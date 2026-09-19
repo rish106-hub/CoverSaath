@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="520" viewBox="0 0 1600 520" role="img" aria-labelledby="title desc">
+  <title id="title">Waymark wordmark</title>
+  <desc id="desc">Waymark logo and wordmark in the approved health insurance brand palette.</desc>
+  <defs>
+    <linearGradient id="tide" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#163F42"/>
+      <stop offset="1" stop-color="#0B383B"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="520" fill="#F3F7F6"/>
+  <rect x="40" y="40" width="440" height="440" rx="92" fill="url(#tide)"/>
+  <path d="M110 158l84 202 80-135 64 120 61-183" fill="none" stroke="#F3F7F6" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M338 345l61-183" fill="none" stroke="#E0A02B" stroke-width="26" stroke-linecap="round"/>
+  <circle cx="338" cy="345" r="18" fill="#F3F7F6"/>
+  <path d="M399 139l24 24-24 24-24-24z" fill="#E0A02B"/>
+  <text x="545" y="245" fill="#163F42" font-family="Source Sans 3, Arial, sans-serif" font-size="154" font-weight="700" letter-spacing="-4">Waymark</text>
+  <text x="553" y="326" fill="#176F69" font-family="Source Sans 3, Arial, sans-serif" font-size="38" font-weight="600" letter-spacing="1.5">HEALTH INSURANCE, MADE CLEAR</text>
+  <rect x="554" y="362" width="306" height="7" rx="3.5" fill="#E0A02B"/>
+</svg>
