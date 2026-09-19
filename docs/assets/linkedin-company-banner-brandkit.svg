@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1512" height="256" viewBox="0 0 1512 256" role="img" aria-labelledby="title desc">
+  <title id="title">Insurance should feel clear before it becomes urgent</title>
+  <desc id="desc">LinkedIn Company Page cover for a health insurance clarity product, using the approved Deep Tide, Harbour, Mist and Signal Gold brand system.</desc>
+  <defs>
+    <linearGradient id="tide" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#163F42"/>
+      <stop offset="1" stop-color="#0B383B"/>
+    </linearGradient>
+    <linearGradient id="harbour" x1="0" x2="1">
+      <stop offset="0" stop-color="#176F69" stop-opacity=".94"/>
+      <stop offset="1" stop-color="#176F69" stop-opacity=".10"/>
+    </linearGradient>
+    <pattern id="dots" width="18" height="18" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="3" r="2" fill="#7ED1C7" opacity=".34"/>
+    </pattern>
+  </defs>
+  <rect width="1512" height="256" fill="url(#tide)"/>
+  <path d="M0 0H208L392 256H0Z" fill="#176F69" opacity=".62"/>
+  <path d="M88 0H252L436 256H270Z" fill="url(#harbour)" opacity=".62"/>
+  <path d="M0 89H152L276 256H0Z" fill="url(#dots)" opacity=".55"/>
+  <path d="M1240 0H1512V256H1374L1224 36Z" fill="#176F69" opacity=".34"/>
+  <path d="M1410 0H1512V256H1481L1352 67Z" fill="#E0A02B" opacity=".70"/>
+  <path d="M246 0L430 256" stroke="#7ED1C7" stroke-width="1" opacity=".34"/>
+  <path d="M272 0L456 256" stroke="#7ED1C7" stroke-width="1" opacity=".19"/>
+  <path d="M298 0L482 256" stroke="#7ED1C7" stroke-width="1" opacity=".12"/>
+  <g transform="skewX(-12)">
+    <rect x="715" y="27" width="154" height="29" rx="3" fill="#176F69" stroke="#7ED1C7" stroke-opacity=".34"/>
+    <rect x="891" y="27" width="181" height="29" rx="3" fill="#176F69" stroke="#7ED1C7" stroke-opacity=".34"/>
+    <rect x="1094" y="27" width="172" height="29" rx="3" fill="#176F69" stroke="#7ED1C7" stroke-opacity=".34"/>
+  </g>
+  <g fill="#F3F7F6" font-family="Source Sans 3, Arial, sans-serif" font-size="14" font-weight="600" text-anchor="middle">
+    <text x="792" y="47">Which hospital?</text>
+    <text x="981" y="47">What gets covered?</text>
+    <text x="1180" y="47">What happens next?</text>
+  </g>
+  <text x="294" y="106" fill="#E0A02B" font-family="Source Sans 3, Arial, sans-serif" font-size="13" font-weight="700" letter-spacing="2">HEALTH INSURANCE, MADE CLEAR</text>
+  <text x="294" y="158" fill="#F3F7F6" font-family="Source Sans 3, Arial, sans-serif" font-size="42" font-weight="700">Insurance should feel clear</text>
+  <text x="294" y="204" fill="#F3F7F6" font-family="Source Sans 3, Arial, sans-serif" font-size="42" font-weight="700">before it becomes urgent.</text>
+  <rect x="294" y="221" width="362" height="3" fill="#E0A02B"/>
+  <g transform="translate(1018 184) skewX(-12)">
+    <rect width="250" height="39" rx="3" fill="#F3F7F6"/>
+  </g>
+  <text x="1143" y="209" fill="#163F42" font-family="Source Sans 3, Arial, sans-serif" font-size="15" font-weight="700" text-anchor="middle">Know what you have. First.</text>
+</svg>
