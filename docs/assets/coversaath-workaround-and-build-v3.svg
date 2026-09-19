@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1350" viewBox="0 0 2400 1350">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="8" stdDeviation="11" flood-color="#102F3D" flood-opacity="0.10"/></filter>
+    <style>
+      .title{font-family:Arial,sans-serif;font-size:50px;font-weight:700;fill:#123847;letter-spacing:-1px}.sub{font-family:Arial,sans-serif;font-size:21px;fill:#5B6D73}.eyebrow{font-family:Arial,sans-serif;font-size:17px;font-weight:700;fill:#0E7567;letter-spacing:2px}.sec{font-family:Arial,sans-serif;font-size:28px;font-weight:700;fill:#123847}.card{font-family:Arial,sans-serif;font-size:21px;font-weight:700;fill:#123847}.body{font-family:Arial,sans-serif;font-size:17px;fill:#40535A}.small{font-family:Arial,sans-serif;font-size:14px;fill:#65777D}.white{font-family:Arial,sans-serif;font-size:16px;fill:#FFF}.whitehead{font-family:Arial,sans-serif;font-size:21px;font-weight:700;fill:#FFF}.teal{font-family:Arial,sans-serif;font-size:15px;font-weight:700;fill:#0E7567}.orange{font-family:Arial,sans-serif;font-size:15px;font-weight:700;fill:#B85F35}.chip{font-family:Arial,sans-serif;font-size:16px;font-weight:700;fill:#123847}
+    </style>
+    <marker id="a" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0 0 L12 6 L0 12z" fill="#0E7567"/></marker>
+    <marker id="o" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0 0 L12 6 L0 12z" fill="#C96A3D"/></marker>
+  </defs>
+  <rect width="2400" height="1350" fill="#F7F3EB"/><rect x="60" y="48" width="2280" height="1254" rx="28" fill="#FFFDF8" stroke="#D8E2DD" stroke-width="2"/>
+  <text x="130" y="118" class="eyebrow">COVERSAATH  |  ILLUSTRATIVE WORKAROUND MAP</text>
+  <text x="130" y="182" class="title">Today, a family solves a health-insurance question by starting from zero.</text>
+  <text x="130" y="222" class="sub">The workaround is a relay race across calls, PDFs, WhatsApp, hospital desks and memory. Coversaath turns that into one permissioned record.</text>
+  <line x1="130" y1="260" x2="2270" y2="260" stroke="#D8E2DD" stroke-width="2"/>
+
+  <!-- current workaround -->
+  <text x="130" y="320" class="eyebrow">CURRENT WORKAROUND</text><text x="130" y="358" class="sec">When a parent needs care, this is the family’s manual flow</text>
+  <g filter="url(#shadow)"><rect x="130" y="400" width="470" height="220" rx="18" fill="#FFF5EE" stroke="#F0C9B8" stroke-width="2"/></g>
+  <circle cx="180" cy="455" r="24" fill="#C96A3D"/><text x="173" y="462" style="font-family:Arial;font-size:19px;font-weight:700;fill:#fff">1</text>
+  <text x="220" y="447" class="card">Someone remembers</text><text x="220" y="473" class="card">“we have insurance”</text><text x="170" y="512" class="body">But cannot find the current PDF, insurer,</text><text x="170" y="538" class="body">policy number, covered member or room limit.</text><text x="170" y="582" class="orange">Failure: a policy exists, but is not operable.</text>
+  <line x1="612" y1="510" x2="690" y2="510" stroke="#C96A3D" stroke-width="5" marker-end="url(#o)"/>
+  <g filter="url(#shadow)"><rect x="705" y="400" width="470" height="220" rx="18" fill="#FFF5EE" stroke="#F0C9B8" stroke-width="2"/></g>
+  <circle cx="755" cy="455" r="24" fill="#C96A3D"/><text x="748" y="462" style="font-family:Arial;font-size:19px;font-weight:700;fill:#fff">2</text>
+  <text x="795" y="453" class="card">The family calls the usual organiser</text><text x="745" y="497" class="body">Parent, relative, agent, HR or a sibling.</text><text x="745" y="523" class="body">They repeat the same details to every person.</text><text x="745" y="575" class="orange">Failure: knowledge lives with one person.</text>
+  <line x1="1187" y1="510" x2="1265" y2="510" stroke="#C96A3D" stroke-width="5" marker-end="url(#o)"/>
+  <g filter="url(#shadow)"><rect x="1280" y="400" width="470" height="220" rx="18" fill="#FFF5EE" stroke="#F0C9B8" stroke-width="2"/></g>
+  <circle cx="1330" cy="455" r="24" fill="#C96A3D"/><text x="1323" y="462" style="font-family:Arial;font-size:19px;font-weight:700;fill:#fff">3</text>
+  <text x="1370" y="447" class="card">They compare fragments</text><text x="1370" y="473" class="card">under pressure</text><text x="1320" y="512" class="body">Policy wording, room cap, employer cover,</text><text x="1320" y="538" class="body">hospital network and what cash to arrange.</text><text x="1320" y="582" class="orange">Failure: the decision is made without context.</text>
+  <line x1="1762" y1="510" x2="1840" y2="510" stroke="#C96A3D" stroke-width="5" marker-end="url(#o)"/>
+  <g filter="url(#shadow)"><rect x="1855" y="400" width="385" height="220" rx="18" fill="#123847"/></g>
+  <text x="1890" y="453" class="whitehead">Result</text><text x="1890" y="497" class="white">Delayed documents.</text><text x="1890" y="525" class="white">Avoidable cash gap.</text><text x="1890" y="553" class="white">The wrong person has to decide.</text><text x="1890" y="585" style="font-family:Arial;font-size:16px;font-weight:700;fill:#F9D6B4">A helpline asks them to start again.</text>
+
+  <!-- solution -->
+  <line x1="130" y1="670" x2="2270" y2="670" stroke="#D8E2DD" stroke-width="2"/>
+  <text x="130" y="730" class="eyebrow">THE COVERSAATH WORKAROUND</text><text x="130" y="768" class="sec">Build the context once. Reuse it when a real decision arrives.</text>
+  <g filter="url(#shadow)"><rect x="130" y="810" width="500" height="235" rx="18" fill="#E9F5F0" stroke="#B7D9CE" stroke-width="2"/></g>
+  <text x="170" y="858" class="card">1. Rebuild the current situation</text><text x="170" y="898" class="body">Upload family policies, employer cover,</text><text x="170" y="924" class="body">top-ups and relevant card benefits.</text><text x="170" y="960" class="body">AI extracts the facts and keeps the source page.</text><rect x="170" y="989" width="405" height="30" rx="9" fill="#D1E9DF"/><text x="188" y="1010" class="teal">Per-person map: confirmed / uncertain / missing</text>
+  <line x1="642" y1="926" x2="735" y2="926" stroke="#0E7567" stroke-width="5" marker-end="url(#a)"/>
+  <g filter="url(#shadow)"><rect x="750" y="810" width="500" height="235" rx="18" fill="#FFF7EB" stroke="#ECD5AD" stroke-width="2"/></g>
+  <text x="790" y="858" class="card">2. Make the record usable</text><text x="790" y="898" class="body">Adults set permissions. The family names</text><text x="790" y="924" class="body">the operator and a backup.</text><text x="790" y="960" class="body">A five-minute drill teaches and re-tests if needed.</text><rect x="790" y="989" width="405" height="30" rx="9" fill="#F6DFC4"/><text x="808" y="1010" class="orange">Shareable handover: helpline, roles and next action</text>
+  <line x1="1262" y1="926" x2="1355" y2="926" stroke="#0E7567" stroke-width="5" marker-end="url(#a)"/>
+  <g filter="url(#shadow)"><rect x="1370" y="810" width="870" height="235" rx="18" fill="#123847"/></g>
+  <text x="1410" y="858" class="whitehead">3. Use the same record at three moments</text>
+  <text x="1410" y="902" style="font-family:Arial;font-size:17px;font-weight:700;fill:#9DE0CD">BUY / RENEW</text><text x="1590" y="902" class="white">Explain the gap with sources. Human reviews a purchase route.</text>
+  <text x="1410" y="942" style="font-family:Arial;font-size:17px;font-weight:700;fill:#9DE0CD">PLANNED CARE</text><text x="1590" y="942" class="white">Check possible policy routes, hospital network, cash and documents.</text>
+  <text x="1410" y="982" style="font-family:Arial;font-size:17px;font-weight:700;fill:#9DE0CD">EMERGENCY</text><text x="1590" y="982" class="white">One button reaches a human with the permitted context.</text>
+  <text x="1410" y="1020" style="font-family:Arial;font-size:15px;fill:#F9D6B4">The system prepares the route. Insurer or TPA decides eligibility, pre-authorisation and settlement.</text>
+
+  <!-- stack -->
+  <line x1="130" y1="1094" x2="2270" y2="1094" stroke="#D8E2DD" stroke-width="2"/>
+  <text x="130" y="1145" class="eyebrow">BUILD FEASIBILITY</text><text x="130" y="1180" class="sec">A hackathon can prove the workflow without pretending the integrations already exist.</text>
+  <rect x="130" y="1212" width="350" height="55" rx="14" fill="#FFFFFF" stroke="#C8D7D9" stroke-width="2"/><text x="155" y="1247" class="chip">NEXT.JS / REACT</text>
+  <rect x="500" y="1212" width="350" height="55" rx="14" fill="#FFFFFF" stroke="#C8D7D9" stroke-width="2"/><text x="525" y="1247" class="chip">SARVAM OCR</text>
+  <rect x="870" y="1212" width="350" height="55" rx="14" fill="#FFFFFF" stroke="#C8D7D9" stroke-width="2"/><text x="895" y="1247" class="chip">OPENAI</text>
+  <rect x="1240" y="1212" width="350" height="55" rx="14" fill="#FFFFFF" stroke="#C8D7D9" stroke-width="2"/><text x="1265" y="1247" class="chip">POSTGRES + STORAGE</text>
+  <rect x="1610" y="1212" width="630" height="55" rx="14" fill="#123847"/><text x="1638" y="1246" style="font-family:Arial;font-size:15px;font-weight:700;fill:#9DE0CD">PROPOSED STACK, NOT A CLAIM OF PARTNERSHIP OR LIVE INTEGRATION</text>
+</svg>

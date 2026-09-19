@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1500" viewBox="0 0 2400 1500">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0E2E3D" flood-opacity="0.10"/></filter>
+    <style>
+      .title{font-family:Arial,sans-serif;font-size:50px;font-weight:700;fill:#123847;letter-spacing:-1px}
+      .subtitle{font-family:Arial,sans-serif;font-size:22px;fill:#5B6D73}
+      .eyebrow{font-family:Arial,sans-serif;font-size:18px;font-weight:700;fill:#0E7567;letter-spacing:2px}
+      .section{font-family:Arial,sans-serif;font-size:25px;font-weight:700;fill:#123847}
+      .cardtitle{font-family:Arial,sans-serif;font-size:22px;font-weight:700;fill:#123847}
+      .body{font-family:Arial,sans-serif;font-size:17px;fill:#3E5258}
+      .small{font-family:Arial,sans-serif;font-size:15px;fill:#5B6D73}
+      .micro{font-family:Arial,sans-serif;font-size:14px;font-weight:700;fill:#0E7567}
+      .mono{font-family:Arial,sans-serif;font-size:16px;font-weight:700;fill:#123847}
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#0E7567"/></marker>
+    <marker id="arrowGray" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#789098"/></marker>
+  </defs>
+
+  <rect width="2400" height="1500" fill="#F7F3EB"/>
+  <rect x="70" y="55" width="2260" height="1390" rx="30" fill="#FFFDF8" stroke="#D9E1DC" stroke-width="2"/>
+
+  <text x="140" y="145" class="eyebrow">COVERSAATH  |  EVIDENCE ATTACHMENT</text>
+  <text x="140" y="215" class="title">From “we have insurance” to a decision the family can act on</text>
+  <text x="140" y="255" class="subtitle">A source-linked household protection record, with AI doing the document work and people retaining the final say.</text>
+  <line x1="140" y1="295" x2="2260" y2="295" stroke="#D9E1DC" stroke-width="2"/>
+
+  <!-- FLOW HEADER -->
+  <text x="140" y="350" class="eyebrow">01  CUSTOMER WORKFLOW AND DECISION TREE</text>
+  <text x="140" y="390" class="section">Start with a real decision, not a generic insurance conversation</text>
+
+  <!-- trigger -->
+  <g filter="url(#shadow)">
+    <rect x="140" y="425" width="300" height="212" rx="18" fill="#E9F5F0" stroke="#B8D9CD" stroke-width="2"/>
+  </g>
+  <circle cx="180" cy="469" r="20" fill="#0E7567"/><text x="173" y="476" style="font-family:Arial;font-size:18px;font-weight:700;fill:#fff">1</text>
+  <text x="215" y="469" class="cardtitle">Real trigger</text>
+  <text x="170" y="511" class="body">• Renewal notice</text>
+  <text x="170" y="540" class="body">• New job or job exit</text>
+  <text x="170" y="569" class="body">• Family change</text>
+  <text x="170" y="598" class="body">• Planned treatment</text>
+  <text x="170" y="622" class="micro">Fixes: low-attention onboarding</text>
+
+  <line x1="450" y1="531" x2="526" y2="531" stroke="#0E7567" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- reconstruct -->
+  <g filter="url(#shadow)">
+    <rect x="540" y="425" width="340" height="212" rx="18" fill="#FFFFFF" stroke="#C8D7D9" stroke-width="2"/>
+  </g>
+  <circle cx="580" cy="469" r="20" fill="#0E7567"/><text x="573" y="476" style="font-family:Arial;font-size:18px;font-weight:700;fill:#fff">2</text>
+  <text x="615" y="469" class="cardtitle">Rebuild existing cover</text>
+  <text x="570" y="511" class="body">Policies, employer cover,</text>
+  <text x="570" y="538" class="body">members, dates and terms.</text>
+  <text x="570" y="570" class="body">Every extracted fact links</text>
+  <text x="570" y="597" class="body">back to its source page.</text>
+  <text x="570" y="622" class="micro">Fixes: missing PDFs, fragmented cover</text>
+
+  <line x1="890" y1="531" x2="966" y2="531" stroke="#0E7567" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- permissions -->
+  <g filter="url(#shadow)">
+    <rect x="980" y="425" width="340" height="212" rx="18" fill="#FFF7EB" stroke="#ECD6AF" stroke-width="2"/>
+  </g>
+  <circle cx="1020" cy="469" r="20" fill="#C96A3D"/><text x="1013" y="476" style="font-family:Arial;font-size:18px;font-weight:700;fill:#fff">3</text>
+  <text x="1055" y="469" class="cardtitle">Permission + operator</text>
+  <text x="1010" y="511" class="body">Each adult chooses who</text>
+  <text x="1010" y="538" class="body">can see, share or act.</text>
+  <text x="1010" y="570" class="body">Name the real person who</text>
+  <text x="1010" y="597" class="body">would handle an emergency.</text>
+  <text x="1010" y="622" class="micro">Fixes: “Papa knows” dependency</text>
+
+  <line x1="1330" y1="531" x2="1406" y2="531" stroke="#0E7567" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- drill -->
+  <g filter="url(#shadow)">
+    <rect x="1420" y="425" width="300" height="212" rx="18" fill="#FFFFFF" stroke="#C8D7D9" stroke-width="2"/>
+  </g>
+  <circle cx="1460" cy="469" r="20" fill="#0E7567"/><text x="1453" y="476" style="font-family:Arial;font-size:18px;font-weight:700;fill:#fff">4</text>
+  <text x="1495" y="469" class="cardtitle">Five-minute drill</text>
+  <text x="1450" y="511" class="body">Can a backup locate the</text>
+  <text x="1450" y="538" class="body">right policy and route?</text>
+  <text x="1450" y="570" class="body">Record pass, fail or</text>
+  <text x="1450" y="597" class="body">what remains unknown.</text>
+  <text x="1450" y="622" class="micro">Fixes: emergency confusion</text>
+
+  <!-- Decision area -->
+  <line x1="1730" y1="531" x2="1792" y2="531" stroke="#0E7567" stroke-width="5" marker-end="url(#arrow)"/>
+  <g filter="url(#shadow)">
+    <rect x="1805" y="425" width="435" height="212" rx="18" fill="#123847"/>
+  </g>
+  <text x="1845" y="470" style="font-family:Arial;font-size:22px;font-weight:700;fill:#fff">5. Is there a proven gap?</text>
+  <line x1="1850" y1="493" x2="2190" y2="493" stroke="#3A6470" stroke-width="2"/>
+  <text x="1850" y="532" style="font-family:Arial;font-size:18px;font-weight:700;fill:#F9D6B4">NO</text>
+  <text x="1892" y="532" style="font-family:Arial;font-size:17px;fill:#fff">Retain cover. Close with a</text>
+  <text x="1892" y="556" style="font-family:Arial;font-size:17px;fill:#fff">clear handover and next event.</text>
+  <text x="1850" y="596" style="font-family:Arial;font-size:18px;font-weight:700;fill:#9DE0CD">YES</text>
+  <text x="1900" y="596" style="font-family:Arial;font-size:17px;fill:#fff">Compare routes, price affordability,</text>
+  <text x="1900" y="620" style="font-family:Arial;font-size:17px;fill:#fff">then send purchase cases to a human.</text>
+
+  <!-- outputs strip -->
+  <path d="M2023 648 C2023 690 2023 700 2023 722" stroke="#789098" stroke-width="3" fill="none" marker-end="url(#arrowGray)"/>
+  <g>
+    <rect x="140" y="690" width="2100" height="92" rx="16" fill="#F0F6F4" stroke="#BCD7CE" stroke-width="2"/>
+    <text x="180" y="730" class="cardtitle">What the household receives</text>
+    <text x="180" y="758" class="body">A source-linked cover map  •  named operator + backup  •  emergency handover  •  gap or no-purchase result  •  optional affordability plan  •  updated issued-policy check</text>
+  </g>
+
+  <!-- TECH SECTION -->
+  <line x1="140" y1="824" x2="2240" y2="824" stroke="#D9E1DC" stroke-width="2"/>
+  <text x="140" y="876" class="eyebrow">02  TECHNICAL ARCHITECTURE</text>
+  <text x="140" y="916" class="section">A practical prototype now. Permissioned integrations only after validation.</text>
+
+  <!-- input column -->
+  <g filter="url(#shadow)"><rect x="140" y="956" width="315" height="302" rx="18" fill="#FFFFFF" stroke="#C8D7D9" stroke-width="2"/></g>
+  <text x="175" y="1002" class="cardtitle">A. Inputs</text>
+  <text x="175" y="1042" class="mono">Hackathon prototype</text>
+  <text x="175" y="1070" class="body">• PDF upload</text>
+  <text x="175" y="1097" class="body">• Guided form</text>
+  <text x="175" y="1124" class="body">• Mock employer benefit data</text>
+  <text x="175" y="1151" class="body">• User-entered affordability facts</text>
+  <text x="175" y="1195" class="mono">Later, with consent</text>
+  <text x="175" y="1223" class="body">HRMS / insurer / TPA responses</text>
+
+  <line x1="465" y1="1107" x2="540" y2="1107" stroke="#0E7567" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- core -->
+  <g filter="url(#shadow)"><rect x="555" y="956" width="670" height="302" rx="18" fill="#E9F5F0" stroke="#B8D9CD" stroke-width="2"/></g>
+  <text x="590" y="1002" class="cardtitle">B. Household Protection Record</text>
+  <text x="590" y="1035" class="small">The single system of record. Facts never lose their source, owner or permission state.</text>
+  <rect x="590" y="1060" width="280" height="75" rx="12" fill="#FFFFFF"/><text x="612" y="1092" class="mono">Permission registry</text><text x="612" y="1117" class="small">scope • viewer • expiry • audit log</text>
+  <rect x="890" y="1060" width="300" height="75" rx="12" fill="#FFFFFF"/><text x="912" y="1092" class="mono">Evidence store</text><text x="912" y="1117" class="small">document • page • version • confidence</text>
+  <rect x="590" y="1150" width="280" height="75" rx="12" fill="#FFFFFF"/><text x="612" y="1182" class="mono">Household graph</text><text x="612" y="1207" class="small">people • roles • operator • backup</text>
+  <rect x="890" y="1150" width="300" height="75" rx="12" fill="#FFFFFF"/><text x="912" y="1182" class="mono">Case tracker</text><text x="912" y="1207" class="small">question • owner • deadline • outcome</text>
+
+  <line x1="1238" y1="1107" x2="1315" y2="1107" stroke="#0E7567" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- agent/rules -->
+  <g filter="url(#shadow)"><rect x="1330" y="956" width="420" height="302" rx="18" fill="#FFF7EB" stroke="#ECD6AF" stroke-width="2"/></g>
+  <text x="1365" y="1002" class="cardtitle">C. Agent + rules layer</text>
+  <text x="1365" y="1044" class="body">LLM tasks</text>
+  <text x="1388" y="1073" class="body">Extract • cite • reconcile</text>
+  <text x="1388" y="1100" class="body">Ask for missing evidence</text>
+  <text x="1388" y="1127" class="body">Draft handover and scenarios</text>
+  <text x="1365" y="1174" class="body">Deterministic code</text>
+  <text x="1388" y="1203" class="body">Permission checks • policy arithmetic</text>
+  <text x="1388" y="1230" class="body">State changes • commission disclosure</text>
+
+  <line x1="1760" y1="1107" x2="1837" y2="1107" stroke="#0E7567" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- outputs / human -->
+  <g filter="url(#shadow)"><rect x="1850" y="956" width="390" height="302" rx="18" fill="#123847"/></g>
+  <text x="1885" y="1002" style="font-family:Arial;font-size:22px;font-weight:700;fill:#fff">D. Human and outcomes</text>
+  <text x="1885" y="1044" style="font-family:Arial;font-size:17px;fill:#D9E9E7">Customer sees the card, sources,</text>
+  <text x="1885" y="1069" style="font-family:Arial;font-size:17px;fill:#D9E9E7">unknowns and next action.</text>
+  <line x1="1885" y1="1094" x2="2195" y2="1094" stroke="#3A6470" stroke-width="2"/>
+  <text x="1885" y="1130" style="font-family:Arial;font-size:17px;font-weight:700;fill:#F9D6B4">Licensed human gate</text>
+  <text x="1885" y="1156" style="font-family:Arial;font-size:17px;fill:#fff">Purchase recommendation, ambiguity,</text>
+  <text x="1885" y="1181" style="font-family:Arial;font-size:17px;fill:#fff">exception or customer request.</text>
+  <text x="1885" y="1225" style="font-family:Arial;font-size:17px;font-weight:700;fill:#9DE0CD">Household approves. Partner transacts.</text>
+
+  <!-- footer -->
+  <rect x="140" y="1302" width="2100" height="92" rx="16" fill="#F7F3EB" stroke="#D9E1DC" stroke-width="2"/>
+  <text x="175" y="1340" class="micro">FEASIBILITY BOUNDARY</text>
+  <text x="175" y="1370" class="body">The prototype can prove document reconstruction, sourced outputs, permissions, operator handover and human-review workflow. It does not claim insurer authority, claim approval, clinical advice or live integrations.</text>
+</svg>

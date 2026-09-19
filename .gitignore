@@ -1,0 +1,14 @@
+# Keep identifiers, medical records, interview recordings and credentials out of a future repository.
+.DS_Store
+.env
+.env.*
+!.env.example
+private/
+research/private/
+*.key
+*.pem
+node_modules/
+dist/
+.insforge/
+coverage/
+.local/
