@@ -1,12 +1,229 @@
-# Coversaath: submission answers and defence
+# Knowvia: submission answers and defence
 
 Updated 20 September 2026. Drafts against the public [The Ken competition questions](https://the-ken.com/case-competition-2026/). Prompts are paraphrased. The private form has not been inspected. No submission has been made.
 
-**Not ready to submit unchanged:** Question 2 now uses Rishav's reported 15 student conversations, but the exact count, raw answers and consent status still need documentation. Question 1 needs Tiya's confirmed personal connection. Question 8 needs confirmation of the submitter's own belief.
+**Round 2 status:** not ready to submit unchanged. The product design is specified, but the reported
+student conversations, one real household drill, vendor-platform testing and the 3.92% opening share
+still need attachable evidence or organiser confirmation. The older ten-question draft is retained below
+as an archive and has separate unresolved member inputs.
 
 **North Star:** no household should reach an insurance decision or hospital admission without knowing what cover it has, what remains uncertain, what money it may need and what it should do next.
 
-**USP:** Coversaath reconstructs group and personal cover first, then carries the same household context through buying, renewal, hospitalisation and claim coordination. The Treasury, policy history, disclosure record and emergency handover are internal modules, not separate products.
+**USP:** Knowvia reconstructs group and personal cover first, then carries the same household context through buying, renewal, hospitalisation and claim coordination. The Treasury, policy history, disclosure record and emergency handover are internal modules, not separate products.
+
+## Round 2: the eight design questions
+
+These answers respond to the Round 2 email received on 20 September 2026. They supersede the older
+ten-question format for this round. The integrations below are proposed uses based on public
+documentation. No partnership, production connection or platform test is claimed.
+
+The reported opening share is 3.92%, the third-lowest share of submissions. Treat that as a competition
+signal, not customer evidence. It may mean fewer teams to beat within the opening. It may also mean the
+problem is difficult, unattractive or poorly understood. It does not prove demand for Knowvia.
+
+### 1. What outcome is the agent accountable for?
+
+> For each buying, renewal or planned-care case, Knowvia delivers a source-linked household decision brief where every material cover, cash and next-action question is confirmed, disputed, unknown or assigned to a named owner and deadline.
+
+Completion is testable: no material question may disappear into a summary, and the household must be
+able to identify the next action and owner from the brief. In an emergency, the brief is optional and
+must never delay care. The outcome is not “a claim gets approved.” Knowvia cannot bind the insurer, predict an
+underwriting decision, choose treatment or guarantee cashless approval. It is accountable for reducing
+avoidable uncertainty and unfinished household work, while preserving the institution's authority.
+
+### 2. What level of autonomy does the agent have?
+
+> **L3, inside a permissioned case.**
+
+After the named adults set the purpose, permissions and communication limits, the agent can act without
+asking again inside those limits: read evidence, reconstruct cover, identify missing facts, contact an
+authorised household member or institution, track responses, compare them with policy wording, revise the
+case and produce the next decision brief. It checks citations, conflicts, stale documents and unanswered
+material questions before release. A person handles anything outside the agreed limits.
+
+L3 does not give the agent unlimited authority. It must ask before a new person sees data, before a new
+institution is contacted outside the agreed scope, before a declaration is submitted, before a licensed
+recommendation is accepted, before payment, cancellation, borrowing, investment sale or settlement
+acceptance. A licensed expert owns regulated recommendations. The insurer, TPA, hospital and employer
+retain their own decisions.
+
+The most consequential action it may take without asking again is to send and chase a pre-approved,
+case-specific factual question within an already consented channel. It cannot expand that question into a
+new purpose or disclose another adult's record.
+
+### 3. What states does the agent go through?
+
+#### Core state machine
+
+```text
+TRIGGERED
+  -> SCOPED
+  -> PERMISSIONED
+  -> EVIDENCE COLLECTING
+  -> RECONSTRUCTING
+  -> ASSESSING
+  -> AWAITING INSTITUTION / HUMAN GATE
+  -> ACTION READY
+  -> ACTION IN PROGRESS
+  -> RECONCILED
+  -> RECORDED FOR THE NEXT EVENT
+```
+
+Every state contains four visible fields: current owner, evidence used, unresolved question and deadline.
+An evidence item is marked confirmed, needs confirmation, missing, conflicting, or reported from memory.
+Unknown never means absent.
+
+#### Happy flow
+
+1. **Triggered.** A renewal, new job, family change, planned admission or claim problem creates one case.
+2. **Scoped.** The agent names the exact question, patient or buyer, deadline and existing helper. If no
+   unresolved job exists, it closes rather than manufacturing work.
+3. **Permissioned.** Each adult approves the purpose, records, viewers, channels and revocation rules.
+   Patient, policyholder, payer, household operator and backup may be different people.
+4. **Evidence collecting.** It requests only relevant policy schedules, wording, endorsements, employer
+   benefit booklets, estimates and institution correspondence. Each file receives a version, source,
+   owner and timestamp.
+5. **Reconstructing.** It creates a household cover map across group and personal cover. It extracts
+   members, sum insured, utilisation, room rules, co-pay, deductible, waiting periods, exclusions,
+   condition or therapy limits, restoration and top-up dependencies. A headline sum insured is never
+   shown as the payable amount.
+6. **Assessing.** For buying or renewal, it identifies the uncovered need and viable route. For planned
+   care, it creates cash-timing scenarios and the exact questions that remain. For a claim problem, it
+   reconstructs what was declared, submitted, acknowledged, queried and decided.
+7. **Awaiting gate.** The agent sends permitted questions to the named hospital desk, HR team, TPA,
+   insurer or licensed partner. Material ambiguity and regulated recommendations go to a human. The case
+   stays open until an answer, deadline or explicit unresolved status exists.
+8. **Action ready.** It produces one primary brief: buy, renew, retain, switch, defer, prepare admission,
+   supply a document, challenge a mismatch or escalate. Every statement shows source, confidence and
+   owner.
+9. **Action in progress.** The household approves the action. Payment, policy issuance, pre-authorisation,
+   claim submission and settlement remain separate events.
+10. **Reconciled.** The agent checks issued terms or institutional responses against the accepted route.
+    A mismatch becomes a new owned question, not a silent success.
+11. **Recorded.** The permissioned cover map, continuity history, correspondence and handover remain in
+    the Household Health Treasury for the next renewal, job change, admission or claim issue.
+
+#### Unhappy flow
+
+| Failure or exception | Agent response | Exit or recovery |
+|---|---|---|
+| Emergency treatment is underway | Show the smallest available emergency card and say “Admit first. Optimise later.” | Administrative work resumes only when it will not delay care. |
+| A named adult has not consented | Hide that adult's data and stop dependent tasks. | Ask that adult directly, narrow the scope or continue without the data and label the gap. |
+| Policy or employer booklet is missing | Do not infer that cover is absent. | Request the document or an authorised institutional answer; otherwise mark unknown. |
+| Two sources conflict | Preserve both versions, dates and source pages. | Apply the source hierarchy, ask the institution and route material ambiguity to a human. |
+| Voice transcript is uncertain | Do not convert uncertain speech into a declaration. | Read back, ask for confirmation, switch language or channel, or send to human review. |
+| Insurer, TPA, HR or hospital does not answer | Log attempts and the approaching deadline. | Escalate through the permitted route and issue a brief that states the unanswered question. |
+| A rail or API fails | Keep the case and evidence state intact. | Fall back to a permissioned call, email, upload or manual payment route. |
+| Payment succeeds but policy is not issued | Never mark the case complete. | Reconcile payment status with the licensed partner and insurer until issued, reversed or disputed. |
+| A claim appears weak or excluded | Do not invent an approval probability or coach concealment. | Explain the relevant condition, missing evidence, response route and right owner; obtain formal confirmation. |
+| The current adviser already solves the job | Avoid duplicate onboarding. | Work alongside them with permission or close the case. |
+| A medical, underwriting or settlement decision is requested | Stop the model from deciding it. | Route to the doctor, insurer, TPA, licensed expert or household decision-maker. |
+| Serious source or privacy error is found | Block release and outbound action. | Notify the owner, revoke affected access, correct the record and require review before resuming. |
+
+### 4. What does the agent use and need on each rail?
+
+| Rail | What exists and Knowvia would leverage | What Knowvia must build or validate | Fallback when it is unavailable |
+|---|---|---|---|
+| **Gnani, voice** | Agent Builder, knowledge bases, configurable voice agents, multilingual behaviour, dynamic pre-call variables, custom actions, call logs, transcripts, dispositions, analytics, audio access and post-call webhooks. Speech APIs also provide real-time, batch and REST STT/TTS for Indian languages. | Per-adult consent bound to each call and record; a household-role map; source-linked read-back; safe caller-to-parent-to-relative-to-human handoff; field-level redaction; insurance vocabulary evaluation; uncertainty handling; revocation, retention and audit rules; resumable follow-up without leaking another adult's facts. | A scoped human call or WhatsApp/email questionnaire. The transcript remains unconfirmed until the speaker approves the material facts. |
+| **Pine Labs, payments and authorisation** | Hosted checkout, order creation, cards, UPI, netbanking and wallets, callbacks, payment status, webhooks, refunds and optional payment pre-authorisation/capture flows. | Bind the exact accepted policy quote, premium, commission disclosure, payer permission and case revision to an order; use idempotency and expiry; reconcile payment with the licensed partner; keep authorised, processed, refunded, policy issued and endorsement accepted as separate states. Payment pre-authorisation is not insurance authorisation, and Pine Labs cannot confirm insurance issuance. | Send the licensed partner's approved payment route and manually reconcile the receipt. No payment link appears before the recommendation and disclosure gates pass. |
+| **Delhivery, logistics and maps** | Shipment creation, pickup and tracking APIs exist. Maps provides Indian address geocoding, standardisation, validation, verification, routing and distance tools. | **No core first-build role.** If a real case requires physical originals, build a consent token, tamper-evident chain of custody, sensitive-document handling, exact recipient proof and return/destruction status. Address validation may later reduce failed physical correspondence, but it does not verify identity or insurance eligibility. | Secure digital upload, authorised email or household-managed courier. If no physical original is required, do not create a shipment. |
+
+The load-bearing rail is Gnani. Voice reaches the parent, relative or household operator who holds the
+missing facts but may not install another app or type policy details. Pine Labs is narrow. Delhivery has
+no honest core role today. Saying that is stronger than inventing one.
+
+Documentation checked on 20 September 2026: [Gnani Agent Builder](https://docs.gnani.ai/introduction),
+[Gnani Platform API](https://docs.gnani.ai/Platform/platform-introduction),
+[Pine Labs hosted checkout](https://www.pinelabs.com/docs/online-payments/hosted-checkout/integration-steps),
+[Delhivery B2C APIs](https://one.delhivery.com/developer-portal/documents/b2c/) and
+[Delhivery Maps](https://www.delhivery.com/maps/reference). The Gnani console was not tested in this
+draft, so console-only behaviour remains unverified.
+
+### 5. Does the agent need a fourth rail?
+
+> **Yes: a Health Insurance Evidence Rail, piloted by Medi Assist for cases it is authorised to administer.**
+
+With the adult's permission, this rail would return source-stamped group membership, applicable benefit
+booklet version, insurer and TPA identifiers, network status, pre-authorisation or claim status,
+outstanding document queries, response timestamps and the institution that owns the next decision. It
+would also accept a structured question and return a written, attributable response.
+
+Medi Assist is the preferred pilot builder because it already sits between employers, members, hospitals and
+insurers in health-benefit administration. That makes the company operationally close to the missing
+answers. It does not make it neutral or universal. A later industry rail would need permission,
+auditability and cross-TPA standards. Without it, Knowvia uses customer documents, official correspondence and manual
+institutional follow-up, and labels the remaining unknowns.
+
+Basis for the choice: [Medi Assist says it provides TPA services to insurers and administers employer
+and retail health plans](https://www.mediassist.in/about/). This supports proximity to the workflow, not
+access to a universal API or willingness to build the proposed rail.
+
+This rail must not expose a secret “claim score.” It should expose evidence, status, reason codes and
+ownership. A claims approval probability without an insurer-validated model would create false confidence.
+
+### 6. How does a human interact with the agent?
+
+The primary interface is an event-led mobile case, not a generic chat screen. The first question is:
+**What is happening now?** The choices are buy or renew, job or family change, planned admission, claim
+problem, or emergency access.
+
+The case then has six fixed views:
+
+1. **Today.** One sentence on the situation, the next action, its owner and deadline.
+2. **Household cover map.** People on one axis and group or personal policies on the other. Each cell shows
+   confirmed cover, unknowns, relevant limits and the source page. It never adds policies into one
+   guaranteed cash number.
+3. **Questions and answers.** One queue for household, hospital, HR, TPA, insurer and licensed partner.
+   Every question has one owner, one written answer, attempts, deadline and escalation route.
+4. **Money view.** Premium, known deductibles or co-pay, hospital deposit, possible upfront cash and
+   unresolved exposure remain separate. Optional income, commitments, loans and emergency savings appear
+   only when they answer an affordability question.
+5. **Evidence drawer.** Original document, version, page citation, extracted fact, confidence and dispute
+   history sit together. A user can correct a fact without deleting the earlier record.
+6. **Permissions and people.** Each adult sees who may read, speak or act for what purpose and until when.
+   They can revoke access or nominate a backup without granting blanket family authority.
+
+Voice is a channel into the same case. Gnani can call the named knowledge holder in their preferred
+language, read back material facts and write the confirmed answer into the queue. WhatsApp or email can
+collect a document or deliver a brief, but neither becomes a second uncontrolled record.
+
+The agent's outputs change with the event: a Buy/Renew/Retain/Switch/Defer decision, an Admission
+Readiness Brief, a Claim Position Brief, an updated Household Health Card or an Optional Backup Handover.
+A licensed human appears as a clearly marked gate, not a permanent concierge. They see the disputed
+facts and sources, record their reasoning, and return the case to the household. In an emergency, the
+interface collapses to policy identifiers, support contacts, named operator, authorised documents and
+the instruction to admit first.
+
+### 7. What is the name of the agent?
+
+> **Knowvia**
+
+The internal project name has been Coversaath. Knowvia is the current working public name. It supports
+the actual promise: know what cover exists, know what remains uncertain and know what to do next. Name,
+trademark, domain and company clearance remain unverified.
+
+### 8. Which Indian company has the best chance of creating the same agent?
+
+> **Policybazaar.**
+
+It is closest to the full loop because it already has insurance shoppers, licensed distribution,
+insurer relationships, payment flows and post-purchase support. It could add household cover
+reconstruction, permissioned operator mapping, institutional question tracking and continuity across
+events faster than a new company can build distribution.
+
+Its possible weakness is incentive, not capability. Knowvia treats retain, defer and no-purchase as
+valid outcomes and refuses to recommend before reconstructing existing cover. A conversion-led business
+may find that friction hard to prioritise. That is an external inference, not a claim about Policybazaar's
+internal plans. If Policybazaar builds the same pre-sale household record with credible conflict controls,
+the current differentiation is largely gone.
+
+### Why this may stand out within a 3.92% opening
+
+The originality is not “AI reads an insurance PDF.” Many teams and incumbents can do that. The stronger
+sequence is: reconstruct group and personal cover, bind each fact to evidence and permission, identify
+the real household operator, make institutions own unanswered questions, then carry the same record from
+purchase into admission and claim coordination. The weakest part remains proof that households will
+complete this work and that the economics can support the exceptions.
 
 ## 1. Members, personal connection and team edge
 
