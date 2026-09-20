@@ -608,6 +608,20 @@ distribution, insurer relationships, payment flows and post-purchase support. It
 states that the insurer makes the final settlement or rejection decision, so the boundary is already
 acknowledged.
 
+There is one important distinction. **Policybazaar is the strongest distribution competitor; Medi Assist is
+the strongest operational entrant.** Medi Assist already sits in the claims and hospital workflow through
+TPA relationships, network hospitals, policyholder servicing, pre-authorisation and claim tracking. It is
+therefore the natural builder of the missing **Insurance Confirmation Rail** described in Question 5. That
+rail could make a Medi Assist-built agent materially stronger at answering live questions about enrolment,
+TPA ownership, network status, required documents and claim state.
+
+This does not make Medi Assist a complete Knowvia competitor today. Its access is strongest for policies and
+claims it administers, while Knowvia is designed to reconstruct the household's complete cover position,
+including policies held across employers, insurers and TPAs. Medi Assist also has an operational incentive to
+serve the policies in its network, not necessarily to tell a household to retain, replace or buy nothing.
+That is why Policybazaar remains the answer to this question, while Medi Assist is the most important rail
+partner and the most credible adjacent entrant.
+
 **The gap is not access or technology.** The difficult part is building an agent that treats these as
 equally valid outcomes: buy, renew, retain the existing cover, defer the decision, and "we cannot confirm
 this yet". A conversion-led business may find that last one hard to prioritise, because it is the only
