@@ -1,4 +1,4 @@
-# Coversaath: product and decisions
+# Knowvia: product and decisions
 
 Updated 20 September 2026. Brand system added 18 September 2026. Status: coherent concept with a
 buying-led sequence, ready for a scoped prototype and behavioural testing. Fifteen student conversations
@@ -6,7 +6,7 @@ are user-reported. No paid pilot, partner agreement or working integration is cl
 
 ## 1. The product in one sentence
 
-Coversaath is a household health-insurance understanding and decision agent. It reconstructs group and
+Knowvia is a household health-insurance understanding and decision agent. It reconstructs group and
 personal cover, helps the household buy or renew appropriately, and carries the same context into planned
 care, a claim problem and the next decision.
 
@@ -15,13 +15,13 @@ Working descriptor: **Know what you have. Buy what you need. Plan what it costs.
 **North Star:** no household should reach an insurance decision or hospital admission without knowing what
 cover it has, what remains uncertain, what money it may need and what it should do next.
 
-**USP:** Coversaath first reconstructs the household's complete insurance position across employer and
+**USP:** Knowvia first reconstructs the household's complete insurance position across employer and
 personal policies. It then carries that same context through buying, renewal, hospitalisation and claim
 coordination.
 
 The Household Health Treasury is the record and planning layer inside this agent. A disclosure history,
 policy reconciliation record, email trail, admission brief and backup handover are modules inside
-Coversaath. None is the product on its own. Coversaath is not a generic policy wallet, a claims processor
+Knowvia. None is the product on its own. Knowvia is not a generic policy wallet, a claims processor
 or a "disclosure-to-claim ledger" sold as a separate product.
 
 Readiness is not a separate product placed before buying. It is the first half of buying properly.
@@ -59,7 +59,7 @@ build uses voluntary affordability inputs. It does not make a general investment
 - Each personal policy can keep a policy continuity record: proposal answers, evidence supplied,
   submission and acknowledgement receipts, insurer questions, underwriting changes, loading, waiting
   periods, exclusions, endorsements, payment, issuance and later correspondence. This is a supporting
-  evidence module, not Coversaath's public identity.
+  evidence module, not Knowvia's public identity.
 - The agent completes routine document work, follow-up, coverage reconstruction and planning.
 - A human enters at the licensed recommendation gate, on material ambiguity, on exception or when the
   customer asks for one. Human minutes per completed decision are measured and capped.
@@ -455,17 +455,14 @@ claim and leave breathing room.
 
 ### Name recommendation
 
-**PolicyKey is the final masterbrand recommendation. Coversaath remains the working product and
-repository name until clearance and user testing are complete. Do not run a code-wide rename yet.**
-“Policy” gives the category away immediately across Indian regions. “Key” frames the product as the
-thing that helps a household unlock, understand and act on what its policy actually means. It follows
-the strongest YC naming pattern for this product: a short, familiar word pair that earns meaning through
-use, rather than an invented name that needs explanation. It is a creative recommendation, not a
-cleared mark.
+**Knowvia is the approved public brand.** The name combines “know” with “via”, a route or way through
+something difficult. It keeps the product promise centred on understanding and next action without
+pretending to be the insurer. The name is deliberately calmer and more expandable than a literal policy
+label. It should be treated as a brand decision, not as legal clearance.
 
 | Candidate | Why it fits | Main risk | Score |
 |---|---|---|---:|
-| **PolicyKey** | Direct insurance cue; “key” signals access, understanding and readiness; nine letters | More descriptive than distinctive; trademark and domain checks are still required | **24/25** |
+| **Knowvia** | “Know” makes the clarity promise direct; “via” suggests a route through the policy and next step | Category needs to be carried by the descriptor; trademark and domain checks are still required | **23/25** |
 | **CoverNest** | Household protection cue and easy pronunciation | Existing Indian insurance aggregator; reject | **14/25** |
 | **CoverSure** | Clear cover and confidence cue | Existing Indian insurance-management platform; reject | **14/25** |
 | **Insurly** | Immediate insurance category cue | Existing health-insurance app and generic suffix; reject | **14/25** |

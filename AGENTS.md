@@ -1,4 +1,8 @@
-# Coversaath: start here
+# Knowvia: start here
+
+Knowvia is the approved public brand and tagline: **Know your cover. Before you need it.**
+Coversaath remains the internal repository and legacy code name. Do not expose the legacy name in
+new user-facing copy unless the context is explicitly about the codebase.
 
 Updated 07 September 2026. This is the only active product direction.
 

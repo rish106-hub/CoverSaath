@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3600" height="5600" viewBox="0 0 3600 5600" role="img" aria-labelledby="title desc">
+  <title id="title">Coversaath product architecture</title>
+  <desc id="desc">A detailed product architecture showing Coversaath's household health-insurance agent, its data model, specialist workers, state flows, human gates, external rails and safety boundaries.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M 0 1 L 11 6 L 0 11 z" fill="#315665"/></marker>
+    <marker id="arrowRisk" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M 0 1 L 11 6 L 0 11 z" fill="#bb4d55"/></marker>
+    <style>
+      .bg{fill:#f6f9f8}.band{fill:#183f4a}.ink{fill:#18323b;font-family:Helvetica}.muted{fill:#54727a;font-family:Helvetica}.white{fill:#fff;font-family:Helvetica}.title{font-size:70px;font-weight:700;letter-spacing:.2px}.subtitle{font-size:30px}.h1{font-size:39px;font-weight:700;letter-spacing:.3px}.h2{font-size:30px;font-weight:700}.body{font-size:26px}.small{font-size:22px}.tiny{font-size:19px}.mono{font-size:21px;font-family:Menlo;fill:#18323b}.section{fill:#e3eeed;stroke:#a4bfbd;stroke-width:3}.card{fill:#fff;stroke:#b2c6c9;stroke-width:3}.core{fill:#ddf0ec;stroke:#338177;stroke-width:4}.agent{fill:#e4eef8;stroke:#477ca4;stroke-width:4}.worker{fill:#f6eee0;stroke:#ad7b35;stroke-width:4}.human{fill:#f9e6e7;stroke:#bb4d55;stroke-width:4}.rail{fill:#efe9f7;stroke:#7554a2;stroke-width:4}.output{fill:#e8f0df;stroke:#628443;stroke-width:4}.risk{fill:#fff1f1;stroke:#bb4d55;stroke-width:4}.unknown{fill:#fff7d6;stroke:#b28a20;stroke-width:4}.line{fill:none;stroke:#315665;stroke-width:5;stroke-linejoin:round;stroke-linecap:round;marker-end:url(#arrow)}.thin{fill:none;stroke:#75949a;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}.dashed{fill:none;stroke:#bb4d55;stroke-width:5;stroke-dasharray:15 12;stroke-linecap:round;marker-end:url(#arrowRisk)}.divider{stroke:#c1d1d2;stroke-width:2}.pill{fill:#183f4a}.pillText{fill:#fff;font-family:Helvetica;font-size:21px;font-weight:700;letter-spacing:.5px}.num{fill:#338177;font-family:Helvetica;font-size:38px;font-weight:700}.label{fill:#477ca4;font-family:Helvetica;font-size:21px;font-weight:700;letter-spacing:.8px}.red{fill:#bb4d55;font-family:Helvetica;font-size:22px;font-weight:700}.green{fill:#2b7068;font-family:Helvetica;font-size:22px;font-weight:700}
+    </style>
+  </defs>
+
+  <rect width="3600" height="5600" class="bg"/>
+  <!-- HEADER -->
+  <rect x="0" y="0" width="3600" height="235" class="band"/>
+  <text x="120" y="104" class="white title">COVERSAATH · PRODUCT ARCHITECTURE</text>
+  <text x="120" y="158" class="white subtitle">Household health-insurance understanding and decision agent. Detailed build map, not a claim-approval promise.</text>
+  <text x="120" y="202" class="white subtitle">Version 20 September 2026 · Design proposal · all live institution integrations remain unverified</text>
+
+  <!-- NORTH STAR -->
+  <rect x="110" y="285" width="3380" height="220" rx="20" class="core"/>
+  <text x="160" y="350" class="h1 ink">North Star</text>
+  <text x="470" y="350" class="body ink">No household should reach an insurance decision or hospital admission without knowing what cover it has,</text>
+  <text x="470" y="389" class="body ink">what remains uncertain, what money it may need and what it should do next.</text>
+  <line x1="160" y1="424" x2="3440" y2="424" class="divider"/>
+  <text x="160" y="470" class="h2 ink">USP</text>
+  <text x="290" y="470" class="body ink">Reconstruct group and personal cover first. Carry that same household context through buying, renewal, hospitalisation and claim coordination.</text>
+
+  <!-- CONSTRAINT BAND -->
+  <rect x="110" y="545" width="3380" height="125" rx="16" class="risk"/>
+  <text x="160" y="594" class="h2 ink">Non-negotiable boundary</text>
+  <text x="160" y="634" class="body ink">Coversaath explains and coordinates. It does not diagnose, promise cashless access, predict claim approval, bind an insurer, submit a declaration, buy cover or move money without the named adult's approval.</text>
+
+  <!-- SECTION 1 ENTRY AND CONSENT -->
+  <rect x="80" y="715" width="3440" height="660" rx="24" class="section"/>
+  <text x="130" y="790" class="num">01</text><text x="210" y="790" class="h1 ink">ENTRY: a real household event starts a bounded case</text>
+  <text x="210" y="830" class="muted small">Do not begin with a generic dashboard. The trigger determines questions, permissions, urgency and the next worker plan.</text>
+  <rect x="130" y="880" width="620" height="190" rx="16" class="card"/>
+  <text x="170" y="930" class="h2 ink">BUY / RENEW</text><text x="170" y="970" class="body ink">Renewal notice · new purchase</text><text x="170" y="1005" class="body ink">Top-up · switch · retain · defer</text><text x="170" y="1045" class="muted small">Question: what already protects us?</text>
+  <rect x="815" y="880" width="620" height="190" rx="16" class="card"/>
+  <text x="855" y="930" class="h2 ink">JOB / FAMILY CHANGE</text><text x="855" y="970" class="body ink">Employer entry or exit</text><text x="855" y="1005" class="body ink">Marriage · child · parent addition</text><text x="855" y="1045" class="muted small">Question: what changes, and when?</text>
+  <rect x="1500" y="880" width="620" height="190" rx="16" class="card"/>
+  <text x="1540" y="930" class="h2 ink">PLANNED ADMISSION</text><text x="1540" y="970" class="body ink">Patient · procedure · hospital · date</text><text x="1540" y="1005" class="body ink">Estimate · deposit · pre-auth route</text><text x="1540" y="1045" class="muted small">Question: what must we clarify and fund?</text>
+  <rect x="2185" y="880" width="620" height="190" rx="16" class="human"/>
+  <text x="2225" y="930" class="h2 ink">CLAIM PROBLEM / EMERGENCY</text><text x="2225" y="970" class="body ink">Query · delay · shortfall · rejection</text><text x="2225" y="1005" class="body ink">Admission happening right now</text><text x="2225" y="1045" class="red">Emergency rule: admit first. Optimise later.</text>
+  <path d="M440 1085 V1150 H1120" class="line"/><path d="M1125 1085 V1150" class="line"/><path d="M1810 1085 V1150 H1700" class="line"/><path d="M2495 1085 V1150 H2310" class="line"/>
+  <rect x="880" y="1150" width="1870" height="165" rx="16" class="core"/>
+  <text x="930" y="1202" class="h2 ink">Case Triage Agent</text><text x="930" y="1240" class="body ink">Sets urgency, scope and immediate safe action. Creates a case ID. Routes emergency to hospital first, then returns to evidence work.</text><text x="930" y="1280" class="green">Output: trigger classification + allowed next actions + task plan.</text>
+
+  <!-- SECTION 2 CONSENT + HOUSEHOLD TREE -->
+  <rect x="80" y="1420" width="3440" height="760" rx="24" class="section"/>
+  <text x="130" y="1495" class="num">02</text><text x="210" y="1495" class="h1 ink">CONTROL PLANE: household roles and permission are separate facts</text>
+  <text x="210" y="1535" class="muted small">Family relationship is not authority. Every collection, viewing, sharing and action checks the named adult's recorded permission.</text>
+  <rect x="130" y="1585" width="1180" height="500" rx="18" class="agent"/>
+  <text x="175" y="1645" class="label">AGENT A · HOUSEHOLD &amp; PERMISSION AGENT</text>
+  <text x="175" y="1693" class="body ink">Builds a role map for every relevant adult and child.</text>
+  <text x="175" y="1740" class="body ink">• Patient: health event may concern them</text><text x="175" y="1777" class="body ink">• Policyholder / proposer: policy or declaration owner</text><text x="175" y="1814" class="body ink">• Payer: premium or hospital cash source</text><text x="175" y="1851" class="body ink">• Operator: can locate and work the route</text><text x="175" y="1888" class="body ink">• Decision-maker: approves recommendation or payment</text><text x="175" y="1925" class="body ink">• Backup: optional person who may receive a handover</text>
+  <line x1="175" y1="1950" x2="1260" y2="1950" class="divider"/>
+  <text x="175" y="1990" class="small ink">Permission record = person · source · purpose · viewer · allowed action · expiry · revocation · audit event.</text><text x="175" y="2030" class="red">No permission or unclear authority → ask the correct person or stop.</text>
+  <rect x="1430" y="1585" width="2010" height="500" rx="18" class="card"/>
+  <text x="1480" y="1645" class="h2 ink">Permission tree enforced before every tool call</text>
+  <rect x="1500" y="1690" width="430" height="105" rx="14" class="core"/><text x="1540" y="1735" class="h2 ink">Named adult?</text><text x="1540" y="1770" class="small ink">identity and role known</text>
+  <rect x="2180" y="1690" width="430" height="105" rx="14" class="core"/><text x="2220" y="1735" class="h2 ink">Purpose clear?</text><text x="2220" y="1770" class="small ink">why this data/action now</text>
+  <rect x="2860" y="1690" width="470" height="105" rx="14" class="core"/><text x="2900" y="1735" class="h2 ink">Scope allowed?</text><text x="2900" y="1770" class="small ink">view · share · call · act</text>
+  <path d="M1935 1742 H2170" class="line"/><path d="M2615 1742 H2850" class="line"/>
+  <rect x="1500" y="1870" width="800" height="140" rx="14" class="output"/><text x="1540" y="1920" class="h2 ink">YES → scoped worker task</text><text x="1540" y="1958" class="body ink">Task carries only needed fields, purpose and expiry.</text>
+  <rect x="2550" y="1870" width="780" height="140" rx="14" class="risk"/><text x="2590" y="1920" class="h2 ink">NO / AMBIGUOUS → do not act</text><text x="2590" y="1958" class="body ink">Request permission, switch owner or log blocked state.</text>
+  <path d="M3075 1805 V1860 H2940" class="dashed"/><path d="M3075 1805 V1860 H1900" class="line"/>
+
+  <!-- SECTION 3 SOURCE, EVIDENCE, MODULES -->
+  <rect x="80" y="2225" width="3440" height="1040" rx="24" class="section"/>
+  <text x="130" y="2300" class="num">03</text><text x="210" y="2300" class="h1 ink">FACT BASE: source first, then extract, reconcile and label uncertainty</text>
+  <text x="210" y="2340" class="muted small">The system stores a cited fact, not a polished insurance story. Original documents and correspondence remain evidence, not instructions.</text>
+  <rect x="130" y="2390" width="630" height="675" rx="18" class="worker"/>
+  <text x="175" y="2450" class="label" fill="#ad7b35">WORKER 1 · INTAKE &amp; SOURCE CAPTURE</text>
+  <text x="175" y="2498" class="body ink">Collects only permitted inputs:</text><text x="175" y="2535" class="body ink">• policy schedule, wording, endorsement</text><text x="175" y="2572" class="body ink">• employer benefit booklet / HR note</text><text x="175" y="2609" class="body ink">• renewal quote, receipt, payment proof</text><text x="175" y="2646" class="body ink">• email, letter, TPA/hospital response</text><text x="175" y="2683" class="body ink">• voice answer and read-back confirmation</text><text x="175" y="2720" class="body ink">• hospital estimate and pre-auth request</text>
+  <line x1="175" y1="2750" x2="715" y2="2750" class="divider"/>
+  <text x="175" y="2790" class="small ink">Creates source ID, owner, date, version, page/section, consent scope and checksum.</text><text x="175" y="2830" class="red">Never treats an email, PDF or voice transcript as executable instruction.</text><text x="175" y="2870" class="small ink">No raw document upload to live system until private storage, deletion and export controls exist.</text>
+  <rect x="880" y="2390" width="790" height="675" rx="18" class="worker"/>
+  <text x="925" y="2450" class="label">WORKER 2 · EXTRACTION &amp; NORMALISATION</text>
+  <text x="925" y="2498" class="body ink">Reads source into typed, cited fields:</text><text x="925" y="2535" class="body ink">• identity, member, policy, effective dates</text><text x="925" y="2572" class="body ink">• insurer, TPA, HR and hospital contacts</text><text x="925" y="2609" class="body ink">• sum insured, utilisation, co-pay, deductible</text><text x="925" y="2646" class="body ink">• room rules, exclusions, waiting periods</text><text x="925" y="2683" class="body ink">• top-up / super top-up attachment rules</text><text x="925" y="2720" class="body ink">• underwriting queries, loadings, endorsements</text>
+  <line x1="925" y1="2750" x2="1620" y2="2750" class="divider"/>
+  <text x="925" y="2790" class="small ink">Model use is bounded: structured output, source pointer, schema validation, version and confidence captured.</text><text x="925" y="2830" class="red">Cannot decide cover, declare a fact or change source text.</text>
+  <rect x="1790" y="2390" width="790" height="675" rx="18" class="agent"/>
+  <text x="1835" y="2450" class="label">AGENT B · EVIDENCE RESOLUTION AGENT</text>
+  <text x="1835" y="2498" class="body ink">Joins citations into a household coverage graph.</text><text x="1835" y="2535" class="body ink">It compares sources, dates and policy versions.</text><text x="1835" y="2582" class="h2 ink">Every fact has one status</text>
+  <text x="1835" y="2620" class="body ink">CONFIRMED: source + page + version</text><text x="1835" y="2657" class="body ink">NEEDS CONFIRMATION: rule or institution unclear</text><text x="1835" y="2694" class="body ink">MISSING: no source or answer</text><text x="1835" y="2731" class="body ink">CONFLICT: sources disagree</text><text x="1835" y="2768" class="body ink">REMEMBERED / PROXY-REPORTED: kept labelled</text>
+  <text x="1835" y="2835" class="red">Unknown is not false. A brochure is not governing wording.</text>
+  <rect x="2700" y="2390" width="740" height="675" rx="18" class="core"/>
+  <text x="2745" y="2450" class="h2 ink">HOUSEHOLD HEALTH TREASURY</text><text x="2745" y="2490" class="muted small">Continuous record and planning layer inside Coversaath. Not a separate policy wallet.</text>
+  <text x="2745" y="2540" class="h2 ink">Three linked modules</text>
+  <text x="2745" y="2580" class="body ink">1. Group cover membership record</text><text x="2770" y="2615" class="small ink">enrolment · members · contribution · exit risk · TPA/HR route</text>
+  <text x="2745" y="2660" class="body ink">2. Personal policy record</text><text x="2770" y="2695" class="small ink">schedule · wording · endorsements · renewal / lapse · base + top-up</text>
+  <text x="2745" y="2740" class="body ink">3. Policy continuity record</text><text x="2770" y="2775" class="small ink">declaration → proof → submission → query → underwriting → issuance → correspondence</text>
+  <line x1="2745" y1="2810" x2="3390" y2="2810" class="divider"/><text x="2745" y="2850" class="small ink">Also stores task log, permissions, source map, action history, affordability inputs and known/unknowns.</text>
+  <path d="M765 2720 H870" class="line"/><path d="M1675 2720 H1780" class="line"/><path d="M2585 2720 H2690" class="line"/>
+
+  <!-- SECTION 4 AGENT ORCHESTRATION -->
+  <rect x="80" y="3310" width="3440" height="1080" rx="24" class="section"/>
+  <text x="130" y="3385" class="num">04</text><text x="210" y="3385" class="h1 ink">DECISION ENGINE: agents plan work; specialist workers produce bounded evidence</text>
+  <text x="210" y="3425" class="muted small">No agent has direct provider authority. No agent runs a transaction. Orchestrator can only dispatch a permitted, versioned task to a worker.</text>
+  <rect x="130" y="3480" width="810" height="760" rx="18" class="agent"/>
+  <text x="175" y="3540" class="label">AGENT C · CASE ORCHESTRATOR</text>
+  <text x="175" y="3588" class="body ink">Owns the case state machine, not insurance truth.</text><text x="175" y="3628" class="body ink">1. Reads trigger, permissions and evidence status</text><text x="175" y="3668" class="body ink">2. Selects smallest task plan for the current event</text><text x="175" y="3708" class="body ink">3. Dispatches workers with deadline, budget and scope</text><text x="175" y="3748" class="body ink">4. Rechecks consent and record revision before action</text><text x="175" y="3788" class="body ink">5. Stops on conflict, unknown material fact or failed worker</text><text x="175" y="3828" class="body ink">6. Builds a plain-language output with citations</text>
+  <line x1="175" y1="3860" x2="895" y2="3860" class="divider"/><text x="175" y="3900" class="h2 ink">Hard limits</text><text x="175" y="3938" class="body ink">Task budget · retries · lease · cancellation · revision check · cost/time cap</text><text x="175" y="3985" class="red">Cannot override a worker, institution, policy wording or human approval gate.</text>
+  <rect x="1080" y="3480" width="770" height="250" rx="18" class="worker"/>
+  <text x="1125" y="3540" class="label">WORKER 3 · COVERAGE RULE CHECK</text><text x="1125" y="3585" class="body ink">Tests this person + event + date against cited terms.</text><text x="1125" y="3623" class="small ink">Eligibility · dates · waiting period · exclusion · room rule · co-pay · deductible · sum insured · restore · top-up attachment.</text><text x="1125" y="3680" class="red">Output is a condition map, never “claim will pass”.</text>
+  <rect x="1080" y="3775" width="770" height="250" rx="18" class="worker"/>
+  <text x="1125" y="3835" class="label">WORKER 4 · INSTITUTIONAL ROUTE PLANNER</text><text x="1125" y="3880" class="body ink">Assigns each unanswered question to the owner.</text><text x="1125" y="3918" class="small ink">Hospital desk · HR · TPA · insurer · licensed partner · household. Tracks outreach, response, deadline and source.</text><text x="1125" y="3975" class="red">Cannot assume hospital network or cashless approval.</text>
+  <rect x="1080" y="4070" width="770" height="170" rx="18" class="worker"/>
+  <text x="1125" y="4130" class="label">WORKER 5 · CASH SCENARIO PLANNER</text><text x="1125" y="4168" class="small ink">Uses voluntary savings and commitments only to show deposit / possible exposure bands. Keeps insurance, cash, loans and investments separate.</text><text x="1125" y="4210" class="red">No borrowing, liquidation or investment advice or execution.</text>
+  <rect x="2010" y="3480" width="680" height="250" rx="18" class="worker"/>
+  <text x="2055" y="3540" class="label">WORKER 6 · CONTINUITY RECONCILER</text><text x="2055" y="3585" class="body ink">Builds the policy-history trail.</text><text x="2055" y="3623" class="small ink">Question asked → answer → evidence → submission → acknowledgement → query → underwriting change → payment → issuance / endorsement.</text><text x="2055" y="3680" class="red">Payment does not prove issuance. Issuance does not prove claim outcome.</text>
+  <rect x="2010" y="3775" width="680" height="250" rx="18" class="worker"/>
+  <text x="2055" y="3835" class="label">WORKER 7 · CORRESPONDENCE TRACKER</text><text x="2055" y="3880" class="body ink">Classifies emails, letters and call summaries.</text><text x="2055" y="3918" class="small ink">Links sender, request, due date, attachment, response and unresolved issue back to source map.</text><text x="2055" y="3975" class="red">Does not send a reply, submit a form or make a representation without approval.</text>
+  <rect x="2010" y="4070" width="680" height="170" rx="18" class="worker"/>
+  <text x="2055" y="4130" class="label">WORKER 8 · OUTPUT &amp; HANDOVER WRITER</text><text x="2055" y="4168" class="small ink">Creates simple, cited cards: known cover, conditions, unknowns, tasks, owners, money bands, documents and escalation path.</text><text x="2055" y="4210" class="red">No invented precision. No medical or legal advice.</text>
+  <rect x="2850" y="3480" width="590" height="360" rx="18" class="human"/>
+  <text x="2895" y="3540" class="red">HUMAN GATES</text><text x="2895" y="3585" class="body ink">The household must approve:</text><text x="2895" y="3622" class="small ink">• data sharing / new contact</text><text x="2895" y="3659" class="small ink">• declaration or correction</text><text x="2895" y="3696" class="small ink">• recommendation and purchase</text><text x="2895" y="3733" class="small ink">• commission disclosure</text><text x="2895" y="3770" class="small ink">• payment, cancellation, settlement</text>
+  <rect x="2850" y="3890" width="590" height="350" rx="18" class="human"/>
+  <text x="2895" y="3950" class="red">EXPERT / INSTITUTION GATES</text><text x="2895" y="3995" class="body ink">Licensed expert when:</text><text x="2895" y="4032" class="small ink">regulated recommendation · material ambiguity · exception · user asks</text><text x="2895" y="4082" class="body ink">Institution decides:</text><text x="2895" y="4119" class="small ink">insurer underwriting / claim · TPA route · hospital admission / estimate · HR benefit status</text><text x="2895" y="4175" class="red">Coversaath records the answer. It does not replace the owner.</text>
+  <path d="M945 3730 H1070" class="line"/><path d="M945 3900 H1070" class="line"/><path d="M945 4060 H1070" class="line"/>
+  <path d="M1855 3605 H2000" class="line"/><path d="M1855 3900 H2000" class="line"/><path d="M2695 3605 H2840" class="dashed"/><path d="M2695 3985 H2840" class="dashed"/>
+
+  <!-- SECTION 5 STATE FLOW -->
+  <rect x="80" y="4435" width="3440" height="520" rx="24" class="section"/>
+  <text x="130" y="4510" class="num">05</text><text x="210" y="4510" class="h1 ink">CASE STATE MACHINE: happy flow, unhappy flow and return paths</text>
+  <rect x="130" y="4580" width="350" height="140" rx="16" class="card"/><text x="170" y="4635" class="h2 ink">0. INTAKE</text><text x="170" y="4675" class="small ink">trigger, urgency, scope</text>
+  <rect x="560" y="4580" width="390" height="140" rx="16" class="core"/><text x="600" y="4635" class="h2 ink">1. PERMISSIONED</text><text x="600" y="4675" class="small ink">roles + consent valid</text>
+  <rect x="1030" y="4580" width="400" height="140" rx="16" class="agent"/><text x="1070" y="4635" class="h2 ink">2. RECONSTRUCTING</text><text x="1070" y="4675" class="small ink">sources, extraction, status</text>
+  <rect x="1510" y="4580" width="400" height="140" rx="16" class="agent"/><text x="1550" y="4635" class="h2 ink">3. ASSESSING</text><text x="1550" y="4675" class="small ink">conditions, route, money</text>
+  <rect x="1990" y="4580" width="400" height="140" rx="16" class="human"/><text x="2030" y="4635" class="h2 ink">4. AWAITING GATE</text><text x="2030" y="4675" class="small ink">household / expert / owner</text>
+  <rect x="2470" y="4580" width="390" height="140" rx="16" class="output"/><text x="2510" y="4635" class="h2 ink">5. ACTION READY</text><text x="2510" y="4675" class="small ink">approved task or decision</text>
+  <rect x="2940" y="4580" width="410" height="140" rx="16" class="output"/><text x="2980" y="4635" class="h2 ink">6. RECORDED</text><text x="2980" y="4675" class="small ink">outcome + next review trigger</text>
+  <path d="M485 4650 H550" class="line"/><path d="M955 4650 H1020" class="line"/><path d="M1435 4650 H1500" class="line"/><path d="M1915 4650 H1980" class="line"/><path d="M2395 4650 H2460" class="line"/><path d="M2865 4650 H2930" class="line"/>
+  <rect x="600" y="4780" width="2850" height="120" rx="16" class="risk"/><text x="650" y="4830" class="h2 ink">Unhappy flow</text><text x="900" y="4830" class="body ink">missing consent · source conflict · unanswered material question · deadline missed · worker failure · payment / issuance mismatch · institutional rejection or dispute</text><text x="900" y="4870" class="red">→ mark the exact blocker, preserve evidence, notify the owner, hand off where needed, then return only to the state that new evidence can resolve.</text>
+  <path d="M1710 4725 V4770 H1080" class="dashed"/><path d="M2200 4725 V4770" class="dashed"/>
+
+  <!-- SECTION 6 OUTPUTS / RAILS -->
+  <rect x="80" y="5000" width="3440" height="515" rx="24" class="section"/>
+  <text x="130" y="5075" class="num">06</text><text x="210" y="5075" class="h1 ink">OUTPUTS, INTERFACES AND RAIL BOUNDARIES</text>
+  <rect x="130" y="5140" width="900" height="305" rx="18" class="output"/>
+  <text x="175" y="5200" class="h2 ink">WHAT THE HOUSEHOLD SEES</text><text x="175" y="5240" class="body ink">WhatsApp / voice first. Simple web card when needed.</text><text x="175" y="5280" class="small ink">• Household Health Card: what we have / do not know / next</text><text x="175" y="5317" class="small ink">• Buying / renewal comparison with stated conflict controls</text><text x="175" y="5354" class="small ink">• Admission Readiness Brief: cited conditions, questions, owners, documents, cash bands</text><text x="175" y="5391" class="small ink">• Claim Position Brief: timeline, clause, evidence, open questions, institution owner</text><text x="175" y="5428" class="red">No “approved/rejected likely” score. No policy summary sold as certainty.</text>
+  <rect x="1130" y="5140" width="740" height="305" rx="18" class="rail"/>
+  <text x="1175" y="5200" class="h2 ink">GNANI · LOAD-BEARING RAIL</text><text x="1175" y="5240" class="small ink">Use: multilingual voice intake, read-back, follow-up and assisted handoff.</text><text x="1175" y="5282" class="small ink">Need to build: permission-scoped handoff carrying adult consent, source provenance and unresolved facts.</text><text x="1175" y="5330" class="red">Do not infer phone identity, authority, consent or call completion from a transcript.</text>
+  <rect x="1960" y="5140" width="700" height="305" rx="18" class="rail"/>
+  <text x="2005" y="5200" class="h2 ink">PINE LABS · NARROW RAIL</text><text x="2005" y="5240" class="small ink">Use: approved hosted payment step and reconciliation where merchant setup permits.</text><text x="2005" y="5282" class="small ink">Need to build: approval → checkout → signed event → purchase record → issuance check.</text><text x="2005" y="5330" class="red">Payment is not underwriting, issuance, endorsement or cover confirmation.</text>
+  <rect x="2750" y="5140" width="690" height="305" rx="18" class="rail"/>
+  <text x="2795" y="5200" class="h2 ink">DELHIVERY · NO CORE FLOW</text><text x="2795" y="5240" class="small ink">Possible later utility: hospital-address normalisation or routing context.</text><text x="2795" y="5282" class="small ink">Do not use logistics to invent a document collection workflow or a fake claims role.</text><text x="2795" y="5330" class="red">No physical-document flow until a real service need and privacy model are confirmed.</text>
+  <text x="130" y="5570" class="muted tiny">Build sequence: protected evidence store → durable worker runtime → bounded model gateway → real consent + operator verification → one rail adapter at a time → licensed-partner and issuance gates. Before that: synthetic data only.</text>
+</svg>
