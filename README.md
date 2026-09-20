@@ -1,4 +1,4 @@
-# CoverSaath MVP
+# Knowvia MVP
 
 Local, synthetic prototype of household health-insurance understanding, buying and continuity.
 Not an insurance adviser, staffed support service or claims platform.
@@ -6,17 +6,24 @@ Not an insurance adviser, staffed support service or claims platform.
 **Product North Star:** no household should reach an insurance decision or hospital admission without
 knowing what cover it has, what remains uncertain, what money it may need and what it should do next.
 
-**Product boundary:** Coversaath is the agent. The Household Health Treasury, group and personal policy
+**Product boundary:** Knowvia is the agent. The Household Health Treasury, group and personal policy
 modules, proposal and underwriting record, correspondence history, Admission Readiness Brief and Claim
 Position Brief are capabilities inside it. This prototype does not yet operate any of them with real data.
 
 ## Brand implementation
 
 The prototype uses the brand tokens and product typography defined in
-[research/01-product.md](research/01-product.md#brand-system). PolicyKey is the final masterbrand
-recommendation, pending formal clearance and user testing. Coversaath remains the working name in code.
-The interface signature is `Known / Unknown / Next`: evidence stays visible,
-uncertainty stays explicit and each open issue gets a next action.
+[research/01-product.md](research/01-product.md#brand-system). The approved public brand is **Knowvia**.
+Its tagline is **Know your cover. Before you need it.** Coversaath remains the internal repository and
+working code name until a separate code migration is approved. The interface signature is
+`Known / Unknown / Next`: evidence stays visible, uncertainty stays explicit and each open issue gets a next action.
+
+**LinkedIn overview:** Knowvia helps people understand their health insurance before they need to use it.
+Most policies are bought with good intent and opened only when someone is admitted to a hospital. By then,
+people are trying to understand what is covered, which hospital to visit, what documents matter, and what to do
+if a claim gets stuck. Knowvia turns policy documents into a clearer view of what you know, what still needs
+checking, and what to do next. We do not replace insurers or promise claim approvals. We help you ask better
+questions earlier.
 
 ## Specialist coverage agents
 

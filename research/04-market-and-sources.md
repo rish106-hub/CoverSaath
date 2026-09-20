@@ -302,16 +302,14 @@ in the name if a plain descriptor carries the category.
 
 | Candidate | Trust | Recall | Seriousness | Expansion | Basic web cleanliness | Total |
 |---|---:|---:|---:|---:|---:|---:|
-| **PolicyKey** | 5 | 5 | 5 | 5 | 4 | **24/25** |
+| **Knowvia** | 5 | 5 | 5 | 5 | 3 | **23/25** |
 | **CoverNest** | 3 | 4 | 3 | 4 | 0 | **14/25** |
 | **CoverSure** | 3 | 4 | 3 | 4 | 0 | **14/25** |
 | **Insurly** | 4 | 4 | 3 | 3 | 0 | **14/25** |
 
-**PolicyKey is the recommended creative route for formal clearance.** It is nine letters, easy to
-pronounce, and tells an Indian user that the product is about insurance before the descriptor is read.
-“Key” adds the product promise: access and understanding, not a claim or payout promise. A basic current
-web search surfaced technical and protocol uses but no obvious active consumer insurance brand named
-PolicyKey. That is only an early filter, not legal clearance.
+**Knowvia is the approved creative route for formal clearance.** It is seven letters, easy to pronounce,
+and carries a useful promise of knowing the route through a confusing policy. The product category is
+carried by the descriptor, tagline and explanation. This is a brand decision, not legal clearance.
 
 Several initially strong names were rejected after current checks. CoverNest is an active Indian insurance
 aggregator, CoverSure is used by an Indian insurance-management platform, PlanCover is an insurance
@@ -326,11 +324,11 @@ and unaided recall with the target age and language range. No candidate has comp
 
 ## Working name status
 
-**PolicyKey is the final naming recommendation. Coversaath remains the working product name and
-repository slug.** The proposed lockup is:
+**Knowvia is the final public naming recommendation. Coversaath remains the internal repository slug and
+legacy code name.** The approved lockup is:
 
-> PolicyKey
-> Health insurance, made clear.
+> Knowvia
+> Know your cover. Before you need it.
 
 The repository should not be renamed until a candidate clears the legal and user tests above.
 
