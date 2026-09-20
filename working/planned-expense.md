@@ -16,6 +16,19 @@ Coversaath is a **policy-deciphering and household decision system**. It reads t
 
 It does not predict claim approval. It does not make a medical decision. It does not hide uncertainty. But it should give a clear conclusion when the underlying documents answer the question.
 
+## The two ways Ram starts
+
+The product should not open as a generic insurance dashboard. Ram begins with one of two jobs:
+
+| Entry route | When Ram chooses it | What Coversaath does |
+|---|---|---|
+| **Plan an expense** | He already has one or more policies and has a pregnancy, planned procedure, parent-care concern, claim issue or renewal approaching | Maps existing policies to the person and event, calculates the cash scenarios, prepares the decision and routes a renewal payment only after Ram approves it |
+| **Find and buy personal health cover** | Ram is losing dependent eligibility, lacks personal continuity cover, wants a personal policy beyond employer cover, or needs to replace a policy | Reconstructs current cover first, compares suitable new options, recommends one route, and lets Ram purchase only after he approves declarations and payment |
+
+**Renewal is not a third generic mode.** It is a time-sensitive case inside `Plan an expense` when Ram already has a policy, or inside `Find and buy personal health cover` when he must replace expiring or ending protection.
+
+Pine Labs appears only at the final payment step for an approved renewal or approved new-policy purchase. It is not the discovery engine, policy reader, underwriting engine or emergency-payment system.
+
 ## Ram's source pack
 
 Before analysis, the main agent asks Ram for the smallest useful source pack:
@@ -150,7 +163,11 @@ The result is not "renew because renewal is good." It is a decision:
 
 Ram presses `Emergency access`.
 
-The app does not make him perform a policy analysis. It gives the smallest usable record:
+**The primary action is an immediate call to a live healthcare expert.** It is not an AI chat. The expert receives a permissioned Emergency Case Brief that Coversaath has prepared from the household record.
+
+The AI's role is limited to retrieving, structuring and displaying evidence. It does not decide treatment, tell Ram to delay admission, decide whether a claim will pass, or independently instruct a hospital.
+
+The healthcare expert sees:
 
 1. Policy number, e-card and insurer or TPA number.
 2. The person covered and the hospital selected.
@@ -160,11 +177,23 @@ The app does not make him perform a policy analysis. It gives the smallest usabl
 6. Hospital-insurance-desk script and required documents.
 7. Pre-authorisation and escalation status.
 
-The first instruction remains: **admit first, optimise later.** No insurance workflow may delay urgent care.
+The expert talks Ram through the immediate administrative path, coordinates the appropriate hospital or insurance route, and tells him what can wait. The first instruction remains: **admit first, optimise later.** No insurance workflow may delay urgent care.
+
+Optional chat remains available for Ram when he wants to read the evidence, send a document, or ask a non-urgent follow-up. It never replaces the emergency expert call.
+
+## Renewal payment and new-policy payment
+
+Once Ram has received the recommendation and reviewed the exact premium, policy wording, disclosures and consequences, he can approve payment through Pine Labs.
+
+| Case | Pine Labs role | Coversaath must do before payment |
+|---|---|---|
+| Existing-policy renewal | Collect the renewal premium after Ram approves | Diff the old and new policy, show the renewal deadline and confirm what is being renewed |
+| New personal-policy purchase | Collect the premium after Ram chooses a recommended policy and approves declarations | Show the recommended policy, exclusions, waiting periods, disclosed details and final premium |
+
+Coversaath keeps payment separate from recommendation. It must allow `do not buy now`, `renew while comparing`, or `seek clarification first` when those are the safer actions.
 
 ## What Ram's parents experience
 
 The normal design is that Ram operates the case. His parents do not need to type, navigate policy clauses or answer a medical questionnaire.
 
 If a parent wants to use Coversaath directly, the product can provide an accessible read-only view. That is an option, not a required workflow. The parent sees a short approved summary: what cover is active, what to carry, whom to call and what Ram has already prepared.
-
