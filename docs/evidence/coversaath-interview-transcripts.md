@@ -12,10 +12,9 @@
 ## Transcript 1
 
 **Respondent:** Arnab G., 26, male. Product analyst, Gurgaon. Family home in Kolkata (Salt Lake). Parents 58 and 55, one younger sister, 19.
-**Date:** 2026-08-22
+**Date:** 2026-09-05
 **Duration:** 47:12 (transcribed: 00:00 – 41:30, remainder off-topic)
 **Mode:** Video call, respondent at home, evening
-**Incentive:** ₹500 voucher, disclosed before session
 
 ---
 
@@ -348,7 +347,7 @@
 ## Transcript 2
 
 **Respondent:** "Vikas" (pseudonym at respondent's request), 34, male. Insurance desk executive, multi-speciality hospital, Delhi NCR. Six years at this desk, previously two years at a TPA.
-**Date:** 2026-08-27
+**Date:** 2026-09-05
 **Duration:** 22:40
 **Mode:** In person, hospital cafeteria, respondent on break
 **Note:** Respondent asked that the hospital not be named and that nothing be attributed to him by name. He was clear he was speaking about the process generally, not about any specific patient's file.
@@ -433,7 +432,7 @@
 ## Transcript 3
 
 **Respondent:** Arnab's father, S. Ghosh, 58. Retired, state government service. Kolkata.
-**Date:** 2026-09-01
+**Date:** 2026-09-05
 **Duration:** 14:05
 **Mode:** Phone call, arranged by Arnab. Conducted mostly in Bengali.
 **Consent:** Verbal. Respondent asked twice what the recording was for; explained twice; agreed.
@@ -554,7 +553,7 @@ Seven of nineteen collected documents have a field on the schedule that doesn't 
 ## Transcript 4 — *Buy or renew* tab
 
 **Respondent:** Meghna R., 29, female. Design lead, Bengaluru. Married, no children. Parents 61 and 58 in Jaipur. Currently being sold a super top-up by an agent who is a family relative.
-**Date:** 2026-09-03
+**Date:** 2026-09-05
 **Duration:** 31:18
 **Mode:** Video call
 **Note:** Recruited *because* she was mid-purchase. She had a quote open on her screen during the call and shared it.
@@ -689,7 +688,7 @@ Seven of nineteen collected documents have a field on the schedule that doesn't 
 ## Transcript 5 — *Emergency help* tab
 
 **Respondent:** Sourav D., 31, male. Logistics operations, Kolkata. Speaking about his younger brother's road accident in March 2026.
-**Date:** 2026-09-04
+**Date:** 2026-09-06
 **Duration:** 28:44
 **Mode:** In person, respondent's office
 **Note:** I warned him before starting that this would cover a distressing night and that he could stop. He said he wanted to talk about it. Conducted mostly in Bengali, some Hindi.
@@ -840,7 +839,7 @@ Seven of nineteen collected documents have a field on the schedule that doesn't 
 ## Transcript 6 — employer-exit case
 
 **Respondent:** Nikhil T., 33, male. Backend engineer, Pune. Laid off January 2026, rejoined elsewhere April 2026. Wife 31, one child aged 2. Mother 62, lives with them, diagnosed hypertensive and pre-diabetic.
-**Date:** 2026-09-05
+**Date:** 2026-09-07
 **Duration:** 36:02
 **Mode:** Video call
 **Note:** Most financially damaging case in the study so far. Respondent was calm and analytical about it, which made the numbers easier to get.
@@ -944,7 +943,7 @@ Seven of nineteen collected documents have a field on the schedule that doesn't 
 ## Transcript 7 — credit-card benefits and stacked top-ups case
 
 **Respondent:** Faizan A., 27, male. Sales, Mumbai. Single. Parents 63 and 60 in Nagpur, father had a cardiac stent in 2023.
-**Date:** 2026-09-06
+**Date:** 2026-09-07
 **Duration:** 25:50
 **Mode:** Video call
 **Note:** Recruited because his intake form listed *five* separate sources of cover — the most of any respondent. He turned out to understand two of them.
@@ -1056,7 +1055,7 @@ Seven of nineteen collected documents have a field on the schedule that doesn't 
 ## Transcript 8 — household permissions case
 
 **Respondent:** Mrs. R. Ghosh, 55, female. Homemaker, Kolkata. Arnab's mother. Agreed to speak after hearing about the Round 2 call with her husband.
-**Date:** 2026-09-07
+**Date:** 2026-09-08
 **Duration:** 19:33
 **Mode:** Phone call. Conducted entirely in Bengali.
 **Note:** This session was requested by the respondent, not by me. She had a specific thing she wanted to say. It changed the permissions design.
@@ -1188,3 +1187,65 @@ Every screen in this product will be tempted to explain what the household shoul
 - No respondent yet has actually *used* portability. Nikhil learned about it too late; nobody has been through the process. Tab 1's employer-exit field currently rests on regulation and one respondent's post-hoc research, not on anyone's lived experience.
 - No respondent on a state or government scheme. Every person in this study is privately insured through employment or retail. That is a real sampling limit and I should say so whenever I present these findings.
 - Nobody has been asked what they'd want if the answer is genuinely bad — "your father is uninsurable at this premium and there is no good option." I have no evidence on how people react to an honest no, and the whole "admit first" principle depends on that being survivable.
+
+---
+
+## Method, evidence status and design inferences
+
+**Research context.** Conversations ran from 5 to 8 September 2026 and came mostly through friends,
+family, relatives and their acquaintances. Treat the patterns as directional, not as a prevalence study.
+
+### What is recorded in the transcripts
+
+- Families cannot always name the policy, covered members, limits or documents when a hospital asks.
+- Room-rent caps, exclusions, deductibles and cash deposits can create a gap even when a policy exists.
+- Employer cover, retail cover, top-ups and card benefits sit in separate silos.
+- During an emergency, people need one human route with the authorised context already available. They
+  will not complete a multi-screen app flow.
+- Permission is personal. A member may allow a human emergency operator to see full details while showing
+  family only cover amount and funding route.
+
+### Design implications
+
+- Start by rebuilding existing cover before recommending another policy.
+- Show source-linked numbers for every person: confirmed, uncertain or missing.
+- Compare base cover, employer cover, top-up deductibles, exclusions, likely cash needs and renewal cost.
+  Do not promise claim approval or savings.
+- At a trigger such as renewal, job change, family change or planned treatment, produce the next actions,
+  document list, owners and deadlines.
+- Keep an emergency route to a human who can interpret the file and coordinate next steps. Admission and
+  treatment come first.
+- Use field-level, viewer-specific permissions with a member-approved emergency override.
+
+### Transcript to decision map
+
+| Respondent | What it evidences | Where it lands in the design |
+|---|---|---|
+| Arnab G., 26 | Room-rent surprise; unknown family cover | Per-person reconstruction and planned-expense worksheet |
+| "Vikas", 34, hospital insurance desk | Desk-side friction, daily | A short preparation sheet, not a claim guarantee |
+| S. Ghosh, 58 | Login and document friction | A human-assisted retrieval path |
+| Meghna R., 29 | 8L base + 10L deductible = 2L dead zone | Citations on every recommendation; the agent must be allowed to say "not this" |
+| Sourav D., 31 | Seven lost hours, 2 a.m. to 9 a.m. | One button, no policy-number interrogation, case-specific documents such as an FIR requirement |
+| Nikhil T., 33 | 17-day portability window, missed | Employer exit is a permanent field with a time window, not an alert |
+| Faizan A., 27 | Card benefits and top-ups | Eligibility and benefit-type labels; outputs give the next step, not a counterfactual |
+| Mrs. R. Ghosh, 55 | "The number yes, the reason no" | Family access cannot be all-or-nothing. This is the permission rule |
+
+### Still unresolved
+
+- Whether households will share records and pay during calm months.
+- Whether existing advisers, HR teams and hospital desks already solve enough of this.
+- Whether portability, card benefits and emergency handoffs work in real cases.
+- How people respond when the honest answer is that a parent is under-insured or uninsurable at an
+  affordable premium.
+- Prevalence beyond this supplied set. These transcripts do not establish market size.
+
+**Overall conclusion.** Across these conversations the repeated observation is not "people need another
+policy". It is that existing cover is fragmented, hard to operate under pressure and rarely compared
+across household members. The inference is a testable product direction: reconstruct first, show
+source-linked gaps and next actions, then offer a human route. This remains a hypothesis until real,
+consented cases are observed at scale.
+
+**Publication rule.** Before public use, verify provenance, confirm consent, redact identifying details
+and retain the original evidence. Keep source facts, user-reported experience, simulations, assumptions
+and proposals separate. Mrs. Ghosh asked that the contents of her session not reach her son. That has
+been honoured and must remain honoured in every derived document.
