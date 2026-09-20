@@ -2,6 +2,10 @@
 
 Updated 20 September 2026. Drafts against the public [The Ken competition questions](https://the-ken.com/case-competition-2026/). Prompts are paraphrased. The private form has not been inspected. No submission has been made.
 
+The source of truth for the current Round 2 eight-question form is
+[round2_answers.md](round2_answers.md). Update that file first. The material below retains the earlier
+competition answers and supporting defence notes.
+
 **Round 2 status:** not ready to submit unchanged. The product design is specified, but the reported
 student conversations, one real household drill, vendor-platform testing and the 3.92% opening share
 still need attachable evidence or organiser confirmation. The older ten-question draft is retained below
