@@ -1,4 +1,12 @@
-# Coversaath: viability and fit audit
+# Knowvia: viability and fit audit
+
+> **SUPERSEDED — historical working material, 20 September 2026.**
+> This file predates the eight consented interviews (5 to 8 September 2026) and the build spec in
+> `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
+> five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
+> no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
+> Read [AGENTS.md](../AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Kept for provenance. Do not cite from this file.
 
 Updated 07 September 2026. Written against the live competition page read in the browser on
 07 September 2026, which supplied the ten question prompts and the five judging criteria verbatim.
@@ -44,7 +52,7 @@ metered rather than unlimited.
 
 ### Approved response to this audit
 
-The user approved an agent-led Coversaath with a Household Health Treasury as the long-term record and
+The user approved an agent-led Knowvia with a Household Health Treasury as the long-term record and
 planning layer. This accepts the audit's core correction: the agent performs reconstruction, consented
 voice intake, source linking, gap assessment, affordability calculations, follow-up and card generation.
 Humans are metered at licensed purchase gates, material ambiguity, exceptions or a customer request.
@@ -208,7 +216,7 @@ Admission Readiness Brief with cited limits, unanswered questions, document need
 owners across hospital desk, HR, TPA and insurer.
 
 This is not evidence of demand, prevalence or a claims-API gap. A claims-first strategy would be fragile
-because Coversaath cannot assume insurer or TPA system access. Keep buying as the opening and test the
+because Knowvia cannot assume insurer or TPA system access. Keep buying as the opening and test the
 brief manually against one real or fully synthetic planned-care case. Stop if it merely restates a policy
 PDF or adds a slower layer than the existing hospital or TPA route.
 
@@ -221,13 +229,13 @@ multi-adult consent or real-service feasibility. No live rail integration is con
 
 ## 10. Product hierarchy correction, 20 September
 
-The claims-backwards feedback should improve Coversaath's continuity layer, not rename the product into a
+The claims-backwards feedback should improve Knowvia's continuity layer, not rename the product into a
 "Disclosure-to-Claim Ledger." That would make a supporting record-keeping capability the headline and
 would reintroduce the post-purchase drift this audit warned against.
 
 The corrected hierarchy is:
 
-- **Coversaath:** household health-insurance understanding and decision agent.
+- **Knowvia:** household health-insurance understanding and decision agent.
 - **Core sequence:** reconstruct group and personal cover, decide whether to buy, renew, retain, switch or
   defer, complete the authorised transaction, and check issued terms.
 - **Continuous context:** policy history, disclosure evidence, underwriting treatment, correspondence,

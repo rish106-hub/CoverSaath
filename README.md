@@ -13,9 +13,10 @@ Position Brief are capabilities inside it. This prototype does not yet operate a
 ## Brand implementation
 
 The prototype uses the brand tokens and product typography defined in
-[research/01-product.md](research/01-product.md#brand-system). The approved public brand is **Knowvia**.
-Its tagline is **Know your cover. Before you need it.** Coversaath remains the internal repository and
-working code name until a separate code migration is approved. The interface signature is
+[research/01-product.md](research/01-product.md#brand-system). The public brand is **Knowvia**.
+Its tagline is **Know your cover. Before you need it.** Coversaath was the internal codename and is
+retired from all new copy. It survives only in existing filenames, the database path, the session cookie,
+the git remote URL and the research transcripts, which are real artefacts left as they are. The interface signature is
 `Known / Unknown / Next`: evidence stays visible, uncertainty stays explicit and each open issue gets a next action.
 
 **LinkedIn overview:** Knowvia helps people understand their health insurance before they need to use it.

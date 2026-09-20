@@ -1,5 +1,13 @@
 # Knowvia: submission answers and defence
 
+> **SUPERSEDED — historical working material, 20 September 2026.**
+> This file predates the eight consented interviews (5 to 8 September 2026) and the build spec in
+> `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
+> five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
+> no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
+> Read [AGENTS.md](AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Kept for provenance. Do not cite from this file.
+
 Updated 20 September 2026. Drafts against the public [The Ken competition questions](https://the-ken.com/case-competition-2026/). Prompts are paraphrased. The private form has not been inspected. No submission has been made.
 
 The source of truth for the current Round 2 eight-question form is
@@ -202,7 +210,7 @@ the instruction to admit first.
 
 > **Knowvia**
 
-The internal project name has been Coversaath. Knowvia is the current working public name. It supports
+The internal codename was Coversaath. Knowvia is the public name. It supports
 the actual promise: know what cover exists, know what remains uncertain and know what to do next. Name,
 trademark, domain and company clearance remain unverified.
 
@@ -243,7 +251,7 @@ Do not infer Tiya's contribution from her parents or pressure her to share a dif
 
 Limit: 60 words. **Based on conversations reported by Rishav. Confirm the underlying evidence before submission.**
 
-> Across 15 college students we spoke to, most could not name their family policy. More surprisingly, they expected relatives outside the immediate family to operate it in an emergency. So Coversaath tests that assumption: before recommending cover, a backup person must find the family's existing policy within five minutes.
+> Across 15 college students we spoke to, most could not name their family policy. More surprisingly, they expected relatives outside the immediate family to operate it in an emergency. So Knowvia tests that assumption: before recommending cover, a backup person must find the family's existing policy within five minutes.
 
 Do not substitute an invented exact percentage. The observation is unverified delegation outside the immediate household. The design consequence is the five-minute readiness drill, which is a falsifiable test we can pass or fail, not a promise. The claim that parents caused disengagement is a hypothesis, not the finding. Record the exact numerator, question wording, raw answers, participant mix and publication consent before using evidence attachments.
 
@@ -395,7 +403,7 @@ Because a buying case depends on records belonging to several adults, so permiss
 
 ### Why isn't this just Ditto with AI?
 
-It is, if all we do is explain policies and offer calls. Ditto already serves motivated buyers well. Coversaath differs in order: it will not recommend a policy until existing family and employer cover has been reconstructed from documents and a backup person has been tested. We have not proved that this order is enough differentiation, or that buyers value it enough to switch.
+It is, if all we do is explain policies and offer calls. Ditto already serves motivated buyers well. Knowvia differs in order: it will not recommend a policy until existing family and employer cover has been reconstructed from documents and a backup person has been tested. We have not proved that this order is enough differentiation, or that buyers value it enough to switch.
 
 ### Why not use Policybazaar or an LLM?
 
@@ -403,7 +411,7 @@ They are valid alternatives. Policybazaar can compare, sell and support claims. 
 
 ### Why won't the existing broker do this?
 
-They might, and we should not claim otherwise. First identify the exact question left unanswered after the existing route. Work alongside the adviser when useful. If they already deliver the same outcome with less effort, Coversaath adds no value to that case. Our comparison must measure duplicate calls and extra onboarding as costs, not hide them.
+They might, and we should not claim otherwise. First identify the exact question left unanswered after the existing route. Work alongside the adviser when useful. If they already deliver the same outcome with less effort, Knowvia adds no value to that case. Our comparison must measure duplicate calls and extra onboarding as costs, not hide them.
 
 ### Do you need people to come back monthly?
 

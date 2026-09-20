@@ -1,8 +1,8 @@
-# Coversaath working notes
+# Knowvia working notes
 
 ## Gnani's correct role
 
-Gnani is not the policy analyst, claims engine or family-interrogation bot. Coversaath's evidence workers do the insurance reasoning. Gnani is used where speaking is faster, easier or more accessible than typing.
+Gnani is not the policy analyst, claims engine or family-interrogation bot. Knowvia's evidence workers do the insurance reasoning. Gnani is used where speaking is faster, easier or more accessible than typing.
 
 ### Use 1: optional voice intake for each covered person
 
@@ -26,11 +26,20 @@ Ram may say:
 
 > "My wife is pregnant, my mother has kidney issues, my employer cover exists, and I need to know whether I should buy another policy now."
 
-Gnani transcribes the request. The main Coversaath agent turns it into a case, assigns specialist workers and returns a structured answer. Gnani can then read that answer aloud, but it does not perform the policy reasoning itself.
+Gnani transcribes the request. The main Knowvia agent turns it into a case, assigns specialist workers and returns a structured answer. Gnani can then read that answer aloud, but it does not perform the policy reasoning itself.
 
 ### Use 3: accessible text-to-speech for senior citizens
 
-If Ram is unavailable, his father or mother may open an approved household view and listen in their preferred language.
+A senior family member is not restricted to listening. The operator model is the **default, not a ceiling**:
+Ram runs the case so his parents do not have to, but if his father or mother wants to open the case, add a
+document, answer a question, correct a fact or act on their own policy, they can. Nothing is locked to Ram.
+
+What we do not do is hand a senior full agency by default and then expect them to operate an insurance
+workflow. S. Ghosh, 58, holds the family policy and cannot get past the insurer login [T3]. Defaulting him
+into the driver's seat would fail him. Defaulting him out of it, permanently, would also fail him.
+
+If Ram is unavailable, or simply if a parent wants to, they open an approved household view and listen in
+their preferred language.
 
 The content is a simplified, pre-generated summary:
 
@@ -41,7 +50,20 @@ The content is a simplified, pre-generated summary:
 - What Ram has already done
 - Immediate next action
 
-Gnani translates and reads this summary in the requested language. It should not improvise medical, legal or policy conclusions beyond the evidence-backed Coversaath output.
+Gnani translates and reads this summary in the requested language. It should not improvise medical, legal or policy conclusions beyond the evidence-backed Knowvia output.
+
+From that view, a senior can request the same actions any operator can: ask a question, supply a document,
+correct a recorded fact, or start a case on their own policy. Their own records are theirs. What they cannot
+do is see another adult's protected fields without that adult's permission, which is the same rule that
+applies to Ram.
+
+## Permission
+
+Permission is per-field and per-viewer, never a household switch. The full model — the three visibility
+classes, grants, expiry, revocation, the pre-authorised emergency override and the worker constraints — is
+specified under section C of [`building/insurance.md`](../building/insurance.md). Every rule in this file is
+subject to it, including Gnani's three uses: a voice agent may not read a protected field aloud to a viewer
+who does not hold that class.
 
 ## Product rule: concise answer first, proof on demand
 
@@ -112,7 +134,20 @@ Read the exact dependent definition. Identify the evidenced last day of cover. S
 
 ### Hospital admission now
 
-Default to an immediate call to a live healthcare expert. Give that expert the permissioned Emergency Case Brief: e-card, policy number, cover map, dated network evidence, cash scenario, hospital contact path and current pre-authorisation state. AI chat is optional and secondary. Do not make the family wait for an analysis before admission.
+**Direct call to a human support operator. Gnani has no role in this path at all.**
+
+Pressing `Emergency access` dials a trained support human. That human receives the permissioned Emergency
+Case Brief: e-card, policy number, cover map, dated network evidence, cash scenario, hospital contact path
+and current pre-authorisation state. They are a support operator who already has the file open, not a
+clinician: they do not advise on treatment.
+
+No voice agent, no IVR, no bot triage, no read-back, no transcription step. Sourav's specification is one
+button and a person who does not ask him anything [T5 00:04:22, 00:04:36]. A voice agent in that path is a
+screen with a voice.
+
+Talking to the AI is a **separate product path**, available any time the user chooses it, including during a
+hospital stay for a non-urgent question. It is never on the emergency route and never a step before the call
+connects. Do not make the family wait for an analysis before admission.
 
 ### Claim dispute or pre-authorisation delay
 

@@ -1,8 +1,8 @@
-# Coversaath working case: Ram's planned expense
+# Knowvia working case: Ram's planned expense
 
 ## Why this case exists
 
-This is a working example, not a statement about Google's actual employee benefits or any insurer's actual terms. It shows how Coversaath should behave once a household uploads the relevant policy documents, enrolment records, endorsements and hospital estimate.
+This is a working example, not a statement about Google's actual employee benefits or any insurer's actual terms. It shows how Knowvia should behave once a household uploads the relevant policy documents, enrolment records, endorsements and hospital estimate.
 
 The household operator is **Ram**, 27, a Google engineer. He has a pregnant wife, a mother with kidney issues, and both parents are above 60. Ram is the user of the product. His family are people whose policies, benefits and care events may appear in the case.
 
@@ -12,7 +12,7 @@ The question is not, "Will every claim pass?" It is:
 
 ## Product position
 
-Coversaath is a **policy-deciphering and household decision system**. It reads the policies, maps them to each covered person and specific care event, and recommends the best available action.
+Knowvia is a **policy-deciphering and household decision system**. It reads the policies, maps them to each covered person and specific care event, and recommends the best available action.
 
 It does not predict claim approval. It does not make a medical decision. It does not hide uncertainty. But it should give a clear conclusion when the underlying documents answer the question.
 
@@ -20,7 +20,7 @@ It does not predict claim approval. It does not make a medical decision. It does
 
 The product should not open as a generic insurance dashboard. Ram begins with one of two jobs:
 
-| Entry route | When Ram chooses it | What Coversaath does |
+| Entry route | When Ram chooses it | What Knowvia does |
 |---|---|---|
 | **Plan an expense** | He already has one or more policies and has a pregnancy, planned procedure, parent-care concern, claim issue or renewal approaching | Maps existing policies to the person and event, calculates the cash scenarios, prepares the decision and routes a renewal payment only after Ram approves it |
 | **Find and buy personal health cover** | Ram is losing dependent eligibility, lacks personal continuity cover, wants a personal policy beyond employer cover, or needs to replace a policy | Reconstructs current cover first, compares suitable new options, recommends one route, and lets Ram purchase only after he approves declarations and payment |
@@ -94,7 +94,7 @@ Under `Why`, Ram can inspect every clause, estimate line and calculation. The de
 
 ### 4. What is concrete versus dynamic
 
-| Coversaath can state directly from the supplied record | Coversaath must label as dynamic or unconfirmed |
+| Knowvia can state directly from the supplied record | Knowvia must label as dynamic or unconfirmed |
 |---|---|
 | Eligibility definition, waiting period, maternity cap, room rule, co-pay, deductible, exclusions and document requirements | Current cashless network status if the source is stale or missing |
 | Whether wife is named in an uploaded enrolment schedule | Whether a hospital has accepted pre-authorisation for this exact admission |
@@ -105,7 +105,7 @@ The system does not use "needs confirmation" as a lazy answer. It uses it only f
 
 ## Example planned-expense journey: mother's kidney-related treatment
 
-Ram starts a second event for his mother. He uploads the treatment estimate and her existing policy records. Coversaath does not call his mother to run a generic health interview. Ram is the case operator.
+Ram starts a second event for his mother. He uploads the treatment estimate and her existing policy records. Knowvia does not call his mother to run a generic health interview. Ram is the case operator.
 
 The agents identify:
 
@@ -125,7 +125,7 @@ The main-agent output is a ranked plan, for example:
 
 This is a separate, high-value trigger.
 
-Someone may be covered under a parent's group or family policy while they meet the dependent definition. At 26, employment, marriage, policy renewal, or the plan's exact dependent-age rule may remove that cover. Coversaath must identify this early.
+Someone may be covered under a parent's group or family policy while they meet the dependent definition. At 26, employment, marriage, policy renewal, or the plan's exact dependent-age rule may remove that cover. Knowvia must identify this early.
 
 ### Continuity worker logic
 
@@ -143,7 +143,7 @@ The primary output is:
 
 ## Renewal under pressure
 
-When a renewal is approaching, Coversaath runs a renewal case rather than merely showing a reminder.
+When a renewal is approaching, Knowvia runs a renewal case rather than merely showing a reminder.
 
 | Check | Why it matters | Agent action |
 |---|---|---|
@@ -163,11 +163,16 @@ The result is not "renew because renewal is good." It is a decision:
 
 Ram presses `Emergency access`.
 
-**The primary action is an immediate call to a live healthcare expert.** It is not an AI chat. The expert receives a permissioned Emergency Case Brief that Coversaath has prepared from the household record.
+**The primary action is an immediate call to a human support operator.** It is not an AI chat and not a voice
+agent. **Gnani has no role in this path.** The operator receives a permissioned Emergency Case Brief that
+Knowvia has prepared from the household record.
 
-The AI's role is limited to retrieving, structuring and displaying evidence. It does not decide treatment, tell Ram to delay admission, decide whether a claim will pass, or independently instruct a hospital.
+Talking to the AI is a separate path the user can choose at any time. It is never placed in front of the
+call, and choosing it is never required to reach a person.
 
-The healthcare expert sees:
+The AI's role is limited to retrieving, structuring and displaying evidence. It does not decide treatment, tell Ram to delay admission, decide whether a claim will pass, or independently instruct a hospital. The support operator is not a clinician and does not advise on treatment either.
+
+The support operator sees:
 
 1. Policy number, e-card and insurer or TPA number.
 2. The person covered and the hospital selected.
@@ -185,15 +190,24 @@ Optional chat remains available for Ram when he wants to read the evidence, send
 
 Once Ram has received the recommendation and reviewed the exact premium, policy wording, disclosures and consequences, he can approve payment through Pine Labs.
 
-| Case | Pine Labs role | Coversaath must do before payment |
+| Case | Pine Labs role | Knowvia must do before payment |
 |---|---|---|
 | Existing-policy renewal | Collect the renewal premium after Ram approves | Diff the old and new policy, show the renewal deadline and confirm what is being renewed |
 | New personal-policy purchase | Collect the premium after Ram chooses a recommended policy and approves declarations | Show the recommended policy, exclusions, waiting periods, disclosed details and final premium |
 
-Coversaath keeps payment separate from recommendation. It must allow `do not buy now`, `renew while comparing`, or `seek clarification first` when those are the safer actions.
+Knowvia keeps payment separate from recommendation. It must allow `do not buy now`, `renew while comparing`, or `seek clarification first` when those are the safer actions.
 
 ## What Ram's parents experience
 
 The normal design is that Ram operates the case. His parents do not need to type, navigate policy clauses or answer a medical questionnaire.
 
-If a parent wants to use Coversaath directly, the product can provide an accessible read-only view. That is an option, not a required workflow. The parent sees a short approved summary: what cover is active, what to carry, whom to call and what Ram has already prepared.
+If a parent wants to use Knowvia directly, they can. They get an accessible household view in their own
+language, showing a short approved summary: what cover is active, what to carry, whom to call and what Ram
+has already prepared. From there they can ask a question, supply a document, correct a recorded fact, or
+start a case on their own policy.
+
+The distinction that matters: we do not hand a senior full agency **by default** and leave them to operate an
+insurance workflow alone. We also do not lock them out of one. The operator model is the default path, not a
+restriction, and any member can step into the case when they want to. Their own record is always fully theirs
+— the permission model in `building/insurance.md` section C gives every principal full access to their own
+data by definition.

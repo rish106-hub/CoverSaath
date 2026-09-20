@@ -1,5 +1,13 @@
 # Knowvia: product and decisions
 
+> **SUPERSEDED — historical working material, 20 September 2026.**
+> This file predates the eight consented interviews (5 to 8 September 2026) and the build spec in
+> `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
+> five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
+> no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
+> Read [AGENTS.md](../AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Kept for provenance. Do not cite from this file.
+
 Updated 20 September 2026. Brand system added 18 September 2026. Status: coherent concept with a
 buying-led sequence, ready for a scoped prototype and behavioural testing. Fifteen student conversations
 are user-reported. No paid pilot, partner agreement or working integration is claimed.
@@ -35,7 +43,7 @@ build uses voluntary affordability inputs. It does not make a general investment
 
 ## 2. Decisions settled by the user
 
-- Coversaath operates through a licensed distribution partner for advice and purchase. Support and
+- Knowvia operates through a licensed distribution partner for advice and purchase. Support and
   continuing assistance are funded by disclosed distribution commission through that partner.
 - The adviser must be permitted and expected to recommend no purchase. Adviser pay and case review
   must not depend on a sale. Every recommendation records the commission position at the time it was made.
@@ -92,7 +100,7 @@ It must work for people who are disengaged by default. It should not require the
 ### Entry rule after paired-agent challenge
 
 Before opening a full case, name the unresolved question, the existing helper, the missing answer,
-the institution that can answer it, and the work Coversaath will own. If the current adviser already
+the institution that can answer it, and the work Knowvia will own. If the current adviser already
 finishes the same task with less effort, do not manufacture another workflow. The service can work
 alongside that adviser with permission. This is a design change from simulations, not proof that the
 gap occurs in real households.
@@ -126,7 +134,7 @@ or corporate workers are comfortable with English medical terminology. Let adult
 ### The buying sequence
 
 1. A real buying trigger occurs.
-2. Coversaath reconstructs existing family and employer cover.
+2. Knowvia reconstructs existing family and employer cover.
 3. It identifies and verifies the actual insurance operator.
 4. The family runs the five-minute readiness drill.
 5. The system identifies the uncovered need.
@@ -177,7 +185,7 @@ the documents, and records what remains unknown. Each adult controls their own r
 The output is a small emergency handover: current policy documents, insured members, insurer or TPA,
 the real operator, one backup, authorised viewers, unknowns and the first administrative actions. A
 five-minute backup check is available when a household wants to test the handover or when voice outreach
-reveals a material operator gap. It is a supporting continuity feature, not Coversaath's headline or a
+reveals a material operator gap. It is a supporting continuity feature, not Knowvia's headline or a
 mandatory exam before every recommendation.
 
 The backup check is a test, not a promise. Passing it does not mean the family has adequate insurance.
@@ -228,7 +236,7 @@ one outcome over another.
 ### Issuance check and updated handover
 
 The issued schedule and endorsements are checked against what was agreed. An issued policy that differs
-from the accepted offer stays an open issue. Coversaath reconciles the household's declared facts,
+from the accepted offer stays an open issue. Knowvia reconciles the household's declared facts,
 submitted evidence, insurer questions, underwriting response and issued contract. It flags a mismatch,
 but only the institution can resolve it. The emergency handover is then updated with the new policy,
 members, insurer or TPA route and authorised viewers. A short family guide records how to seek help. The
@@ -500,6 +508,6 @@ coordination and cash-timing value must be tested. This document supersedes all 
 
 Practitioner feedback received on 15 September added a claims-backwards lens. The product must detect
 benefit-specific limits, such as a therapy cap inside a larger sum insured, and make corporate-policy
-unknowns visible before admission. It does not change the primary opening or make Coversaath a claims
+unknowns visible before admission. It does not change the primary opening or make Knowvia a claims
 processor. The next proof is whether an Admission Readiness Brief produces a clearer written answer
 from the hospital desk, TPA, insurer or employer than the household's current route.

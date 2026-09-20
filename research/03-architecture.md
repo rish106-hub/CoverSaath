@@ -1,4 +1,12 @@
-# How Coversaath works
+# How Knowvia works
+
+> **SUPERSEDED — historical working material, 20 September 2026.**
+> This file predates the eight consented interviews (5 to 8 September 2026) and the build spec in
+> `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
+> five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
+> no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
+> Read [AGENTS.md](../AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Kept for provenance. Do not cite from this file.
 
 Updated 17 September 2026. The full service below remains a proposal. A local synthetic workflow
 scaffold and migration-first SQLite backend structure are implemented; their exact scope is in the final
@@ -639,7 +647,7 @@ CodeRabbit's [public architecture](https://docs.coderabbit.ai/overview/architect
 analysis, deterministic tools, contextual exploration, specialised parallel agents and feedback memory.
 Borrow the evidence pipeline and gates, not assumed private prompts, models or deployment topology.
 
-| Review pattern | Coversaath production target |
+| Review pattern | Knowvia production target |
 |---|---|
 | Versioned change snapshot | Case revision plus authorised document/version snapshot |
 | Deterministic analysis | Permissions, contract hierarchy, arithmetic and state validators |
@@ -788,7 +796,7 @@ structure and data protection require qualified review. This build makes no lega
 
 ## Exhaustive working map, 20 September 2026
 
-This is the current product hierarchy. It deliberately makes Coversaath the agent, not a ledger, a
+This is the current product hierarchy. It deliberately makes Knowvia the agent, not a ledger, a
 dashboard, a backup-person drill or a claims product. Those are useful capabilities that make the agent
 more reliable at the moment a household has to decide or act.
 
@@ -938,7 +946,7 @@ permission state, provenance and lifecycle.
 
 ### Rail responsibilities in this map
 
-| Rail | Existing documented surface | Coversaath use | Capability Coversaath must build or validate | Explicit non-claim |
+| Rail | Existing documented surface | Knowvia use | Capability Knowvia must build or validate | Explicit non-claim |
 |---|---|---|---|---|
 | Gnani | Speech-to-text, text-to-speech, real-time and batch interfaces, plus an agent builder | Consent-aware multilingual voice intake, read-back, missing-document requests and human-ready case summary | Per-adult permission and provenance that survives caller, parent, relative and expert handoff; approved telephony or WhatsApp workflow | Voice transcript or read-back is not consent, identity verification or insurer authority. |
 | Pine Labs | Online payments including payment gateway, links, forms, refunds and subscriptions | User-approved premium checkout, payment status, refund path and reconciliation against an authorised purchase | Licensed-partner and merchant configuration, webhooks, idempotency, refund responsibilities and issued-policy reconciliation | Payment success is not a policy sale, underwriting acceptance or issuance. Commission is not an extra fee added by the agent. |
