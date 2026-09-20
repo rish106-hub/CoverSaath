@@ -70,6 +70,20 @@ policy issuance. Logistics has no core role in this build because policy and con
 Zerodha is a later optional source for a user-selected affordability scenario, never a default feed or trading
 rail. Do not manufacture shipping or investing to fill a slide.
 
+### Product hierarchy correction, 20 September
+
+The policy continuity record, declaration trail, employer-policy module, personal-policy module, admission
+brief and claim-position brief belong **inside Coversaath**. They make the agent more useful over time but
+must not replace the buying-led agent with a feature pitch. The submission should keep this hierarchy:
+
+1. Coversaath is the household health-insurance understanding and decision agent.
+2. It reconstructs group and personal cover before it recommends a purchase or renewal route.
+3. It preserves this context for planned care, institutional follow-up and a claim problem.
+4. A ledger, dashboard, voice handover or payment flow is a capability, not the product.
+
+This adjustment lowers the risk of pitching a post-purchase claims tool that misses the opening. It does
+not prove that a buying-led agent is sufficiently differentiated from a broker or benefits platform.
+
 ## Public question checklist
 
 Prompts below are paraphrases. Ready-to-review drafts are in [answers.md](../answers.md).

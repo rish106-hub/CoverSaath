@@ -156,8 +156,28 @@ Links reviewed for this pack on 06 September 2026. For regulated implementation,
 | [Delhivery tracking](https://help.delhivery.com/docs/track-orders) | Shipment tracking capability | Acceptance of sensitive medical-document logistics for our use case |
 | [Delhivery B2B creation](https://help.delhivery.com/docs/b2b-order-creation) | A documented B2B shipping workflow | A ready household medical-courier product |
 | [HDFC ERGO Optima Secure](https://www.hdfcergo.com/health-insurance/optima-secure) | Product-specific benefit design, including growth features | A universal no-claim-bonus rule across products |
+
+## LinkedIn feedback trace, reviewed 20 September 2026
+
+The publicly accessible post describes the same household-case framing now used in Coversaath: start with
+a real decision, obtain per-adult permission, reconstruct cover, assess treatment-specific exposure,
+bring a human in at a regulated or difficult point, and record the result. The comments are useful
+practitioner feedback. They are not customer interviews, prevalence evidence, evidence of demand, or a
+license to claim a live integration.
+
+| Feedback | Product change or confirmation | What remains unproved |
+|---|---|---|
+| Neelkanth Chatterjee suggested working backwards from claims and flagged the lack of insurer claims APIs. | Add a Claim Position Brief and retain the evidence and correspondence timeline. Do not make claims processing the product or depend on an API. | Whether insurer or TPA access is actually unavailable, whether a record improves outcomes, and whether households want this service. |
+| Shilpa Arora flagged therapy-specific caps and corporate benefits that employees discover only at hospitalisation. | Evaluate coverage by person, procedure or therapy, hospital, date and policy version. Mark group-plan terms unverified until a booklet or authorised reply exists. | How common these gaps are, and the correct interpretation of a particular policy clause. |
+| Shilpa also identified the hospital desk, TPA and insurer as separate information processors. | The Admission Readiness Brief assigns a named institutional owner, exact question, deadline and evidence trail instead of pretending one party owns the answer. | Response times, authorisation mechanics and whether Coversaath is faster than the existing route. |
+| Nitin Srivastava flagged the realistic risk that the designated permission holder is unreachable during hospitalisation. | Treat the emergency handover and backup as a permissioned continuity module. In an emergency, route to the hospital desk, TPA, insurer or HR. Never make care wait for missing authority. | Whether families will set up a backup, and which authority accepts which action from that backup. |
+| Vansh Adhlakha agreed that different people hold different documents. | Keep record retrieval and role-specific consent in onboarding, but make them support the insurance decision rather than the product headline. | Whether the collection effort is acceptable or causes drop-off. |
+
+The original post and the publicly displayed comments are available at
+[Rishav Dewan's LinkedIn post](https://www.linkedin.com/posts/rishav-dewan_%F0%9D%97%9B%F0%9D%97%B2%F0%9D%97%AE%F0%9D%97%B9%F0%9D%98%81%F0%9D%97%B5-%F0%9D%97%B6%F0%9D%97%BB%F0%9D%98%80%F0%9D%98%82%F0%9D%97%BF%F0%9D%97%AE%F0%9D%97%BB%F0%9D%97%B0%F0%9D%97%B2-%F0%9D%97%B6%F0%9D%98%80-%F0%9D%97%BB%F0%9D%97%BC-activity-7505177397751697408-25Lz). The account, identities and claims in
+comments should be independently checked before any public attribution beyond this internal trace.
 | [SBI Card current terms](https://www.sbicard.com/sbi-card-en/assets/docs/pdf/most-important-terms-and-conditions/mitc-english.pdf) | Card terms must be checked against the current version | Every credit card includes hospitalisation insurance |
-| Practitioner comments on [Rishav's LinkedIn post](https://www.linkedin.com/posts/rishav-dewan_health-insurance-is-not-a-funnel-it-is-a-activity-7505177397751697408-6pkW) | Two practitioners raised claims-backwards design questions: treatment-specific caps, undisclosed corporate cover and fragmented institutional handling | Prevalence, correctness of every example, claims-API availability or demand for Coversaath |
+| Practitioner comments on [Rishav's LinkedIn post](https://www.linkedin.com/posts/rishav-dewan_health-insurance-is-not-a-funnel-it-is-a-activity-7505177397751697408-6pkW) | Practitioner feedback raised treatment-specific caps, undisclosed corporate cover, fragmented institutional handling and unreachable permission-holder risk | Prevalence, correctness of every example, claims-API availability, demand for Coversaath or a general claim-rejection statistic |
 
 ### Sources retained but now out of scope
 

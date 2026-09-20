@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3000" height="4100" viewBox="0 0 3000 4100" role="img" aria-labelledby="title desc">
+  <title id="title">Coversaath exhaustive working board</title>
+  <desc id="desc">A dense, hand-drawn working board mapping Coversaath from household insurance discovery to buying, renewal, planned admission and claim support.</desc>
+  <style>
+    .paper { fill:#fbf6e9; }
+    .ink { fill:#193349; font-family:"Chalkboard SE","Marker Felt","Comic Sans MS",cursive; }
+    .title { font-size:72px; font-weight:700; letter-spacing:1px; }
+    .sub { font-size:33px; }
+    .head { font-size:39px; font-weight:700; }
+    .body { font-size:29px; }
+    .small { font-size:25px; }
+    .box { fill:#fffdf7; stroke:#193349; stroke-width:6; }
+    .teal { fill:#d9f0ed; stroke:#257b75; stroke-width:6; }
+    .orange { fill:#ffe3bd; stroke:#bd6d2e; stroke-width:6; }
+    .pink { fill:#f9dfe1; stroke:#a55561; stroke-width:6; }
+    .yellow { fill:#fff1ae; stroke:#a47d22; stroke-width:6; }
+    .line { fill:none; stroke:#193349; stroke-width:7; stroke-linecap:round; stroke-linejoin:round; }
+    .dash { fill:none; stroke:#a55561; stroke-width:7; stroke-linecap:round; stroke-dasharray:16 13; }
+    .note { fill:#9a5c22; font-family:"Chalkboard SE","Marker Felt","Comic Sans MS",cursive; font-size:28px; font-style:italic; }
+  </style>
+  <rect class="paper" width="3000" height="4100"/>
+
+  <text x="130" y="120" class="ink title">COVERSAATH / WORKING SYSTEM MAP</text>
+  <text x="134" y="174" class="ink sub">not a policy wallet. not a claims bot. not a ledger pretending to be a product.</text>
+  <path class="line" d="M132 195 C670 212 1130 183 1675 202"/>
+  <text x="1950" y="120" class="note">20 Sept 2026</text>
+  <text x="1950" y="162" class="note">working notes, not promises</text>
+
+  <rect x="210" y="250" width="2580" height="205" rx="22" class="teal" transform="rotate(-0.4 1500 353)"/>
+  <text x="280" y="322" class="ink head">NORTH STAR</text>
+  <text x="580" y="322" class="ink body">No household should reach an insurance decision or hospital admission without knowing</text>
+  <text x="580" y="366" class="ink body">what cover it has, what remains uncertain, what money it may need and what it should do next.</text>
+  <text x="280" y="414" class="note">USP: reconstruct group + personal cover first, then carry the same context through every real decision.</text>
+
+  <text x="125" y="545" class="ink head">01. START WITH A REAL EVENT, NOT A DASHBOARD</text>
+  <rect x="120" y="585" width="575" height="260" rx="18" class="yellow" transform="rotate(-1.2 408 715)"/>
+  <text x="160" y="648" class="ink head">BUY / RENEW</text>
+  <text x="160" y="696" class="ink body">renewal notice</text><text x="160" y="732" class="ink body">new retail purchase</text><text x="160" y="768" class="ink body">top-up or switch question</text>
+  <text x="160" y="810" class="note">"what do we already have?"</text>
+  <rect x="750" y="585" width="575" height="260" rx="18" class="yellow" transform="rotate(0.5 1038 715)"/>
+  <text x="790" y="648" class="ink head">JOB / FAMILY CHANGE</text>
+  <text x="790" y="696" class="ink body">new employer cover</text><text x="790" y="732" class="ink body">parents added or removed</text><text x="790" y="768" class="ink body">marriage, child, job exit</text>
+  <text x="790" y="810" class="note">group cover changes first</text>
+  <rect x="1380" y="585" width="575" height="260" rx="18" class="yellow" transform="rotate(-0.8 1668 715)"/>
+  <text x="1420" y="648" class="ink head">PLANNED CARE</text>
+  <text x="1420" y="696" class="ink body">patient + procedure</text><text x="1420" y="732" class="ink body">hospital + date</text><text x="1420" y="768" class="ink body">estimate if available</text>
+  <text x="1420" y="810" class="note">"cash needed on Tuesday?"</text>
+  <rect x="2010" y="585" width="775" height="260" rx="18" class="yellow" transform="rotate(1 2398 715)"/>
+  <text x="2050" y="648" class="ink head">CLAIM PROBLEM / EMERGENCY</text>
+  <text x="2050" y="696" class="ink body">delay, query, shortfall, rejection letter</text><text x="2050" y="732" class="ink body">or hospitalisation happening now</text>
+  <text x="2050" y="780" class="note">EMERGENCY RULE: admit first. optimise later.</text>
+
+  <path class="line" d="M405 865 C430 910 545 918 615 965"/><path class="line" d="M1035 865 C1000 910 960 918 925 965"/>
+  <path class="line" d="M1665 865 C1675 910 1580 918 1515 965"/><path class="line" d="M2390 865 C2340 910 2215 918 2080 965"/>
+
+  <rect x="500" y="950" width="2020" height="250" rx="22" class="pink" transform="rotate(-0.2 1510 1075)"/>
+  <text x="565" y="1015" class="ink head">02. PER-ADULT PERMISSION BEFORE COLLECTION, VIEWING, SHARING OR ACTION</text>
+  <text x="565" y="1060" class="ink body">patient ≠ payer ≠ policyholder ≠ proposer ≠ operator ≠ decision-maker</text>
+  <text x="565" y="1105" class="ink body">record: person • source • purpose • viewers • permitted action • expiry • revocation • audit event</text>
+  <text x="565" y="1150" class="note">family relationship is not authority. a voice transcript is not consent. no consent = ask or stop.</text>
+
+  <text x="125" y="1295" class="ink head">03. BUILD THE HOUSEHOLD FACT BASE, ONE VERSIONED SOURCE AT A TIME</text>
+  <rect x="120" y="1340" width="835" height="510" rx="20" class="box" transform="rotate(-0.7 538 1595)"/>
+  <text x="165" y="1408" class="ink head">GROUP HEALTH MODULE</text>
+  <text x="165" y="1458" class="ink body">• employee enrolled today?</text><text x="165" y="1498" class="ink body">• which members are enrolled?</text><text x="165" y="1538" class="ink body">• parents / top-up / contribution?</text><text x="165" y="1578" class="ink body">• benefit booklet version?</text><text x="165" y="1618" class="ink body">• TPA / HR / insurer route?</text><text x="165" y="1658" class="ink body">• employer renewal and job-exit date?</text><text x="165" y="1698" class="ink body">• what is merely stated vs confirmed?</text>
+  <text x="165" y="1780" class="note">Never treat company cover as a personal policy.</text>
+
+  <rect x="1080" y="1340" width="835" height="510" rx="20" class="box" transform="rotate(0.6 1498 1595)"/>
+  <text x="1125" y="1408" class="ink head">PERSONAL HEALTH MODULE</text>
+  <text x="1125" y="1458" class="ink body">• schedule + wording + endorsements</text><text x="1125" y="1498" class="ink body">• proposer / insured members / dates</text><text x="1125" y="1538" class="ink body">• renewal quote and payment status</text><text x="1125" y="1578" class="ink body">• base, top-up, super top-up, rider</text><text x="1125" y="1618" class="ink body">• old policy or replacement risk?</text><text x="1125" y="1658" class="ink body">• current insurer and service route</text><text x="1125" y="1698" class="ink body">• governing version, not brochure</text>
+  <text x="1125" y="1780" class="note">Never call payment the same thing as issuance.</text>
+
+  <rect x="2040" y="1340" width="745" height="510" rx="20" class="orange" transform="rotate(-0.5 2412 1595)"/>
+  <text x="2085" y="1408" class="ink head">CONTINUITY RECORD</text>
+  <text x="2085" y="1458" class="ink body">proposal question asked</text><text x="2085" y="1498" class="ink body">household answer</text><text x="2085" y="1538" class="ink body">supporting report / proof</text><text x="2085" y="1578" class="ink body">submitted + acknowledged?</text><text x="2085" y="1618" class="ink body">underwriting query / loading</text><text x="2085" y="1658" class="ink body">waiting period / exclusion</text><text x="2085" y="1698" class="ink body">issued terms reconciled?</text>
+  <text x="2085" y="1780" class="note">Useful module. Never the product headline.</text>
+
+  <path class="line" d="M530 1875 C710 1915 880 1915 1030 1900"/><path class="line" d="M1490 1875 C1500 1915 1510 1915 1520 1900"/><path class="line" d="M2410 1875 C2230 1915 2020 1915 1860 1900"/>
+  <rect x="455" y="1900" width="2090" height="220" rx="20" class="teal" transform="rotate(0.3 1500 2010)"/>
+  <text x="510" y="1962" class="ink head">04. EVERY FACT GETS A STATUS. NO SMOOTHING OVER THE BAD BITS.</text>
+  <text x="510" y="2010" class="ink body">CONFIRMED = source + page + version.  NEEDS CONFIRMATION = unclear wording or institutional dependency.</text>
+  <text x="510" y="2058" class="ink body">MISSING = no document or answer.  CONFLICT = two sources disagree.  REMEMBERED / PROXY-REPORTED stay labelled.</text>
+
+  <text x="125" y="2225" class="ink head">05. TEST COVER FOR THIS PERSON, THIS EVENT, THIS HOSPITAL, THIS DATE</text>
+  <rect x="120" y="2270" width="860" height="990" rx="20" class="box" transform="rotate(-0.4 550 2765)"/>
+  <text x="165" y="2332" class="ink head">A. ELIGIBILITY + CONTRACT</text>
+  <text x="165" y="2378" class="ink body">1. insured today? membership verified?</text><text x="165" y="2418" class="ink body">2. correct policy version / effective date?</text><text x="165" y="2458" class="ink body">3. shared or individual sum insured?</text><text x="165" y="2498" class="ink body">4. existing utilisation evidenced?</text><text x="165" y="2538" class="ink body">5. renewal, lapse or job-exit risk?</text>
+  <text x="165" y="2600" class="ink head">B. EVENT-SPECIFIC LIMITS</text>
+  <text x="165" y="2646" class="ink body">6. condition / procedure / therapy cap?</text><text x="165" y="2686" class="ink body">7. waiting period + start date?</text><text x="165" y="2726" class="ink body">8. declared condition + underwriting terms?</text><text x="165" y="2766" class="ink body">9. exclusion or permanent exclusion?</text><text x="165" y="2806" class="ink body">10. room / ICU / setting rule?</text>
+  <text x="165" y="2868" class="ink head">C. COST-SHARING MECHANICS</text>
+  <text x="165" y="2914" class="ink body">11. co-pay? age / city / hospital condition?</text><text x="165" y="2954" class="ink body">12. deductible? per claim or aggregate?</text><text x="165" y="2994" class="ink body">13. top-up threshold crossed?</text><text x="165" y="3034" class="ink body">14. restoration / bonus rule?</text><text x="165" y="3074" class="ink body">15. bill items or non-payables queried?</text>
+  <text x="165" y="3160" class="note">No one number called "cover available".</text>
+
+  <rect x="1070" y="2270" width="860" height="990" rx="20" class="box" transform="rotate(0.5 1500 2765)"/>
+  <text x="1115" y="2332" class="ink head">D. INSTITUTIONAL ROUTE</text>
+  <text x="1115" y="2378" class="ink body">16. exact insurer / TPA for this policy?</text><text x="1115" y="2418" class="ink body">17. hospital network confirmed today?</text><text x="1115" y="2458" class="ink body">18. hospital desk contact + required form?</text><text x="1115" y="2498" class="ink body">19. pre-authorisation needed? by when?</text><text x="1115" y="2538" class="ink body">20. who owns each unanswered question?</text>
+  <text x="1115" y="2600" class="ink head">E. MONEY + TIME</text>
+  <text x="1115" y="2646" class="ink body">21. hospital estimate and deposit requested?</text><text x="1115" y="2686" class="ink body">22. cash needed before settlement?</text><text x="1115" y="2726" class="ink body">23. possible final personal exposure?</text><text x="1115" y="2766" class="ink body">24. voluntary savings / commitments?</text><text x="1115" y="2806" class="ink body">25. what remains unknowable today?</text>
+  <text x="1115" y="2868" class="ink head">F. MULTI-POLICY INTERACTION</text>
+  <text x="1115" y="2914" class="ink body">26. which policy may be approached first?</text><text x="1115" y="2954" class="ink body">27. where does another policy attach?</text><text x="1115" y="2994" class="ink body">28. duplicate cover or real gap?</text><text x="1115" y="3034" class="ink body">29. what breaks when group cover ends?</text><text x="1115" y="3074" class="ink body">30. insurer confirmation needed?</text>
+  <text x="1115" y="3160" class="note">Network ≠ approval. Estimate ≠ final liability.</text>
+
+  <rect x="2020" y="2270" width="765" height="990" rx="20" class="orange" transform="rotate(-0.6 2402 2765)"/>
+  <text x="2060" y="2332" class="ink head">WHAT THE AGENT PRODUCES</text>
+  <text x="2060" y="2385" class="ink body">KNOWN / UNKNOWN / NEXT</text>
+  <path class="line" d="M2065 2410 C2200 2398 2390 2422 2725 2408"/>
+  <text x="2060" y="2465" class="ink body">• per-person cover map</text><text x="2060" y="2505" class="ink body">• group vs personal view</text><text x="2060" y="2545" class="ink body">• specific missing-document asks</text><text x="2060" y="2585" class="ink body">• decision shortlist + trade-offs</text><text x="2060" y="2625" class="ink body">• disclosure / issuance reconciliation</text><text x="2060" y="2665" class="ink body">• admission readiness brief</text><text x="2060" y="2705" class="ink body">• claim position brief</text><text x="2060" y="2745" class="ink body">• household health card</text>
+  <text x="2060" y="2815" class="ink head">SECONDARY, NOT DECISIVE</text>
+  <text x="2060" y="2860" class="ink body">claim settlement ratio:</text><text x="2060" y="2898" class="ink body">method / period / scope / source</text><text x="2060" y="2936" class="ink body">market context only</text><text x="2060" y="2974" class="ink body">never a claim prediction</text>
+  <text x="2060" y="3050" class="note">Read the contract before ranking the insurer.</text>
+  <text x="2060" y="3110" class="note">Do not use generic NCB or GST logic.</text>
+
+  <path class="line" d="M550 3295 C830 3360 1100 3335 1280 3385"/><path class="line" d="M1500 3295 C1530 3360 1560 3340 1660 3385"/><path class="line" d="M2400 3295 C2240 3360 2050 3340 1880 3385"/>
+  <rect x="180" y="3370" width="2640" height="295" rx="22" class="pink" transform="rotate(0.2 1500 3517)"/>
+  <text x="245" y="3432" class="ink head">06. ACTION BOUNDARY: WHO CAN ACT?</text>
+  <text x="245" y="3482" class="ink body">HOUSEHOLD: permission, declarations, recommendation, purchase, payment, cancellation, settlement acceptance.</text>
+  <text x="245" y="3528" class="ink body">AGENT: read, cite, organise, calculate bounded scenarios, draft questions, track, preserve history and flag conflict.</text>
+  <text x="245" y="3574" class="ink body">HUMAN EXPERT: licensed recommendation gate, ambiguity, exception or requested conversation.  INSTITUTION: binding answer.</text>
+  <text x="245" y="3625" class="note">Agent confidence and adviser confidence do not bind the insurer. Acknowledgement does not mean approval.</text>
+
+  <text x="125" y="3760" class="ink head">07. RAILS: USEFUL, BUT THEY DO NOT BECOME THE PRODUCT</text>
+  <rect x="120" y="3800" width="830" height="200" rx="18" class="teal" transform="rotate(-0.6 535 3900)"/>
+  <text x="160" y="3862" class="ink head">GNANI / VOICE</text><text x="160" y="3902" class="ink small">multilingual intake • read-back • missing facts • human-ready summary</text><text x="160" y="3940" class="ink small">BUILD: per-adult consent + provenance across caller / parent / relative / expert</text>
+  <rect x="1080" y="3800" width="830" height="200" rx="18" class="orange" transform="rotate(0.5 1495 3900)"/>
+  <text x="1120" y="3862" class="ink head">PINE LABS / PAYMENTS</text><text x="1120" y="3902" class="ink small">approved premium checkout • payment status • refund path • reconciliation</text><text x="1120" y="3940" class="ink small">BUILD: merchant / partner setup, webhooks, idempotency, issued-term check</text>
+  <rect x="2040" y="3800" width="745" height="200" rx="18" class="yellow" transform="rotate(-0.4 2412 3900)"/>
+  <text x="2080" y="3862" class="ink head">DELHIVERY / MAPS</text><text x="2080" y="3902" class="ink small">NO core logistics flow. At most normalise a hospital address.</text><text x="2080" y="3940" class="ink small">Never use a map or courier as proof of network or document acceptance.</text>
+
+  <text x="140" y="4055" class="note">STOP: no permission • no governing source • needs institutional answer • claim approval prediction • care delayed for analysis • existing route already solves the task.</text>
+</svg>
