@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="560" viewBox="0 0 1800 560" role="img" aria-labelledby="title desc">
+  <title id="title">Knowvia logo and tagline</title>
+  <desc id="desc">Knowvia. Know your cover. Before you need it.</desc>
+  <defs>
+    <linearGradient id="tide" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#163F42"/>
+      <stop offset="1" stop-color="#0B383B"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F1B53A"/>
+      <stop offset="1" stop-color="#D58B17"/>
+    </linearGradient>
+  </defs>
+  <rect width="1800" height="560" rx="46" fill="#F3F7F6"/>
+  <g transform="translate(72 80) scale(.5)">
+    <rect width="800" height="800" rx="144" fill="url(#tide)"/>
+    <circle cx="400" cy="400" r="290" fill="none" stroke="#176F69" stroke-width="2" opacity=".7"/>
+    <circle cx="400" cy="400" r="240" fill="none" stroke="#176F69" stroke-width="2" opacity=".42"/>
+    <circle cx="400" cy="400" r="190" fill="none" stroke="#176F69" stroke-width="2" opacity=".25"/>
+    <path d="M120 126h178l378 548H498z" fill="#176F69" opacity=".17"/>
+    <path d="M258 194v412M265 404l274-210M265 404l274 210" fill="none" stroke="#F3F7F6" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M265 404l274-210" fill="none" stroke="url(#gold)" stroke-width="46" stroke-linecap="round"/>
+    <circle cx="265" cy="404" r="25" fill="#F3F7F6"/><circle cx="265" cy="404" r="12" fill="#163F42"/>
+    <path d="M557 159l42 42-42 42-42-42z" fill="url(#gold)"/><path d="M557 180v43" stroke="#163F42" stroke-width="9" stroke-linecap="round" opacity=".88"/>
+  </g>
+  <text x="530" y="245" fill="#163F42" font-family="Source Sans 3, Arial, sans-serif" font-size="168" font-weight="700" letter-spacing="-7">Knowvia</text>
+  <rect x="536" y="291" width="93" height="10" rx="5" fill="#E0A02B"/>
+  <text x="530" y="390" fill="#176F69" font-family="Source Sans 3, Arial, sans-serif" font-size="62" font-weight="600" letter-spacing="-.8">Know your cover. Before you need it.</text>
+</svg>
