@@ -1,10 +1,18 @@
 # The Ken: opening, submission and pressure test
 
+> **SUPERSEDED — historical working material, 20 September 2026.**
+> This file predates the eight consented interviews (5 to 8 September 2026) and the build spec in
+> `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
+> five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
+> no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
+> Read [AGENTS.md](../AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Kept for provenance. Do not cite from this file.
+
 Verified against the public [competition page](https://the-ken.com/case-competition-2026/) in the browser on 07 September 2026. Refer to the opening by title, **Buying the insurance**, because its displayed number has changed. The logged-in submission form and private upload constraints have not been verified.
 
 ## Fit in one sentence
 
-Coversaath helps a household buy the right health cover by reconstructing what exists, verifying who can
+Knowvia helps a household buy the right health cover by reconstructing what exists, verifying who can
 operate it, pricing the gap against voluntary affordability inputs, and turning the result into a
 Household Health Card. The agent leads; a licensed human enters only at a purchase gate, exception or request.
 
@@ -73,10 +81,10 @@ rail. Do not manufacture shipping or investing to fill a slide.
 ### Product hierarchy correction, 20 September
 
 The policy continuity record, declaration trail, employer-policy module, personal-policy module, admission
-brief and claim-position brief belong **inside Coversaath**. They make the agent more useful over time but
+brief and claim-position brief belong **inside Knowvia**. They make the agent more useful over time but
 must not replace the buying-led agent with a feature pitch. The submission should keep this hierarchy:
 
-1. Coversaath is the household health-insurance understanding and decision agent.
+1. Knowvia is the household health-insurance understanding and decision agent.
 2. It reconstructs group and personal cover before it recommends a purchase or renewal route.
 3. It preserves this context for planned care, institutional follow-up and a claim problem.
 4. A ledger, dashboard, voice handover or payment flow is a capability, not the product.

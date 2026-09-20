@@ -1,5 +1,16 @@
 # Customer evidence and pressure tests
 
+> **SUPERSEDED — historical working material, 20 September 2026.**
+> This file predates the eight consented interviews (5 to 8 September 2026) and the build spec in
+> `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
+> five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
+> no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
+> Read [AGENTS.md](../AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Additionally: the personas in this file are **paired AI-simulated interviews** run with GPT-5.6
+> Terra and Luna. They are not customer evidence and must never be presented beside the eight real
+> transcripts as the same kind of thing.
+> Kept for provenance. Do not cite from this file.
+
 Updated 07 September 2026. This file separates firsthand conversations reported by Rishav from fictional ICPs tested through paired AI simulations.
 
 The product has since become agent-led and buying-led, with a Household Health Treasury as the long-term

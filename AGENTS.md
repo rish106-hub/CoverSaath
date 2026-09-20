@@ -1,15 +1,17 @@
-# Coversaath: start here
+# Knowvia: start here
 
 Updated 20 September 2026. This file is the working contract for Claude, Codex, Cursor and Grok.
 It supersedes every earlier direction in this repository.
 
-**The name is Coversaath.** Public descriptor: *Understand your insurance before you need it.*
+**The name is Knowvia.** Public descriptor: *Understand your insurance before you need it.*
 Product line: *Know what you have. Know what could go wrong. Know what to do next.*
-Knowvia was an intermediate working name and has been retired. Do not reintroduce it.
+Coversaath was the internal codename and is retired. Do not use it in any new copy, answer or file.
+It survives only inside existing filenames, the Google Doc title and the git remote URL, which are real
+artefacts and are left as they are.
 
 ## Source of truth
 
-The Google Doc **"Coversaath Evidence Pack | Buying the Insurance"** is the source of truth for the
+The Google Doc **"Coversaath Evidence Pack | Buying the Insurance"** (title kept as the real artefact name) is the source of truth for the
 Round 2 position. Where any file in this repository disagrees with that doc, the doc wins and the file
 is wrong.
 
@@ -17,15 +19,25 @@ Order of authority:
 
 1. The evidence pack Google Doc (transcripts, method, Tab 11 answers).
 2. `docs/evidence/coversaath-interview-transcripts.md` — the tracked mirror of the transcripts and method.
-3. `round2_answers.md` — the eight Round 2 answers, expanded from Tab 11 with rail detail.
-4. Everything in `research/` and `answers.md` — historical working material, superseded where it conflicts.
+3. `working/working.md`, `working/planned-expense.md`, `building/insurance.md` — the **build spec**. These
+   define how the product actually works. Written by Codex, 20 September. They win on product mechanics.
+4. `working/answer-to-build-map.md` — traceability between the answers and the build spec, and the current
+   gap list. Read it before editing either side, so the two do not drift apart again.
+5. `round2_answers.md` — the eight Round 2 answers. These must **describe** the build spec, not a parallel
+   product. Reconciled to it on 20 September.
+6. Everything in `research/` and `answers.md` — historical working material, superseded where it conflicts.
+
+Where the build spec and the evidence disagree, the evidence wins and the spec gets fixed. The one live case
+of this is permissions: the spec says "one operator plus a read-only parent view", which is the common case,
+not the permission model. Per-field and per-viewer stands, because Mrs. Ghosh's rule is evidence.
 
 ## Who edits what, 20 September 2026
 
 - **Claude** makes the main file edits in this repository.
 - **Codex** leads direction and review. Codex should not commit file edits in this window. Commit `c2f4b9e`
   (20 September, 12:30) was Codex.
-- Do not create new concept files. Add sections to the files that already exist.
+- `working/` and `building/` are the build spec and are canonical. Add sections to existing files rather than
+  creating more concept files. The three build-spec files are the approved exception.
 
 ## The one confident claim
 
@@ -35,7 +47,7 @@ someone else can operate it during an emergency.
 **North Star.** No family should have to understand its health insurance for the first time during a
 medical crisis.
 
-**USP.** Coversaath creates a living, source-backed understanding of a household's insurance, then turns
+**USP.** Knowvia creates a living, source-backed understanding of a household's insurance, then turns
 it into the next clear action across purchase, renewal, hospitalisation and claims. It does four things
 together: explains what the household has; separates confirmed facts from assumptions; identifies what
 could create problems; coordinates the people and institutions needed to resolve them.
@@ -124,7 +136,14 @@ The Ken supplies three rails: Gnani (voice), Pine Labs (payments), Delhivery (lo
   geocoding and routing help the family reach a confirmed hospital insurance desk. Do not invent a parcel
   workflow to feature the rail.
 
-**WhatsApp is the main working interface, and it is not one of the three rails.** Say this plainly rather
+**Pine Labs is the final payment step only.** It is invoked after a human approves one of exactly two
+outcomes: renew an existing policy, or purchase a selected new personal policy. It is **not** the discovery
+engine, policy reader, underwriting engine or emergency-payment system, and **it does not reserve a hospital
+deposit**. The pre-authorisation hold was considered and withdrawn: no hold-expiry window is documented, no
+hospital merchant eligibility is verified, and a payment instrument inside an emergency flow conflicts with
+"admit first, optimise later".
+
+**WhatsApp is the main working channel, and it is not one of the three rails.** Say this plainly rather
 than pretending a rail covers it. WhatsApp is where the household already is; Gnani is how the product
 reaches the people WhatsApp cannot. They are complements, and the answer must explain what each one does
 that the other cannot. See `round2_answers.md` answer 6.
@@ -132,10 +151,51 @@ that the other cannot. See `round2_answers.md` answer 6.
 **Do not call any single rail "the only load-bearing rail".** The load-bearing thing is the permissioned,
 source-linked cover record. The rails are how it reaches people, money and places.
 
+## The workflow, in one place
+
+This is the product. Everything else serves it.
+
+- **No dashboard.** The first screen is a **household matrix**: person, policies found, immediate issue,
+  evidence status. Each row opens covered facts, cost exposure, conditions that matter, next action, source
+  pages.
+- **Two entry routes only.** `Plan an expense` and `Find and buy personal health cover`. **Renewal is not a
+  third mode** — it is a time-sensitive case inside either one.
+- **Source pack requested by name** before analysis. Never invent a benefit. A clause proves the rule; the
+  enrolment schedule proves a named person gets that rule; a dated network result proves network status; a
+  hospital estimate proves the cost input.
+- **Workers run in parallel**, each with one job and one allowed output type: person and enrolment,
+  benefit-rule, hospital-network, estimate, benefit-application, cash-exposure, evidence.
+- **Six output states, always one of:** Proven, Calculated, Reported, Dynamic, Unknown, Conflicting. Every
+  field keeps source document, version, page, clause, confidence, effective date, and whether a human
+  corrected it.
+- **Decision first, proof on demand.** Four layers: Decision, Financial, Evidence, Research. `Why` expands
+  every clause and calculation. Never force someone to read the reasoning to get the answer.
+- **Evidence hierarchy:** official wording and schedules > dated institutional confirmation > hospital
+  estimate > regulatory disclosure > public complaint trends. Reddit and settlement ratios stay in the
+  research layer, never above policy evidence.
+- **Continuity is a first-class trigger.** Read the exact dependent definition; do not assume an age-26 rule.
+  Raise deadline cases at 120, 90, 60 and 30 days.
+- **Renewal is a policy diff, not a price comparison.** Output: renew / renew and add cover / port / seek
+  clarification / do not lapse while comparing.
+- **Emergency access dials a human support operator. Directly.** No voice agent, no IVR, no bot triage, **no
+  Gnani in this path at all.** The operator gets a permissioned read-only Emergency Case Brief and already
+  has the file open. They handle insurance and coordination, not clinical advice. The AI only retrieves,
+  structures and displays. Talking to the AI is a **separate path** the user may choose at any time; it is
+  never in front of the call. Admit first, optimise later.
+- **Seniors: default out of the driver's seat, never locked out.** The operator model is a default, not a
+  ceiling. A senior who wants to open the case, ask, supply a document, correct a fact or act on their own
+  policy can do so, in their own language. What we do not do is hand full agency by default and expect them
+  to run an insurance workflow alone.
+- **Payment last.** Only after approval, and the interface must keep offering `do not buy now`,
+  `renew while comparing` and `seek clarification first`.
+- **Never** sum every sum insured into one "guaranteed family cover" number. Never report someone as covered
+  because they are eligible — check they are enrolled. Never tell a user to omit health history. Never call a
+  pre-authorisation delay a claim rejection.
+
 ## Fourth rail
 
 An **Insurance Confirmation Rail**, built by **Medi Assist**. Policy explanations, hospital information,
-insurer emails, TPA replies and pre-authorisation updates live in different systems. Coversaath can organise
+insurer emails, TPA replies and pre-authorisation updates live in different systems. Knowvia can organise
 them; it cannot make them authoritative. The rail returns dated, case-specific status: active policy and
 member status, latest endorsement, confirmed TPA, hospital network status, required documents,
 pre-authorisation status, claim status, pending institutional action, responsible team and escalation route.
@@ -149,8 +209,9 @@ do not cover health records or family delegation today.
 
 ## Working contract
 
-- Build the household health insurance understanding, buying and support service described in
-  `research/01-product.md`, as corrected by this file.
+- Build the service described in the workflow section above and specified in `working/working.md`,
+  `working/planned-expense.md` and `building/insurance.md`. `research/01-product.md` is superseded
+  historical material and must not be used as a build reference.
 - Reconstruct existing cover before recommending anything. The refusal to recommend before reconstruction
   is an asset. Keep it.
 - Treat a real event as the trigger: purchase, renewal, job change, family change or planned treatment.

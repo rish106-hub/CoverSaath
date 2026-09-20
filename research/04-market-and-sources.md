@@ -1,5 +1,13 @@
 # Market, evidence and commercial test
 
+> **SUPERSEDED — historical working material, 20 September 2026.**
+> This file predates the eight consented interviews (5 to 8 September 2026) and the build spec in
+> `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
+> five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
+> no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
+> Read [AGENTS.md](../AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Kept for provenance. Do not cite from this file.
+
 Updated 07 September 2026. Brand evidence and naming review added 18 September 2026. Source review
 distinguishes what organisations advertise from independently demonstrated service quality.
 
@@ -37,7 +45,7 @@ The strongest hypothesis is not "AI understands policies". It is "a household bu
 | Existing broker, HR and family organiser | Familiar people and existing records | Would a new service save more effort than it introduces? |
 | General LLM | Immediate policy explanations and comparisons | It lacks verified household authority, durable consent and accountable execution unless wrapped in a service |
 
-These pages establish positioning, not independently measured reliability. Ditto and Policybazaar are strong routes for motivated buyers. We should not caricature them as policy sellers with no support. Coversaath's difference is that the agent reconstructs existing cover, household responsibility and voluntary affordability before a recommendation, then preserves a provider-neutral Treasury. They can copy the sequence. A possible advantage would come from years of verified delegation, versioned policy facts, disclosure history and actual decision outcomes. None is a moat we possess today.
+These pages establish positioning, not independently measured reliability. Ditto and Policybazaar are strong routes for motivated buyers. We should not caricature them as policy sellers with no support. Knowvia's difference is that the agent reconstructs existing cover, household responsibility and voluntary affordability before a recommendation, then preserves a provider-neutral Treasury. They can copy the sequence. A possible advantage would come from years of verified delegation, versioned policy facts, disclosure history and actual decision outcomes. None is a moat we possess today.
 
 An honest reading of the competitive position: this may be a feature of a benefits or distribution platform rather than a company. The counter-argument is that the record, the delegation graph and the disclosure history only compound for whoever owns the buying relationship across employer and retail cover over years. That is a bet, not a demonstrated defence.
 
@@ -159,7 +167,7 @@ Links reviewed for this pack on 06 September 2026. For regulated implementation,
 
 ## LinkedIn feedback trace, reviewed 20 September 2026
 
-The publicly accessible post describes the same household-case framing now used in Coversaath: start with
+The publicly accessible post describes the same household-case framing now used in Knowvia: start with
 a real decision, obtain per-adult permission, reconstruct cover, assess treatment-specific exposure,
 bring a human in at a regulated or difficult point, and record the result. The comments are useful
 practitioner feedback. They are not customer interviews, prevalence evidence, evidence of demand, or a
@@ -169,7 +177,7 @@ license to claim a live integration.
 |---|---|---|
 | Neelkanth Chatterjee suggested working backwards from claims and flagged the lack of insurer claims APIs. | Add a Claim Position Brief and retain the evidence and correspondence timeline. Do not make claims processing the product or depend on an API. | Whether insurer or TPA access is actually unavailable, whether a record improves outcomes, and whether households want this service. |
 | Shilpa Arora flagged therapy-specific caps and corporate benefits that employees discover only at hospitalisation. | Evaluate coverage by person, procedure or therapy, hospital, date and policy version. Mark group-plan terms unverified until a booklet or authorised reply exists. | How common these gaps are, and the correct interpretation of a particular policy clause. |
-| Shilpa also identified the hospital desk, TPA and insurer as separate information processors. | The Admission Readiness Brief assigns a named institutional owner, exact question, deadline and evidence trail instead of pretending one party owns the answer. | Response times, authorisation mechanics and whether Coversaath is faster than the existing route. |
+| Shilpa also identified the hospital desk, TPA and insurer as separate information processors. | The Admission Readiness Brief assigns a named institutional owner, exact question, deadline and evidence trail instead of pretending one party owns the answer. | Response times, authorisation mechanics and whether Knowvia is faster than the existing route. |
 | Nitin Srivastava flagged the realistic risk that the designated permission holder is unreachable during hospitalisation. | Treat the emergency handover and backup as a permissioned continuity module. In an emergency, route to the hospital desk, TPA, insurer or HR. Never make care wait for missing authority. | Whether families will set up a backup, and which authority accepts which action from that backup. |
 | Vansh Adhlakha agreed that different people hold different documents. | Keep record retrieval and role-specific consent in onboarding, but make them support the insurance decision rather than the product headline. | Whether the collection effort is acceptable or causes drop-off. |
 
@@ -177,7 +185,7 @@ The original post and the publicly displayed comments are available at
 [Rishav Dewan's LinkedIn post](https://www.linkedin.com/posts/rishav-dewan_%F0%9D%97%9B%F0%9D%97%B2%F0%9D%97%AE%F0%9D%97%B9%F0%9D%98%81%F0%9D%97%B5-%F0%9D%97%B6%F0%9D%97%BB%F0%9D%98%80%F0%9D%98%82%F0%9D%97%BF%F0%9D%97%AE%F0%9D%97%BB%F0%9D%97%B0%F0%9D%97%B2-%F0%9D%97%B6%F0%9D%98%80-%F0%9D%97%BB%F0%9D%97%BC-activity-7505177397751697408-25Lz). The account, identities and claims in
 comments should be independently checked before any public attribution beyond this internal trace.
 | [SBI Card current terms](https://www.sbicard.com/sbi-card-en/assets/docs/pdf/most-important-terms-and-conditions/mitc-english.pdf) | Card terms must be checked against the current version | Every credit card includes hospitalisation insurance |
-| Practitioner comments on [Rishav's LinkedIn post](https://www.linkedin.com/posts/rishav-dewan_health-insurance-is-not-a-funnel-it-is-a-activity-7505177397751697408-6pkW) | Practitioner feedback raised treatment-specific caps, undisclosed corporate cover, fragmented institutional handling and unreachable permission-holder risk | Prevalence, correctness of every example, claims-API availability, demand for Coversaath or a general claim-rejection statistic |
+| Practitioner comments on [Rishav's LinkedIn post](https://www.linkedin.com/posts/rishav-dewan_health-insurance-is-not-a-funnel-it-is-a-activity-7505177397751697408-6pkW) | Practitioner feedback raised treatment-specific caps, undisclosed corporate cover, fragmented institutional handling and unreachable permission-holder risk | Prevalence, correctness of every example, claims-API availability, demand for Knowvia or a general claim-rejection statistic |
 
 ### Sources retained but now out of scope
 
@@ -236,7 +244,7 @@ are the actual trust system.
 
 There is no single winning healthcare colour. Blue, cyan, green, purple, red and yellow all appear in
 established systems. No reliable source reviewed here attributes an Indian platform's revenue, claim
-outcome, conversion or trust causally to its palette. Coversaath should therefore differentiate through
+outcome, conversion or trust causally to its palette. Knowvia should therefore differentiate through
 colour proportions, hierarchy and evidence behaviour, not by chasing an allegedly optimal hue.
 
 ### Derived palette and accessibility rules
@@ -316,7 +324,7 @@ aggregator, CoverSure is used by an Indian insurance-management platform, PlanCo
 broker, and Insurly and Coverio are active health-insurance brands. [Cavren](https://cavren.org/sl/about/)
 is a family and personal-safety product, [Talven](https://talven.supernetrix.com/about) is Indian clinic
 software, and [Savren](https://savren.io/en) is an active financial-services brand. This is why an exact
-web search cannot be treated as trademark clearance and why the codebase remains Coversaath for now.
+web search cannot be treated as trademark clearance and why runtime identifiers keep the old slug for now.
 
 Before adoption, complete Indian trademark class searches, MCA company-name checks, phonetic-conflict
 review, app-store and social-handle checks, and domain checks. Then test hearing, spelling, pronunciation
@@ -324,8 +332,8 @@ and unaided recall with the target age and language range. No candidate has comp
 
 ## Working name status
 
-**Knowvia is the final public naming recommendation. Coversaath remains the internal repository slug and
-legacy code name.** The approved lockup is:
+**Knowvia is the public name. Coversaath is retired from new copy and survives only in existing filenames,
+runtime identifiers and the research transcripts.** The approved lockup is:
 
 > Knowvia
 > Know your cover. Before you need it.

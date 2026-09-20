@@ -1,4 +1,4 @@
-# How Coversaath breaks down a health-insurance policy
+# How Knowvia breaks down a health-insurance policy
 
 ## Purpose
 
@@ -109,6 +109,54 @@ The continuity worker creates a timeline. It identifies the next point at which 
 ### Worker interpretation
 
 The person worker maps each named household member to a named certificate or enrolment record. It never assumes a dependent is covered because the master-policy definition permits them. It checks that they were actually enrolled.
+
+### Permission model
+
+Permission is not a policy field. It is a separate record that governs every other field in this document,
+and it is **per-field and per-viewer**. A household is not a permission boundary and neither is a person.
+
+Each stored fact carries a visibility class:
+
+1. **Cover facts** — that a policy exists, its sum insured, who is enrolled, the funding route.
+2. **Operational facts** — policy number, member ID, TPA route, network status, hospital desk contact.
+3. **Protected facts** — medical declarations, disclosed conditions, claim reasons, underwriting loadings.
+
+Each viewer holds a grant per class, per member, not a single household switch:
+
+| Field | Meaning |
+|---|---|
+| Principal | The adult the data is about. Always holds full access to their own record |
+| Viewer | The person or agent being granted access |
+| Classes granted | Cover / operational / protected, individually |
+| Purpose | The named case or standing reason |
+| Expiry | A date, a case closure, or standing until revoked |
+| Revocation | Live, unilateral by the principal, with immediate effect |
+| Emergency override | Whether the principal has pre-authorised full access to a support operator during an active emergency |
+| Audit | Every read of a protected field is recorded and visible to the principal |
+
+**The evidenced rule this implements.** A member may permit family to see the cover amount and the funding
+route while withholding the reason a condition is listed — "the number yes, the reason no" [T4/T8 00:02:52].
+The same member may simultaneously permit a **stranger** on an emergency line to see everything, because
+that is closer to telling a doctor than to telling a son [T5/T8 00:03:06]. A single household on/off switch
+cannot express this. Neither can a per-person switch. The grant must be per class and per viewer.
+
+The emergency override is granted **in advance, by the principal, knowingly**, for a moment when they may not
+be able to speak [T8 00:02:16]. It is not inferred from a relationship, a payment method or a device.
+
+### Worker constraints on permission
+
+- No worker may read a protected field without a live grant covering that class, that viewer and that
+  purpose. Absence of a grant produces a denial state, not a silent omission.
+- **Unknown and not-permitted are different states and must never be collapsed.** Rendering a withheld field
+  as "unknown" leaks a fact to the viewer and misinforms them at the same time.
+- A grant is never created as a side effect of another action. Adding a dependent, taking a payment or
+  receiving a document does not grant visibility.
+- Family relationship creates no authority. The operator running a case holds no implicit right to another
+  adult's protected class.
+- Revocation is immediate and retroactive for future reads. Already-generated briefs containing revoked
+  fields must be invalidated, not left in a cache.
+- A senior family member, or any member, may exercise every one of these rights over their own record
+  directly. The operator model is a default, not a restriction on the principal.
 
 ## D. Coverage structure and financial limits
 
@@ -239,7 +287,13 @@ The claims-process worker makes a case-specific checklist. It should say, "The p
 
 ### Emergency handoff rule
 
-For an active emergency, the system routes the case to a live healthcare expert by default. The workers produce a read-only Emergency Case Brief for that expert. No AI worker may make treatment decisions, decide whether admission should wait, promise approval, or autonomously direct hospital action. Chat is optional and cannot replace the expert handoff.
+For an active emergency, the system places a direct call to a human support operator. **No voice agent sits in
+this path.** The workers produce a read-only Emergency Case Brief for that operator. No AI worker may make
+treatment decisions, decide whether admission should wait, promise approval, or autonomously direct hospital
+action. The support operator handles insurance and coordination, not clinical advice.
+
+Conversing with the AI is a separate product path the user may choose at any time. It cannot replace the
+operator handoff and must never be interposed before it.
 
 ## I. Renewal, portability and change control
 
@@ -284,6 +338,8 @@ This worker produces a research appendix, not the core policy conclusion. Claim-
 5. What coverage ends or changes soon.
 6. Whether a new product would solve the present risk or merely start new waiting periods.
 7. Premium affordability, if Ram provides it voluntarily.
+8. Which facts in this case are withheld by permission rather than missing, so the recommendation states its
+   own blind spots honestly instead of reasoning over a gap it cannot see.
 
 ### Recommendation output
 
