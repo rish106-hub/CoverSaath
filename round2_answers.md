@@ -16,15 +16,18 @@ No partnership, production connection or vendor-platform test is claimed.
 | 0.3 | Replaced a broad outcome promise with a testable decision brief. | “The household understands” was too soft to judge. The new outcome has a completion condition. |
 | 0.4 | Narrowed the Medi Assist fourth rail to cases it is authorised to administer. | Medi Assist is not a neutral or universal source across every insurer and TPA. |
 | 0.5 | Standardised the public name as Knowvia and retained Coversaath only as the internal project name. | The earlier draft mixed both names. |
+| 0.6 | Reframed the design around per-person cover interaction and the admission-morning cash question. Replaced the mandatory readiness drill and separate physical card. | The product should quietly hold usable context. It should not make a household pass a preparedness test or mistake a static card for live support. |
 
 ## Current position
 
-**North Star:** no household should reach an insurance decision or planned hospital admission without
-knowing what cover it has, what remains uncertain, what money it may need and what it should do next.
-During an emergency, the record should be immediately available but must never delay care.
+**North Star:** no household should make an insurance decision or reach a planned hospital admission
+without knowing, for the specific person and expense, what cover may apply, what remains uncertain,
+what money may be needed and what to do next. During an emergency, the authorised context should be
+available to a human but must never delay care.
 
-**USP:** Knowvia reconstructs group and personal cover first, then carries the same household context
-through buying, renewal, hospitalisation and claim coordination.
+**USP:** Knowvia is a household health-cover interaction engine. It reconstructs group and personal
+cover per person, then works out how those protections may interact for a particular purchase, renewal
+or hospital expense. It does not add headline sums insured into a false total.
 
 The Household Health Treasury, policy continuity record, disclosure history, correspondence tracker,
 Admission Readiness Brief and backup handover are capabilities inside Knowvia. None is the product alone.
@@ -33,9 +36,13 @@ The reported opening share is 3.92%, the third-lowest share of submissions. This
 not customer evidence. It may mean fewer comparable submissions. It may also mean the opening is harder,
 less attractive or poorly understood. It does not prove demand.
 
+The five-source, ₹30 lakh-to-₹8 lakh scenario is an **illustrative working case**, not proof of a typical
+household or a claims result. It may be used to make the interaction logic concrete only when each policy
+term, bill assumption and institutional fact is labelled and source-checked.
+
 ## 1. What is the outcome your agent is accountable for?
 
-> For each buying, renewal or planned-care case, Knowvia delivers a source-linked household decision brief where every material cover, cash and next-action question is confirmed, disputed, unknown or assigned to a named owner and deadline.
+> For each buying, renewal or planned-care case, Knowvia delivers a person-specific, source-linked route: what existing cover may apply, what does not yet apply, what must be confirmed, and what cash may be needed by the relevant deadline.
 
 Completion is testable:
 
@@ -43,6 +50,8 @@ Completion is testable:
 - Every important statement links to evidence or is labelled as reported from memory.
 - The household can identify its next action, owner and deadline from the brief.
 - Group cover, personal cover, available cash, loans and investments remain separate.
+- A shared floater, deductible, waiting period, room rule, co-pay, top-up and fixed-benefit payment are
+  modelled as conditions, not added into one reassuring number.
 - In an emergency, administrative analysis never delays treatment.
 
 The accountable outcome is not claim approval. Knowvia cannot bind an insurer, decide underwriting,
@@ -86,8 +95,8 @@ TRIGGERED
   -> SCOPED
   -> PERMISSIONED
   -> EVIDENCE COLLECTING
-  -> RECONSTRUCTING
-  -> ASSESSING
+  -> PER-PERSON COVER MAP
+  -> EVENT ROUTE MODELLED
   -> AWAITING INSTITUTION / HUMAN GATE
   -> ACTION READY
   -> ACTION IN PROGRESS
@@ -106,16 +115,19 @@ means absent.
    If no unresolved job exists, it closes instead of manufacturing work.
 3. **Permissioned.** Each adult approves the purpose, records, viewers, communication channels and expiry.
    Patient, policyholder, payer, household operator and backup may be different people.
-4. **Evidence collecting.** Knowvia requests only the policy schedules, wording, endorsements, employer
-   benefit booklets, estimates and correspondence relevant to the case. Each source receives an owner,
-   version and timestamp.
-5. **Reconstructing.** It creates a household cover map across group and personal cover. It separately
-   records membership, sum insured, utilisation, room rules, co-pay, deductible, waiting periods,
-   exclusions, therapy or condition limits, restoration and top-up dependencies. A headline sum insured
-   is never shown as the payable amount.
-6. **Assessing.** For buying or renewal, it identifies the uncovered need and feasible routes. For planned
-   care, it creates cash-timing scenarios and institutional questions. For a claim problem, it reconstructs
-   what was declared, submitted, acknowledged, queried and decided.
+4. **Evidence collecting.** Knowvia asks for only the evidence needed for this case: policy schedules,
+   wording, endorsements, employer benefit booklets, hospital estimate and correspondence. It turns a
+   vague request into a small task, for example: "forward the current renewal PDF from this email thread."
+   Each source receives an owner, version and timestamp.
+5. **Per-person cover map.** It maps who is actually insured under each group and personal policy. It
+   separately records shared utilisation, room and ICU rules, co-pay, deductible, waiting-period dates,
+   exclusions, condition limits, restoration and top-up dependencies. A headline sum insured is never
+   presented as payable cash.
+6. **Event route modelled.** For buy or renew, it identifies the real gap, duplication and facts that
+   could change the answer. "Wait and find out X" is a valid output. For planned care, it models this
+   patient, procedure, hospital, date and estimate: likely first route, network and pre-authorisation
+   questions, documents, constraints and conservative admission-morning cash scenarios. It never calls
+   a scenario an approval.
 7. **Awaiting gate.** Knowvia sends permitted questions to the named hospital desk, HR team, TPA, insurer
    or licensed partner. Material ambiguity and regulated recommendations go to a human. The case remains
    open until an answer, deadline or explicit unresolved status exists.
@@ -125,14 +137,15 @@ means absent.
    claim submission and settlement remain separate events.
 10. **Reconciled.** Knowvia checks issued terms or institutional replies against the accepted route. A
     mismatch becomes a new owned question, not a silent success.
-11. **Recorded.** The permissioned cover map, continuity history, correspondence and handover remain in
-    the Household Health Treasury for the next renewal, job change, admission or claim issue.
+11. **Recorded.** The permissioned cover map, continuity history, correspondence and event route remain
+    available for the next renewal, job change, admission or claim issue. Preparedness is an outcome of
+    accumulated context, not a compulsory drill.
 
 ### Unhappy flow
 
 | Failure or exception | What Knowvia does | Exit or recovery |
 |---|---|---|
-| Emergency treatment is underway | Shows the smallest available emergency card and says “Admit first. Optimise later.” | Administrative work resumes only when it cannot delay care. |
+| Emergency treatment is underway | Connects the authorised human to the smallest safe live case view and says “Admit first. Optimise later.” | Administrative work resumes only when it cannot delay care. |
 | A named adult has not consented | Hides that adult's data and stops dependent tasks. | Ask that adult, narrow the scope, or continue with the gap labelled. |
 | Policy or employer booklet is missing | Does not infer that cover is absent. | Request the document or an authorised institutional answer. Otherwise mark unknown. |
 | Two sources conflict | Preserves both versions, dates and source pages. | Apply source hierarchy, ask the institution and route material ambiguity to a human. |
@@ -149,13 +162,14 @@ means absent.
 
 | Rail | What exists and Knowvia would use | What Knowvia must build or validate | Fallback |
 |---|---|---|---|
-| **Gnani, voice** | Agent Builder, knowledge bases, configurable voice agents, multilingual behaviour, dynamic pre-call variables, custom actions, call logs, transcripts, dispositions, analytics, audio access and post-call webhooks. Speech APIs provide real-time, batch and REST STT/TTS for Indian languages. | Bind per-adult consent to each call and record; household-role mapping; source-linked read-back; safe caller-to-parent-to-relative-to-human handoff; field-level redaction; insurance-vocabulary evaluation; uncertainty handling; revocation and retention rules; resumable follow-up without leaking another adult's facts. | A scoped human call or WhatsApp/email questionnaire. Material voice facts remain unconfirmed until the speaker approves them. |
-| **Pine Labs, payments and authorisation** | Hosted checkout, order creation, cards, UPI, netbanking, wallets, callbacks, payment status, webhooks, refunds and optional payment pre-authorisation and capture. | Bind the accepted policy quote, premium, commission disclosure, payer permission and case revision to an order; add expiry and idempotency; reconcile payment with the licensed partner; keep authorised, processed, refunded, policy issued and endorsement accepted as separate states. Payment pre-authorisation is not insurance authorisation. | Use the licensed partner's approved payment route and reconcile the receipt manually. No link appears before the recommendation and disclosure gates. |
+| **Gnani, voice** | Agent Builder provides voice-agent configuration, knowledge bases, dynamic pre-call variables, custom actions, call logs and integrations. Its Agent Chains documentation includes a transfer event and transfer-number configuration. | Bind each call to an adult's purpose-limited permission; pass only permitted context into a human transfer; read back material facts; redact at field level; evaluate insurance terms in relevant languages; retain revocation and audit records; and prevent one relative's call from exposing another adult's details. A transfer event alone does not carry safe household authority or source-linked context. | A scoped human call or WhatsApp/email questionnaire. Material voice facts remain unconfirmed until the speaker approves them. |
+| **Pine Labs, payments and authorisation** | Hosted Checkout supports order creation, payment callbacks, verified status, refunds and a card-payment pre-authorisation flow. An `AUTHORIZED` card payment can be captured or cancelled. The public documentation also lists UPI Reserve Pay, split settlement and agentic-commerce products, whose case-specific operating terms require validation. | For a policy premium, bind the accepted quote, commission disclosure, payer permission and case revision to an order. For planned care, validate whether the hospital is an eligible merchant and whether it can accept an authorised hold. Build payer-to-patient authority, amount ceiling, expiry, release condition, cancellation deadline, idempotency and reconciliation. A payment hold is not insurance pre-authorisation or a right to use another adult's money. | Use the licensed partner's approved payment route or the hospital's own payment route. Reconcile the receipt manually. No link appears before recommendation and disclosure gates. |
 | **Delhivery, logistics and maps** | Shipment creation, pickup and tracking. Maps provides Indian address geocoding, standardisation, validation, verification, routing and distance tools. | **No core first-build role.** If a real case needs physical originals, build a consent token, tamper-evident chain of custody, sensitive-document handling, exact-recipient proof and return or destruction status. Address validation does not verify identity or insurance eligibility. | Secure digital upload, authorised email or a household-managed courier. If no physical original is required, do not create a shipment. |
 
-The load-bearing rail is Gnani. Voice reaches the parent, relative or household operator who holds the
-missing facts but may not install another app or type policy details. Pine Labs is narrow. Delhivery has
-no honest core role today.
+Gnani is the access rail for the household member who holds a missing fact. Pine Labs is the differentiated
+event rail: after the household and hospital agree the route, it may support an authorised premium payment
+or time-bound deposit hold. The cover-interaction and evidence layer remains the product's load-bearing
+logic. Delhivery has no honest core role today.
 
 Documentation checked on 20 September 2026:
 
@@ -169,39 +183,41 @@ The Gnani console has not been tested for this submission. Console-only behaviou
 
 ## 5. Does the agent need a fourth rail?
 
-> **Yes: a Health Insurance Evidence Rail, piloted by Medi Assist for cases it is authorised to administer.**
+> **Yes: a Household Authority Rail, with Setu as the best Indian company to build the first version.**
 
-With the adult's permission, this rail would return:
+The missing thing across voice, payment and logistics is not another channel. It is proof that a named
+adult has authorised a named person or agent to do a named thing for a limited purpose and time. The rail
+would create a signed, revocable authority record containing:
 
-- Group membership and the applicable benefit-booklet version.
-- Insurer and TPA identifiers.
-- Network status with source and timestamp.
-- Pre-authorisation or claim status.
-- Outstanding document or information queries.
-- Response timestamps and reason codes.
-- The institution that owns the next decision.
-- A written, attributable answer to a structured question.
+- The principal, delegated person or agent, and confirmed identity.
+- The permitted action: read, ask, share, pay, hold funds or receive a response.
+- The exact records, institution, purpose, amount limit and expiry.
+- A live revocation and an audit trail that a rail or human can verify before acting.
+- A denial state when authority is absent, expired, disputed or broader than the intended task.
 
-Medi Assist is the preferred pilot builder because it already operates between employers, members,
-hospitals and insurers in health-benefit administration. This makes it operationally close to the missing
-answers. It does not make Medi Assist neutral or universal. A later industry rail would require common
-permission, audit and cross-TPA standards.
+Setu is the best fit because its Account Aggregator documentation already uses purpose-specific consent
+objects, approval or rejection, expiry and status for financial-data sharing. That is a useful operational
+starting point, not proof that it can manage health records or household delegation today. The new rail
+would need a cross-domain authority standard, institution adoption and legal review before it could be
+relied upon.
 
-Without this rail, Knowvia uses customer documents, official correspondence and manual institutional
-follow-up. Any missing answer remains unknown.
+Without this rail, Knowvia uses per-institution consent, customer documents and manual follow-up. Any
+missing answer or authority remains unknown or unavailable. A Medi Assist-style evidence connection would
+still be valuable, but only inside cases it is authorised to administer. It does not solve cross-rail
+household authority.
 
-[Medi Assist says it provides TPA services to insurers and administers employer and retail health
-plans](https://www.mediassist.in/about/). This supports its proximity to the workflow. It does not prove
-that an open evidence API exists or that the company would build it.
+[Setu's AA documentation describes consent requests and status within the financial-information
+ecosystem](https://docs.setu.co/data/account-aggregator/overview). It does not establish a health-data,
+family-delegation or third-party action API.
 
-This rail should expose evidence, status, ownership and reason codes. It should not expose a secret claim
-score. A claim-approval probability without an insurer-validated decision model would create false
-confidence.
+This rail must not turn a family relationship, a payment token or a delivery address into authority. Nor
+should it expose a secret claim score. A claim-approval probability without an insurer-validated model
+would create false confidence.
 
 ## 6. How will a human interact with the agent?
 
-The primary interface is an event-led mobile case, not a generic chat screen. The first question is:
-**What is happening now?**
+The primary interface is an event-led mobile case, not a generic chat screen or a policy dashboard. The
+first question is: **What is happening now?**
 
 The choices are:
 
@@ -211,20 +227,30 @@ The choices are:
 - Claim problem.
 - Emergency access.
 
-The case has six fixed views:
+The case has four working modes:
 
-1. **Today.** One sentence on the situation, next action, owner and deadline.
-2. **Household cover map.** People on one axis and group or personal policies on the other. Each cell shows
+1. **Per-person view.** People sit on one axis and group or personal policies on the other. Each cell shows
    confirmed cover, unknowns, relevant limitations and source pages. Policies are never added into one
    guaranteed cash number.
-3. **Questions and answers.** One queue for the household, hospital, HR, TPA, insurer and licensed partner.
+2. **Plan an expense.** Patient, procedure, hospital, date and estimate lead to a route: policies that may
+   apply, network and pre-authorisation questions, documents, constraints and a conservative cash-needed
+   scenario for admission morning.
+3. **Buy or renew.** The agent first checks the household's existing map. It can recommend buy, retain,
+   switch, defer or "find out X first", with the regulated recommendation gate marked.
+4. **Emergency access.** An authorised human opens the same live context, with policy identifiers, support
+   contacts, known limits, unknowns and the next administrative task. It is not a static physical card.
+
+Across every mode, the case also keeps:
+
+1. **Today.** One sentence on the situation, next action, owner and deadline.
+2. **Questions and answers.** One queue for the household, hospital, HR, TPA, insurer and licensed partner.
    Each question has one owner, one written answer, attempts, deadline and escalation route.
-4. **Money.** Premium, deductible, co-pay, hospital deposit, possible upfront cash and unresolved exposure
+3. **Money.** Premium, deductible, co-pay, hospital deposit, possible upfront cash and unresolved exposure
    remain separate. Optional income, commitments, loans and emergency savings appear only when needed for
    an affordability question.
-5. **Evidence.** Original document, version, page citation, extracted fact, confidence and dispute history
+4. **Evidence.** Original document, version, page citation, extracted fact, confidence and dispute history
    sit together. A correction does not erase the earlier record.
-6. **Permissions and people.** Each adult sees who may read, speak or act, for what purpose and until when.
+5. **Permissions and people.** Each adult sees who may read, speak or act, for what purpose and until when.
    They can revoke access or nominate a backup without granting blanket family authority.
 
 Voice is another channel into the same case. Gnani can call the named knowledge holder in their preferred
@@ -236,8 +262,8 @@ Outputs change with the event:
 - Buy, Renew, Retain, Switch or Defer decision brief.
 - Admission Readiness Brief.
 - Claim Position Brief.
-- Updated Household Health Card.
-- Optional Backup Handover.
+- Updated per-person cover map.
+- Authorised emergency context for the human who answers.
 
 A licensed human appears as a marked gate, not a permanent concierge. They receive disputed facts and
 their sources, record their reasoning and return the case to the household. In an emergency, the interface
@@ -285,11 +311,14 @@ The separate adversarial review returned **REVISE**, with an overall answer scor
 ## Before submission
 
 1. Run one real household case with redacted documents and recorded permission.
-2. Run the five-minute retrieval and backup drill. Record the failure, not only the success.
+2. Run one planned-care rehearsal with a real patient, hospital estimate and redacted policy evidence. Record
+   which question, document or authority stops the route.
 3. Test Gnani in at least two relevant language modes and document where insurance terminology,
    consent, context or handoff fails.
-4. Confirm the 3.92% figure and preserve its organiser source.
-5. Obtain qualified review of the licensed recommendation, data handling and commission model.
-6. Keep the first demonstration focused on buying or renewal after cover reconstruction. Present planned
-   admission and claim support as continuity, not as three additional products.
-
+4. Test the Pine Labs authorised-payment lifecycle in its test environment. Do not claim that a hospital
+   deposit hold works until a hospital merchant and the operating terms are verified.
+5. Confirm the 3.92% figure and preserve its organiser source.
+6. Obtain qualified review of the licensed recommendation, data handling, delegated authority and
+   commission model.
+7. Keep the first demonstration focused on one planned-care event after cover reconstruction. Present
+   buying, renewal and claim support as connected modes, not three unrelated products.
