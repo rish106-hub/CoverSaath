@@ -218,3 +218,22 @@ A local synthetic workflow scaffold now exists. README.md and the final section 
 03-architecture.md record its exact boundary. Statements above about no prototype reflect
 the 07 September audit. This build does not resolve customer evidence, economics, licensing,
 multi-adult consent or real-service feasibility. No live rail integration is configured.
+
+## 10. Product hierarchy correction, 20 September
+
+The claims-backwards feedback should improve Coversaath's continuity layer, not rename the product into a
+"Disclosure-to-Claim Ledger." That would make a supporting record-keeping capability the headline and
+would reintroduce the post-purchase drift this audit warned against.
+
+The corrected hierarchy is:
+
+- **Coversaath:** household health-insurance understanding and decision agent.
+- **Core sequence:** reconstruct group and personal cover, decide whether to buy, renew, retain, switch or
+  defer, complete the authorised transaction, and check issued terms.
+- **Continuous context:** policy history, disclosure evidence, underwriting treatment, correspondence,
+  permissions and known versus unknown facts.
+- **Later decision modules:** planned-admission readiness, emergency handover and claim-position support.
+
+The policy continuity record is valuable because it lets the same agent explain an insurer question or a
+later claim problem without making the household rediscover its history. It cannot predict claim approval,
+bind an insurer, prove demand or substitute for a licensed or institutional decision.

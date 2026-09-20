@@ -1,10 +1,12 @@
 # Coversaath: submission answers and defence
 
-Updated 07 September 2026. Drafts against the public [The Ken competition questions](https://the-ken.com/case-competition-2026/). Prompts are paraphrased. The private form has not been inspected. No submission has been made.
+Updated 20 September 2026. Drafts against the public [The Ken competition questions](https://the-ken.com/case-competition-2026/). Prompts are paraphrased. The private form has not been inspected. No submission has been made.
 
 **Not ready to submit unchanged:** Question 2 now uses Rishav's reported 15 student conversations, but the exact count, raw answers and consent status still need documentation. Question 1 needs Tiya's confirmed personal connection. Question 8 needs confirmation of the submitter's own belief.
 
-**Our one confident claim:** a family should not buy another health policy until it knows what protection exists, what it costs, and whether someone else can operate it during an emergency.
+**North Star:** no household should reach an insurance decision or hospital admission without knowing what cover it has, what remains uncertain, what money it may need and what it should do next.
+
+**USP:** Coversaath reconstructs group and personal cover first, then carries the same household context through buying, renewal, hospitalisation and claim coordination. The Treasury, policy history, disclosure record and emergency handover are internal modules, not separate products.
 
 ## 1. Members, personal connection and team edge
 
@@ -30,27 +32,27 @@ Limit: one sentence per step, at most 15 words each.
 
 **Trigger**
 
-> A renewal notice, new job or family change starts a real buying decision.
+> A renewal, new job, family change or planned admission starts a real insurance decision.
 
 **Knows**
 
-> It knows consented cover, named operators, optional affordability inputs and unresolved facts.
+> It knows consented group and personal cover, household roles, policy history and unresolved facts.
 
 **Does**
 
-> It reconstructs cover, runs the drill, finds benefit limits and creates the Household Health Card.
+> It reconstructs cover, checks crisis-relevant limits, coordinates answers and prepares the next decision.
 
 **Deals with**
 
-> It coordinates with households, employers, insurers, TPAs, licensed partners and authorised experts.
+> It coordinates with households, hospitals, HR, insurers, TPAs, licensed partners and authorised experts.
 
 **Asks a human**
 
-> People approve sharing, affordability inputs, disclosures, purchase, commission and payment.
+> People approve sharing, declarations, recommendations, purchases, commission, payment and settlement decisions.
 
 **Done**
 
-> A policy is issued or retained; the card shows cover, costs, roles and next action.
+> The household has a clear decision, issued terms or a record of what remains unresolved.
 
 Routing a question is not resolving it. A licensed adviser separately reviews the evidence behind every recommendation and is expected to recommend no purchase when existing cover is enough. The household, adviser and insurer have different decision authority. Retaining existing cover, deferral and rejection are recorded completions, not failures.
 
@@ -60,15 +62,15 @@ Limit: one sentence per rail.
 
 **Payments**
 
-> We would use Pine Labs for approved premium payments, keeping payment, commission disclosure and policy issuance separate.
+> We would use Pine Labs for user-approved premium payment and reconciliation; payment never means policy issuance.
 
 **Logistics**
 
-> Delhivery has no core role: policy, consent and handover flow should be digital and permissioned.
+> Delhivery has no core role: policy evidence, consent and coordination should stay digital and permissioned.
 
 **Voice**
 
-> We would use Gnani as the load-bearing rail to collect parent consent and missing policy facts by voice.
+> We would use Gnani for consented multilingual voice intake, read-back and missing-fact collection across household members.
 
 Zerodha is the main partner, not one of these three rails. It is a later optional source for a user-selected affordability scenario, not a default feed or trading rail. Credit, investment and tax data are never needed for a basic coverage decision. These are proposed uses, not established partnerships.
 
@@ -84,7 +86,7 @@ Gnani already advertises contextual transfer to people. The novel test is whethe
 
 Limit: 30 words.
 
-> Existing policies and voluntary affordability inputs, because they receive a usable cover, cost and emergency card whether they buy or not.
+> Existing policies, employer benefit documents and optional affordability inputs, for a clear cover, cost and next-action view whether they buy or not.
 
 This answers what the customer hands over, not the case file our product creates. Ask only for records relevant to the current buying question. A first-time buyer without an existing policy can supply their employer benefit document instead. The customer keeps authorised access whether or not they buy.
 
@@ -92,7 +94,7 @@ This answers what the customer hands over, not the case file our product creates
 
 Limit: 30 words.
 
-> Planned admission: reuse the cover map to expose benefit limits, missing documents and institutional questions before admission.
+> Planned admission: reuse the cover map, policy history and permissions to prepare limits, cash questions and institutional follow-up.
 
 This remains conditional planning, not clinical advice or guaranteed coverage. The broader product already anticipates this extension; the competition demonstration centres on completing a purchase.
 
@@ -124,15 +126,15 @@ These are preparation questions, not a claim that the organisers will ask them.
 
 ### What are you building in plain language?
 
-An agent that rebuilds a family's cover, tests whether a backup can use it, prices the gap and creates a
-Household Health Card. The family then buys, retains or defers. The same Treasury carries renewal, job
-changes and planned care.
+An agent that reconstructs a family's employer and personal cover, prepares a buying or renewal decision,
+then helps the same household use that context during planned care or a claim problem. The Treasury and
+policy history sit inside the agent; they are not the product headline.
 
 ### Isn't readiness a separate thing from buying?
 
-No. The Treasury is the record created while buying properly. It starts with documents and the drill,
-then adds an optional affordability plan and card. A drill alone would be a feature. A finance dashboard
-without a buying decision would be the wrong product.
+No. The Treasury is the record created while buying properly. It starts with documents and an optional
+continuity check, then adds an affordability plan and card when useful. A drill, policy ledger or finance
+dashboard alone would each be a feature. None is the product.
 
 ### Who is the first user?
 

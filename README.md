@@ -1,7 +1,14 @@
 # CoverSaath MVP
 
-Local, synthetic prototype of household health-cover buying and continuity.
+Local, synthetic prototype of household health-insurance understanding, buying and continuity.
 Not an insurance adviser, staffed support service or claims platform.
+
+**Product North Star:** no household should reach an insurance decision or hospital admission without
+knowing what cover it has, what remains uncertain, what money it may need and what it should do next.
+
+**Product boundary:** Coversaath is the agent. The Household Health Treasury, group and personal policy
+modules, proposal and underwriting record, correspondence history, Admission Readiness Brief and Claim
+Position Brief are capabilities inside it. This prototype does not yet operate any of them with real data.
 
 ## Brand implementation
 
@@ -239,6 +246,7 @@ flowchart TD
 Supporting material is kept out of the repository root. Visual architecture files are in
 `docs/assets/`, raw working evidence is in `docs/evidence/`, and communication drafts are in
 `docs/comms/`. The active product pack remains in `research/01-06` and `answers.md`.
+The current full working board is [coversaath-exhaustive-working-board.svg](docs/assets/coversaath-exhaustive-working-board.svg).
 
 ## Data and security limits
 

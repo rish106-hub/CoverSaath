@@ -1,18 +1,28 @@
 # Coversaath: product and decisions
 
-Updated 07 September 2026. Brand system added 18 September 2026. Status: coherent concept with a
+Updated 20 September 2026. Brand system added 18 September 2026. Status: coherent concept with a
 buying-led sequence, ready for a scoped prototype and behavioural testing. Fifteen student conversations
 are user-reported. No paid pilot, partner agreement or working integration is claimed.
 
 ## 1. The product in one sentence
 
-Coversaath rebuilds a household's health cover, identifies what it needs next, and turns that work into
-a Household Health Treasury with a clear plan for premiums, medical spending and emergencies.
+Coversaath is a household health-insurance understanding and decision agent. It reconstructs group and
+personal cover, helps the household buy or renew appropriately, and carries the same context into planned
+care, a claim problem and the next decision.
 
 Working descriptor: **Know what you have. Buy what you need. Plan what it costs.**
 
-**Our one confident claim:** a family should not buy another health policy until it knows what
-protection already exists and whether someone else can operate it during an emergency.
+**North Star:** no household should reach an insurance decision or hospital admission without knowing what
+cover it has, what remains uncertain, what money it may need and what it should do next.
+
+**USP:** Coversaath first reconstructs the household's complete insurance position across employer and
+personal policies. It then carries that same context through buying, renewal, hospitalisation and claim
+coordination.
+
+The Household Health Treasury is the record and planning layer inside this agent. A disclosure history,
+policy reconciliation record, email trail, admission brief and backup handover are modules inside
+Coversaath. None is the product on its own. Coversaath is not a generic policy wallet, a claims processor
+or a "disclosure-to-claim ledger" sold as a separate product.
 
 Readiness is not a separate product placed before buying. It is the first half of buying properly.
 Reconstructing cover, verifying the operator and running the drill are what make a recommendation
@@ -43,6 +53,13 @@ build uses voluntary affordability inputs. It does not make a general investment
   known. They help price affordability, not determine insurance eligibility or replace financial advice.
 - The service works across existing employer cover, personal health policies and genuinely relevant
   additional benefits. It does not assume every credit card supplies illness cover.
+- Group cover is treated as a live membership and benefits record, not an individual policy purchase:
+  enrolment, members, employer contribution, voluntary top-up, exit dependency, employer renewal and
+  benefit-booklet version all remain separate facts.
+- Each personal policy can keep a policy continuity record: proposal answers, evidence supplied,
+  submission and acknowledgement receipts, insurer questions, underwriting changes, loading, waiting
+  periods, exclusions, endorsements, payment, issuance and later correspondence. This is a supporting
+  evidence module, not Coversaath's public identity.
 - The agent completes routine document work, follow-up, coverage reconstruction and planning.
 - A human enters at the licensed recommendation gate, on material ambiguity, on exception or when the
   customer asks for one. Human minutes per completed decision are measured and capped.
@@ -158,20 +175,23 @@ recorded permission, it contacts the parent or trusted relative by voice or What
 the documents, and records what remains unknown. Each adult controls their own records.
 
 The output is a small emergency handover: current policy documents, insured members, insurer or TPA,
-the real operator, one backup, authorised viewers, unknowns and the first administrative actions.
-The family then runs a five-minute drill. Another authorised person must be able to locate the cover
-and support route without calling the usual organiser.
+the real operator, one backup, authorised viewers, unknowns and the first administrative actions. A
+five-minute backup check is available when a household wants to test the handover or when voice outreach
+reveals a material operator gap. It is a supporting continuity feature, not Coversaath's headline or a
+mandatory exam before every recommendation.
 
-The drill is a test, not a promise. Passing it does not mean the family has adequate insurance. Failing
-it does not mean they must buy anything. Refusal, an unreachable relative, no policy found and a failed
-drill are all real, recorded outcomes.
+The backup check is a test, not a promise. Passing it does not mean the family has adequate insurance.
+Failing it does not mean they must buy anything. Refusal, an unreachable relative, no policy found and a
+failed check are all real, recorded outcomes.
 
 ### Identifying the uncovered need
 
 Only after existing protection is reconstructed does the service name a gap. It captures priorities,
-compares a small shortlist and explains consequential trade-offs using a household scenario. It
-reconciles proposal answers with submitted evidence and routes unknowns to the insurer or licensed
-adviser. Where the honest answer is that current cover is enough, the service says so and closes.
+compares a small shortlist and explains consequential trade-offs using a household scenario. It reconciles
+proposal answers with submitted evidence, labels whether a disclosure is only prepared, sent,
+acknowledged, considered in underwriting or reflected in issued terms, and routes unknowns to the insurer
+or licensed adviser. Where the honest answer is that current cover is enough, the service says so and
+closes.
 
 ### Household Health Treasury and affordability plan
 
@@ -208,9 +228,11 @@ one outcome over another.
 ### Issuance check and updated handover
 
 The issued schedule and endorsements are checked against what was agreed. An issued policy that differs
-from the accepted offer stays an open issue. The emergency handover is then updated with the new policy,
-members, insurer or TPA route and authorised viewers, and the backup person is re-tested. A short family
-guide records how to seek help. The case persists for renewal and claims.
+from the accepted offer stays an open issue. Coversaath reconciles the household's declared facts,
+submitted evidence, insurer questions, underwriting response and issued contract. It flags a mismatch,
+but only the institution can resolve it. The emergency handover is then updated with the new policy,
+members, insurer or TPA route and authorised viewers. A short family guide records how to seek help. The
+case persists for renewal and claims.
 
 ### Renewal
 
@@ -248,10 +270,16 @@ The interface becomes deliberately simple. AI stays backstage to retrieve docume
 track requests and brief the human. The expert uses the case and gives their own interpretation.
 Make the access card available to authorised family members.
 
-### After the expense and after a job change
+### Claim problem, after the expense and after a job change
 
 Reconcile bills and actual payments, record remaining cover, and pursue a specific unresolved item
-within the service's agreed scope. Do not invent savings from an estimated payout.
+within the service's agreed scope. For a disputed, delayed or rejected reimbursement, prepare a **Claim
+Position Brief**: what the institution says, the exact clause it cites, the household evidence, the
+submission and correspondence timeline, unresolved contradictions, and the next evidence-based question.
+It helps a household preserve and understand its record. It does not claim a rejection is wrongful, submit
+an appeal autonomously, promise settlement or speak with the authority of the insurer.
+
+Do not invent savings from an estimated payout.
 
 A job change updates employer cover on the same record and may expose a new gap. Provide personal
 access or export of the household's authorised records at any time. Never imply employer insurance

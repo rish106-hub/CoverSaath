@@ -785,3 +785,174 @@ and [excessive-agency guidance](https://genai.owasp.org/llmrisk/llm062025-excess
 Use [NIST's generative AI risk profile](https://www.nist.gov/publications/artificial-intelligence-risk-management-framework-generative-artificial-intelligence)
 as a risk-management reference, not a compliance badge. Current insurance obligations, intermediary
 structure and data protection require qualified review. This build makes no legal compliance conclusion.
+
+## Exhaustive working map, 20 September 2026
+
+This is the current product hierarchy. It deliberately makes Coversaath the agent, not a ledger, a
+dashboard, a backup-person drill or a claims product. Those are useful capabilities that make the agent
+more reliable at the moment a household has to decide or act.
+
+The matching visual board is [coversaath-exhaustive-working-board.svg](../docs/assets/coversaath-exhaustive-working-board.svg).
+
+**North Star:** no household should reach an insurance decision or hospital admission without knowing what
+cover it has, what remains uncertain, what money it may need and what it should do next.
+
+**USP:** reconstruct group and personal cover first, then carry the same household context through buying,
+renewal, hospitalisation and claim coordination.
+
+```mermaid
+flowchart TD
+  Start([A real insurance or care decision]) --> Trigger{What changed?}
+  Trigger -->|New job or benefits enrolment| Group
+  Trigger -->|Retail purchase or renewal notice| Buy
+  Trigger -->|Family, health or job change| Rebuild
+  Trigger -->|Planned procedure or admission| Care
+  Trigger -->|Claim delay, query or rejection| Claim
+  Trigger -->|Emergency| Emergency
+
+  Group[Group-cover module\nmember enrolment, parents, employer contribution, top-up,\nbooklet version, renewal and job-exit dependency]
+  Buy[Personal-policy module\nexisting policy, quote, proposal, renewal and replacement risk]
+  Rebuild[Household reconstruction\nwho is insured, who pays, who knows, who decides]
+  Care[Planned-care module\npatient, procedure, hospital, date and estimate]
+  Claim[Claim-problem module\nletter, cited clause, evidence, timeline and next question]
+  Emergency[Emergency access\nAdmit first. Optimise later.\nShow authorised records and institutional route]
+
+  Group --> Consent
+  Buy --> Consent
+  Rebuild --> Consent
+  Care --> Consent
+  Claim --> Consent
+  Emergency --> Access{Existing authorised access?}
+  Access -->|Yes| EmergencyBrief[Emergency brief\npolicy or TPA route, documents,\nknown limits, unknowns and human contact]
+  Access -->|No| EmergencyRoute[Hospital desk, TPA, insurer or HR route\nNo waiting for onboarding or AI analysis]
+
+  Consent[Per-adult, purpose-scoped permission\ncollect? view? share? act? for how long?] --> Permission{Permission valid\nfor this source and action?}
+  Permission -->|No| Ask[Ask named adult or stop\nNever infer authority from family role]
+  Permission -->|Yes| Collect
+
+  Collect[Collect only what answers this case\npolicy schedule, wording, endorsement, employer booklet,\nquote, hospital estimate, correspondence, user-stated facts] --> Validate
+  Validate[Version, source page, effective date, subject,\naccess scope and evidence status] --> Map[Household coverage graph]
+  Map --> GroupMap[Group cover view\nwhat membership actually exists today]
+  Map --> PersonalMap[Personal cover view\nwhat contract and version applies]
+  Map --> Record[Policy continuity record\nproposal to issued terms to correspondence]
+
+  GroupMap --> Analyse
+  PersonalMap --> Analyse
+  Record --> Analyse
+  Analyse[First-principles policy analysis\nper person, policy, condition, procedure, hospital and date] --> Unknown{Material fact confirmed?}
+  Unknown -->|No| Question[Create exact question, owner, deadline and approved payload\nHR, hospital desk, TPA, insurer, adviser or household]
+  Question --> Reply[Preserve reply, authority and reference number]
+  Reply --> Analyse
+  Unknown -->|Yes or bounded enough| Decision
+
+  Decision{What decision is needed now?}
+  Decision -->|Buy or renew| Compare
+  Decision -->|Plan admission| Readiness
+  Decision -->|Resolve claim problem| Position
+  Decision -->|Maintain continuity| Update
+
+  Compare[Small, source-linked route comparison\nretain, renew, add, switch, defer or no purchase] --> HumanGate{Licensed advice, material ambiguity\nor customer asks for a person?}
+  HumanGate -->|Yes| Adviser[Licensed-partner review\nsource evidence, conflicts and commission disclosure]
+  HumanGate -->|No| HouseholdChoice
+  Adviser --> HouseholdChoice[Household approves choice\ndeclaration, payment and purchase remain human decisions]
+  HouseholdChoice --> Pine[Pine Labs only for approved merchant checkout\npayment status and reconciliation]
+  Pine --> Underwriting[Application, insurer questions, underwriting and offer]
+  Underwriting --> Issuance[Payment is not issuance\ncheck issued schedule and endorsements]
+  Issuance --> Reconcile[Reconcile proposal, submitted evidence, insurer treatment\nand issued terms. Flag differences; do not invent resolution.]
+
+  Readiness[Admission Readiness Brief\napplicability, documents, questions, cash scenarios, owners and deadlines] --> Institution[Permissioned hospital, HR, TPA or insurer follow-up]
+  Institution --> CareUpdate[Update pre-authorisation, estimate, admission, discharge and bills\nwithout claiming approval or final settlement]
+  Position[Claim Position Brief\ninstitution statement, cited clause, evidence timeline, conflicts and next question] --> ClaimFollowup[Permissioned clarification or escalation preparation\nNo autonomous appeal, filing or settlement acceptance]
+  Update[Renewal, job change, family change or user-requested review] --> Map
+
+  Reconcile --> Treasury[Household Health Treasury\nrecords facts and scenarios for the next decision]
+  CareUpdate --> Treasury
+  ClaimFollowup --> Treasury
+  EmergencyBrief --> Treasury
+  Treasury --> Card[Known / Unknown / Next\nshort household-facing view]
+```
+
+### The agent's feasibility test, in the order it must reason
+
+Do not start with a claim-settlement ratio, a headline sum insured or a list of cheapest policies. They
+are partial information. Start with the specific person and decision.
+
+| Order | Question the agent must answer | Why it matters | If unknown or conflicting |
+|---:|---|---|---|
+| 1 | Who is the patient, buyer, proposer, payer, policyholder, operator and decision-maker? | These roles often differ; one person cannot silently speak for every adult. | Request the right adult's permission or record the case as blocked. |
+| 2 | What exact decision is due, and by when? | A renewal, pre-authorisation and emergency have different clocks. | Do not open a broad discovery project without a concrete decision. |
+| 3 | Which policies, group memberships, riders and benefits might be relevant? | Multiple sources can overlap, lapse or apply to different members. | Record a missing source, not an assumed absence. |
+| 4 | Which document version and effective date governs? | A marketing page, expired schedule or old booklet can give the wrong answer. | Request current wording, endorsement or authorised institutional reply. |
+| 5 | Is the person actually enrolled and eligible on the relevant date? | Group cover, parent enrolment, age limits and job exit are membership facts, not guesses. | Mark unverified and route the question to HR, TPA or insurer. |
+| 6 | What event is being assessed: routine treatment, named procedure, therapy, admission, reimbursement or renewal? | Cover can be event-specific; a large sum insured is not a procedure promise. | Keep applicability conditional until a clinician, hospital estimate and policy wording exist. |
+| 7 | What policy limits may change this event? | Sub-limits, disease or therapy limits, exclusions and waiting periods can dominate the headline cover. | Cite the clause or state that it needs confirmation. |
+| 8 | What cost-sharing mechanics may apply? | Room-category rules, co-pay, deductible and top-up attachment can change personal payment. | Do not calculate a confident amount from a generic rule. |
+| 9 | How do multiple policies interact for this person and expense? | Shared sum insured, restoration and indemnity coordination cannot be safely added into one total. | Show possible routes separately and ask the institution about sequence where needed. |
+| 10 | Is the hospital in network for this exact insurer or TPA route? | Network status can affect the cashless process, but it is not approval. | Request current confirmation from the relevant institution. |
+| 11 | What must happen before admission or reimbursement? | Pre-authorisation, claim form, estimate, discharge record and bills have owners and deadlines. | Produce a named checklist rather than claiming readiness. |
+| 12 | What cash may be needed now versus what could remain after settlement? | A requested deposit, possible out-of-pocket amount and final settlement are distinct. | Preserve the ranges and uncertainty; never call an estimate an entitlement. |
+| 13 | What was disclosed and what did the insurer actually accept? | Proposal answers, evidence and underwriting changes matter at purchase and later questions. | Preserve the trace, label its status and ask the insurer to reconcile contradictions. |
+| 14 | What exactly does a dispute or delay say? | A broad complaint is not actionable until the stated reason, clause, evidence and dates are separated. | Create a Claim Position Brief with the next evidence-based question. |
+| 15 | Who has authority to answer or act? | The household, hospital, HR, TPA, insurer, adviser and agent have different authority. | Route the task to the authority rather than simulating certainty. |
+
+### Policy coverage and crisis-readiness matrix
+
+The table is a checklist for source-linked analysis. It is not a universal policy rulebook and must never
+turn an absent source into a negative answer.
+
+| Dimension | What the agent records | Reason for the check | Output state |
+|---|---|---|---|
+| Identity and membership | Insured member, relationship, enrolment date, policyholder, group status and exit date | A policy may exist without covering this person at this time. | Confirmed, unverified or missing |
+| Contract version | Schedule, wording, endorsements, issue and renewal dates | Terms change; the most convenient PDF is not always governing. | Source-backed version or blocked |
+| Sum insured and sharing | Base amount, shared versus individual, used amount only if evidenced, restoration mechanics | Prevents fake total-cover arithmetic. | Per-policy view, never one guaranteed total |
+| Procedure, therapy and condition limits | Named therapy, disease, procedure or consumable limits where stated | Modern therapy or disease caps may drive the outcome. | Cited limit, question or not found |
+| Waiting periods and pre-existing conditions | Clause, start date, relevant declared condition and insurer treatment | Time and underwriting can alter applicability. | Cited condition plus uncertainty |
+| Exclusions | Specific permanent, temporary, general or condition exclusions | Exclusions cannot be inferred from memory or a generic product summary. | Cited, unresolved or absent from supplied material |
+| Room, ICU and treatment setting | Room-category condition, ICU rule and hospital estimate category | A room rule can affect more than the room charge depending on the policy wording. | Cite exact contract effect or ask insurer |
+| Co-pay and deductible | Percentage, age or location conditions, aggregate or per-claim deductible, top-up threshold | These determine where the household starts paying. | Scenario input, not final settlement |
+| Top-up and super top-up | Threshold, aggregation period, underlying cover and renewal period | A top-up may not attach to this event when the threshold is not met. | In-play, not in-play or uncertain |
+| Restoration and bonus | Trigger, timing, one-time versus recurring rule, member sharing and policy year | These are policy-specific and cannot be assumed from a product name. | Cited feature and condition |
+| Network and cashless process | Insurer or TPA route, hospital network confirmation, required desk and authorisation sequence | Network is route information, not a payment promise. | Confirmed route or pending confirmation |
+| Non-payable and bill components | Known exclusions, estimate line items, consumables or package ambiguity where the source identifies them | The hospital estimate and insurer process may treat components differently. | Itemised questions, never a blanket exclusion claim |
+| Premium and renewal | Due date, grace rules if evidenced, quote change, payer and payment status | Lapse and job change can break continuity. | Deadline and required action |
+| Disclosure and underwriting | Question asked, household answer, source evidence, submission receipt, insurer query, loading, exclusion or waiting-period result | Prevents lost context between application and issued policy. | Prepared, sent, acknowledged, considered or reflected |
+| Correspondence and claim record | Email, letter, reference number, sender, authority, date, attachment and requested next step | A household needs a usable timeline, not a folder of screenshots. | Linked evidence timeline |
+| Claim settlement ratio | Insurer-reported metric, methodology, period, product scope and source | It can provide market context but cannot predict this household's claim. | Secondary comparison context only |
+
+### Storage and evidence rules
+
+The system stores a case record, not one giant PDF folder. Every retained item needs an owner, purpose,
+permission state, provenance and lifecycle.
+
+| Object | Minimum fields | Non-negotiable boundary |
+|---|---|---|
+| Household and roles | Person, role, relationship, who nominated them, contact route and backup | Relationship does not grant access. |
+| Consent grant | Adult, record scope, purpose, viewers, permitted actions, expiry, revocation and audit event | Consent is rechecked for every external share or action. |
+| Source document | Hash, type, version, effective date, uploader, source pages, storage state and retention state | Document content is untrusted until reviewed; no silent overwrite. |
+| Extracted fact | Subject, value, source location, date, evidence status, reviewer and permitted viewers | `unknown` is not `false`; model confidence is not contractual certainty. |
+| Policy record | Group or personal type, membership, renewal, insurer or TPA route, governing documents and status | Group and personal policies stay distinct before any scenario is run. |
+| Policy continuity record | Proposal question, answer, evidence, submission receipt, insurer query, response, underwriting decision, issued-term check | It supports the wider agent. It is not the product headline. |
+| Institutional correspondence | Sender, authority, reference number, exact question, approved payload, reply, date and unresolved point | An acknowledgement is not a binding coverage answer. |
+| Decision and scenario | Trigger, alternatives, assumptions, cash-now view, possible final exposure, owner and deadline | Never presents a final payout or medical recommendation. |
+| Audit event | Actor, action, case revision, permission reference, timestamp and result | Supports dispute review, revocation and correction. |
+
+### Rail responsibilities in this map
+
+| Rail | Existing documented surface | Coversaath use | Capability Coversaath must build or validate | Explicit non-claim |
+|---|---|---|---|---|
+| Gnani | Speech-to-text, text-to-speech, real-time and batch interfaces, plus an agent builder | Consent-aware multilingual voice intake, read-back, missing-document requests and human-ready case summary | Per-adult permission and provenance that survives caller, parent, relative and expert handoff; approved telephony or WhatsApp workflow | Voice transcript or read-back is not consent, identity verification or insurer authority. |
+| Pine Labs | Online payments including payment gateway, links, forms, refunds and subscriptions | User-approved premium checkout, payment status, refund path and reconciliation against an authorised purchase | Licensed-partner and merchant configuration, webhooks, idempotency, refund responsibilities and issued-policy reconciliation | Payment success is not a policy sale, underwriting acceptance or issuance. Commission is not an extra fee added by the agent. |
+| Delhivery | Maps surface includes geocoding, address validation, standardisation and routing | No core logistics workflow. At most, normalise a hospital address after the household has chosen a hospital. | If physical records ever become necessary, validate medical-document acceptance, pickup, consent, custody and privacy before use | Maps or a courier cannot prove network status, coverage, document acceptance or claim approval. |
+
+### What stops the workflow
+
+The agent should refuse or pause rather than manufacture a polished answer when any of these apply:
+
+- The adult whose record is needed has not granted the required permission.
+- The current policy version, membership or insured person cannot be established.
+- A claim question needs an institutional answer and none is available yet.
+- The agent would need to predict underwriting, cashless approval or final settlement.
+- The treatment decision would be altered by product advice rather than a clinician.
+- A named financial asset is not voluntarily identified as available for this specific scenario.
+- The existing adviser, HR or hospital desk already closes the task faster with less repetition.
+- An emergency requires care now. The visible instruction remains: **Admit first. Optimise later.**
