@@ -1,5 +1,12 @@
 # Coversaath — the idea, as a conversation
 
+**Status, 20 September 2026:** this is an illustrative internal working conversation, not the canonical
+product specification or evidence of real claims operations. The current source of truth is
+[research/01-product.md](../../research/01-product.md): Coversaath is the household health-insurance
+understanding and decision agent. The Treasury, policy continuity record, emergency handover and claim
+support are capabilities inside it. Specific policy examples in this narrative remain illustrative until
+their wording and facts are verified against the governing documents and authorised institutions.
+
 *Rishav and Aman, Sunday evening, a chai stall near Aman's office. Aman spent four years in claims operations at a TPA before moving to a fintech. Rishav is building Coversaath.*
 
 ---
