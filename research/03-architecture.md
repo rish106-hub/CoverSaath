@@ -792,7 +792,7 @@ This is the current product hierarchy. It deliberately makes Coversaath the agen
 dashboard, a backup-person drill or a claims product. Those are useful capabilities that make the agent
 more reliable at the moment a household has to decide or act.
 
-The matching visual board is [coversaath-exhaustive-working-board.svg](../docs/assets/coversaath-exhaustive-working-board.svg).
+The matching visual architecture is [coversaath-product-architecture.png](../docs/assets/coversaath-product-architecture.png). It maps the case triggers, permission tree, evidence model, specialist workers, agent limits, human gates, state machine, outputs and rail boundaries.
 
 **North Star:** no household should reach an insurance decision or hospital admission without knowing what
 cover it has, what remains uncertain, what money it may need and what it should do next.
