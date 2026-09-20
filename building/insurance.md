@@ -237,6 +237,10 @@ The hospital worker must use a dated official network source, not a search-resul
 
 The claims-process worker makes a case-specific checklist. It should say, "The policy wording says X and this case is missing Y," not "your claim will fail." A pre-authorisation delay is not a final claim denial. A final claim decision belongs to the insurer and must be represented as such.
 
+### Emergency handoff rule
+
+For an active emergency, the system routes the case to a live healthcare expert by default. The workers produce a read-only Emergency Case Brief for that expert. No AI worker may make treatment decisions, decide whether admission should wait, promise approval, or autonomously direct hospital action. Chat is optional and cannot replace the expert handoff.
+
 ## I. Renewal, portability and change control
 
 ### Brackets
@@ -301,6 +305,15 @@ Named owner, action and deadline.
 UNRESOLVED FACTS
 Only facts that cannot be proven from the source pack or that change in real time.
 ```
+
+## Payment boundary: renewal and new personal cover
+
+Pine Labs is invoked only after a human has approved one of two outcomes:
+
+1. **Renew an existing policy.** The renewal worker has shown the policy-version diff, premium, deadline and any material coverage change.
+2. **Purchase a new personal health policy.** The comparison and recommendation workers have shown the chosen product, final premium, waiting periods, exclusions and declarations for approval.
+
+The payment worker records the chosen policy and payment status. It cannot recommend a product, alter a declaration, make a claim decision or handle an emergency deposit.
 
 ## Example: Ram's household
 

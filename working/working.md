@@ -56,6 +56,15 @@ The first response must be a decision, not a wall of text.
 
 Ram should be able to ask, "Why do you recommend this?" and inspect the reasoning. He should not be forced to read it before getting the decision.
 
+## The two entry routes and Pine Labs boundary
+
+| Start route | User intent | Result |
+|---|---|---|
+| **Plan an expense** | "I already have insurance. Help me plan this pregnancy, treatment, claim issue or renewal." | Event-specific cover map, cash scenario, next action and, if needed, a renewal decision |
+| **Find and buy personal health cover** | "I need personal cover because existing cover ends, is inadequate, or does not exist." | Current-cover reconstruction, comparison, one ranked recommendation and an optional purchase route |
+
+Pine Labs is used only after the user approves a renewal or a selected personal policy. It is the payment rail. It does not decide what to buy, make an insurance recommendation, process a claim, reserve an emergency hospital deposit or replace insurer approval.
+
 ## Evidence hierarchy
 
 1. Policy schedule, certificate, endorsement and official wording.
@@ -103,9 +112,8 @@ Read the exact dependent definition. Identify the evidenced last day of cover. S
 
 ### Hospital admission now
 
-Show the emergency card, policy record, network evidence, cash scenario and contact sequence. Do not make the family wait for an analysis before admission.
+Default to an immediate call to a live healthcare expert. Give that expert the permissioned Emergency Case Brief: e-card, policy number, cover map, dated network evidence, cash scenario, hospital contact path and current pre-authorisation state. AI chat is optional and secondary. Do not make the family wait for an analysis before admission.
 
 ### Claim dispute or pre-authorisation delay
 
 Show the stated reason, the policy clause, the missing evidence, current deadline and the permitted escalation route. Do not label a delayed pre-authorisation as a final claim rejection.
-
