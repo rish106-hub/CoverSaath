@@ -1,25 +1,31 @@
 # Knowvia: Round 2 answers
 
-Submission draft, revised for clarity and feasibility on 21 September 2026.
+Master submission draft, revised for clarity and feasibility on 21 September 2026. Paste only the eight
+numbered responses into the form. The appendix is supporting material for a judge, presentation or later
+Product Strategy stage. No Round 2 field-level word limit has been supplied in the organiser email yet.
 
 These answers are based on eight consented interviews across six households, conducted between 5 and 8
 September 2026. The sample is directional, not representative. All respondents were privately insured and
-none used a state scheme. The design also incorporates Shilpa Arora's public feedback on an earlier
-architecture. Proposed rail integrations are product designs, not built or contracted integrations.
+none used a state scheme. We went looking for policy-understanding gaps. We did not expect seven of 19
+collected documents to disagree with the household's own account, or a family to require different emergency
+access for an operator and a son. Those findings changed the design. It also incorporates Shilpa Arora's
+public feedback on an earlier architecture. Proposed rail integrations are product designs, not built or
+contracted integrations.
 
 ## 1. What is the outcome your agent is accountable for? One sentence.
 
-**For each health-insurance decision, Knowvia must tell the family what cover applies, what could limit
-payment, what cash they may need, and what to do next, while showing the source for each fact and naming the
-owner of anything still unknown.**
+**For each health-insurance decision, Knowvia is accountable for giving the family a source-backed view of
+applicable cover, likely limits, cash exposure and next actions, with a named owner and due date for every
+material question it cannot answer.**
 
 ## 2. What is the level of autonomy your agent has?
 
 **L3: Knowvia acts independently inside limits approved by the household.**
 
-The most consequential action it takes without asking again is sending a factual question to an already
-approved insurer, TPA, employer or hospital, then tracking the reply and updating the case record. It can
-only do this when a named adult has already approved the institution, purpose and information being shared.
+The most consequential action it takes without asking again is sending a narrow factual question through an
+already approved channel, then tracking the reply and updating the case record. It can only do this when a
+named adult has already approved the institution, purpose and information being shared. Approval allows the
+question to be sent. It does not oblige an insurer, TPA, employer or hospital to answer a third party.
 
 Inside those limits, Knowvia can:
 
@@ -27,7 +33,7 @@ Inside those limits, Knowvia can:
 - Reconstruct available cover for each person. Eligibility alone is not treated as enrolment.
 - Find missing, conflicting or time-sensitive information.
 - Apply policy clauses to the person's event and estimate likely cash exposure.
-- Contact an approved family member or institution with a narrow factual question.
+- Contact an approved family member or use an approved institutional channel with a narrow factual question.
 - Track replies, deadlines, policy versions and unresolved questions.
 - Check its own output for missing sources, conflicting evidence and unsupported conclusions.
 
@@ -45,13 +51,18 @@ operator directly. The AI only retrieves and displays a permissioned Emergency C
 triage the patient, recommend treatment, delay admission, promise cashless approval or decide whether a
 claim will pass.
 
-This boundary comes from the research. Mrs. Ghosh allowed full emergency access in advance but did not want
-her son to see the reason behind a condition in her declaration [T8 00:02:16; T8 00:03:06]. A household
+This boundary comes from the research. T8 (55, Kolkata) allowed full emergency access in advance but did not
+want her son to see the reason behind a condition in her declaration [T8 00:02:16; T8 00:03:06]. A household
 cannot be treated as one permission boundary. Access must be granted per person, per information class and
 per viewer.
 
 Knowvia is not L4 because insurers, TPAs, hospitals and licensed advisers control decisions the agent cannot
 make or verify by itself.
+
+**What is possible now versus after the fourth rail:** today, Knowvia works from household documents and
+approved manual follow-up. The proposed Insurance Confirmation Rail would let an authorised request receive a
+structured institutional status. Until that rail exists, a non-response remains **Dynamic** or **Unknown**,
+not a hidden failure or an invented answer.
 
 ## 3. What states does your agent go through? Share the happy and unhappy flow.
 
@@ -78,8 +89,8 @@ replaced.
    endorsement, estimate or medical document needed for the case.
              ↓
 3. PARALLEL READING
-   Separate workers check enrolment, benefits, exclusions, hospital,
-   estimate lines, cash exposure and evidence.
+   Bounded specialist checks assess enrolment, benefits, exclusions,
+   hospital, estimate lines, cash exposure and evidence.
              ↓
 4. CASE APPLICATION
    The policy rules are applied to this person, event, hospital and bill.
@@ -109,8 +120,12 @@ Every material fact carries one evidence state:
 | **Unknown** | The required source is missing or unreadable |
 | **Conflicting** | Two sources disagree and both remain visible |
 
+These are bounded checks, not seven human teams or seven irreversible actions. They create one case record,
+and the user sees a decision brief only after the evidence check identifies what is proven, calculated,
+dynamic, unknown or conflicting.
+
 These states came from real failures. Seven of 19 collected documents contained a schedule field that did
-not match the family's own account. One sister's date of birth was recorded six years wrong. Nikhil's
+not match the family's own account. One sister's date of birth was recorded six years wrong. T6 (33, Pune)'s
 employer cover ended without a notification: "Nothing happened. That's the thing" [T6 00:01:26]. The
 system therefore cannot turn missing, old or disputed information into a confident answer.
 
@@ -135,6 +150,10 @@ Unknown, or assigned to a named person or institution with a deadline.
 
 ## 4. On each rail, what exists and what must be built?
 
+WhatsApp is Knowvia's main working surface for documents, reminders and written next actions. It is not a
+competition rail and it is not an alternate source of truth. It writes into the same permissioned case record
+as the app and voice.
+
 | Rail | What exists today | How Knowvia uses it | What Knowvia must build | Hard boundary |
 |---|---|---|---|---|
 | **Gnani: voice** | Multilingual voice agents, knowledge bases, dynamic pre-call variables, external actions, logs and analytics | Optional voice intake, voice interaction with the main agent, and approved read-back for a family member | A permission-aware layer that records who supplied each fact, reads material facts back, writes approved facts into the same case record and escalates uncertainty | Gnani does not analyse policy wording and never sits in the emergency route |
@@ -151,7 +170,9 @@ person's permission. Gnani turns speech into a structured draft. A voice-sourced
 The documented ceilings shape the design. An agent supports a maximum of three languages, which this
 research already used: English, Hindi and Bengali. The FAQ limit is 100. Agent Chaining is bot to bot, not a
 documented bot-to-human warm transfer. There is no documented multi-party call or mid-call event stream.
-Therefore emergency access bypasses Gnani and reaches the human operator directly.
+Knowvia therefore does not make a decision during a call that needs live supervision: Gnani captures a draft,
+the call ends, and the main case record checks, labels and routes it. Emergency access bypasses Gnani and
+reaches the human operator directly.
 
 ### Pine Labs in practice
 
@@ -163,8 +184,9 @@ is unverified, and placing a payment instrument before treatment conflicts with 
 ### Delhivery in practice
 
 Delhivery is useful but not central. Knowvia will not invent a parcel workflow to make the rail look more
-important. Its Maps capability reduces wrong-address and wrong-desk friction after the hospital and desk
-have been confirmed through an insurance source.
+important. The first build uses Maps for address and route quality after the hospital and desk have been
+confirmed through an insurance source. Original-document shipment remains an optional later workflow, only
+when an institution specifically requires it and chain of custody can be proved.
 
 Documentation reviewed: [Gnani Agent Builder](https://docs.gnani.ai/introduction),
 [Gnani Platform API](https://docs.gnani.ai/Platform/platform-introduction),
@@ -177,6 +199,9 @@ yet been tested.
 
 **Yes. Knowvia needs an Insurance Confirmation Rail, and Medi Assist is the Indian company best placed to
 build it.**
+
+This is Knowvia's load-bearing rail: without an authoritative status route, the product can prepare a case
+but cannot responsibly convert changing institutional facts into confirmation.
 
 Knowvia can read a policy document, but it cannot make a changing institutional fact authoritative. Member
 status, latest endorsement, TPA ownership, hospital network status, document receipt, pre-authorisation and
@@ -217,7 +242,9 @@ art for purpose, approval, expiry and status, but they do not currently create a
 family-delegation rail.
 
 Medi Assist building this rail would not make its recommendation layer neutral. The rail returns dated
-facts. The conflict begins when a product recommends whether to retain, replace or buy cover.
+facts. The conflict begins when a product recommends whether to retain, replace or buy cover. This is why
+Medi Assist can be the right builder for a status rail while Policybazaar can still be the stronger answer to
+Question 8, which asks who could build the whole agent.
 
 Without the rail, Knowvia still works through customer documents, narrow consent and manual follow-up, but
 decision-critical facts remain visibly Dynamic.
@@ -258,8 +285,8 @@ For a planned delivery, the first answer might read:
 > conditions. Keep ₹[range] available because [named cap] may remain payable. Submit pre-authorisation
 > through [named desk] by [date].
 
-`Why` expands the clauses and calculation. This follows Meghna's instruction: "An app told me" would not
-settle an argument with her relative-agent, but "it says here, page fourteen" could [T4 00:06:06].
+`Why` expands the clauses and calculation. This follows T4's instruction: "An app told me" would not settle
+an argument with her relative-agent, but "it says here, page fourteen" could [T4 00:06:06].
 
 ### Channels
 
@@ -275,9 +302,9 @@ or need voice. Both write into the same case record, so neither becomes an uncon
 
 ### Emergency interaction
 
-Sourav lost seven hours between 2 a.m. and 9 a.m. while trying to identify his brother's employer cover. He
-said one button is the maximum acceptable interface and two screens are already too many [T5 00:04:22]. He
-expected the person answering to know the policy context already [T5 00:04:36].
+T5 (31, Kolkata) lost seven hours between 2 a.m. and 9 a.m. while trying to identify his brother's employer
+cover. He said one button is the maximum acceptable interface and two screens are already too many [T5
+00:04:22]. He expected the person answering to know the policy context already [T5 00:04:36].
 
 Pressing `Emergency access` therefore calls a human support operator directly. The operator receives a
 permissioned, read-only Emergency Case Brief containing the e-card, policy and TPA details, named member,
@@ -288,8 +315,10 @@ The operator helps with insurance coordination, not clinical advice. The first r
 optimise later**.
 
 This route cannot launch until Knowvia has an operator rota, escalation rules, backup routing and measured
-time-to-human. Until then the product must state that the service is unavailable and provide the prepared
-brief and direct routes to the hospital insurance desk, TPA, insurer or HR.
+time-to-human. An office-hours route is not emergency access. Until the service can prove real on-call
+coverage, it must state that human support is unavailable and provide the prepared brief and direct routes to
+the hospital insurance desk, TPA, insurer or HR. A pilot measures answered-call rate and time-to-human before
+it promises this route to households.
 
 ### Household control
 
@@ -303,7 +332,7 @@ Permissions are per person, per viewer and per information class:
 - **Operational:** policy number, member ID, TPA route, network status and desk contact.
 - **Protected:** medical declarations, conditions, claim reasons and underwriting details.
 
-Mrs. Ghosh's rule was "the number yes, the reason no" [T8 00:02:52]. Her son could see that cover existed
+T8's rule was "the number yes, the reason no" [T8 00:02:52]. Her son could see that cover existed
 and where money would come from, but not the medical reason behind a declaration. She separately approved
 full emergency access for a moment when she might be unable to speak [T8 00:02:16]. That is why a single
 household permission switch is not enough.
@@ -338,7 +367,7 @@ outcomes: buy, renew, retain existing cover, add cover, port, wait for clarifica
 conversion-led business may find the last two outcomes harder to prioritise. This is an inference about the
 business model, not a claim about Policybazaar's internal plans.
 
-Meghna's case shows the difference. She was about to spend ₹9,400 a year on a top-up that left a ₹2 lakh
+T4's case shows the difference. She was about to spend ₹9,400 a year on a top-up that left a ₹2 lakh
 gap. The useful answer was not a different product for her. It was to stop that purchase and examine her
 parents' weaker cover first [T4 00:01:34; T4 00:05:37].
 
@@ -346,3 +375,40 @@ Knowvia's defence is therefore not policy comparison or claim assistance. It is 
 record, source-level proof, visible unknowns and the discipline to recommend no transaction. If Policybazaar
 builds that same record and protects non-transactional recommendations from conversion pressure, most of
 Knowvia's current differentiation disappears.
+
+---
+
+## Product Strategy appendix: segment map and the wall
+
+This is not a ninth form answer. It is the material behind the eight answers and the two Product Strategy
+deliverables the competition describes: a segment map and the wall we hit.
+
+### Segment map
+
+| Segment | Trigger | Job they need done | What Knowvia does first | Evidence and limit |
+|---|---|---|---|---|
+| **Household operator with a planned expense** | Pregnancy, procedure, parent-care estimate or hospital choice | Know which existing cover applies and how much cash to keep ready | `Plan an expense`: reconstruct cover, apply clauses to the estimate, show low, expected and high cash scenarios | Primary starting segment. T2 (hospital-insurance-desk employee, Delhi NCR) saw families arrive without cash clarity [T2 00:03:42]. This is not a claim-approval promise. |
+| **Employee with opaque group cover** | Joining a job, HR benefit change, hospitalisation or family addition | Find out whether a named person is actually enrolled and what the employer policy includes | Request the exact employer booklet, schedule and enrolment proof before relying on the headline sum insured | Shilpa Arora highlighted corporate coverage that is undisclosed until hospitalisation. One small interview set cannot prove prevalence. |
+| **Adult child managing parents' cover** | Parent's planned care, renewal, hospitalisation or document retrieval | Compare parent-specific protection with the care event without treating the household as one policy | Create one row per person and restrict views by permission class | One household's T1, T3 and T8 interviews showed that operator, policyholder and covered member can need different access. It is a design input, not a claim about all Indian families. |
+| **Household approaching a coverage break** | Job exit, dependent-age limit, renewal, portability or lapse risk | Preserve continuity before a quiet gap becomes expensive | Read the exact policy definition, show the evidenced deadline and compare renew, port, replace or wait | T6's missed window is one directional case [T6 00:01:26]. Knowvia does not assume a universal age or portability rule. |
+| **Retail-policy shopper without a current event** | Wants a new policy because an ad, agent or relative suggested one | Decide whether to buy at all, after existing cover is reconstructed | `Find and buy personal health cover`: map current cover before comparison and allow `do not buy now` | T4's top-up gap made stopping a purchase the better immediate action [T4 00:01:34; T4 00:05:37]. This is not the first activation segment because calm-month willingness to act is unproven. |
+
+**Initial wedge:** the household operator with a live planned expense. The problem has an estimate, a date,
+a hospital and a reason to collect documents now. The same cover record then supports group-cover checks,
+renewal and continuity events.
+
+### The wall we hit, and why
+
+**The wall is authoritative, case-specific insurance status.** A policy PDF can prove wording. An enrolment
+schedule can prove membership at a point in time. Neither can prove today's network status, latest
+endorsement, document receipt, pre-authorisation state or who at the hospital desk, TPA or insurer owns the
+next answer. Those facts are spread across institutions and change after the document is issued.
+
+Knowvia can be useful before that wall. It can reconstruct documents, calculate scenarios, mark uncertainty,
+prepare a precise question and coordinate approved follow-up. It must not turn that preparation into a false
+confirmation. That is why the proposed Insurance Confirmation Rail is the product's load-bearing dependency.
+
+There is a second operating wall: a direct human emergency route is only real with tested on-call staffing,
+backup routing and measured response times. We will not represent it as live until that operating system
+exists. Both walls are explicit because hiding them would make the product look feasible on paper and unsafe
+in a hospital.
