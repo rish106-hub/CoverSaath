@@ -1,39 +1,33 @@
 # CLAUDE.md
 
-**Read [AGENTS.md](AGENTS.md) first and in full. It is the working contract for this repository.**
+**Read [AGENTS.md](AGENTS.md) first and in full. It is the only working contract for this repository.**
 
-Short version, so nothing drifts:
+Do not maintain a second product brief here. If this file and `AGENTS.md` disagree, `AGENTS.md` wins and this
+file must be corrected.
 
-- The product is **Knowvia**. Coversaath is the retired internal codename. Do not use it in new copy.
-- The **Google Doc "Coversaath Evidence Pack | Buying the Insurance"** is the source of truth. Where a file
-  here disagrees with it, the file is wrong.
-- The evidence is **eight consented interviews, 5 to 8 September 2026**, transcribed in
-  [docs/evidence/coversaath-interview-transcripts.md](docs/evidence/coversaath-interview-transcripts.md).
-  Cite them by respondent and timestamp. Every Round 2 answer must.
-- **Retired and not to be revived:** the "15 college students" claim, the five-minute readiness drill, the
-  separate physical card, the 18-to-24 student ICP, and any statement that no parent has been interviewed
-  or that the evidence is the weakest area.
-- `research/02-customer-tests.md` is **AI-simulated**, not customer evidence. Never place it beside the real
-  transcripts as the same kind of thing.
-- **The build spec is [working/working.md](working/working.md),
+Before editing:
+
+1. Read the source hierarchy and consent rules in `AGENTS.md`.
+2. Inspect the current changes so another agent's work is not overwritten.
+3. Read [working/answer-to-build-map.md](working/answer-to-build-map.md) before changing either the build spec
+   or [docs/strategy/round2-answers.md](docs/strategy/round2-answers.md).
+
+Non-negotiable reminders:
+
+- The product is **Knowvia**. Coversaath is a retired internal codename.
+- Competition rules come from the organiser's latest Round 2 communication, website and terms. Product and
+  interview evidence comes from the evidence pack and its tracked transcript mirror.
+- Eight interviews across six households were consented for this case-competition work. Use them only where
+  they support a claim. Keep submitted interview references anonymised unless public identification was
+  separately approved. Do not expose raw recordings, full transcripts, contact details or protected T8
+  information.
+- `research/02-customer-tests.md` is AI-simulated working material, not customer evidence.
+- The build spec is [working/working.md](working/working.md),
   [working/planned-expense.md](working/planned-expense.md) and
-  [building/insurance.md](building/insurance.md).** These define how the product works and win on mechanics.
-  Two entry routes only (`Plan an expense`, `Find and buy personal health cover`) — renewal is not a third
-  mode. Six output states: Proven / Calculated / Reported / Dynamic / Unknown / Conflicting. Emergency access
-  dials a human support operator directly — no voice agent, no Gnani in that path; AI chat is a separate
-  path, never in front of the call. Pine Labs is the final payment step only and does **not** reserve a
-  hospital deposit.
-- [working/answer-to-build-map.md](working/answer-to-build-map.md) traces each answer to the build component
-  behind it and lists the current gaps. Check it before editing either side.
-- The Round 2 answers live in [round2-answers.md](docs/strategy/round2-answers.md) and must describe that build spec, not a
-  parallel product. `docs/strategy/answers.md` and `research/` are historical working material, superseded where they
-  conflict.
-- **No rail is "the only load-bearing rail."** The load-bearing thing is the permissioned, source-linked
-  cover record. WhatsApp is the main working channel and is not one of The Ken's three rails. Say so plainly.
-- Permissions are **per-field and per-viewer** with a member-approved emergency override. The build spec's
-  "one operator plus read-only parent view" is the common case, not the permission model. Mrs. Ghosh's rule
-  is evidence and outranks it.
-- Mrs. Ghosh (T8) asked that her session contents not reach her son. Honour that in every derived document.
-- No external publication, submission, outreach, purchase or financial transaction is authorised.
-
-Editing right now: **Claude makes the file edits. Codex leads direction and does not commit in this window.**
+  [building/insurance.md](building/insurance.md). The Round 2 answers must describe that product.
+- Emergency access calls a human directly. Gnani is not in the emergency path. Pine Labs is used only after
+  a human approves renewal or purchase. WhatsApp is the main working channel, not a supplied rail.
+- The proposed Insurance Confirmation Rail is the core product dependency. Among the supplied rails, Gnani is
+  the main access rail.
+- Do not use an opening number. Refer to the opening only as **"Buying the insurance"**.
+- Do not commit, push, submit, publish, contact anyone or make a transaction unless the user explicitly asks.

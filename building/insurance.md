@@ -135,9 +135,9 @@ Each viewer holds a grant per class, per member, not a single household switch:
 | Audit | Every read of a protected field is recorded and visible to the principal |
 
 **The evidenced rule this implements.** A member may permit family to see the cover amount and the funding
-route while withholding the reason a condition is listed — "the number yes, the reason no" [T4/T8 00:02:52].
+route while withholding the reason a condition is listed — "the number yes, the reason no" [T8 00:02:52].
 The same member may simultaneously permit a **stranger** on an emergency line to see everything, because
-that is closer to telling a doctor than to telling a son [T5/T8 00:03:06]. A single household on/off switch
+that is closer to telling a doctor than to telling a son [T8 00:03:06]. A single household on/off switch
 cannot express this. Neither can a per-person switch. The grant must be per class and per viewer.
 
 The emergency override is granted **in advance, by the principal, knowingly**, for a moment when they may not

@@ -1,6 +1,6 @@
 # Knowvia: start here
 
-Updated 20 September 2026. This file is the working contract for Claude, Codex, Cursor and Grok.
+Updated 21 September 2026. This file is the working contract for Claude, Codex, Cursor and Grok.
 It supersedes every earlier direction in this repository.
 
 **The name is Knowvia.** Public descriptor: *Understand your insurance before you need it.*
@@ -28,33 +28,36 @@ Root keeps only what tooling and agents expect to find there without a path: `AG
 
 ## Source of truth
 
-The Google Doc **"Coversaath Evidence Pack | Buying the Insurance"** (title kept as the real artefact name) is the source of truth for the
-Round 2 position. Where any file in this repository disagrees with that doc, the doc wins and the file
-is wrong.
+Competition rules and product evidence answer different questions. Do not use one as a substitute for the
+other. The organiser's current Round 2 email or form decides what must be submitted. The competition website
+and terms decide the general rules. The Google Doc **"Coversaath Evidence Pack | Buying the Insurance"**
+(title kept as the real artefact name) is the source of truth for the research and current product position.
 
 Order of authority:
 
-1. The evidence pack Google Doc (transcripts, method, Tab 11 answers).
-2. `docs/evidence/coversaath-interview-transcripts.md` — the tracked mirror of the transcripts and method.
-3. `working/working.md`, `working/planned-expense.md`, `building/insurance.md` — the **build spec**. These
+1. The organiser's current Round 2 email or submission form, then the competition website and terms, for
+   questions, format, deadlines, judging, consent and submission rules.
+2. The evidence pack Google Doc for transcripts, research method and the product position.
+3. `docs/evidence/coversaath-interview-transcripts.md` — the tracked mirror of the transcripts and method.
+4. `working/working.md`, `working/planned-expense.md`, `building/insurance.md` — the **build spec**. These
    define how the product actually works. Written by Codex, 20 September. They win on product mechanics.
-4. `working/answer-to-build-map.md` — traceability between the answers and the build spec, and the current
+5. `working/answer-to-build-map.md` — traceability between the answers and the build spec, and the current
    gap list. Read it before editing either side, so the two do not drift apart again.
-5. `docs/strategy/round2-answers.md` — the eight Round 2 answers. These must **describe** the build spec, not a parallel
+6. `docs/strategy/round2-answers.md` — the eight Round 2 answers. These must **describe** the build spec, not a parallel
    product. Reconciled to it on 20 September.
-6. Everything in `research/` and `docs/strategy/answers.md` — historical working material, superseded where it conflicts.
+7. Everything in `research/` and `docs/strategy/answers.md` — historical working material, superseded where it conflicts.
 
 Where the build spec and the evidence disagree, the evidence wins and the spec gets fixed. The one live case
 of this is permissions: the spec says "one operator plus a read-only parent view", which is the common case,
 not the permission model. Per-field and per-viewer stands, because Mrs. Ghosh's rule is evidence.
 
-## Who edits what, 20 September 2026
+## Editing contract
 
-- **Claude** makes the main file edits in this repository.
-- **Codex** leads direction and review. Codex should not commit file edits in this window. Commit `c2f4b9e`
-  (20 September, 12:30) was Codex.
-- `working/` and `building/` are the build spec and are canonical. Add sections to existing files rather than
-  creating more concept files. The three build-spec files are the approved exception.
+- Claude, Codex, Cursor and Grok may edit the repository when the user asks them to.
+- Read this file before editing. Preserve unrelated work and inspect the current diff before changing a file.
+- Do not commit, push, publish, submit, contact anyone or make a transaction unless the user explicitly asks.
+- `working/` and `building/` are the canonical build spec. Add sections to existing files instead of creating
+  more concept files unless the user asks for a new file.
 
 ## The one confident claim
 
@@ -77,25 +80,35 @@ evidence, risk signals and unanswered questions.
 This section replaces every earlier statement in this repository that the evidence is thin, that no parent
 has been interviewed, or that the research rests on student conversations.
 
-**Eight consented interviews were conducted between 5 and 8 September 2026.** They are transcribed in
-`docs/evidence/coversaath-interview-transcripts.md`. Every Round 2 answer must cite them.
+**Eight consented interviews across six households were conducted between 5 and 8 September 2026.** The user
+has confirmed that every respondent consented to being interviewed and to their opinions being used for this
+case-competition work. The interviews are transcribed in
+`docs/evidence/coversaath-interview-transcripts.md`. One household contributed the adult-child, policyholder
+and covered-member perspectives that led to the per-field permission model.
+
+Use interview evidence only where it actually supports an answer. Do not force an interview into every answer.
+Keep the claim narrow: these interviews show observed problems and design inputs, not market prevalence.
+Unless a respondent separately approved public identification, use the organiser's required anonymised format
+in the submitted version. Do not publish raw recordings, full transcripts or contact details.
 
 | # | Respondent | Why the transcript matters |
 |---|---|---|
 | T1 | Arnab G., 26, product analyst, Gurgaon | Lost ₹80,000 to a ₹1,200 room-rent decision [T1 00:06:15] |
 | T2 | "Vikas", 34, hospital insurance-desk executive, Delhi NCR | Six years at the desk plus two at a TPA. Declined payment; interviewed in the hospital cafeteria |
 | T3 | S. Ghosh, 58, retired, Kolkata | Login and document friction for the generation that actually holds the policies |
-| T4 | Meghna R., 29, Bengaluru | Discovered a ₹2 lakh deductible dead zone live on the call [T4 00:01:43]. "It says here, page fourteen" [T4 00:06:06] |
+| T4 | Meghna R., 29, Bengaluru | Discovered a ₹2 lakh deductible dead zone live on the call [T4 00:01:34]. "It says here, page fourteen" [T4 00:06:06] |
 | T5 | Sourav D., 31, Kolkata | Seven lost hours, 2 a.m. to 9 a.m. One button maximum. "The rest they should already know" [T5 00:04:36] |
-| T6 | Nikhil T., 33, Pune | 17-day portability window missed. "Nothing happens, that's the thing" [T6 00:01:39] |
+| T6 | Nikhil T., 33, Pune | 17-day portability window missed. "Nothing happens, that's the thing" [T6 00:01:26] |
 | T7 | Faizan A., 27, Mumbai | "Everyone gives me the counterfactual. I want the next step." [T7 00:05:41] |
-| T8 | Mrs. R. Ghosh, 55, Kolkata | Conducted entirely in Bengali. She requested the session. "The number yes, the reason no" [T4/T8 00:02:52] |
+| T8 | Mrs. R. Ghosh, 55, Kolkata | Conducted entirely in Bengali. She requested the session. "The number yes, the reason no" [T8 00:02:52] |
 
 Hard numbers that belong in the answers: **7 of 19 collected documents had a schedule field that did not
 match the family's own account of it.** One sister's date of birth was recorded six years wrong.
 
-**Binding conduct rule.** Mrs. Ghosh asked that the contents of her session not reach her son. That was
-agreed and has been honoured. Any derived document, demo or submission must preserve that redaction.
+**Binding conduct rule.** Consent to use an interview for the competition does not cancel a narrower
+confidentiality request. Mrs. Ghosh asked that the contents of her session not reach her son. Any internal
+sharing, derived document, demo or submission must preserve that separation and use only the agreed,
+anonymised insight.
 
 ### What the evidence does not establish
 
@@ -165,8 +178,10 @@ than pretending a rail covers it. WhatsApp is where the household already is; Gn
 reaches the people WhatsApp cannot. They are complements, and the answer must explain what each one does
 that the other cannot. See `docs/strategy/round2-answers.md` answer 6.
 
-**Do not call any single rail "the only load-bearing rail".** The load-bearing thing is the permissioned,
-source-linked cover record. The rails are how it reaches people, money and places.
+**Rail dependency.** The product's core dependency is the proposed Insurance Confirmation Rail because it
+turns scattered insurer, TPA and hospital responses into dated, case-specific status. Among the three supplied
+rails, Gnani is the main access rail. Pine Labs is a final transaction rail and Delhivery is a supporting
+location rail. Do not pretend that a supplied rail performs the confirmation function when it does not.
 
 ## The workflow, in one place
 
@@ -253,22 +268,29 @@ do not cover health records or family delegation today.
 - Preserve disagreements between AI, adviser, customer and institution. An adviser cannot bind an insurer.
 - Ignorance is not demand. Not knowing a policy does not establish that a household will act, share records
   or pay. Keep that distinction visible in every answer.
-- No external publication, submission, outreach, insurance purchase or financial transaction is authorised.
+- Interview material may be used to prepare the competition submission within the consent boundaries above.
+  No actual submission, public post, outreach, insurance purchase or financial transaction is authorised
+  unless the user explicitly asks.
 
 ## Competition facts
 
-The Ken Case Competition 2026, "The Great Rewiring". Opening #14, "Buying the insurance". Product Strategy
-track. Round 2 is eight design questions, due **Friday 25 September 2026, 11:59 p.m. IST**. Finale 10 October.
+The Ken Case Competition 2026, "The Great Rewiring". Opening **"Buying the insurance"**, Product Strategy
+track. Do not attach an opening number because the number has changed across organiser pages. Round 2 is eight
+design questions, due **Friday 25 September 2026, 11:59 p.m. IST** according to the organiser's Round 2 email.
+Finale: 10 October, subject to the organiser's latest communication.
 
 Three grading mechanics that decide this round:
 
-1. Answers are graded relative to other teams in the same opening. Opening #14 is 3.92% of submissions.
+1. Answers are graded relative to other teams in the same opening. The organiser's published Round 1 page
+   showed "Buying the insurance" at 3.92% of submissions.
 2. Answers are graded against The Ken's internal frontier-AI baseline. Anything a model could have written
    without this research scores nothing.
 3. AI chat logs are collected to rank human versus machine contribution.
 
-Mechanics 2 and 3 are why the eight transcripts are the whole advantage. A frontier model cannot invent
-Vikas at a hospital desk or Mrs. Ghosh in Bengali. Cite them by respondent and timestamp.
+These three mechanics came from the organiser's Round 2 email. The interviews are one advantage, not the whole
+submission. The answers also need rail-documentation evidence, a coherent state model, explicit product limits
+and a feasible human operating model. Cite interviews by anonymised respondent label and timestamp where they
+directly support a claim.
 
 ## Recovery
 
