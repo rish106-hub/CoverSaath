@@ -5,13 +5,13 @@
 > `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
 > five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
 > no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
-> Read [AGENTS.md](AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Read [AGENTS.md](../../AGENTS.md) for the current position and `round2-answers.md` (this folder) for the live answers.
 > Kept for provenance. Do not cite from this file.
 
 Updated 20 September 2026. Drafts against the public [The Ken competition questions](https://the-ken.com/case-competition-2026/). Prompts are paraphrased. The private form has not been inspected. No submission has been made.
 
 The source of truth for the current Round 2 eight-question form is
-[round2_answers.md](round2_answers.md). Update that file first. The material below retains the earlier
+[round2-answers.md](round2-answers.md). Update that file first. The material below retains the earlier
 competition answers and supporting defence notes.
 
 **Round 2 status:** not ready to submit unchanged. The product design is specified, but the reported
@@ -505,7 +505,7 @@ purchase, affordability-plan behaviour, measured demand or paid pilot. Ignorance
 
 ### Where are the sub-agents' own opinions?
 
-Each pair's independent audit is preserved beside its transcript in [the customer research file](research/02-customer-tests.md). It distinguishes the persona's conditional reaction, the interviewer's critique and the main agent's decision. The result is not a single rewritten consensus paragraph. Refusal cases and generation errors remain visible.
+Each pair's independent audit is preserved beside its transcript in [the customer research file](../../research/02-customer-tests.md). It distinguishes the persona's conditional reaction, the interviewer's critique and the main agent's decision. The result is not a single rewritten consensus paragraph. Refusal cases and generation errors remain visible.
 
 ### What changed because the interviewers contradicted the personas?
 
@@ -519,7 +519,7 @@ Households will not supply their existing policy documents, the reconstruction s
 
 One manual buying case end to end: reconstruct real cover, verify the operator, run a cold drill, name
 the gap, collect voluntary income and loan inputs only if needed, produce the Household Health Card, then
-buy, retain or defer. The staged implementation is in [the architecture](research/03-architecture.md).
+buy, retain or defer. The staged implementation is in [the architecture](../../research/03-architecture.md).
 
 ## Final pre-submission check
 

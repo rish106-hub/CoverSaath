@@ -9,6 +9,23 @@ Coversaath was the internal codename and is retired. Do not use it in any new co
 It survives only inside existing filenames, the Google Doc title and the git remote URL, which are real
 artefacts and are left as they are.
 
+## Repo layout
+
+| Path | What it is | Status |
+|---|---|---|
+| `src/` | The app: `agents/`, `backend/` (database, repositories, services, state), `core/`, `evaluation/`, `integrations/` (email, gnani, pine-labs, sarvam), `models/`, `modules/` (ai-analysis, coverage-analysis, document-intake, insurance-rules), `orchestration/`, `server/`, `shared/`, `ui/` | Live code |
+| `tests/` | One test file per code module above, plus `tests/evals/` | Live |
+| `scripts/` | `dev.mjs`, `database.mjs`, `orchestration-demo.mjs`, `run-safety-evals.mjs`, `check-architecture.mjs` | Live |
+| `working/`, `building/` | The build spec — how the product works, mechanics-level. Led by Codex. | **Authoritative**, rank 3 above |
+| `docs/evidence/` | The tracked transcript mirror | **Authoritative**, rank 2 above |
+| `docs/strategy/` | `round2-answers.md` (current submission draft) and `answers.md` (superseded) | Mixed, see ranks 5–6 |
+| `docs/assets/`, `docs/comms/` | Images, diagrams, wordmarks, external-post drafts | Supporting |
+| `research/` | Historical working material, six numbered files | Superseded where it conflicts |
+| `.local/`, `dist/` | Runtime DB, build output | Gitignored, not part of the repo |
+
+Root keeps only what tooling and agents expect to find there without a path: `AGENTS.md`, `CLAUDE.md`,
+`README.md`, `LICENSE`, `package.json`, `vite.config.js`, `index.html`, `.env.example`.
+
 ## Source of truth
 
 The Google Doc **"Coversaath Evidence Pack | Buying the Insurance"** (title kept as the real artefact name) is the source of truth for the
@@ -23,9 +40,9 @@ Order of authority:
    define how the product actually works. Written by Codex, 20 September. They win on product mechanics.
 4. `working/answer-to-build-map.md` — traceability between the answers and the build spec, and the current
    gap list. Read it before editing either side, so the two do not drift apart again.
-5. `round2_answers.md` — the eight Round 2 answers. These must **describe** the build spec, not a parallel
+5. `docs/strategy/round2-answers.md` — the eight Round 2 answers. These must **describe** the build spec, not a parallel
    product. Reconciled to it on 20 September.
-6. Everything in `research/` and `answers.md` — historical working material, superseded where it conflicts.
+6. Everything in `research/` and `docs/strategy/answers.md` — historical working material, superseded where it conflicts.
 
 Where the build spec and the evidence disagree, the evidence wins and the spec gets fixed. The one live case
 of this is permissions: the spec says "one operator plus a read-only parent view", which is the common case,
@@ -146,7 +163,7 @@ hospital merchant eligibility is verified, and a payment instrument inside an em
 **WhatsApp is the main working channel, and it is not one of the three rails.** Say this plainly rather
 than pretending a rail covers it. WhatsApp is where the household already is; Gnani is how the product
 reaches the people WhatsApp cannot. They are complements, and the answer must explain what each one does
-that the other cannot. See `round2_answers.md` answer 6.
+that the other cannot. See `docs/strategy/round2-answers.md` answer 6.
 
 **Do not call any single rail "the only load-bearing rail".** The load-bearing thing is the permissioned,
 source-linked cover record. The rails are how it reaches people, money and places.

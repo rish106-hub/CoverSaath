@@ -182,6 +182,7 @@ be able to speak [T8 00:02:16]. It is not inferred from a relationship, a paymen
    - AYUSH
    - Home care
    - Consumables, implants or treatment-specific categories
+   - Modern therapy, including any drug, procedure, indication, cycle or therapy-specific cap named in the policy
 5. Restoration or recharge benefit
    - Trigger
    - Amount restored
@@ -218,6 +219,7 @@ The financial-rules worker does not add every policy's sum insured into a single
    - Waiting period
    - Disclosure linkage
 7. Dialysis, organ-related treatment, cancer, cardiac care and other high-cost categories
+   - Modern therapy, immunotherapy, targeted therapy and treatment-specific inner caps where the policy names them
 8. Mental health, rehabilitation, home care and domiciliary treatment
 9. AYUSH, dental, vision and outpatient benefits
 10. Critical illness and fixed-benefit riders
@@ -284,6 +286,11 @@ The hospital worker must use a dated official network source, not a search-resul
 ### Worker interpretation
 
 The claims-process worker makes a case-specific checklist. It should say, "The policy wording says X and this case is missing Y," not "your claim will fail." A pre-authorisation delay is not a final claim denial. A final claim decision belongs to the insurer and must be represented as such.
+
+For every live case question, it also names the authority that can answer it: the hospital insurance desk for
+desk process and documents received, the TPA for administered pre-authorisation or claim workflow, and the
+insurer for the final policy and claim decision. Their updates remain separate evidence items. A hospital
+desk acknowledgement is not a TPA approval. A TPA status is not final insurer settlement.
 
 ### Emergency handoff rule
 
