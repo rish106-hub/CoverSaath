@@ -8,7 +8,7 @@ Tab 11 answers with rail detail and evidence citations. `answers.md` and `resear
 material and are superseded wherever they conflict.
 
 Evidence citations use respondent and timestamp from
-[docs/evidence/coversaath-interview-transcripts.md](docs/evidence/coversaath-interview-transcripts.md).
+[docs/evidence/coversaath-interview-transcripts.md](../evidence/coversaath-interview-transcripts.md).
 
 No submission has been made. Integrations below are proposed uses based on public documentation. No
 partnership, production connection or vendor-platform test is claimed.
@@ -27,23 +27,28 @@ partnership, production connection or vendor-platform test is claimed.
 | 0.8 | Named **WhatsApp as the main working interface** and Gnani voice as the reach rail, with an explicit comparison of what each does that the other cannot. | The research shows two different populations: the person who signs up, and the people who hold the documents. |
 | 0.9 | Wired all eight transcripts into the answers and removed every statement that human evidence is the weakest area. | Eight consented interviews were conducted 5 to 8 September 2026. Earlier files said none existed. |
 | 1.0 | Reconciled the answers to the build spec in `working/` and `building/`. Four working modes became **two entry routes**. Evidence labels became **Proven / Calculated / Reported / Dynamic / Unknown / Conflicting**. Pine Labs narrowed to the payment step and the hospital-deposit hold was **withdrawn**. Emergency access became a **call to a live expert**, not a screen. | The answers must describe the product actually being built, not a parallel one. |
+| 1.1 | Rewrote the opening and accountable outcome in plain language. | The product is deep. The explanation should not sound like a compliance memo. |
 
 ## Current position
+
+Health insurance is sold as one number. It is used as a stack of rules: who is actually enrolled, which
+version applies, what room is chosen, whether a waiting period is over, which hospital is in network, and
+who answers the phone when something goes wrong. Families usually discover that stack when they are already
+under pressure.
 
 **North Star.** No family should have to understand its health insurance for the first time during a
 medical crisis.
 
-**USP.** Knowvia creates a living, source-backed understanding of a household's insurance, then turns it
-into the next clear action across purchase, renewal, hospitalisation and claims. It does four things
-together:
+**What Knowvia does.** It turns policies, schedules, renewals, hospital estimates and insurer messages into
+one live answer for each person: **what cover do we have, what could stop it, what might we have to pay,
+and what do we do next?**
 
-- Explains what the household has.
-- Separates confirmed facts from assumptions.
-- Identifies what could create problems.
-- Coordinates the people and institutions needed to resolve them.
+That answer stays useful from a planned expense to a renewal, a job change, a new policy purchase or a
+claim problem. The product does not make a family read another dashboard. It reads the documents, applies
+the rules to the right person and event, shows the evidence when asked, and keeps the next action moving.
 
-It does not predict whether a claim will pass. It produces a **claim-readiness assessment** showing
-supporting evidence, risk signals and unanswered questions.
+Knowvia does not promise a claim will be approved. It tells the household what supports the claim, what may
+create trouble, what is still unknown, and who needs to answer next.
 
 ### What the research established
 
@@ -54,6 +59,25 @@ a TPA, interviewed in person, who declined payment.
 The number that anchors the product: **7 of 19 collected documents had a schedule field that did not match
 the family's own account of it.** One sister's date of birth was six years wrong on a live policy schedule.
 
+The interviews gave us three non-negotiable product rules:
+
+- Arnab's family lost ₹80,000 after choosing a room ₹1,200 above the policy cap. The screen must show the
+  family's number, not a definition of room-rent limits [T1 00:06:15].
+- Meghna found a ₹2 lakh gap between her base policy and top-up. Policies must be checked together, not one
+  at a time [T4 00:01:43].
+- Nikhil missed a portability window for his mother's cover. A deadline is part of the answer, not a later
+  reminder [T6 00:01:16].
+
+The proposed system follows the same logic. Separate workers read the person, policy terms, hospital and
+money question in parallel. A rules layer checks the conditions. The main agent turns their work into one
+answer with a source, owner and deadline. A human takes over for emergencies, regulated advice and hard
+institutional disputes. This is how the product gets more useful with technology without pretending that AI
+can approve a claim.
+
+Shilpa Arora's detailed feedback on the **earlier** architecture is recorded in Question 5. The current
+design changes because of that feedback: it reads treatment-specific caps, retrieves corporate cover before
+admission, and records which institution owns each live answer.
+
 Directional, not a prevalence study. Respondents came through friends, family and their acquaintances.
 Every one of them is privately insured; nobody is on a state scheme. Stated wherever these findings appear.
 
@@ -62,25 +86,20 @@ not customer evidence.
 
 ## 1. What is the outcome your agent is accountable for?
 
-> **Knowvia is accountable for a household understanding its health insurance, resolving the
-> uncertainties that matter, and knowing what to do next — from purchase and renewal through
-> hospitalisation and claim coordination.**
+> **For every health-insurance decision, Knowvia is accountable for giving the family one clear answer:
+> what cover applies to this person and event, what could block it, what they may need to pay, and what
+> they should do next.**
 
-For each case, the deliverable is a person-specific, source-linked route: what existing cover may apply,
-what does not yet apply, what must be confirmed, and what cash may be needed by which deadline.
+A case is complete only when every important question has one of three endings: it is answered from a
+source, clearly marked unknown, or owned by a named person or institution with a deadline. No important
+question gets buried inside a long policy summary.
 
-Completion is testable:
+The answer is always personal. Knowvia does not add every sum insured and call it family protection. It
+checks who is enrolled, which policy version applies, how the base policy and top-up work together, what
+the room rule or co-pay changes, and what money might be needed before an insurer or TPA responds.
 
-- No material question disappears into a summary.
-- Every important statement links to evidence or is labelled as reported from memory.
-- The household can identify its next action, owner and deadline from the brief.
-- Group cover, personal cover, available cash, loans and investments remain separate.
-- A shared floater, deductible, waiting period, room rule, co-pay, top-up and fixed-benefit payment are
-  modelled as conditions, not added into one reassuring number.
-- In an emergency, administrative analysis never delays treatment.
-
-**Why this outcome and not "saves money" or "gets claims approved".** Three named mechanisms, three
-households, and not one of them is a pricing problem.
+**Why this outcome matters.** The problem is not that families cannot find definitions online. The problem
+is that they cannot connect a clause to their own person, hospital, timing and bill.
 
 **Room-rent sub-limit and proportionate deduction.** Arnab's father's policy carried a ₹10 lakh sum insured
 and a room-rent cap of one percent per day — ₹10,000. The family took a single AC room at ₹11,200. Because
@@ -112,21 +131,19 @@ one thing: **₹2–8 lakh** [T6 00:03:47].
 His summary of why a definition was not enough: "I knew the words. I did not understand the consequence.
 Those are different things" [T6 00:01:16].
 
-None of these is a price failure. All three are understanding failures, all three turn on a mechanism with
-a name, and all three happened before anyone reached a hospital. The accountable outcome is that the
-household knows its own number for each of these before the day it matters.
+None of these is solved by a generic policy explainer. The family needed a direct answer for their own case
+before the moment became expensive. That is the job Knowvia owns.
 
-The accountable outcome is not claim approval. Knowvia cannot bind an insurer, decide underwriting,
-select treatment, guarantee cashless approval or promise settlement. It is accountable for reducing
-avoidable uncertainty and unfinished household work while preserving institutional authority.
+Knowvia is not accountable for claim approval. It cannot bind an insurer, decide underwriting, select
+treatment, guarantee cashless approval or promise settlement. In an emergency, it does not delay care. It
+gets the available record in front of a human support operator and keeps the insurance work moving after
+admission.
 
-**What this is worth, from the same respondent.** Asked what would have happened if someone had picked up
-and said "I can see your mother's file, she's at [hospital], your room rent cap is ten thousand, don't take
-the single AC room", Arnab's answer was "I'd pay for that. Genuinely. At that moment I'd have paid for it"
-[T1 00:15:31]. Willingness to pay in this study attaches to a specific sentence containing a specific number,
-not to a product category. That is a narrow finding and we are not widening it: the same respondent said he
-probably would not sign up in a calm month, "because when there's no problem you don't remember it"
-[T1 00:16:03].
+**What this is worth, from the same respondent.** Asked what would have happened if someone had said,
+"your room-rent cap is ₹10,000, do not take the single AC room", Arnab said, "I'd pay for that. Genuinely."
+[T1 00:15:31]. This is not proof that people will pay for Knowvia in a calm month. Arnab also said he might
+not sign up when nothing is wrong [T1 00:16:03]. It is proof that the valuable unit is a clear answer at the
+right moment, not another insurance dashboard.
 
 **The output rule, taken verbatim from a respondent.** Faizan: "Everyone gives me the counterfactual. I want
 the next step." [T7 00:05:41]. Every screen will be tempted to explain what the household should have done.
@@ -412,6 +429,19 @@ Today, policy status, hospital network status, TPA identity, endorsement history
 updates live in different systems, none of which returns a dated, case-specific answer to a third party.
 Knowvia can organise them. It cannot make them authoritative. So the product is forced to label the most
 decision-relevant facts as Dynamic and ask the household to go find out.
+
+**What changed after field feedback.** Shilpa Arora, Co-Founder and COO of Insurance Samadhan, replied to
+our earlier architecture post with three reasons a generic coverage summary fails. A ₹10 lakh sum insured
+can still contain a ₹2 lakh cap for immunotherapy. Corporate-policy benefits may be hidden from the employee
+until hospitalisation sends them to HR. And the hospital TPA desk, TPA and insurer each process different
+information. Her conclusion was: **"The process is breaking at many ends. ... It’s a complex problem but
+can be solved."** [Public comment on the earlier architecture](https://www.linkedin.com/posts/rishav-dewan_%F0%9D%97%9B%F0%9D%97%B2%F0%9D%97%AE%F0%9D%97%B9%F0%9D%98%81%F0%9D%97%B5-%F0%9D%97%B6%F0%9D%97%BB%F0%9D%98%80%F0%9D%98%82%F0%9D%97%BF%F0%9D%97%AE%F0%9D%97%BB%F0%9D%97%B0%F0%9D%97%B2-%F0%9D%97%B6%F0%9D%98%80-%F0%9D%97%BB%F0%9D%97%BC-activity-7505177397751697408-25Lz)
+
+That feedback is why the **new architecture** has three rules. First, it exposes treatment-specific inner
+caps, not only the headline sum insured. Second, it asks for the employer booklet and proof of enrolment
+before a hospital event, not after HR becomes the bottleneck. Third, it records whether the hospital desk,
+TPA or insurer owns the next answer. The Confirmation Rail is the technical way to retrieve those live,
+dated answers instead of leaving the household to reconstruct them under pressure.
 
 The rail should return, dated and case-specific:
 

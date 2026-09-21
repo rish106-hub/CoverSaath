@@ -1,7 +1,7 @@
 # Answer-to-build map
 
 Updated 20 September 2026. Traceability between the eight Round 2 answers in
-[`round2_answers.md`](../round2_answers.md) and the build spec in
+[`docs/strategy/round2-answers.md`](../docs/strategy/round2-answers.md) and the build spec in
 [`working.md`](working.md), [`planned-expense.md`](planned-expense.md) and
 [`insurance.md`](../building/insurance.md).
 
@@ -79,9 +79,15 @@ That is consistent, but it means the honest answer on Delhivery is even more hon
 | Enrolment, not eligibility | Person worker (C) |
 | Network status cannot be asserted | Hospital worker (G): "must use a dated official network source" |
 | Pre-auth status, claim status | Claims-process worker (H) |
+| Modern-therapy inner cap and split institutional ownership | Financial-rules worker (D), treatment worker (E) and claims-process worker (H): each answer stays tied to the hospital desk, TPA or insurer that owns it |
 
 **Status: this is the tightest derivation in the submission.** Q5 is not an idea bolted on; it is the name of
 the state the machine is forced to emit when no rail can answer. Dynamic is the rail-shaped hole.
+
+**Iteration evidence.** Shilpa Arora's public feedback on the earlier architecture named the missing
+requirements: immunotherapy can have a low inner cap inside a high sum insured; corporate cover can be
+invisible until hospitalisation; and hospital desk, TPA and insurer answers must not be merged. The new
+build spec implements those requirements. The Fourth Rail makes their live confirmation possible.
 
 ### Q6 — Human interaction
 

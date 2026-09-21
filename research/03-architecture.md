@@ -5,7 +5,7 @@
 > `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
 > five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
 > no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
-> Read [AGENTS.md](../AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Read [AGENTS.md](../AGENTS.md) for the current position and `docs/strategy/round2-answers.md` for the live answers.
 > Kept for provenance. Do not cite from this file.
 
 Updated 17 September 2026. The full service below remains a proposal. A local synthetic workflow
@@ -766,7 +766,7 @@ and tests. Shared infrastructure must stay narrow. Do not create another general
 - Temporary compatibility paths must say `deprecated`, preserve the old public contract and contain no
   new implementation. Remove them after callers migrate.
 - Put visual artifacts in `docs/assets/`, working evidence in `docs/evidence/`, and communication drafts
-  in `docs/comms/`. Keep the active product pack at its stable `research/01-06` and `answers.md` paths.
+  in `docs/comms/`. Keep the active product pack at its stable `research/01-06` and `docs/strategy/answers.md` paths.
 
 Run `npm run check:architecture` after structural changes. It checks source naming and the dependency
 rules that can be enforced without adding a framework. `npm run check` runs that boundary check, the

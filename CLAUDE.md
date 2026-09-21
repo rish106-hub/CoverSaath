@@ -25,8 +25,8 @@ Short version, so nothing drifts:
   hospital deposit.
 - [working/answer-to-build-map.md](working/answer-to-build-map.md) traces each answer to the build component
   behind it and lists the current gaps. Check it before editing either side.
-- The Round 2 answers live in [round2_answers.md](round2_answers.md) and must describe that build spec, not a
-  parallel product. `answers.md` and `research/` are historical working material, superseded where they
+- The Round 2 answers live in [round2-answers.md](docs/strategy/round2-answers.md) and must describe that build spec, not a
+  parallel product. `docs/strategy/answers.md` and `research/` are historical working material, superseded where they
   conflict.
 - **No rail is "the only load-bearing rail."** The load-bearing thing is the permissioned, source-linked
   cover record. WhatsApp is the main working channel and is not one of The Ken's three rails. Say so plainly.

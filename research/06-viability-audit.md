@@ -5,7 +5,7 @@
 > `working/` and `building/`. It still contains retired claims: the "15 college students" research, the
 > five-minute readiness drill, the separate physical card, the 18-to-24 student ICP, and statements that
 > no parent was interviewed or that evidence is the weakest area. **All of those are retired.**
-> Read [AGENTS.md](../AGENTS.md) for the current position and `round2_answers.md` for the live answers.
+> Read [AGENTS.md](../AGENTS.md) for the current position and `docs/strategy/round2-answers.md` for the live answers.
 > Kept for provenance. Do not cite from this file.
 
 Updated 07 September 2026. Written against the live competition page read in the browser on

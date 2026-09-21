@@ -253,7 +253,7 @@ flowchart TD
 
 Supporting material is kept out of the repository root. Visual architecture files are in
 `docs/assets/`, raw working evidence is in `docs/evidence/`, and communication drafts are in
-`docs/comms/`. The active product pack remains in `research/01-06` and `answers.md`.
+`docs/comms/`. The active product pack remains in `research/01-06` and `docs/strategy/answers.md`.
 The current full working board is [coversaath-exhaustive-working-board.svg](docs/assets/coversaath-exhaustive-working-board.svg).
 
 ## Data and security limits
