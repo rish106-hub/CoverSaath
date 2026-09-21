@@ -67,10 +67,10 @@ not from the pitch.**
 |---|---|---|
 | Gnani | `working.md` Uses 1–3, plus the read-back rule | Backed. The three-language cap is a real ceiling, stated |
 | Pine Labs | Payment boundary section (`insurance.md`), payment worker | Backed, and narrowed. The hospital-deposit hold is withdrawn |
-| Delhivery | Hospital worker (G) — desk location, contact, hours | **Thinnest link.** G covers hospital access; it does not require Delhivery to do it |
+| Delhivery | Hospital worker (G) plus `working.md` WhatsApp and Delhivery boundaries | Supporting only. Maps validates the route to an already confirmed desk; it does not establish insurance eligibility or network status |
 
-**Gap: Delhivery.** The answer says "useful but not load-bearing". The build spec does not mention it at all.
-That is consistent, but it means the honest answer on Delhivery is even more honest than we wrote it.
+**Delhivery boundary.** The build spec now names the narrow Maps use. Original-document shipping remains out
+of the first build because neither demand nor a defensible chain-of-custody workflow has been evidenced.
 
 ### Q5 — Fourth rail
 
@@ -171,13 +171,14 @@ emergency override, and six worker constraints. The load-bearing one: **unknown 
 different states and must never be collapsed**, because rendering a withheld field as "unknown" leaks a fact
 and misinforms the viewer at the same time. Q6 now names the three classes so both sides match.
 
-**2. The Emergency Case Brief assembly path.** Q6 specifies exactly what the operator sees. The build spec
-names the brief but does not say which workers populate it or how it stays current when the household record
-is stale. This matters because the brief is assembled under time pressure.
+**2. The Emergency Case Brief assembly path. — RESOLVED, 21 September.** `working.md` and
+`insurance.md` now name the six bounded worker outputs that populate the brief. They also require source
+dates and visible Dynamic, Unknown or Conflicting labels. No field is silently refreshed while the operator
+waits.
 
-**3. The support-operator rota: EXPOSED AS A LAUNCH GATE, 21 September.** Q6 no longer implies that a live
-service exists. It states that emergency access cannot launch until staffing, escalation, backup routing and
-measured time-to-human exist. This resolves the submission overclaim, not the operating dependency.
+**3. The support-operator rota: EXPOSED AS A LAUNCH GATE, 21 September.** Q6 and the build spec now state
+that emergency access cannot launch until staffing, escalation, backup routing, answered-call rate and
+time-to-human have been measured. This resolves the submission overclaim, not the operating dependency.
 
 ---
 

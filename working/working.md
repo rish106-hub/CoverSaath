@@ -87,6 +87,18 @@ Ram should be able to ask, "Why do you recommend this?" and inspect the reasonin
 
 Pine Labs is used only after the user approves a renewal or a selected personal policy. It is the payment rail. It does not decide what to buy, make an insurance recommendation, process a claim, reserve an emergency hospital deposit or replace insurer approval.
 
+## WhatsApp and Delhivery boundaries
+
+WhatsApp is the main working surface for document forwarding, deadline nudges, written next actions and
+institutional replies. It is not a source of truth. Every item received through WhatsApp enters the same
+permissioned case record and retains its evidence state, source and date.
+
+Delhivery is a supporting Maps rail, not a core insurance workflow. After a hospital insurance desk has been
+confirmed through an insurer, TPA or hospital source, Knowvia may use address validation, geocoding and routing
+to reduce wrong-address and wrong-desk friction. It does not infer network status from proximity. Original
+document shipping is not part of the first build. It is considered only when an institution specifically
+requires an original and the product can record consent, recipient proof, return or destruction status.
+
 ## Evidence hierarchy
 
 1. Policy schedule, certificate, endorsement and official wording.
@@ -140,6 +152,17 @@ Pressing `Emergency access` dials a trained support human. That human receives t
 Case Brief: e-card, policy number, cover map, dated network evidence, cash scenario, hospital contact path
 and current pre-authorisation state. They are a support operator who already has the file open, not a
 clinician: they do not advise on treatment.
+
+The brief is assembled from bounded worker outputs: document identity supplies the correct policy and
+e-card; person and enrolment supplies the named member; benefit and cash-exposure supplies limits and the
+immediate cash scenario; hospital access supplies the dated network and desk route; claims-process supplies
+pre-authorisation and escalation state; evidence supplies the source date and visible uncertainty. A field is
+never silently refreshed during the call. It remains Proven, Dynamic, Unknown or Conflicting, with its source
+date, until an approved institution returns a new answer.
+
+This route cannot be offered as emergency access until an on-call rota, backup routing and escalation rules
+have been tested. A pilot measures answered-call rate and time-to-human first. Office-hours support must be
+labelled as office-hours support, not emergency support.
 
 No voice agent, no IVR, no bot triage, no read-back, no transcription step. Sourav's specification is one
 button and a person who does not ask him anything [T5 00:04:22, 00:04:36]. A voice agent in that path is a

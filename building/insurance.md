@@ -299,6 +299,17 @@ this path.** The workers produce a read-only Emergency Case Brief for that opera
 treatment decisions, decide whether admission should wait, promise approval, or autonomously direct hospital
 action. The support operator handles insurance and coordination, not clinical advice.
 
+The Emergency Case Brief is assembled before the call from six bounded outputs: document identity supplies
+the correct policy and e-card; person and enrolment supplies the named member; benefit and cash-exposure
+supplies applicable limits and immediate cash scenarios; hospital access supplies dated network and desk
+details; claims-process supplies pre-authorisation and escalation state; and evidence supplies source date,
+version and unresolved status. A worker cannot conceal a stale or missing field. It renders as Dynamic,
+Unknown or Conflicting with its source date until an approved institution updates it.
+
+This is a launch-gated operating path. Knowvia must not label a route `Emergency access` until it has an
+on-call rota, backup routing, escalation rules and measured answered-call and time-to-human performance.
+Office-hours support is not emergency support.
+
 Conversing with the AI is a separate product path the user may choose at any time. It cannot replace the
 operator handoff and must never be interposed before it.
 
