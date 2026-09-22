@@ -38,13 +38,14 @@ the submission unless it resolves a judge-facing gap.
 
 | Claim | Build component | Note |
 |---|---|---|
-| L3 inside approved limits | Main-agent operating contract, `working.md` | The "must / must never" lists are the autonomy boundary |
+| L4 inside standing approved limits | Main-agent operating contract, `working.md` | It plans, carries out, checks and re-plans a case. The "must / must never" lists remain the authority boundary |
 | Send an institutional question only inside existing authority | Permission model in C and main-agent outbound-action boundary | The fourth rail is not silently assumed |
 | Must ask before a declaration | Exclusions worker (F): "Only the user can approve a declaration" | Also enforced at voice intake |
 | Autonomy **drops** in an emergency | Emergency handoff rule (H) | AI becomes retrieval only |
 
 **Status: backed, and Q2's strongest line — autonomy dropping at peak stakes — comes from the build spec,
-not from the pitch.**
+not from the pitch. The new organiser FAQ correctly means this is L4: it judges the designed operating loop,
+including the Confirmation Rail needed to make institutional responses structured and current.**
 
 ### Q3 — States
 
