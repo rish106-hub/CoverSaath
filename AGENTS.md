@@ -173,10 +173,17 @@ deposit**. The pre-authorisation hold was considered and withdrawn: no hold-expi
 hospital merchant eligibility is verified, and a payment instrument inside an emergency flow conflicts with
 "admit first, optimise later".
 
-**WhatsApp is the main working channel, and it is not one of the three rails.** Say this plainly rather
-than pretending a rail covers it. WhatsApp is where the household already is; Gnani is how the product
-reaches the people WhatsApp cannot. They are complements, and the answer must explain what each one does
-that the other cannot. See `docs/strategy/round2-answers.md` answer 6.
+**Knowvia's web or app workspace is the main product surface.** WhatsApp is an optional companion for
+document forwarding, reminders, written updates and short questions. It is not one of the three rails and
+not a second source of truth. Gnani is the optional voice access route for people who prefer speaking.
+
+**Proposed acquisition and integration model.** Knowvia remains a D2C household product. Employer HRMS
+and insurance platforms are proposed entry points, not replacements for Knowvia. HRMS is useful when a
+person joins, changes benefits or needs to discover group cover. It is not assumed to be the place someone
+remembers in a health event. A platform or adviser such as Ditto is a proposed trust-led entry point after
+a personal-policy purchase, renewal or support interaction. It can introduce the household record and
+surface it later; it is not a claimed partner or a proven integration. The household works in Knowvia.
+This is a product hypothesis from the ICP discussion, not a conclusion established by the eight interviews.
 
 **Rail dependency.** The product's core dependency is the proposed Insurance Confirmation Rail because it
 turns scattered insurer, TPA and hospital responses into dated, case-specific status. Among the three supplied
@@ -192,6 +199,9 @@ This is the product. Everything else serves it.
   pages.
 - **Two entry routes only.** `Plan an expense` and `Find and buy personal health cover`. **Renewal is not a
   third mode** — it is a time-sensitive case inside either one.
+- **Three ways into the product.** Direct D2C sign-up is always available. HRMS can introduce the group-cover
+  case at joining or benefit change. An insurance platform or adviser can introduce the personal-policy case
+  after purchase, renewal or a support interaction. Those two integrations are proposed, not contracted.
 - **Source pack requested by name** before analysis. Never invent a benefit. A clause proves the rule; the
   enrolment schedule proves a named person gets that rule; a dated network result proves network status; a
   hospital estimate proves the cost input.
@@ -214,6 +224,10 @@ This is the product. Everything else serves it.
   has the file open. They handle insurance and coordination, not clinical advice. The AI only retrieves,
   structures and displays. Talking to the AI is a **separate path** the user may choose at any time; it is
   never in front of the call. Admit first, optimise later.
+- **Do not make recall a false product promise.** In a health event, a household may first call its insurer,
+  TPA, hospital desk or the adviser who sold the policy. Knowvia does not claim it will replace that habit.
+  Its record makes whichever approved route the household takes more prepared, and a partner entry point can
+  surface the same permissioned brief where the customer already seeks help.
 - **Seniors: default out of the driver's seat, never locked out.** The operator model is a default, not a
   ceiling. A senior who wants to open the case, ask, supply a document, correct a fact or act on their own
   policy can do so, in their own language. What we do not do is hand full agency by default and expect them

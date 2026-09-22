@@ -26,7 +26,9 @@ Non-negotiable reminders:
   [working/planned-expense.md](working/planned-expense.md) and
   [building/insurance.md](building/insurance.md). The Round 2 answers must describe that product.
 - Emergency access calls a human directly. Gnani is not in the emergency path. Pine Labs is used only after
-  a human approves renewal or purchase. WhatsApp is the main working channel, not a supplied rail.
+  a human approves renewal or purchase. Knowvia's web or app workspace is the main product surface;
+  WhatsApp is an optional companion, not a supplied rail or second source of truth. HRMS and insurance
+  platforms are proposed acquisition and integration entry points, not the D2C product itself.
 - The proposed Insurance Confirmation Rail is the core product dependency. Among the supplied rails, Gnani is
   the main access rail.
 - Do not use an opening number. Refer to the opening only as **"Buying the insurance"**.
