@@ -1,6 +1,6 @@
 # Knowvia: Round 2 answers
 
-Master submission draft, revised for clarity and feasibility on 21 September 2026. Paste only the eight
+Master submission draft, revised for the organiser FAQ on 22 September 2026. Paste only the eight
 numbered responses into the form. The appendix is supporting material for a judge, presentation or later
 Product Strategy stage. No Round 2 field-level word limit has been supplied in the organiser email yet.
 
@@ -14,18 +14,24 @@ contracted integrations.
 
 ## 1. What is the outcome your agent is accountable for? One sentence.
 
-**For each health-insurance decision, Knowvia is accountable for giving the family a source-backed view of
-applicable cover, likely limits, cash exposure and next actions, with a named owner and due date for every
-material question it cannot answer.**
+**For every health-insurance event, Knowvia is accountable for getting the family to the next insurance
+action, or to a named human or institutional handoff with the exact blocker, evidence, owner and deadline.**
 
 ## 2. What is the level of autonomy your agent has?
 
-**L3: Knowvia acts independently inside limits approved by the household.**
+**L4: Knowvia plans, carries out and checks a multi-step insurance case inside standing household limits,
+then comes back when a person or institution must decide.**
 
-The most consequential action it takes without asking again is sending a narrow factual question through an
-already approved channel, then tracking the reply and updating the case record. It can only do this when a
-named adult has already approved the institution, purpose and information being shared. Approval allows the
-question to be sent. It does not oblige an insurer, TPA, employer or hospital to answer a third party.
+This is the level of the agent we are designing, not only what can be assembled from the three rails today.
+After a named adult sets a standing permission, Knowvia can run a case plan without returning for each
+routine step: collect the named documents, read them, find contradictions, ask approved factual questions,
+chase the responsible party, check every output against its sources and keep going until the next action is
+complete or it is genuinely blocked. The most consequential thing it does without asking again is send a
+narrow factual request through an already approved channel and update the case record from the reply.
+
+Standing permission names the institution, purpose, information class, expiry and escalation route. It
+allows a question to be sent. It does not oblige an insurer, TPA, employer or hospital to answer a third
+party, and it never turns Knowvia into the decision-maker.
 
 Inside those limits, Knowvia can:
 
@@ -36,6 +42,8 @@ Inside those limits, Knowvia can:
 - Contact an approved family member or use an approved institutional channel with a narrow factual question.
 - Track replies, deadlines, policy versions and unresolved questions.
 - Check its own output for missing sources, conflicting evidence and unsupported conclusions.
+- Re-plan when a reply changes the route, then close the case only when the action is completed or the
+  remaining blocker has a named owner and deadline.
 
 It must ask before:
 
@@ -56,13 +64,15 @@ want her son to see the reason behind a condition in her declaration [T8 00:02:1
 cannot be treated as one permission boundary. Access must be granted per person, per information class and
 per viewer.
 
-Knowvia is not L4 because insurers, TPAs, hospitals and licensed advisers control decisions the agent cannot
-make or verify by itself.
+L4 does not mean Knowvia can override an insurer, give clinical advice or spend the household's money. It
+means it owns the operational sequence around those decisions and reports back when the sequence reaches a
+decision it cannot take.
 
-**What is possible now versus after the fourth rail:** today, Knowvia works from household documents and
-approved manual follow-up. The proposed Insurance Confirmation Rail would let an authorised request receive a
-structured institutional status. Until that rail exists, a non-response remains **Dynamic** or **Unknown**,
-not a hidden failure or an invented answer.
+**What is missing to make this real:** today, Knowvia can work from household documents and approved manual
+follow-up. The proposed Insurance Confirmation Rail would let an authorised request receive structured,
+case-specific institutional status. Until then, a non-response remains **Dynamic** or **Unknown**, not a
+hidden failure or an invented answer. That is the specific gap between an L4 design and an L4 service in
+production.
 
 ## 3. What states does your agent go through? Share the happy and unhappy flow.
 
@@ -81,32 +91,44 @@ replaced.
 ### Happy flow
 
 ```text
-1. EVENT + PERMISSION
+1. CASE OPEN
+   EVENT + PERMISSION
    A person, purpose and access boundary are named.
              ↓
-2. SOURCE PACK
+2. EVIDENCE INTAKE
+   SOURCE PACK
    Knowvia requests the exact schedule, wording, employer booklet,
    endorsement, estimate or medical document needed for the case.
              ↓
-3. PARALLEL READING
+3. CASE ANALYSIS
+   PARALLEL READING
    Bounded specialist checks assess enrolment, benefits, exclusions,
    hospital, estimate lines, cash exposure and evidence.
              ↓
-4. CASE APPLICATION
+4. DECISION READY
+   CASE APPLICATION
    The policy rules are applied to this person, event, hospital and bill.
              ↓
-5. DECISION BRIEF
+5. PLAN ISSUED
+   DECISION BRIEF
    The family sees one route, cash scenarios, next actions and source pages.
              ↓
-6. INSTITUTIONAL CONFIRMATION
+6. WAITING ON INSTITUTION
+   INSTITUTIONAL CONFIRMATION
    Time-sensitive facts are checked with the responsible insurer, TPA,
    employer or hospital desk when authority exists.
              ↓
-7. HUMAN APPROVAL + ACTION
+7. WAITING ON HOUSEHOLD
+   HUMAN APPROVAL + ACTION
    The household approves sharing, declarations, payment or filing.
              ↓
-8. TRACKING + RECONCILIATION
+8. TRACKING
+   TRACKING + RECONCILIATION
    Knowvia tracks issuance, pre-authorisation, claim status and the final outcome.
+             ↓
+9. RESOLVED OR BLOCKED
+   CLOSE OR RETURN STUCK
+   It closes with proof of completion, or returns the exact blocker, owner and deadline.
 ```
 
 Every material fact carries one evidence state:
@@ -140,8 +162,17 @@ system therefore cannot turn missing, old or disputed information into a confide
 | Person is eligible but not enrolled | Do not report them as covered |
 | Hospital network status is old or unclear | Mark it Dynamic and do not promise cashless treatment |
 | Institution does not reply | Record attempts, show the deadline and escalate through an approved route |
+| Institution replies with an answer that conflicts with the document | Keep both sources visible, block the affected conclusion and assign the contradiction to the institution that owns it |
+| Institution says it cannot speak to Knowvia | Give the household a one-tap approval or direct-contact route. Do not impersonate the household or fabricate authority |
+| Employer HRMS data and the employee booklet differ | Treat HRMS as a source, not truth. Request the current booklet, schedule or HR confirmation and mark the field Conflicting |
+| Voice transcript is unclear or a material fact was not read back | Keep it Reported, do not turn it into a declaration and ask for correction by voice, text or document |
+| Gnani call is unanswered, fails or times out | Do not retry silently. Send the written next action through WhatsApp or the app and preserve the incomplete voice task |
+| Rail endpoint is unavailable, unauthorised or rate-limited | Preserve the case, expose the failed check as Dynamic or Unknown, retry only within a visible policy and offer the manual route |
 | Pre-authorisation is delayed or denied | Show deposit and reimbursement scenarios; do not call it a final claim rejection |
 | Premium paid but policy not issued | Keep the purchase unresolved until issuance, reversal or dispute resolution |
+| Payment callback is missing, invalid or inconsistent with the order record | Verify the callback signature, poll the order status, and keep payment unconfirmed until the two agree |
+| Payment fails or the user abandons checkout | Leave the recommendation intact, mark payment incomplete and never substitute another policy or payment method without approval |
+| Hospital address or route is uncertain | Show the address-confidence result and direct contact, not a false claim that the hospital is the right insurance desk |
 | User asks to hide medical history | Refuse to coach concealment and require an accurate declaration |
 | User asks for medical advice | Route to the treating clinician |
 
@@ -152,13 +183,15 @@ Unknown, or assigned to a named person or institution with a deadline.
 
 WhatsApp is Knowvia's main working surface for documents, reminders and written next actions. It is not a
 competition rail and it is not an alternate source of truth. It writes into the same permissioned case record
-as the app and voice.
+as the app and voice. An employer HRMS is a possible **source** of group-cover data, not an acquisition
+channel and not a requirement. If it is unavailable or disagrees with the policy schedule, Knowvia asks for
+the booklet, schedule or HR confirmation and marks the result Conflicting.
 
-| Rail | What exists today | How Knowvia uses it | What Knowvia must build | Hard boundary |
+| Rail | Exact existing call and what it returns | How Knowvia uses the return | What Knowvia must build | Hard boundary |
 |---|---|---|---|---|
-| **Gnani: voice** | Multilingual voice agents, knowledge bases, dynamic pre-call variables, external actions, logs and analytics | Optional voice intake, voice interaction with the main agent, and approved read-back for a family member | A permission-aware layer that records who supplied each fact, reads material facts back, writes approved facts into the same case record and escalates uncertainty | Gnani does not analyse policy wording and never sits in the emergency route |
-| **Pine Labs: payments** | Hosted checkout, payment links, payment status, refunds and reconciliation; public documentation also describes card pre-authorisation and UPI Reserve Pay | Final premium payment only, after the household approves renewal or a selected personal policy | A transaction record joining recommendation, quote, declaration, approval, payment, insurer issuance and endorsement | Payment success is not policy issuance; Pine Labs is not used for hospital deposits or claim decisions |
-| **Delhivery: logistics and maps** | Address validation, standardisation, geocoding, routing, shipment creation and tracking | Validate the address and route to an already confirmed hospital insurance desk; ship originals only when an institution actually requires them | A verified desk directory and, for original documents, consent, chain of custody, exact-recipient proof and return or destruction status | Proximity and address accuracy do not prove network or cashless eligibility |
+| **Gnani: voice** | For sandbox validation, `POST /v1/agents/{botId}/trigger_call` returns a `clientReferenceId`. `POST /v1/conversations/logs` finds the `conversationId`; `GET /v1/conversations/{conversationId}/stats` returns `callStatus`, turn-by-turn `utteranceAnalytics`, detected language, a disposition and latency. Gnani also supports a custom on-call HTTP action. | After an optional intake call, Knowvia takes only the transcript, speaker, language and call outcome into a voice draft. It reads material facts back for approval before those facts affect a case. | A permission-aware `voice-draft` action and case-record writer: it must accept only allowed fields, attach speaker and consent, ask for read-back, and return `accepted`, `needs-correction` or `blocked`. | The Gnani result is a transcript, not a verified health fact. Gnani does not analyse policy wording and never sits in the emergency route. |
+| **Pine Labs: payments** | `POST /api/auth/v1/token` returns an access token. `POST /api/checkout/v1/orders` creates an order and returns a checkout URL. The callback returns `order_id`, `status` and `signature`; `GET /api/pay/v1/orders/{order_id}` returns the current order and payment status. | After human approval, Knowvia creates one premium order, opens the returned checkout URL, verifies the signed callback, then polls the order until payment is `PROCESSED`, `FAILED`, `CANCELLED` or another documented state. | A transaction record joining recommendation, insurer quote, declaration approval, Pine order, verified payment, policy issuance and endorsement. The missing link is insurer issuance confirmation, not payment collection. | Payment success is not policy issuance. Pine Labs is not used for hospital deposits, underwriting, claims or claim decisions. |
+| **Delhivery: logistics and maps** | `POST /validate` returns address quality, granularity and a corrected address. `POST /geocode` returns latitude, longitude and `error_radius`. `POST /route` returns driving distance, duration and route. | Only after Knowvia has already confirmed the hospital and its insurance desk from an insurance source, it validates the desk address and gives the family a route and ETA. | A verified desk directory that joins the insurer or TPA's dated desk confirmation to one address and contact. For any later original-document shipment: consent, chain of custody, exact-recipient proof and return or destruction status. | Address quality, distance and route do not prove hospital network status or cashless eligibility. |
 
 ### Gnani in practice
 
@@ -172,7 +205,8 @@ research already used: English, Hindi and Bengali. The FAQ limit is 100. Agent C
 documented bot-to-human warm transfer. There is no documented multi-party call or mid-call event stream.
 Knowvia therefore does not make a decision during a call that needs live supervision: Gnani captures a draft,
 the call ends, and the main case record checks, labels and routes it. Emergency access bypasses Gnani and
-reaches the human operator directly.
+reaches the human operator directly. We will use the Gnani sandbox to test this exact intake, read-back and
+failed-call flow before presenting the rail as validated. It is not yet a tested production integration.
 
 ### Pine Labs in practice
 
@@ -190,10 +224,11 @@ when an institution specifically requires it and chain of custody can be proved.
 
 Documentation reviewed: [Gnani Agent Builder](https://docs.gnani.ai/introduction),
 [Gnani Platform API](https://docs.gnani.ai/Platform/platform-introduction),
+[Gnani conversation statistics](https://docs.gnani.ai/Platform/Get_Conversation_Stats),
 [Pine Labs hosted checkout](https://www.pinelabs.com/docs/online-payments/hosted-checkout/integration-steps),
-[Delhivery B2C APIs](https://one.delhivery.com/developer-portal/documents/b2c/) and
-[Delhivery Maps](https://www.delhivery.com/maps/reference). The Gnani console and live rail calls have not
-yet been tested.
+[Pine Labs order lookup](https://www.pinelabs.com/docs/online-payments/api/orders/get-order-by-id) and
+[Delhivery Maps](https://www.delhivery.com/maps/reference). The Gnani sandbox test is the one remaining
+rail-validation task. No live payment, logistics or production call is needed for this round.
 
 ## 5. Does the agent need a fourth rail?
 
