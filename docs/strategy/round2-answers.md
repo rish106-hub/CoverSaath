@@ -22,7 +22,7 @@ action, or to a named human or institutional handoff with the exact blocker, evi
 **L4: Knowvia plans, carries out and checks a multi-step insurance case inside standing household limits,
 then comes back when a person or institution must decide.**
 
-This is the level of the agent we are designing, not only what can be assembled from the three rails today.
+This is the level of the agent we are designing, not only what can be assembled from the 3 rails today.
 After a named adult sets a standing permission, Knowvia can run a case plan without returning for each
 routine step: collect the named documents, read them, find contradictions, ask approved factual questions,
 chase the responsible party, check every output against its sources and keep going until the next action is
@@ -181,11 +181,17 @@ Unknown, or assigned to a named person or institution with a deadline.
 
 ## 4. On each rail, what exists and what must be built?
 
-WhatsApp is Knowvia's main working surface for documents, reminders and written next actions. It is not a
-competition rail and it is not an alternate source of truth. It writes into the same permissioned case record
-as the app and voice. An employer HRMS is a possible **source** of group-cover data, not an acquisition
-channel and not a requirement. If it is unavailable or disagrees with the policy schedule, Knowvia asks for
-the booklet, schedule or HR confirmation and marks the result Conflicting.
+Knowvia's web or app workspace is the D2C product surface for the household matrix, evidence, permissions
+and decisions. WhatsApp is an optional companion for documents, reminders, written updates and short
+questions. It is not a competition rail or an alternate source of truth. An employer HRMS and insurance
+platforms - esp. Ditto are proposed entry points into Knowvia, not replacements for it.
+
+HRMS is useful when a person joins, changes benefits or needs to discover group cover. It is not assumed to
+be the place a household recalls during a health event. A proposed insurance-platform or adviser integration,
+beginning with Ditto, is useful after a personal-policy purchase, renewal or support interaction: it can
+invite the person to add the issued policy and build the full household record. Neither integration is built,
+contracted or necessary for direct D2C sign-up. If HRMS data disagrees with a policy schedule, Knowvia asks
+for the booklet, schedule or HR confirmation and marks the result Conflicting.
 
 | Rail | Exact existing call and what it returns | How Knowvia uses the return | What Knowvia must build | Hard boundary |
 |---|---|---|---|---|
@@ -327,13 +333,21 @@ an argument with her relative-agent, but "it says here, page fourteen" could [T4
 
 | Channel | Role |
 |---|---|
-| **App** | Household matrix, evidence, calculations and permission controls |
-| **WhatsApp** | Document forwarding, deadline nudges, written next actions and institutional replies |
+| **Knowvia web or app workspace** | Household matrix, evidence, calculations, permissions and the decision brief |
+| **WhatsApp companion** | Optional document forwarding, deadline nudges, written updates and short questions |
 | **Gnani voice** | Optional intake and read-back for someone who prefers speaking |
 | **Emergency access** | One button that calls a human support operator directly; neither WhatsApp nor Gnani sits in front of it |
 
-WhatsApp is the main working surface, but it is not one of The Ken's rails. Gnani reaches people who prefer
-or need voice. Both write into the same case record, so neither becomes an uncontrolled second record.
+HRMS and an insurance platform or adviser are proposed ways a household can first reach Knowvia. HRMS is
+best for group-cover setup or benefit change. An insurance platform is more relevant after personal-policy
+purchase, renewal or a support interaction. This is an ICP hypothesis, not a claim that any named company
+has agreed to integrate. Direct D2C sign-up remains available.
+
+We do not expect a household to remember its HRMS in a health event. Nor do we assume it will remember
+Knowvia before its insurer, TPA, hospital desk or existing adviser. Knowvia's role is to keep the household
+record ready and make any approved help route more prepared. A future partner entry point can surface the
+same permissioned case brief where the customer already seeks insurance help. WhatsApp and Gnani write into
+the same case record, so neither becomes an uncontrolled second record.
 
 ### Emergency interaction
 
@@ -431,6 +445,38 @@ deliverables the competition describes: a segment map and the wall we hit.
 **Initial wedge:** the household operator with a live planned expense. The problem has an estimate, a date,
 a hospital and a reason to collect documents now. The same cover record then supports group-cover checks,
 renewal and continuity events.
+
+### Acquisition hypothesis and road ahead
+
+**What we propose.** Knowvia is a D2C household workspace distributed through three paths: direct sign-up,
+employer HRMS at the group-cover setup moment, and insurance platforms or advisers at the personal-policy
+purchase, renewal or support moment. We would begin by proposing integrations with Ditto and HRMS providers.
+This is not a claim that either has agreed.
+
+**Why each party could care.** The household gets one record across employer, personal and parent cover.
+An HRMS provider could offer employees a clearer group-cover setup and fewer avoidable “what does my policy
+cover?” handoffs to HR. An insurance platform or adviser could give its customer a source-backed view of the
+issued policy alongside the rest of the household's cover, and enter support conversations with the case
+context already assembled. These are proposed value propositions, not measured partner outcomes.
+
+**What led us here.** T5 shows the cost of discovering employer cover at 2 a.m.; Shilpa Arora's feedback
+shows that corporate cover is often understood too late. The ICP inference is that HRMS is useful before the
+event, but a health or insurance platform is more likely to be recalled during it. The interviews do not test
+brand recall, platform trust or partner adoption. We label those as open assumptions.
+
+**Implementation sequence.** First, direct sign-up with policy upload and the household matrix. Second, a
+small HRMS pilot that passes only employee-approved group-cover material and records its source/version.
+Third, a proposed adviser or platform flow that starts after purchase or renewal, links the issued policy to
+the household record, and lets an authorised support person view the same case brief. Every integration
+needs an explicit data-sharing agreement, consent screen, source/version rules and a fallback when data is
+missing or conflicts.
+
+**Assumptions to test before scale.** Do people complete setup when introduced through HRMS or an adviser?
+Do they return when a renewal, job change or planned treatment begins? Does a partner-provided case brief
+reduce repeated context collection without exposing protected information? Do users prefer the Knowvia
+workspace, WhatsApp companion or their existing insurer/adviser route during an event? We would test these
+with a small consented pilot and compare activation, completed source packs, repeat case opening, unresolved
+case time and user-reported clarity. We would not infer claim outcomes from those measures.
 
 ### The wall we hit, and why
 

@@ -106,6 +106,8 @@ build spec implements those requirements. The Fourth Rail makes their live confi
 | Seniors: default out, never locked out | `working.md` Use 3 |
 | Per-field, per-viewer permissions | Permission model under C in `insurance.md` |
 | Emergency operator is a launch gate | Open operational dependency stated in Q6 and section 4 below |
+| Web or app workspace is the D2C product; WhatsApp is a companion | `working.md` Product surfaces, acquisition and Delhivery boundaries |
+| HRMS and a proposed insurance-platform/adviser integration are entry points | `working.md` acquisition table; Q6 acquisition hypothesis. Neither is described as a signed partnership. |
 
 ### Q7 — Name
 

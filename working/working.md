@@ -87,11 +87,27 @@ Ram should be able to ask, "Why do you recommend this?" and inspect the reasonin
 
 Pine Labs is used only after the user approves a renewal or a selected personal policy. It is the payment rail. It does not decide what to buy, make an insurance recommendation, process a claim, reserve an emergency hospital deposit or replace insurer approval.
 
-## WhatsApp and Delhivery boundaries
+## Product surfaces, acquisition and Delhivery boundaries
 
-WhatsApp is the main working surface for document forwarding, deadline nudges, written next actions and
-institutional replies. It is not a source of truth. Every item received through WhatsApp enters the same
-permissioned case record and retains its evidence state, source and date.
+Knowvia's web or app workspace is where the household sees its matrix, evidence, calculations, permissions
+and decision brief. It is the D2C product, not the HRMS or an insurer's support screen.
+
+WhatsApp is an optional companion for document forwarding, deadline nudges, written next actions and
+institutional replies. It is not a source of truth and not the only place the product lives. Every item
+received through WhatsApp enters the same permissioned case record and retains its evidence state, source
+and date.
+
+Two proposed integrations make the D2C workspace easier to discover and set up:
+
+| Entry point | When it is useful | What it could provide | What it must not become |
+|---|---|---|---|
+| Employer HRMS | Joining, benefit enrolment, family addition or employer-cover change | A link to Knowvia, an employee-authorised group-policy booklet or schedule, and a prompt to check enrolment | The assumed emergency destination or the source of truth when it conflicts with the policy schedule |
+| Insurance platform or adviser, beginning with a proposed Ditto integration | After personal-policy purchase, renewal or an existing support interaction | A trust-led invitation to add the issued policy and build the household record; later, a link to the same permissioned case brief | A white-labelled partner tool, a claimed commercial partnership, or a replacement for the platform's own support service |
+
+This is an acquisition hypothesis, not research proof: in a health event, people are more likely to recall a
+health or insurance brand, hospital, TPA or adviser than an employer system. Knowvia therefore uses HRMS for
+setup and cover discovery, while insurance platforms can provide a more relevant health-insurance moment of
+entry. The household's work remains in Knowvia. The hypothesis needs activation and repeat-use testing.
 
 Delhivery is a supporting Maps rail, not a core insurance workflow. After a hospital insurance desk has been
 confirmed through an insurer, TPA or hospital source, Knowvia may use address validation, geocoding and routing
