@@ -255,7 +255,7 @@ The fourth rail would return a dated, case-specific response containing:
 It would confirm status. It would not guarantee approval.
 
 This need was sharpened by feedback on our earlier architecture. Shilpa Arora, COO of Insurance Samadhan,
-pointed out that a ₹10 lakh sum insured can still contain a ₹2 lakh immunotherapy cap, corporate-policy
+pointed out to us that a ₹10 lakh sum insured can still contain a ₹2 lakh immunotherapy cap, corporate-policy
 coverage may remain undisclosed until an employee reaches HR during hospitalisation, and three different
 entities process information: the hospital TPA desk, the TPA and the insurer. Her conclusion was that the
 process breaks at several points, but can be solved. [Public comment on the earlier
