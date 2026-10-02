@@ -10,8 +10,8 @@ const clientSource = await readFile(new URL('../src/ui/api/v1-client.js', import
 
 test('workspace exposes exactly the two canonical entry routes', () => {
   assert.deepEqual(ENTRY_ROUTES.map(route => route.title), [
-    'Plan an expense',
-    'Find and buy personal health cover',
+    'Plan a procedure',
+    'Emergency help',
   ]);
   assert.equal(ENTRY_ROUTES.length, 2);
 });
@@ -27,6 +27,8 @@ test('case workspace preserves the four answer layers and direct-human emergency
   for (const layer of ['Decision', 'Financial', 'Evidence', 'Research']) assert.match(appSource, new RegExp(`'${layer}'`));
   assert.match(appSource, /No AI, Gnani or IVR sits in front/i);
   assert.match(appSource, /tel:112/);
+  assert.match(appSource, /Break down the policy once/i);
+  assert.match(appSource, /policy_decomposition_\[a-j\]/);
   assert.doesNotMatch(appSource, /five-minute|5-minute/i);
   assert.doesNotMatch(appSource, /CoverSaath/i);
 });
@@ -37,21 +39,24 @@ test('shipped workspace uses only the authenticated persistent v1 API', () => {
   assert.doesNotMatch(clientSource, /localStorage|sessionStorage/);
 });
 
-test('new purchase and renewal remain distinct case conditions', async () => {
+test('policy reconstruction gates planned care while emergency skips analysis', async () => {
   const calls = [];
+  const analyses = [];
   const client = {
     setSessionToken() {},
-    createCase: async body => { calls.push(body); return { id:'case-1', revision:'r1' }; },
-    transitionCase: async (_id, body) => ({ id:'case-1', revision:body.toStatus }),
+    createCase: async body => { calls.push(body); return { id:`case-${calls.length}`, trigger_type:body.triggerType, revision:'r1' }; },
+    transitionCase: async (id, body) => ({ id, trigger_type:calls.find((_call, index) => `case-${index + 1}` === id).triggerType, revision:body.toStatus }),
     grantConsent: async () => ({ id:'consent-1' }),
-    startAnalysis: async () => ({ id:'run-1', status:'completed', tasks:[] }),
+    startAnalysis: async caseId => { analyses.push(caseId); return { id:`run-${analyses.length}`, status:'completed', tasks:[] }; },
     householdMatrix: async () => ({ members:[] }),
   };
   const controller = createWorkspaceController({ client });
   await controller.connect({ sessionToken:'x'.repeat(32), householdId:'h1', adultId:'a1', memberId:'m1' });
-  await controller.createAndAnalyze({ route:'personal_cover', condition:'new_purchase' });
-  await controller.createAndAnalyze({ route:'personal_cover', condition:'renewal' });
-  assert.deepEqual(calls.map(call => call.triggerType), ['user_requested_review', 'renewal']);
+  await controller.reconstructPolicy();
+  await controller.createAndAnalyze({ route:'planned_care' });
+  await controller.createAndAnalyze({ route:'emergency' });
+  assert.deepEqual(calls.map(call => call.triggerType), ['user_requested_review', 'planned_care', 'emergency']);
+  assert.deepEqual(analyses, ['case-1', 'case-2']);
 });
 
 test('responsive theme includes dark mode and reduced-motion handling', () => {

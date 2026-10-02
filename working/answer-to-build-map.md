@@ -53,7 +53,7 @@ including the Confirmation Rail needed to make institutional responses structure
 
 | Claim | Build component |
 |---|---|
-| Two entry routes, renewal not a third | `working.md` entry-route table; `planned-expense.md` |
+| Policy-first reconstruction, then planned-procedure or emergency-help routes | `working.md` policy-first route table; `planned-expense.md` |
 | Workers in parallel | Worker system diagram, `insurance.md` |
 | Six output states | Non-negotiable worker rule |
 | Unhappy flow | Distributed across B, F, G, H worker interpretations |

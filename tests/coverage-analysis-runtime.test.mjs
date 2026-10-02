@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   AGENT_CONTRACT_VERSION,
   COVERAGE_ANALYSIS_WORKFLOW,
+  POLICY_DECOMPOSITION,
   createCoverageAnalysisRuntime,
   createFixtureTaskRegistry,
   createPersistentCoverageAnalysisService,
+  decomposePolicySection,
   validateTaskOutputEnvelope,
 } from '../src/modules/coverage-analysis/index.js';
 import { ANALYSIS_DAG } from '../src/server/routes/v1-backend-routes.js';
@@ -77,6 +79,46 @@ test('persisted API DAG derives from canonical workflow definition', () => {
     COVERAGE_ANALYSIS_WORKFLOW.tasks.map(task => ({ key: task.key, taskKind: task.kind, dependsOn: task.dependsOn })),
   );
   assert.ok(ANALYSIS_DAG.every(task => task.agentName && task.inputSchema && task.outputSchema));
+});
+
+test('policy decomposition preserves the full coverage inventory and surfaces absent criteria as gaps', () => {
+  const coverage = {
+    facts: [
+      { id: 'room-rule', field: 'room_rent_limit', value: 'single private room', status: 'document_backed', source: { id: 'schedule', page: 3, version: 'v1' } },
+      { id: 'ped-rule', field: 'PED_waiting_period', value: '36 months', status: 'document_backed', source: { id: 'wording', page: 12, version: 'v1' } },
+      { id: 'network', field: 'dated_network_status', value: 'listed', status: 'institution_confirmed', source: { id: 'network-result', page: '2026-10-02', version: 'current' } },
+    ],
+  };
+
+  const financial = decomposePolicySection('financialRules', coverage);
+  const exclusions = decomposePolicySection('exclusions', coverage);
+  const access = decomposePolicySection('hospitalAccess', coverage);
+
+  assert.equal(financial.facts.find(fact => fact.field === 'room_rent_limit')?.value, 'single private room');
+  assert.equal(exclusions.facts.find(fact => fact.field === 'PED_waiting_period')?.value, '36 months');
+  assert.equal(access.facts.find(fact => fact.field === 'dated_network_status')?.value, 'listed');
+  assert.ok(financial.facts.some(fact => fact.field === 'restoration_rules' && fact.evidenceState === 'Unknown'));
+  assert.ok(exclusions.facts.some(fact => fact.field === 'disclosure_and_misrepresentation' && fact.evidenceState === 'Unknown'));
+  assert.ok(access.facts.some(fact => fact.field === 'estimate_and_deposit' && fact.evidenceState === 'Unknown'));
+  assert.ok(Object.entries(POLICY_DECOMPOSITION)
+    .filter(([key]) => key !== 'householdAction')
+    .every(([, definition]) => Array.isArray(definition.criteria) && definition.criteria.length > 0));
+});
+
+test('policy decomposition matches structured field names exactly and rejects withheld facts before analysis', () => {
+  const coverage = {
+    facts: [{ id: 'billing-note', field: 'capped_charge', value: 'not a PED rule', status: 'document_backed', source: { id: 'estimate', page: 1, version: 'v1' } }],
+  };
+  const exclusions = decomposePolicySection('exclusions', coverage);
+  assert.ok(exclusions.facts.some(fact => fact.field === 'ped_waiting_period' && fact.evidenceState === 'Unknown'));
+  assert.ok(!exclusions.facts.some(fact => fact.field === 'capped_charge'));
+
+  assert.throws(
+    () => decomposePolicySection('financialRules', {
+      facts: [{ id: 'restricted', field: 'copay', value: '20%', status: 'withheld', source: { id: 'protected-schedule', page: 2, version: 'v1' } }],
+    }),
+    /Permission-restricted facts must not enter coverage decomposition/,
+  );
 });
 
 test('persistent coverage worker scopes every claim to its requested run and workflow', async () => {

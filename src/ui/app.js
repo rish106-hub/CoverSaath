@@ -1,7 +1,7 @@
 import './styles.css';
 import { createV1Client } from './api/v1-client.js';
 import { createWorkspaceController } from './state/workspace-controller.js';
-import { createEvidenceStateKey, createRouteChooser } from './components/household-workspace.js';
+import { createEvidenceStateKey, createRouteChooser, evidenceTone } from './components/household-workspace.js';
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -105,20 +105,53 @@ function actionPanel() {
     const rupees = Number(data.get('estimate'));
     void controller.createAndAnalyze({
       route: activeRoute,
-      condition: data.get('condition'),
       estimateMinor: Number.isFinite(rupees) && rupees > 0 ? Math.round(rupees * 100) : null,
     });
   } },
-  el('h2', {}, 'Start from a real event'),
-  hint('The record is reconstructed before any purchase recommendation. This local path runs persisted fixture workers only.'),
+  el('h2', {}, 'Choose what is happening now'),
+  hint('Both routes use the same permissioned policy record. They do not reread or reinterpret the policy from scratch.'),
   routeMount,
-  activeRoute === 'personal_cover' ? el('div', { class:'field' },
-    el('label', { for:'condition' }, 'Current condition'),
-    el('select', { id:'condition', name:'condition' },
-      el('option', { value:'new_purchase' }, 'Looking for new personal cover'),
-      el('option', { value:'renewal' }, 'Renewal is due'))) : el('input', { type:'hidden', name:'condition', value:'planned_care' }),
-  field('Stated expense in rupees (optional)', 'estimate', 'number', { min:1, max:100000000, step:1 }),
-  el('button', { class:'button full', type:'submit', disabled:view.busy }, view.busy ? 'Working...' : 'Create and analyse'));
+  activeRoute === 'planned_care'
+    ? field('Hospital estimate in rupees (optional)', 'estimate', 'number', { min:1, max:100000000, step:1 })
+    : hint('Opening emergency help never waits for policy analysis. The stored brief is supporting context for a human operator.'),
+  el('button', { class:`button full ${activeRoute === 'emergency' ? 'emergency-button' : ''}`, type:'submit', disabled:view.busy },
+    view.busy ? 'Working...' : activeRoute === 'emergency' ? 'Open emergency help' : 'Plan this procedure'));
+}
+
+function policyBreakdownPanel() {
+  const tasks = view.policyJob?.tasks ?? [];
+  const sections = tasks
+    .filter(task => /^policy_decomposition_[a-j]$/.test(task.taskKind) && task.resultSummary?.section)
+    .sort((left, right) => left.resultSummary.section.localeCompare(right.resultSummary.section));
+  const ready = view.policyJob?.status === 'completed' && sections.length > 0;
+  return el('section', { class:'policy-foundation', 'aria-labelledby':'policy-foundation-title' },
+    el('div', { class:'policy-foundation-head' },
+      el('div', {}, el('p', { class:'section-label' }, 'Policy foundation'),
+        el('h2', { id:'policy-foundation-title' }, 'Break down the policy once. Use it whenever care happens.'),
+        hint('Every section keeps its evidence state. Missing wording remains Unknown; conflicts stay visible.')),
+      ready ? tag('Breakdown ready', 'proven') : el('button', {
+        class:'button', type:'button', disabled:view.busy, onClick:() => controller.reconstructPolicy(),
+      }, view.busy ? 'Working...' : 'Run synthetic breakdown')),
+    ready
+      ? el('div', { class:'breakdown-grid' }, sections.map(task => {
+        const facts = task.resultSummary.facts ?? [];
+        const supported = facts.filter(fact => !['Unknown', 'Conflicting'].includes(fact.evidenceState)).length;
+        return el(
+          'details',
+          { class:'breakdown-section' },
+          el('summary', {},
+            el('span', { class:'breakdown-letter' }, task.resultSummary.section),
+            el('span', {}, el('strong', {}, task.resultSummary.responsibility),
+              el('small', {}, `${supported} supported, ${facts.length - supported} unresolved`))),
+          el('div', { class:'breakdown-facts' }, facts.map(fact =>
+            el('div', { class:'breakdown-fact' },
+              el('span', {}, fact.field.replaceAll('_', ' ')),
+              tag(fact.evidenceState, evidenceTone(fact.evidenceState))))),
+        );
+      }))
+      : el('div', { class:'policy-empty' },
+        el('strong', {}, 'No policy breakdown yet'),
+        hint('This build can demonstrate the persisted A-J breakdown with synthetic evidence. Real PDF extraction remains disabled until protected upload, malware scanning and a verified OCR transport are connected.')));
 }
 
 const layers = [
@@ -129,7 +162,7 @@ const layers = [
 ];
 
 const routeCopy = Object.freeze({
-  admit_first_human_support: ['Get treatment first', 'Household operator', 'Now'],
+  admit_first_human_handoff: ['Get treatment first', 'Human support operator', 'Now'],
   collect_evidence_and_human_review: ['Collect the missing proof, then review with a qualified human', 'Household operator', 'Before any purchase or renewal decision'],
   review_existing_cover_before_purchase: ['Review reconstructed existing cover before considering a purchase', 'Qualified adviser and household', 'Before checkout'],
 });
@@ -138,6 +171,16 @@ function resultPanel() {
   if (!view.caseRecord) return el('section', { class:'empty' },
     el('h2', {}, 'No case yet'), hint('Choose one route. Knowvia will persist the case, consent and bounded worker run.'));
   const tasks = view.job?.tasks ?? [];
+  if (view.caseRecord.trigger_type === 'emergency') return el('section', { class:'case-content' },
+    el('section', { class:'case-top emergency-case' },
+      el('div', {}, el('p', { class:'section-label' }, 'Emergency help'),
+        el('h2', {}, 'Admit first. Optimise later.'),
+        hint('The emergency record is open. No AI or document-processing step was placed before the human route.')),
+      tag('Human route', 'dynamic')),
+    el('div', { class:'panel' },
+      el('h2', {}, 'Use a human channel now'),
+      hint('Call local emergency services for urgent care. For insurance coordination, use the verified hospital desk, TPA or insurer contact stored with the policy. Knowvia does not yet operate a staffed emergency line.'),
+      el('div', { class:'actions' }, el('a', { class:'button emergency-button', href:'tel:112' }, 'Call 112'))));
   const decision = tasks.find(task => task.taskKind === 'deterministic_classification')?.resultSummary;
   const evidenceReview = tasks.find(task => task.taskKind === 'evidence_review')?.resultSummary;
   const [nextAction, owner, deadline] = routeCopy[decision?.route] ?? ['Review the unresolved evidence', 'Household operator', 'Before acting'];
@@ -159,7 +202,7 @@ function resultPanel() {
         el('div', {}, el('dt', {}, 'Owner'), el('dd', {}, owner)),
         el('div', {}, el('dt', {}, 'Deadline'), el('dd', {}, deadline)),
         el('div', {}, el('dt', {}, 'Route'), el('dd', {}, decision?.route?.replaceAll('_', ' ') ?? 'Unknown'))) : null,
-      hint(released ? 'This deterministic route still needs human approval. It does not authorise a purchase, payment or claim decision.' : 'No result is shown as ready until the deterministic release gate completes.'),
+      hint(released ? 'This deterministic route still needs human approval. It does not authorise treatment, payment or a claim decision.' : 'No result is shown as ready until the deterministic release gate completes.'),
       el('button', { class:'button danger', disabled:!view.consent || view.busy, onClick:() => controller.revoke() }, 'Revoke analysis consent'))),
     section('financial', el('div', { class:'panel' }, el('h2', {}, 'Conditional cash view'),
       el('div', { class:'amount' }, money(view.caseRecord.stated_estimate_minor)),
@@ -185,10 +228,12 @@ function render() {
     el('div', { class:'prototype' }, 'LOCAL PERSISTENT PROTOTYPE. Synthetic fixture analysis only. No live providers, advice, purchase, payment or claim approval.'),
     el('main', { class:'shell' }, emergencyBanner(),
       el('section', { class:'intro' }, el('div', {}, el('p', { class:'section-label' }, 'Know what you have. Know what could go wrong. Know what to do next.'),
-        el('h1', {}, 'Your household cover, with the unknowns left visible.')),
-        el('p', {}, 'Authenticated records, explicit consent and bounded workers keep facts separate from assumptions.')),
+        el('h1', {}, 'Your policy, ready before care happens.')),
+        el('p', {}, 'Break down the policy once, then use the same source-backed record for planned care or an emergency.')),
       messages,
-      view.identity ? [matrixPanel(), el('div', { class:'layout' }, actionPanel(), resultPanel())] : setupPanel(),
+      view.identity ? [matrixPanel(), policyBreakdownPanel(), view.policyJob?.status === 'completed'
+        ? el('div', { class:'layout', id:'care-routes' }, actionPanel(), resultPanel())
+        : null] : setupPanel(),
       createEvidenceStateKey({ el, tag }),
       el('p', { class:'footer' }, 'Production still requires a real identity provider, staffed human support, licensed distribution, provider credentials, legal review, backup operations and verified integrations.')));
 }

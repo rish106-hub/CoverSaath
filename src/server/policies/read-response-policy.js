@@ -67,6 +67,18 @@ function redactedResult(task) {
         : [],
     };
   }
+  if (/^policy_decomposition_[a-j]$/.test(task.task_kind)) {
+    const facts = Array.isArray(output.facts) ? output.facts : [];
+    return {
+      section: typeof output.section === 'string' ? output.section : null,
+      responsibility: typeof output.responsibility === 'string' ? output.responsibility : null,
+      facts: facts.slice(0, 100).map(fact => ({
+        field: typeof fact?.field === 'string' ? fact.field : 'unclassified',
+        evidenceState: typeof fact?.evidenceState === 'string' ? fact.evidenceState : 'Unknown',
+        page: fact?.provenance?.page ?? null,
+      })),
+    };
+  }
   if (task.task_kind === 'deterministic_classification') {
     return {
       route: typeof output.route === 'string' ? output.route : null,

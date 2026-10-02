@@ -210,7 +210,7 @@ The build produces frontend assets only. It does not deploy the API or configure
 
 - Authenticated, tenant-scoped household, case, consent, workflow and audit persistence.
 - Per-field and per-viewer grants with explicit purpose, recipient, expiry and immediate revocation.
-- Household matrix with exactly two entry routes. Renewal is a condition inside them, not a third route.
+- Policy-first workspace with a visible A-J breakdown followed by exactly two care routes: planned procedure and emergency help.
 - Canonical coverage workflow v4 with 22 active tasks, A-K policy decomposition and one deterministic release gate.
 - Versioned agent input and output schemas, validated handoff envelopes, source references and six evidence states.
 - Parallel profile, group-cover and personal-cover specialists; evidence, privacy and safety reviewers.

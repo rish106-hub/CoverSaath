@@ -60,6 +60,19 @@ header { min-height:72px; padding:13px max(24px,calc((100vw - 1380px)/2)); backg
 .matrix-button small { margin-top:2px; color:var(--muted); }
 .member-detail { display:flex; justify-content:space-between; align-items:center; gap:28px; padding:22px 26px; background:var(--accent-soft); }
 .member-detail p { max-width:80ch; margin-top:4px; color:var(--muted); font-size:.9rem; }
+.policy-foundation { margin-top:22px; padding:24px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-card); box-shadow:var(--shadow); }
+.policy-foundation-head { display:flex; justify-content:space-between; align-items:start; gap:28px; }
+.policy-foundation-head .hint { max-width:74ch; margin-top:7px; }
+.policy-empty { margin-top:20px; padding:20px; background:var(--surface-subtle); border-radius:12px; }
+.policy-empty .hint { margin-top:5px; max-width:84ch; }
+.breakdown-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:20px; }
+.breakdown-section { border:1px solid var(--line); border-radius:12px; background:var(--surface-subtle); }
+.breakdown-section summary { display:grid; grid-template-columns:34px 1fr; gap:10px; align-items:start; padding:14px; list-style:none; }
+.breakdown-section summary::-webkit-details-marker { display:none; }
+.breakdown-section summary small { display:block; margin-top:3px; color:var(--muted); font-size:.75rem; font-weight:500; }
+.breakdown-letter { display:grid; place-items:center; width:30px; height:30px; border-radius:8px; color:var(--accent-strong); background:var(--accent-soft); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-weight:750; }
+.breakdown-facts { padding:0 14px 12px 58px; }
+.breakdown-fact { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:7px 0; color:var(--muted); font-size:.8rem; }
 .tag { display:inline-flex; align-items:center; width:fit-content; border-radius:6px; padding:4px 7px; background:var(--surface-strong); color:var(--muted); font-family:ui-monospace,"SFMono-Regular",Consolas,monospace; font-size:.7rem; font-weight:650; white-space:nowrap; }
 .tag.teal,.tag.proven { background:#d9eee6; color:#0a5d4d; }
 .tag.calculated { background:#dfe9f2; color:#31566e; }
@@ -112,6 +125,7 @@ header { min-height:72px; padding:13px max(24px,calc((100vw - 1380px)/2)); backg
 .case-top .section-label { color:#a9d4ca; }
 .case-top .hint { margin-top:5px; color:#c7ddd7; }
 .case-top .tag { color:#dff4ee; background:#28554b; }
+.case-top.emergency-case { background:#642a22; }
 .actions { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
 .layer-tabs { display:grid; grid-template-columns:repeat(4,1fr); padding:5px; background:var(--surface-strong); border-radius:13px; }
 .layer-tab { display:grid; gap:2px; padding:10px; border:0; border-radius:9px; color:var(--muted); background:transparent; text-align:left; }
@@ -168,6 +182,6 @@ pre { max-width:100%; overflow:auto; font-size:.75rem; }
   .shell{padding-inline:20px}.layout{grid-template-columns:290px minmax(0,1fr)}.matrix-row{grid-template-columns:1fr 1.2fr 1.5fr .75fr 18px;padding-inline:20px}.policy-grid,.columns{grid-template-columns:1fr}.state-key{grid-template-columns:1fr}
 }
 @media (max-width:780px) {
-  header{padding:13px 18px}.header-note{display:none}.prototype{padding:9px 18px}.shell{padding:18px 14px 46px}.emergency{grid-template-columns:1fr;gap:14px}.emergency-actions{align-items:start;flex-direction:column}.intro{min-height:auto;grid-template-columns:1fr;gap:18px;padding:48px 4px 30px}.intro>p{padding:0}.matrix-heading,.route-heading{align-items:start;flex-direction:column;padding:20px}.matrix-table{display:grid;gap:10px;padding:12px}.matrix-head{display:none}.matrix-row{display:grid;grid-template-columns:1fr auto;gap:7px 12px;min-height:0;padding:16px;border:1px solid var(--line);border-radius:12px}.matrix-row>span:nth-child(2),.matrix-row>span:nth-child(3){grid-column:1/-1}.matrix-row>span:nth-child(4){grid-column:1}.matrix-row>span:nth-child(5){grid-column:2;grid-row:1}.member-detail{align-items:start;flex-direction:column;padding:20px}.route-chooser{grid-template-columns:1fr;padding:0 18px}.layout{grid-template-columns:1fr}.intake{position:static}.empty{min-height:320px;padding:26px}.case-top{align-items:start;flex-direction:column}.layer-tabs{grid-template-columns:1fr 1fr}.data-grid{grid-template-columns:1fr 1fr}.state-list{grid-template-columns:1fr 1fr}.purchase-controls{flex-direction:column}
+  header{padding:13px 18px}.header-note{display:none}.prototype{padding:9px 18px}.shell{padding:18px 14px 46px}.emergency{grid-template-columns:1fr;gap:14px}.emergency-actions{align-items:start;flex-direction:column}.intro{min-height:auto;grid-template-columns:1fr;gap:18px;padding:48px 4px 30px}.intro>p{padding:0}.matrix-heading,.route-heading,.policy-foundation-head{align-items:start;flex-direction:column;padding:20px}.policy-foundation{padding:0 0 18px}.policy-foundation-head{padding-bottom:0}.policy-foundation-head .button{width:100%}.policy-empty{margin:18px}.breakdown-grid{grid-template-columns:1fr;margin:18px}.matrix-table{display:grid;gap:10px;padding:12px}.matrix-head{display:none}.matrix-row{display:grid;grid-template-columns:1fr auto;gap:7px 12px;min-height:0;padding:16px;border:1px solid var(--line);border-radius:12px}.matrix-row>span:nth-child(2),.matrix-row>span:nth-child(3){grid-column:1/-1}.matrix-row>span:nth-child(4){grid-column:1}.matrix-row>span:nth-child(5){grid-column:2;grid-row:1}.member-detail{align-items:start;flex-direction:column;padding:20px}.route-chooser{grid-template-columns:1fr;padding:0 18px}.layout{grid-template-columns:1fr}.intake{position:static}.empty{min-height:320px;padding:26px}.case-top{align-items:start;flex-direction:column}.layer-tabs{grid-template-columns:1fr 1fr}.data-grid{grid-template-columns:1fr 1fr}.state-list{grid-template-columns:1fr 1fr}.purchase-controls{flex-direction:column}
 }
 @media (max-width:480px) { .brand small{display:none}.layer-tabs,.state-list,.data-grid{grid-template-columns:1fr}.layer-tab span{display:none}.panel{padding:18px}.actions .button{width:100%} }

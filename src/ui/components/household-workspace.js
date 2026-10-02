@@ -1,13 +1,13 @@
 export const ENTRY_ROUTES = Object.freeze([
   Object.freeze({
     id: 'planned_care',
-    title: 'Plan an expense',
-    copy: 'Check existing cover, likely cash exposure, open questions and the next action for planned treatment or renewal.',
+    title: 'Plan a procedure',
+    copy: 'Use the policy breakdown to prepare a planned admission, estimate the conditional cash exposure and identify the next action.',
   }),
   Object.freeze({
-    id: 'personal_cover',
-    title: 'Find and buy personal health cover',
-    copy: 'Reconstruct the household first, then compare renewal or purchase choices with a licensed human gate.',
+    id: 'emergency',
+    title: 'Emergency help',
+    copy: 'Open the permissioned policy brief and contact a human directly. Insurance work must never delay care.',
   }),
 ]);
 
