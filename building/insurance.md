@@ -59,6 +59,30 @@ HEALTH POLICY
 |-- K. Household recommendation and action plan
 ```
 
+### First-principles coverage test
+
+For every possible hospital bill, Knowvia answers the same chain of questions in order. A benefit is never
+called available merely because its name appears in a brochure:
+
+1. **Whose policy is it, and is this person enrolled on the event date?**
+2. **Is the policy alive, continuous and in the right version for this event?**
+3. **Does the treatment setting and condition fit an affirmative benefit definition?** In-patient, day care,
+   OPD, home care, maternity and a fixed-benefit rider are different benefit paths.
+4. **Does a waiting period, exclusion, disclosure issue or condition-specific rule change that answer?**
+5. **What is the applicable limit after the cover basis, deductible, co-pay, room rule, inner cap, prior use,
+   restoration and bonus rules?**
+6. **Can the chosen hospital and branch use the required cashless process now, and what institutional step
+   remains?**
+7. **Which estimate lines are not established as payable, which documents and deadlines matter, and who can
+   confirm each dynamic point?**
+
+The sections below are a coverage inventory, not a promise that every policy contains every benefit. Each
+criterion must be shown as Proven, Calculated, Reported, Dynamic, Unknown or Conflicting. An absent clause,
+unclear definition or unavailable schedule is an explicit gap, never a silent positive assumption.
+
+The full parameter checklist, with the bill-to-payout waterfall and the criteria not yet merged into A–K, is in
+[policy-parameters.md](policy-parameters.md).
+
 ## A. Document identity and authority
 
 ### Fields
@@ -176,6 +200,7 @@ be able to speak [T8 00:02:16]. It is not inferred from a relationship, a paymen
 4. Sub-limits
    - Room rent
    - ICU
+   - Proportionate deduction or linked-capping rule when the room chosen exceeds the eligible room
    - Maternity
    - Cataract
    - Ambulance
@@ -183,6 +208,7 @@ be able to speak [T8 00:02:16]. It is not inferred from a relationship, a paymen
    - Home care
    - Consumables, implants or treatment-specific categories
    - Modern therapy, including any drug, procedure, indication, cycle or therapy-specific cap named in the policy
+   - Organ-donor, transplant, dialysis, cancer, cardiac, rehabilitation, mental-health or outpatient inner caps
 5. Restoration or recharge benefit
    - Trigger
    - Amount restored
@@ -190,7 +216,10 @@ be able to speak [T8 00:02:16]. It is not inferred from a relationship, a paymen
    - Frequency and timing
 6. No-claim bonus or cumulative bonus
    - Accrual, cap and reduction condition
-7. Day-care and outpatient structure
+7. Day-care, outpatient and diagnostics structure
+8. Non-medical and administrative charge treatment
+   - Consumables, devices, attendant, registration, service, documentation and similar charges only where the
+     policy or a relevant add-on states their treatment
 
 ### Worker interpretation
 
@@ -206,7 +235,7 @@ The financial-rules worker does not add every policy's sum insured into a single
    - Surgery, medicines, diagnostics and professional fees
 2. Day-care procedures
 3. Pre-hospitalisation and post-hospitalisation expenses
-4. Emergency ambulance and air ambulance
+4. Emergency ambulance, air ambulance, evacuation or travel support, only where expressly included
 5. Maternity
    - Normal delivery and C-section
    - Waiting period
@@ -218,7 +247,7 @@ The financial-rules worker does not add every policy's sum insured into a single
    - Disease-specific wording
    - Waiting period
    - Disclosure linkage
-7. Dialysis, organ-related treatment, cancer, cardiac care and other high-cost categories
+7. Dialysis, organ-donor and transplant-related treatment, cancer, cardiac care and other high-cost categories
    - Modern therapy, immunotherapy, targeted therapy and treatment-specific inner caps where the policy names them
 8. Mental health, rehabilitation, home care and domiciliary treatment
 9. AYUSH, dental, vision and outpatient benefits
@@ -246,6 +275,8 @@ The benefit worker maps the planned treatment or claim event against the exact b
 8. Non-medical consumables and administrative charges
 9. Disclosure obligations at purchase, renewal and claim
 10. Misrepresentation, non-disclosure and fraud clauses
+11. Any continuity, moratorium or prior-cover credit stated in the current wording. The worker records the exact
+    clause and does not infer a statutory or product-wide rule from another policy.
 
 ### Worker interpretation
 
@@ -264,6 +295,9 @@ The exclusions worker highlights terms that could change the household's exposur
 7. Room-category choice and effect
 8. Deposit, payment-card and reimbursement scenario
 9. Treatment estimate and revision history
+10. Network status date, network source and the specific hospital branch. A city-level listing is not branch proof.
+11. Bed, doctor, package and clinical availability as separate hospital facts. They are not insurance benefits and
+    Knowvia does not infer them from network status.
 
 ### Worker interpretation
 
@@ -282,6 +316,7 @@ The hospital worker must use a dated official network source, not a search-resul
 7. Query, denial, partial-settlement and grievance process
 8. Ombudsman or escalation route, where applicable
 9. Claim history and correspondence
+10. Separate status for hospital-desk acknowledgement, TPA workflow status and final insurer decision
 
 ### Worker interpretation
 
@@ -325,6 +360,7 @@ operator handoff and must never be interposed before it.
 6. Portability or migration decision
 7. Employer-cover loss and continuity replacement
 8. Required action owner and deadline
+9. Effect on accumulated bonus, deductible, restoration, waiting-period credit and declared conditions
 
 ### Worker interpretation
 

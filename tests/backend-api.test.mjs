@@ -193,6 +193,11 @@ test('versioned backend persists cases and queued analysis across restart', asyn
   assert.equal(analysis.data.tasks.length, 22);
   assert.equal(analysis.data.dispatchStatus, 'fixture_completed');
   assert.equal(analysis.data.externalProviderCalls, false);
+  const financialBreakdown = analysis.data.tasks.find(item => item.taskKind === 'policy_decomposition_d');
+  assert.equal(financialBreakdown.resultSummary.section, 'D');
+  assert.match(financialBreakdown.resultSummary.responsibility, /financial limits/i);
+  assert.ok(financialBreakdown.resultSummary.facts.some(fact => fact.field === 'room_rent_limit'));
+  assert.ok(financialBreakdown.resultSummary.facts.some(fact => fact.evidenceState === 'Unknown'));
 
   const repeated = await app.call(`/api/v1/cases/${emergency.data.id}/analysis-runs`, {
     method: 'POST',

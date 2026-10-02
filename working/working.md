@@ -78,14 +78,25 @@ The first response must be a decision, not a wall of text.
 
 Ram should be able to ask, "Why do you recommend this?" and inspect the reasoning. He should not be forced to read it before getting the decision.
 
-## The two entry routes and Pine Labs boundary
+## Policy-first foundation and the two care routes
 
-| Start route | User intent | Result |
+The household first adds the smallest authoritative policy pack and Knowvia decomposes it into the A-K
+coverage record. That record is reused rather than reinterpreted for every conversation. A missing clause,
+schedule or enrolment record remains an explicit evidence gap.
+
+After that foundation exists, the two primary routes are:
+
+| Care route | User intent | Result |
 |---|---|---|
-| **Plan an expense** | "I already have insurance. Help me plan this pregnancy, treatment, claim issue or renewal." | Event-specific cover map, cash scenario, next action and, if needed, a renewal decision |
-| **Find and buy personal health cover** | "I need personal cover because existing cover ends, is inadequate, or does not exist." | Current-cover reconstruction, comparison, one ranked recommendation and an optional purchase route |
+| **Plan a procedure** | "I have a planned admission or treatment. Help me use the policy record." | Event-specific cover map, conditional cash scenario, missing confirmations and the next action |
+| **Emergency help** | "Care is happening now. Show the permissioned brief and connect me to a human." | Admit-first instruction, direct human route and a read-only emergency brief. No AI or voice gate sits before the call |
 
-Pine Labs is used only after the user approves a renewal or a selected personal policy. It is the payment rail. It does not decide what to buy, make an insurance recommendation, process a claim, reserve an emergency hospital deposit or replace insurer approval.
+`Ask about this policy` may be added as a convenience over the same source-backed record. It is not a third
+case route, a separate source of truth or permission to invent an answer.
+
+Renewal, purchase and payment remain later actions when the reconstructed record shows that they are relevant.
+Pine Labs is used only after the user approves a renewal or selected personal policy. It does not decide what
+to buy, process a claim, reserve an emergency hospital deposit or replace insurer approval.
 
 ## Product surfaces, acquisition and Delhivery boundaries
 
@@ -208,8 +219,8 @@ Create household -> record member and permission -> create one of two cases
 -> show Decision / Financial / Evidence / Research -> take an approved next action
 ```
 
-The supported case triggers are planned expense, renewal or continuity, and emergency. Renewal remains a
-time-sensitive case inside the two entry routes, not a third product mode. An emergency must surface the
+The supported case triggers are policy reconstruction, planned care and emergency. Renewal and continuity are
+time-sensitive conditions found in the policy record, not primary routes. An emergency must surface the
 admit-first human route before any analysis or chat action.
 
 ### Repository ownership map

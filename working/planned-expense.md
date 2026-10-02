@@ -16,16 +16,19 @@ Knowvia is a **policy-deciphering and household decision system**. It reads the 
 
 It does not predict claim approval. It does not make a medical decision. It does not hide uncertainty. But it should give a clear conclusion when the underlying documents answer the question.
 
-## The two ways Ram starts
+## The policy foundation and two care routes
 
-The product should not open as a generic insurance dashboard. Ram begins with one of two jobs:
+The product should not open as a generic insurance dashboard. Ram first adds the authoritative policy pack.
+Knowvia decomposes it once and keeps the resulting source-backed record ready for later use. Ram then enters
+through one of two care routes:
 
 | Entry route | When Ram chooses it | What Knowvia does |
 |---|---|---|
-| **Plan an expense** | He already has one or more policies and has a pregnancy, planned procedure, parent-care concern, claim issue or renewal approaching | Maps existing policies to the person and event, calculates the cash scenarios, prepares the decision and routes a renewal payment only after Ram approves it |
-| **Find and buy personal health cover** | Ram is losing dependent eligibility, lacks personal continuity cover, wants a personal policy beyond employer cover, or needs to replace a policy | Reconstructs current cover first, compares suitable new options, recommends one route, and lets Ram purchase only after he approves declarations and payment |
+| **Plan a procedure** | A pregnancy, planned operation or other scheduled treatment is approaching | Applies the existing policy record to the person, hospital and estimate, then prepares conditional cash scenarios and next actions |
+| **Emergency help** | Admission or urgent treatment is happening now | Shows the permissioned brief and opens the direct human route immediately. It never places policy analysis, AI or voice in front of care |
 
-**Renewal is not a third generic mode.** It is a time-sensitive case inside `Plan an expense` when Ram already has a policy, or inside `Find and buy personal health cover` when he must replace expiring or ending protection.
+Renewal, continuity and purchase needs can be discovered from the policy record and handled later. They are not
+additional primary care routes. `Ask about this policy` may be an optional interface over the same record.
 
 Pine Labs appears only at the final payment step for an approved renewal or approved new-policy purchase. It is not the discovery engine, policy reader, underwriting engine or emergency-payment system.
 
@@ -60,7 +63,7 @@ Each row opens a short verdict: **covered facts**, **cost exposure**, **conditio
 
 ### 1. Ram starts an event
 
-Ram selects `Plan an expense` and enters:
+Ram selects `Plan a procedure` and enters:
 
 - Person: wife
 - Event: planned delivery
