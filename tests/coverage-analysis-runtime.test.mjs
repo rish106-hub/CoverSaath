@@ -1,10 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  AGENT_CONTRACT_VERSION,
   COVERAGE_ANALYSIS_WORKFLOW,
   createCoverageAnalysisRuntime,
   createFixtureTaskRegistry,
+  createPersistentCoverageAnalysisService,
+  validateTaskOutputEnvelope,
 } from '../src/modules/coverage-analysis/index.js';
+import { ANALYSIS_DAG } from '../src/server/routes/v1-backend-routes.js';
 
 const clone = value => structuredClone(value);
 
@@ -53,12 +57,63 @@ async function setup(options = {}) {
   return { port, runtime, run };
 }
 
-test('canonical workflow names ten executable tasks with explicit dependencies', () => {
-  assert.equal(COVERAGE_ANALYSIS_WORKFLOW.tasks.length, 10);
+test('canonical workflow names every executable task with explicit versioned contracts and dependencies', () => {
+  assert.equal(COVERAGE_ANALYSIS_WORKFLOW.tasks.length, 22);
+  assert.equal(COVERAGE_ANALYSIS_WORKFLOW.version, '4');
   assert.deepEqual(COVERAGE_ANALYSIS_WORKFLOW.tasks.find(task => task.key === 'coverage').dependsOn, ['profile', 'group', 'personal']);
-  assert.deepEqual(COVERAGE_ANALYSIS_WORKFLOW.tasks.find(task => task.key === 'primary').dependsOn, ['decision', 'evidence', 'privacy', 'safety']);
+  assert.deepEqual(COVERAGE_ANALYSIS_WORKFLOW.tasks.find(task => task.key === 'primary').dependsOn, ['decision', 'householdAction', 'evidence', 'privacy', 'safety', 'questions']);
+  assert.ok(COVERAGE_ANALYSIS_WORKFLOW.tasks.every(task => task.inputSchema.endsWith('/input/v1') && task.outputSchema.endsWith('/output/v1')));
   const registry = createFixtureTaskRegistry();
   assert.ok(COVERAGE_ANALYSIS_WORKFLOW.tasks.every(task => typeof registry[task.key] === 'function'));
+  assert.deepEqual(
+    Object.fromEntries(COVERAGE_ANALYSIS_WORKFLOW.tasks.map(task => [task.key, task.owner])),
+    Object.fromEntries(COVERAGE_ANALYSIS_WORKFLOW.tasks.map(task => [task.key, ['profile', 'group', 'personal', 'questions', 'primary'].includes(task.key) ? 'model_assist' : 'deterministic'])),
+  );
+});
+
+test('persisted API DAG derives from canonical workflow definition', () => {
+  assert.deepEqual(
+    ANALYSIS_DAG.map(task => ({ key: task.key, taskKind: task.taskKind, dependsOn: task.dependsOn })),
+    COVERAGE_ANALYSIS_WORKFLOW.tasks.map(task => ({ key: task.key, taskKind: task.kind, dependsOn: task.dependsOn })),
+  );
+  assert.ok(ANALYSIS_DAG.every(task => task.agentName && task.inputSchema && task.outputSchema));
+});
+
+test('persistent coverage worker scopes every claim to its requested run and workflow', async () => {
+  const claims = [];
+  const job = {
+    id: 'run-requested',
+    status: 'queued',
+    workflow_name: COVERAGE_ANALYSIS_WORKFLOW.name,
+    consent_grant_id: 'consent-1',
+  };
+  const port = {
+    getCase: async () => null,
+    requireCoverageConsent: async () => null,
+    findIdempotency: async () => null,
+    recordIdempotency: async () => null,
+    createRunWithTasks: async () => null,
+    getCoverageSourcePages: async () => [],
+    getJob: async runId => runId === job.id ? job : null,
+    getTask: async () => null,
+    claimNext: async claim => { claims.push(claim); return null; },
+    dependencyOutputs: async () => ({}),
+    completeTask: async () => null,
+    failTask: async () => null,
+    recoverExpiredLeases: async () => null,
+    isConsentActive: async () => true,
+    stopForRevocation: async () => null,
+    persistTaskArtifact: async () => null,
+  };
+  const service = createPersistentCoverageAnalysisService({ port, workerId: 'coverage-worker' });
+
+  await service.runUntilSettled(job.id);
+
+  assert.deepEqual(claims, [{
+    workerId: 'coverage-worker',
+    runId: job.id,
+    workflowName: COVERAGE_ANALYSIS_WORKFLOW.name,
+  }]);
 });
 
 test('multi-parent tasks wait and receive upstream outputs', async () => {
@@ -73,7 +128,7 @@ test('multi-parent tasks wait and receive upstream outputs', async () => {
   const coverage = events.find(event => event.key === 'coverage');
   const primary = events.find(event => event.key === 'primary');
   assert.deepEqual(coverage.upstream.sort(), ['group', 'personal', 'profile']);
-  assert.deepEqual(primary.upstream.sort(), ['decision', 'evidence', 'privacy', 'safety']);
+  assert.deepEqual(primary.upstream.sort(), ['decision', 'evidence', 'householdAction', 'privacy', 'questions', 'safety']);
   assert.ok(events.findIndex(event => event.key === 'coverage') > events.findIndex(event => event.key === 'personal'));
   assert.ok(events.findIndex(event => event.key === 'primary') > events.findIndex(event => event.key === 'safety'));
 });
@@ -84,8 +139,8 @@ test('deterministic evidence review blocks release for an unauthorised source', 
   await runtime.createRun({ id: 'blocked-run', caseId: 'case-1', input: input({ authorizedSourceIds: ['profile-source', 'personal-source'] }) });
   const run = await runtime.runUntilSettled('blocked-run');
   assert.equal(run.status, 'blocked');
-  assert.equal(run.tasks.evidence.output.status, 'blocked');
-  assert.equal(run.tasks.release.output.status, 'blocked');
+  assert.equal(run.tasks.evidence.output.payload.status, 'blocked');
+  assert.equal(run.tasks.release.output.payload.status, 'blocked');
   assert.equal(run.result.externalActionsAuthorized, false);
 });
 
@@ -111,8 +166,8 @@ test('a new runtime reconstructs and completes a partially persisted run', async
   const restartedRuntime = createCoverageAnalysisRuntime({ port: restartedPort });
   const complete = await restartedRuntime.runUntilSettled('run-1');
   assert.equal(complete.status, 'completed');
-  assert.equal(complete.tasks.release.output.status, 'released');
-  assert.ok(complete.tasks.coverage.output.facts.length > 0);
+  assert.equal(complete.tasks.release.output.payload.status, 'released');
+  assert.ok(complete.tasks.coverage.output.payload.facts.length > 0);
 });
 
 test('a claimed fixture task is recovered once after process interruption', async () => {
@@ -128,4 +183,34 @@ test('a claimed fixture task is recovered once after process interruption', asyn
   const settled = await runtime.runUntilSettled('run-1');
   assert.equal(settled.status, 'completed');
   assert.equal(settled.tasks.profile.attempts, 2);
+});
+
+test('every canonical agent emits a validated handoff envelope with provenance and one evidence state', async () => {
+  const { runtime } = await setup();
+  const run = await runtime.runUntilSettled('run-1');
+  assert.equal(run.status, 'completed');
+  for (const definition of COVERAGE_ANALYSIS_WORKFLOW.tasks) {
+    const envelope = run.tasks[definition.key].output;
+    assert.equal(envelope.contractVersion, AGENT_CONTRACT_VERSION);
+    assert.equal(envelope.schemas.input, definition.inputSchema);
+    assert.equal(envelope.schemas.output, definition.outputSchema);
+    assert.equal(envelope.provenance.runId, run.id);
+    assert.equal(envelope.provenance.caseId, run.caseId);
+    assert.ok(Array.isArray(envelope.provenance.sourceRefs));
+    assert.doesNotThrow(() => validateTaskOutputEnvelope(definition.key, envelope));
+  }
+  assert.ok(run.tasks.questions.output.payload.questions.length > 0);
+  assert.ok(run.tasks.primary.output.payload.questions.length > 0);
+  assert.equal(run.tasks.release.output.payload.externalActionsAuthorized, false);
+});
+
+test('invalid agent output fails closed before any downstream task can consume it', async () => {
+  const registry = { ...createFixtureTaskRegistry(), group: () => ({ unstructured: true }) };
+  const { runtime } = await setup({ registry });
+  const run = await runtime.runUntilSettled('run-1');
+  assert.equal(run.status, 'blocked');
+  assert.equal(run.tasks.group.status, 'blocked');
+  assert.match(run.tasks.group.error, /Group output must be an array/);
+  assert.equal(run.tasks.coverage.status, 'pending');
+  assert.equal(run.result.blockers[0].code, 'TASK_FAILED');
 });

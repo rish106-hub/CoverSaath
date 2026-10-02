@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  AI_CONTRACT_VERSION,
   PROMPT_VERSION,
   buildPromptContract,
   createAiEnhancedTaskRegistry,
@@ -34,7 +35,7 @@ const extraction = (overrides = {}) => ({
 
 const fixtureResult = (output, task = 'profile_extraction') => ({
   output,
-  metadata: { mode: 'fixture', provider: 'fixture', model: `fixture-${task}`, modelVersion: '1', promptVersion: PROMPT_VERSION, costUsd: 0 },
+  metadata: { contractVersion: AI_CONTRACT_VERSION, mode: 'fixture', provider: 'fixture', model: `fixture-${task}`, modelVersion: '1', promptVersion: PROMPT_VERSION, inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0, latencyMs: 0, costUsd: 0 },
 });
 
 test('task-specific schemas reject extra fields, unrequested fields and unsupported certainty', () => {
@@ -91,7 +92,7 @@ test('failed live calls retain their reservation and cost overruns stop further 
   const overrunBudget = createMemoryBudget(0.02);
   const overrunGateway = createModelGateway({ mode: 'live', budget: overrunBudget, liveRunner: async () => ({
     ...fixtureResult(extraction()),
-    metadata: { ...fixtureResult(extraction()).metadata, mode: 'live', costUsd: 0.011 },
+    metadata: { ...fixtureResult(extraction()).metadata, mode: 'live', calls: 1, costUsd: 0.011 },
   }) });
   await assert.rejects(overrunGateway.execute({ task: 'profile_extraction', input: input(), reservationUsd: 0.01 }), { code: 'reservation_exceeded' });
   assert.equal(overrunBudget.snapshot().spentUsd, 0.011);
@@ -101,6 +102,7 @@ test('deterministic runtime stages cannot be replaced by model executors', () =>
   const baseRegistry = { coverage() {}, decision() {}, release() {}, profile() {} };
   assert.throws(() => createAiEnhancedTaskRegistry({ baseRegistry, aiExecutors: { decision() {} }, enabledTaskKeys: ['decision'] }), { code: 'deterministic_task_protected' });
   const registry = createAiEnhancedTaskRegistry({ baseRegistry, aiExecutors: { profile() { return 'ai'; } }, enabledTaskKeys: ['profile'] });
+  assert.equal(registry.executionMode, 'live');
   assert.equal(registry.profile(), 'ai');
   assert.equal(registry.decision, baseRegistry.decision);
 });
@@ -125,4 +127,32 @@ test('AI SDK v7 runner records model, prompt, token and cost metadata without a 
   assert.deepEqual(settings.tools, {});
   assert.equal(result.metadata.costUsd, 0.00006);
   assert.equal(result.metadata.promptVersion, PROMPT_VERSION);
+  assert.equal(result.metadata.contractVersion, AI_CONTRACT_VERSION);
+  assert.deepEqual({ input: result.metadata.inputTokens, output: result.metadata.outputTokens, total: result.metadata.totalTokens, calls: result.metadata.calls }, { input: 100, output: 50, total: 150, calls: 1 });
+});
+
+test('live gateway bounds concurrent provider calls and reports strict versioned metrics', async () => {
+  let active = 0;
+  let peak = 0;
+  let unblock;
+  const blocked = new Promise(resolve => { unblock = resolve; });
+  const gateway = createModelGateway({
+    mode: 'live',
+    budget: createMemoryBudget(0.1),
+    limits: { maxConcurrentCalls: 1 },
+    liveRunner: async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await blocked;
+      active -= 1;
+      return { ...fixtureResult(extraction()), metadata: { ...fixtureResult(extraction()).metadata, mode: 'live', calls: 1 } };
+    },
+  });
+  const first = gateway.execute({ task: 'profile_extraction', input: input(), reservationUsd: 0.01 });
+  const second = gateway.execute({ task: 'profile_extraction', input: input(), reservationUsd: 0.01 });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(peak, 1);
+  unblock();
+  await Promise.all([first, second]);
+  assert.equal(peak, 1);
 });

@@ -75,9 +75,9 @@ export function buildCoverageGraph({ profilePacket, groupPolicies = [], personal
   const operator = continuity.operator?.status === 'verified' && continuity.operator?.source
     ? { status: 'verified', source: clone(continuity.operator.source) }
     : { status: 'unverified' };
-  const readinessDrill = continuity.readinessDrill?.status === 'passed' && continuity.readinessDrill?.source
-    ? { status: 'passed', source: clone(continuity.readinessDrill.source) }
-    : { status: 'not_run_or_unverified' };
+  const backup = continuity.backup?.status === 'authorised' && continuity.backup?.source
+    ? { status: 'authorised', source: clone(continuity.backup.source) }
+    : { status: 'unverified' };
 
   return {
     kind: 'source_linked_household_coverage_graph',
@@ -89,7 +89,7 @@ export function buildCoverageGraph({ profilePacket, groupPolicies = [], personal
     facts,
     unknowns,
     operator,
-    readinessDrill,
+    backup,
     institutionalStatus: confirmedProcedure ? 'confirmed_for_case' : 'unresolved',
     analyses: { profile, group, personal },
     boundaries: [

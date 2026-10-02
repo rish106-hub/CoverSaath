@@ -191,3 +191,141 @@ connects. Do not make the family wait for an analysis before admission.
 ### Claim dispute or pre-authorisation delay
 
 Show the stated reason, the policy clause, the missing evidence, current deadline and the permitted escalation route. Do not label a delayed pre-authorisation as a final claim rejection.
+
+## EOD implementation plan and release gate
+
+This plan turns the product specification into a demonstrable local release. It does not turn a
+synthetic prototype, a configured key or an unverified partner credential into a claim of live insurer,
+TPA, hospital, voice, payment or emergency-service operation.
+
+### Delivery target
+
+By the end of this build, Knowvia must provide one coherent, synthetic, consent-scoped household journey:
+
+```text
+Create household -> record member and permission -> create one of two cases
+-> add a source-backed synthetic pack -> run bounded analysis -> review and release
+-> show Decision / Financial / Evidence / Research -> take an approved next action
+```
+
+The supported case triggers are planned expense, renewal or continuity, and emergency. Renewal remains a
+time-sensitive case inside the two entry routes, not a third product mode. An emergency must surface the
+admit-first human route before any analysis or chat action.
+
+### Repository ownership map
+
+| Area | Owns | Must not own |
+|---|---|---|
+| `src/ui/` | Accessible household matrix, case intake, four answer layers, permission-aware rendering and explicit prototype status | Policy, payment or institutional decisions |
+| `src/server/` and `src/shared/http/` | HTTP composition, request validation, local security and versioned route dispatch | Business rules or provider-specific logic |
+| `src/backend/` | SQLite migrations, repositories, consent, case lifecycle, task persistence and immutable audit events | UI state or provider clients |
+| `src/agents/` and `src/modules/` | Typed source-pack analysis, coverage graph, worker contracts and deterministic classification | External actions, money authority or hidden inference |
+| `src/orchestration/` and `src/models/` | Bounded DAG execution, model packet construction, reservations, retry and release gates | A fallback that silently turns live mode into fixtures |
+| `src/integrations/` | Narrow fail-closed adapters for document, voice, payment, email and future confirmation rails | Policy interpretation or unauthorised side effects |
+| `tests/` and `tests/evals/` | Module-level contracts, route journeys, migration safety and adversarial safety evidence | Assertions that synthetic runs prove production effectiveness |
+
+### Data and JSON contracts
+
+Every API and worker boundary must use explicit, versioned JSON-shaped data rather than UI-derived
+assumptions. The canonical records are:
+
+- `household`, `adult`, `member`, `policy`, `document`, `source_fact` and `evidence_citation`;
+- `permission_grant` with principal, viewer, member, visibility class, purpose, expiry, revocation and
+  pre-authorised emergency override;
+- `case` with route, trigger, selected member, event, state, evidence digest and revision;
+- `worker_output` with role, schema version, one of the six evidence states, citations, confidence,
+  effective date, calculation inputs and human-correction marker;
+- `institutional_status` with institutional owner, source date, case scope and a Dynamic or Proven state;
+- `recommendation` with decision, reasons, cash scenarios, owners, deadlines, unknowns and explicit
+  permission blind spots; and
+- `approval`, `payment_attempt`, `outbox_item` and `audit_event`, each idempotent and append-only where
+  history matters.
+
+No document, model response or user-provided text is executable instruction. Unknown, conflicting,
+withheld and false remain distinct values throughout persistence, worker outputs and rendering.
+
+### Required implementation sequence
+
+1. **Foundation and naming.** Install the lockfile dependencies; remove retired-name references from new
+   product-facing copy, identifiers and runtime defaults where migration-safe; preserve only explicitly
+   historical filenames, remote URL and evidence artefacts. Make the versioned API the canonical route and
+   label or remove the memory-only demo seam once equivalent persisted journeys exist.
+2. **Household and permission journey.** Complete the persisted household matrix, per-member records and
+   per-field/per-viewer grant lifecycle. Enforce revocation, brief invalidation and emergency override in
+   repositories, services, API and UI together.
+3. **Source-pack and analysis journey.** Implement synthetic source-pack capture with document authority,
+   version, page and clause metadata; route it through the A–K decomposition workers. Add contract schemas
+   and test fixtures for every worker input and output.
+4. **Decision and evidence experience.** Render the four answer layers with proof on demand, source links,
+   visible Dynamic/Unknown/Conflicting states, cash-scenario inputs and an owner/deadline for every next
+   action. The household matrix replaces a dashboard or chat-first surface.
+5. **Pressure paths.** Implement planned expense, renewal/continuity and emergency paths against the same
+   case model. Emergency access is a clearly labelled local demonstration until an independently operated
+   rota, backup routing, escalation policy and measured service levels exist.
+6. **Controlled model assistance.** Gemini is opt-in per run, budget-reserved, schema-validated and
+   source-gated. Live analysis requires authorised, protected OCR pages and never falls back to fixture
+   input. Fixture mode remains explicit. Record provider invocation metrics and
+   redacted errors, but never persist keys or raw sensitive prompts in logs.
+7. **Connector boundaries.** Keep Sarvam, Gnani, Pine Labs, email and the proposed Confirmation Rail
+   disabled by default and fail closed. A connector becomes usable only after its exact contract,
+   authentication, idempotency, webhook verification, reconciliation and explicit human approval gate are
+   implemented and tested. Payment is limited to approved renewal or selected personal-cover purchase; it
+   never handles an emergency deposit.
+8. **Release engineering.** Add configuration validation, health/readiness reporting, migration and restart
+   tests, request-size and rate limits, safe structured logs, dependency audit, accessibility and responsive
+   UI checks, architecture checks, full tests and a production asset build. Deployment, secrets manager,
+   identity provider, encryption-key rotation, backup/restore and 24/7 staffing remain external launch
+   prerequisites unless separately implemented and verified.
+
+### Acceptance gates
+
+The local release is ready only when all of these are demonstrated:
+
+- a fresh database migrates and survives restart without cross-household access;
+- protected fields require a live matching grant and disappear from future reads immediately after
+  revocation;
+- every released recommendation is source-linked, evidence-state-labelled and fails closed on missing or
+  conflicting controlling evidence;
+- no path converts a model output, voice draft or synthetic reply into a declaration, institutional
+  confirmation, claim prediction, payment authorisation or policy issuance;
+- the emergency route presents admit-first human support without putting an AI or voice step in front;
+- live-model configuration is observable and unconfigured or failed calls do not become fixture results;
+- all architecture, unit, integration, safety-evaluation and production-build checks pass from a clean
+  install; and
+- product-facing copy uses Knowvia and accurately labels all simulated, proposed and unverified capability.
+
+### Implemented agent and OCR contracts, 1 October 2026
+
+The canonical coverage workflow is `coverage-analysis` version 4. It executes 22 roles: profile, group,
+personal, coverage graph, ten A-J policy-decomposition workers, deterministic decision, the K household
+action worker, evidence review, privacy review, safety review, question drafting, bounded primary synthesis
+and deterministic release. Every role has versioned input and output
+schema IDs. Every output is wrapped in `knowvia-agent-contract-v1` with producer authority, run and case
+provenance, input digest, source references, one of the six evidence states and a validated payload. A task
+can read only declared dependency envelopes. Invalid identity, dependency, schema, authority or payload
+blocks the handoff.
+
+Model assistance is allowed only for profile extraction, group-cover extraction, personal-cover extraction,
+question drafting and evidence synthesis. Deterministic code owns consent, source authorization, graph
+construction, classification, policy arithmetic, evidence/privacy/safety review, state transitions, external
+action authorization and release. Model output never authorises a purchase, payment, declaration, provider
+message or claim conclusion.
+
+The OCR boundary is `knowvia.ocr.v1`. It requires an active protected document, current document-processing
+consent and a clean scan before starting. Each normalized page retains document ID, immutable source version,
+content hash, one-based page number, text digest, extraction state, optional provider confidence and a stable
+locator. OCR results remain unverified evidence and require human review. Fixture OCR makes zero provider
+calls and proves only lifecycle and schema behavior. Live Sarvam execution remains disabled until an official
+endpoint and payload contract, credentials and an injected verified transport are available. Raw provider
+responses are not persisted.
+
+Live analysis consumes only successful `knowvia.ocr.v1` pages belonging to the case and backed by an active,
+clean, encrypted document. Missing source pages block the run before any model call. Fixture and live inputs
+remain separate.
+
+### Explicit release boundary
+
+Passing these gates establishes a production-oriented, locally demonstrable software release. It does not
+establish legal compliance, licensed insurance distribution, real-document handling approval, production
+data protection, live rail certification, insurer authority, emergency staffing or a deployed service. Each
+needs its own owner, evidence and go-live approval.

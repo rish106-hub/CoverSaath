@@ -82,7 +82,7 @@ test('revocation aborts tasks, clears stored context and denies dial attempts', 
   assert.ok(Object.values(done.tasks).every(task => !task.output)); await assert.rejects(engine.recordCallAttempt(run.id), /Consent/);
 });
 test('disk restart preserves completed work and marks running tasks interrupted', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'coversaath-orchestration-'));
+  const directory = await mkdtemp(join(tmpdir(), 'knowvia-orchestration-'));
   const store = createDiskStore({ directory }); const engine = createOrchestrator({ store, executor });
   const run = await engine.createRun(await sampleCase()); const interrupted = structuredClone(run);
   interrupted.status = 'running'; interrupted.tasks['cover-worker'].status = 'running'; interrupted.tasks['cover-worker'].attempts = 1; interrupted.budget.reservedUsd = 0.02;

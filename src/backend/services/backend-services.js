@@ -1,5 +1,6 @@
-import { AuditRepository, CaseRepository, ConsentRepository, HouseholdRepository, WorkflowRepository } from '../repositories/index.js';
+import { AuthRepository, AuditRepository, CaseRepository, ConsentRepository, HouseholdRepository, OcrRepository, WorkflowRepository } from '../repositories/index.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
+import { TenantAccessService } from './tenant-access-service.js';
 
 export function createBackendServices(database, options = {}) {
   const audit = new AuditRepository(database, options);
@@ -8,9 +9,12 @@ export function createBackendServices(database, options = {}) {
   const consents = new ConsentRepository(database, shared);
   const cases = new CaseRepository(database, shared);
   const workflows = new WorkflowRepository(database, shared);
+  const auth = new AuthRepository(database, shared);
+  const ocr = new OcrRepository(database, shared);
+  const access = new TenantAccessService(database, { auth, households, consents, env: options.env ?? {} });
 
   return {
-    audit, households, consents, cases, workflows,
+    access, audit, auth, households, consents, cases, workflows, ocr,
     emergencyInstruction,
     requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {
       return consents.requireActive(consentGrantId, {
@@ -24,4 +28,3 @@ export function createBackendServices(database, options = {}) {
     },
   };
 }
-

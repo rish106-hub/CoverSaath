@@ -116,7 +116,12 @@ export class WorkflowRepository {
     return this.getTask(taskId);
   }
 
-  claimNext({ workerId = 'local-worker', leaseDurationMs = this.leaseDurationMs } = {}) {
+  claimNext({
+    workerId = 'local-worker',
+    leaseDurationMs = this.leaseDurationMs,
+    runId = null,
+    workflowName = null,
+  } = {}) {
     const now = this.clock();
     const at = now.toISOString();
     const leaseExpiresAt = new Date(now.getTime() + leaseDurationMs).toISOString();
@@ -125,7 +130,9 @@ export class WorkflowRepository {
       const exhausted = this.database.prepare(`SELECT wt.id, wt.workflow_run_id FROM workflow_tasks wt
         JOIN workflow_runs wr ON wr.id = wt.workflow_run_id
         WHERE wt.status = 'pending' AND wt.attempt_count >= 5
-          AND wr.status IN ('queued', 'running')`).all();
+          AND wr.status IN ('queued', 'running')
+          AND (? IS NULL OR wt.workflow_run_id = ?)
+          AND (? IS NULL OR wr.workflow_name = ?)`).all(runId, runId, workflowName, workflowName);
       for (const task of exhausted) {
         this.database.prepare(`UPDATE workflow_tasks
           SET status = 'failed', finished_at = ?, terminal_reason = 'ATTEMPT_LIMIT',
@@ -140,6 +147,8 @@ export class WorkflowRepository {
           AND wt.attempt_count < 5
           AND (wt.retry_available_at IS NULL OR julianday(wt.retry_available_at) <= julianday(?))
           AND wr.status IN ('queued', 'running')
+          AND (? IS NULL OR wt.workflow_run_id = ?)
+          AND (? IS NULL OR wr.workflow_name = ?)
           AND (wr.consent_grant_id IS NULL OR EXISTS (
             SELECT 1 FROM consent_grants cg
             WHERE cg.id = wr.consent_grant_id
@@ -151,7 +160,7 @@ export class WorkflowRepository {
             JOIN workflow_tasks prerequisite ON prerequisite.id = dependency.depends_on_task_id
             WHERE dependency.workflow_task_id = wt.id AND prerequisite.status <> 'completed'
           )
-        ORDER BY wt.created_at, wt.id LIMIT 1`).get(at, at);
+        ORDER BY wt.created_at, wt.id LIMIT 1`).get(at, runId, runId, workflowName, workflowName, at);
       if (!task) {
         this.database.exec('COMMIT');
         return null;
@@ -257,9 +266,21 @@ export class WorkflowRepository {
     const counts = Object.fromEntries(states.map(row => [row.status, row.count]));
     if ((counts.pending ?? 0) + (counts.running ?? 0) > 0) return;
     const terminal = ['failed', 'blocked', 'revoked', 'cancelled', 'interrupted'].find(status => counts[status]);
-    const status = terminal ?? 'completed';
+    const releaseTask = this.database.prepare(`SELECT output_json FROM workflow_tasks
+      WHERE workflow_run_id = ? AND task_kind = 'deterministic_release_gate' AND status = 'completed'
+      ORDER BY created_at DESC LIMIT 1`).get(runId);
+    let releaseBlocked = false;
+    if (releaseTask?.output_json) {
+      try {
+        const output = JSON.parse(releaseTask.output_json);
+        releaseBlocked = (output?.payload ?? output)?.status === 'blocked';
+      } catch {
+        releaseBlocked = true;
+      }
+    }
+    const status = terminal ?? (releaseBlocked ? 'blocked' : 'completed');
     this.database.prepare(`UPDATE workflow_runs SET status = ?, finished_at = ?, terminal_reason = ? WHERE id = ?`)
-      .run(status, at, terminal ?? 'completed', runId);
+      .run(status, at, terminal ?? (releaseBlocked ? 'RELEASE_BLOCKED' : 'completed'), runId);
   }
 
   blockDescendants(taskId, at, reason) {

@@ -1,8 +1,9 @@
 import { buildPromptContract, PROMPT_VERSION } from './prompts.js';
 import { TASK_OUTPUT_SCHEMAS, validateTaskOutput } from './schemas.js';
 import { assertModelTask } from './responsibility-matrix.js';
+import { AI_CONTRACT_VERSION } from './responsibility-matrix.js';
 
-const DEFAULT_LIMITS = Object.freeze({ maxInputBytes: 48_000, maxOutputTokens: 1_500, timeoutMs: 30_000, maxRetries: 0, maxReservationUsd: 0.05 });
+const DEFAULT_LIMITS = Object.freeze({ maxInputBytes: 48_000, maxOutputTokens: 1_500, timeoutMs: 30_000, maxRetries: 0, maxReservationUsd: 0.05, maxConcurrentCalls: 3 });
 
 function fail(code, message) {
   throw Object.assign(new Error(message), { code });
@@ -18,6 +19,7 @@ function limitsWithDefaults(limits) {
   positiveNumber(value.maxOutputTokens, 'maxOutputTokens');
   positiveNumber(value.timeoutMs, 'timeoutMs');
   if (!Number.isInteger(value.maxRetries) || value.maxRetries < 0 || value.maxRetries > 2) fail('invalid_gateway_config', 'maxRetries must be between zero and two.');
+  if (!Number.isInteger(value.maxConcurrentCalls) || value.maxConcurrentCalls < 1 || value.maxConcurrentCalls > 8) fail('invalid_gateway_config', 'maxConcurrentCalls must be between one and eight.');
   positiveNumber(value.maxReservationUsd, 'maxReservationUsd', { allowZero: true });
   return Object.freeze(value);
 }
@@ -28,8 +30,13 @@ function validateExecutionResult(result, request, mode) {
   if (!metadata || typeof metadata.provider !== 'string' || typeof metadata.model !== 'string' || typeof metadata.modelVersion !== 'string') {
     fail('invalid_model_result', 'Provider, model and model version must be recorded.');
   }
-  if (metadata.promptVersion !== PROMPT_VERSION || metadata.mode !== mode) fail('invalid_model_result', 'Prompt version or execution mode is not recorded correctly.');
+  if (metadata.contractVersion !== AI_CONTRACT_VERSION || metadata.promptVersion !== PROMPT_VERSION || metadata.mode !== mode) fail('invalid_model_result', 'Contract, prompt version or execution mode is not recorded correctly.');
+  if (![metadata.inputTokens, metadata.outputTokens, metadata.totalTokens, metadata.calls].every(value => Number.isInteger(value) && value >= 0)) fail('invalid_model_result', 'Token and call metrics must be recorded.');
+  if (metadata.totalTokens !== metadata.inputTokens + metadata.outputTokens) fail('invalid_model_result', 'Token totals are inconsistent.');
+  if ((mode === 'live' && metadata.calls < 1) || (mode === 'fixture' && metadata.calls !== 0)) fail('invalid_model_result', 'Call count does not match execution mode.');
+  if (!Number.isFinite(metadata.latencyMs) || metadata.latencyMs < 0) fail('invalid_model_result', 'Latency must be recorded.');
   if (!Number.isFinite(metadata.costUsd) || metadata.costUsd < 0) fail('invalid_model_result', 'Actual model cost must be recorded.');
+  if (mode === 'fixture' && (metadata.inputTokens !== 0 || metadata.outputTokens !== 0 || metadata.costUsd !== 0)) fail('invalid_model_result', 'Fixture execution cannot report provider usage or cost.');
   return { output: validateTaskOutput(request.task, result.output, request.input), metadata: structuredClone(metadata) };
 }
 
@@ -37,6 +44,29 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
   if (!['fixture', 'live'].includes(mode)) fail('invalid_gateway_config', 'Choose fixture or live mode explicitly.');
   if (mode === 'live' && typeof liveRunner !== 'function') fail('live_not_configured', 'Live mode needs an explicit model runner.');
   const bounded = limitsWithDefaults(limits);
+  let activeCalls = 0;
+  const waiters = [];
+  const acquire = async signal => {
+    if (signal?.aborted) fail('aborted', 'AI task was cancelled before execution.');
+    if (activeCalls < bounded.maxConcurrentCalls) { activeCalls += 1; return; }
+    await new Promise((resolve, reject) => {
+      const entry = { resolve, reject, signal };
+      entry.abort = () => {
+        const index = waiters.indexOf(entry);
+        if (index >= 0) waiters.splice(index, 1);
+        reject(Object.assign(new Error('AI task was cancelled while queued.'), { code: 'aborted' }));
+      };
+      signal?.addEventListener('abort', entry.abort, { once: true });
+      waiters.push(entry);
+    });
+  };
+  const release = () => {
+    const next = waiters.shift();
+    if (next) {
+      next.signal?.removeEventListener('abort', next.abort);
+      next.resolve();
+    } else activeCalls -= 1;
+  };
 
   return Object.freeze({
     mode,
@@ -55,7 +85,10 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
         const timeoutSignal = AbortSignal.timeout(bounded.timeoutMs);
         const abortSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         let result;
+        let acquired = false;
         try {
+          await acquire(abortSignal);
+          acquired = true;
           result = validateExecutionResult(await liveRunner({
             task,
             input: structuredClone(input),
@@ -69,6 +102,8 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
         } catch (error) {
           await budget.settle(reservation, null, { failed: true });
           throw error;
+        } finally {
+          if (acquired) release();
         }
         await budget.settle(reservation, result.metadata.costUsd);
         if (result.metadata.costUsd > reservation.amountUsd) fail('reservation_exceeded', 'Actual model cost exceeded the reserved amount. Further paid work must stop.');

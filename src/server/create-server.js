@@ -10,6 +10,7 @@ import { createModelExecutor, createFixtureExecutor, modelConfigurationStatus } 
 import { failure, publicError } from './http/errors.js';
 import { prepareJsonResponse, readBody, sendJson } from './http/request.js';
 import { assertLocalRequest } from './http/security.js';
+import { createRateLimiter } from '../shared/http/index.js';
 import { openDatabase } from '../backend/database/index.js';
 import { createBackendServices } from '../backend/services/index.js';
 import {
@@ -19,6 +20,8 @@ import {
   createSarvamOcrProvider,
 } from '../integrations/index.js';
 import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
+import { readServerConfig } from './config.js';
+import { createGeminiCoverageRegistryFactory } from '../modules/ai-analysis/index.js';
 
 function validateInput(value) {
   if (!['planned_care', 'renewal', 'emergency'].includes(value.trigger)) throw failure(400, 'Choose a supported trigger.');
@@ -44,19 +47,17 @@ export function createApiServer({
   database: injectedDatabase,
   databasePath,
   backendServices,
+  analysisLiveRegistryFactory,
 } = {}) {
+  const config = readServerConfig(env);
   const cases = new Map();
   const runOwners = new Map();
   const liveExecutor = executor || createModelExecutor({ env });
   const localExecutor = fixtureExecutor || createFixtureExecutor();
-  const budgets = {};
-  for (const [name, key] of [['ORCHESTRATION_RUN_BUDGET_USD', 'budgetUsd'], ['ORCHESTRATION_PROJECT_BUDGET_USD', 'projectBudgetUsd']]) {
-    if (env[name] !== undefined) {
-      const value = Number(env[name]);
-      if (!Number.isFinite(value) || value <= 0 || (key === 'budgetUsd' && value > 1)) throw new Error(`Invalid ${name}.`);
-      budgets[key] = value;
-    }
-  }
+  const budgets = Object.fromEntries(Object.entries({
+    budgetUsd: config.budgetUsd,
+    projectBudgetUsd: config.projectBudgetUsd,
+  }).filter(([, value]) => value !== undefined));
   const sharedEngine = orchestrator || createOrchestrator({ ...budgets, ...(store ? { store } : {}), executor: { reservationUsd({ mode }) {
     const selected = mode === 'fixture' ? localExecutor : liveExecutor;
     return typeof selected.reservationUsd === 'function' ? selected.reservationUsd({ mode }) : mode === 'fixture' ? 0 : 0.02;
@@ -66,13 +67,19 @@ export function createApiServer({
   const engines = { live: sharedEngine, fixture: sharedEngine };
   const sessions = new Map();
   const locks = new Set();
-  const expiry = 60 * 60 * 1000;
+  const expiry = config.sessionTtlMs;
+  const rateLimiter = createRateLimiter({ limit: config.rateLimitPerMinute });
+  const liveRegistryFactory = analysisLiveRegistryFactory ?? createGeminiCoverageRegistryFactory({ env });
   const ownsDatabase = !injectedDatabase;
   let database = injectedDatabase ?? null;
   let services = backendServices ?? null;
   const getBackend = () => {
-    database ||= openDatabase({ path: databasePath ?? env.DATABASE_PATH ?? '.local/coversaath.sqlite' });
-    services ||= createBackendServices(database);
+    database ||= openDatabase({ path: databasePath ?? env.DATABASE_PATH ?? '.local/knowvia.sqlite' });
+    services ||= createBackendServices(database, {
+      env,
+      sessionDurationMs: config.sessionTtlMs,
+      maxActiveSessions: config.maxSessions,
+    });
     return { database, services };
   };
   const integrations = {
@@ -87,11 +94,15 @@ export function createApiServer({
     try {
       // Local-only isolation. Host checks also reduce DNS-rebinding exposure.
       assertLocalRequest(req);
+      rateLimiter.check(req.socket.remoteAddress ?? 'local-unknown');
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory });
         return send(backendResult.status, backendResult.body);
+      }
+      if (!config.enableLegacyDemoApi) {
+        return send(404, { error: { code: 'ROUTE_NOT_FOUND', message: 'Use the authenticated /api/v1 API.' } });
       }
       if (req.method === 'GET' && url.pathname === '/api/health') {
         const config = modelConfigurationStatus(env);
@@ -108,17 +119,17 @@ export function createApiServer({
         }));
         cases.delete(key);
       }
-      const cookie = req.headers.cookie?.match(/(?:^|;\s*)coversaath_session=([a-f0-9-]{36})(?:;|$)/)?.[1];
+      const cookie = req.headers.cookie?.match(/(?:^|;\s*)knowvia_session=([a-f0-9-]{36})(?:;|$)/)?.[1];
       let sessionId = cookie && sessions.has(cookie) ? cookie : null;
       if (!sessionId && req.method === 'POST' && url.pathname === '/api/cases') {
-        if (sessions.size >= 100) throw failure(429, 'Demo capacity reached. Restart the local server.');
+        if (sessions.size >= config.maxSessions) throw failure(429, 'Session capacity reached.');
         sessionId = randomUUID();
         sessions.set(sessionId, { expiresAt: now + expiry });
-        res.setHeader('Set-Cookie', `coversaath_session=${sessionId}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=3600`);
+        res.setHeader('Set-Cookie', `knowvia_session=${sessionId}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=${Math.floor(expiry / 1000)}`);
       }
       if (!sessionId) throw failure(401, 'Open a new demo case first.');
       if (req.method === 'POST' && url.pathname === '/api/cases') {
-        if (cases.size >= 100) throw failure(429, 'Demo capacity reached. Restart the local server.');
+        if (cases.size >= config.maxCases) throw failure(429, 'Case capacity reached.');
         const record = createCase(validateInput(await readBody(req)));
         cases.set(record.id, { owner: sessionId, record, revision: 0 });
         return send(201, record);
@@ -159,7 +170,7 @@ export function createApiServer({
         const mode = value.mode ?? 'live';
         if (!['live', 'fixture'].includes(mode) || typeof value.modelConsent !== 'boolean') throw failure(400, 'Choose live or fixture and explicit model consent.');
         if (!entry.record.input.consent) throw failure(403, 'Recorded processing consent is required.');
-        if ([...runOwners.values()].filter(owned => owned.caseId === entry.record.id).length >= 10) throw failure(429, 'Run limit reached for this case.');
+        if ([...runOwners.values()].filter(owned => owned.caseId === entry.record.id).length >= config.maxRunsPerCase) throw failure(429, 'Run limit reached for this case.');
         const revision = entry.revision;
         const packet = entry.record.policies.length ? entry.record : await runCase(entry.record);
         if (revision !== entry.revision) throw failure(409, 'Consent changed.');

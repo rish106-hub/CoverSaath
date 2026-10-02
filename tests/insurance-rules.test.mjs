@@ -35,7 +35,6 @@ const completeRules = (sourceOverrides = {}) => [
 const continuity = {
   operator: { status: 'verified', source: source({ id: 'operator-log', familyId: 'operator-log' }) },
   backup: { status: 'authorised', source: source({ id: 'backup-log', familyId: 'backup-log' }) },
-  drill: { status: 'passed', source: source({ id: 'drill-log', familyId: 'drill-log' }) },
 };
 
 test('conflicting controlling terms are preserved and sent to human review', () => {
@@ -157,14 +156,14 @@ test('group and personal limits remain separate and are never treated as cash', 
   assert.equal(result.cashExposure.insuranceLimitsAreCash, false);
 });
 
-test('continuity needs cited operator, backup and drill evidence', () => {
+test('continuity needs cited operator and backup evidence', () => {
   const result = analyzeInsuranceRules({
     trigger: 'renewal',
     policies: [{ id: 'personal-1', kind: 'personal', observations: completeRules() }],
-    continuity: { operator: { status: 'verified' }, backup: { status: 'authorised' }, drill: { status: 'passed' } },
+    continuity: { operator: { status: 'verified' }, backup: { status: 'authorised' } },
   });
   assert.equal(result.continuity.state, 'unresolved');
-  assert.deepEqual(result.continuity.missing, ['verified operator', 'authorised backup', 'passed five-minute drill']);
+  assert.deepEqual(result.continuity.missing, ['verified operator', 'authorised backup']);
   assert.equal(result.route.route, 'clarification');
 });
 

@@ -19,7 +19,7 @@ function seedIdentity(database) {
   database.prepare(`INSERT INTO consent_grants
     (id, household_id, subject_adult_id, granted_to_actor, purpose, notice_version, evidence_method, granted_at, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run('consent-1', 'household-1', 'adult-1', 'coversaath-local', 'document_processing', 'v1', 'fixture', at, at);
+    .run('consent-1', 'household-1', 'adult-1', 'knowvia-local', 'document_processing', 'v1', 'fixture', at, at);
   database.prepare(`INSERT INTO service_cases
     (id, household_id, subject_member_id, opened_by_adult_id, trigger_type, status, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -27,12 +27,12 @@ function seedIdentity(database) {
 }
 
 test('a fresh local database migrates to the complete v1 schema', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'coversaath-db-'));
-  const database = openDatabase({ path: join(directory, 'coversaath.sqlite') });
+  const directory = await mkdtemp(join(tmpdir(), 'knowvia-db-'));
+  const database = openDatabase({ path: join(directory, 'knowvia.sqlite') });
   const validation = validateSchema(database);
   assert.equal(validation.valid, true);
   assert.equal(validation.integrity, 'ok');
-  assert.equal(validation.migrationCount, 2);
+  assert.equal(validation.migrationCount, 4);
   assert.deepEqual(runMigrations(database), []);
 
   const tables = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name);

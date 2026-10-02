@@ -24,7 +24,7 @@ export function classifyCase({ trigger, statedEstimate = 0, coverageGraph = {} }
     Array.isArray(fact?.sources) && fact.sources.length > 0,
   );
   const operatorVerified = coverageGraph.operator?.status === 'verified';
-  const drillPassed = coverageGraph.readinessDrill?.status === 'passed';
+  const backupAuthorised = coverageGraph.backup?.status === 'authorised';
   const institutionalConfirmation = coverageGraph.institutionalStatus === 'confirmed_for_case';
 
   const dimensions = {
@@ -39,9 +39,9 @@ export function classifyCase({ trigger, statedEstimate = 0, coverageGraph = {} }
     coverageDeficiency: institutionalConfirmation
       ? { class: 'needs_rules_evaluation', reason: 'Confirmation alone does not calculate the household shortfall.' }
       : { class: 'unknown', reason: 'Policy applicability and institutional status are not confirmed for this case.' },
-    continuityRisk: operatorVerified && drillPassed
-      ? { class: 'operator_and_backup_tested', reason: 'The recorded operator and readiness drill passed.' }
-      : { class: 'unresolved', reason: 'The operator or five-minute readiness drill is not verified.' },
+    continuityRisk: operatorVerified && backupAuthorised
+      ? { class: 'operator_and_backup_confirmed', reason: 'The household operator and authorised backup are recorded.' }
+      : { class: 'unresolved', reason: 'The household operator or authorised backup is not verified.' },
     evidenceConfidence: citedFacts.length > 0 && graphUnknowns.length === 0
       ? { class: 'source_linked_but_not_authoritative', citedFactCount: citedFacts.length }
       : { class: 'limited', citedFactCount: citedFacts.length, unresolvedCount: graphUnknowns.length },
@@ -49,7 +49,7 @@ export function classifyCase({ trigger, statedEstimate = 0, coverageGraph = {} }
 
   const route = trigger === 'emergency'
     ? 'admit_first_human_handoff'
-    : graphUnknowns.length || !operatorVerified || !drillPassed || !institutionalConfirmation
+    : graphUnknowns.length || !operatorVerified || !backupAuthorised || !institutionalConfirmation
       ? 'collect_evidence_and_human_review'
       : 'rules_review_then_household_decision';
 
@@ -63,7 +63,7 @@ export function classifyCase({ trigger, statedEstimate = 0, coverageGraph = {} }
       ...graphUnknowns,
       ...(!institutionalConfirmation ? ['Case-specific institutional confirmation is unresolved.'] : []),
       ...(!operatorVerified ? ['The real household operator is not verified.'] : []),
-      ...(!drillPassed ? ['The five-minute readiness drill has not passed.'] : []),
+      ...(!backupAuthorised ? ['An authorised household backup is not verified.'] : []),
     ]),
     boundary: 'This result routes work. It does not predict approval, payable amount, underwriting, treatment or product suitability.',
   };

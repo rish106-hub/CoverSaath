@@ -93,19 +93,30 @@ CREATE TABLE evidence_facts_v2 (
 
 INSERT INTO evidence_facts_v2 (
   id, household_id, case_id, policy_id, subject_member_id, fact_key, value_json,
-  epistemic_state, evidence_kind, provenance_kind, source_page_id, source_locator,
+  epistemic_state, evidence_kind, provenance_kind, source_page_id, statement_adult_id,
+  institutional_source_ref, calculation_method, source_locator,
   asserted_by, observed_at, supersedes_fact_id, created_at
 )
 SELECT id, household_id, case_id, policy_id, subject_member_id, fact_key, value_json,
   epistemic_state, evidence_kind,
   CASE evidence_kind
     WHEN 'document' THEN 'document_page'
-    WHEN 'adult_statement' THEN 'adult_statement'
+    WHEN 'adult_statement' THEN CASE
+      WHEN EXISTS (SELECT 1 FROM adult_users au WHERE au.id = evidence_facts.asserted_by)
+        THEN 'adult_statement' ELSE 'document_page' END
     WHEN 'institutional_reply' THEN 'institutional_reply'
     WHEN 'calculation' THEN 'calculation'
     ELSE 'fixture'
   END,
-  source_page_id, source_locator, asserted_by, observed_at, supersedes_fact_id, created_at
+  source_page_id,
+  CASE WHEN evidence_kind = 'adult_statement'
+    AND EXISTS (SELECT 1 FROM adult_users au WHERE au.id = evidence_facts.asserted_by)
+    THEN asserted_by ELSE NULL END,
+  CASE WHEN evidence_kind = 'institutional_reply'
+    THEN COALESCE(source_locator, asserted_by) ELSE NULL END,
+  CASE WHEN evidence_kind = 'calculation'
+    THEN COALESCE(source_locator, 'legacy_v1_calculation') ELSE NULL END,
+  source_locator, asserted_by, observed_at, supersedes_fact_id, created_at
 FROM evidence_facts;
 
 CREATE TABLE fact_conflicts_v2 (
