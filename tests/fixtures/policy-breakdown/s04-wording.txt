@@ -1,0 +1,84 @@
+Example General Insurance Company Limited
+Example Family Health Plan | UIN: EXAHLIP26001V012526
+POLICY SCHEDULE - TABLE OF BENEFITS
+Policy No.: EX/FHP/2026/000123 | Family Floater | Policy Period: 01/04/2026 to 31/03/2027
+
+Benefit | Coverage under this Policy
+In-patient Hospitalisation | Covered up to Sum Insured, subject to minimum 24 hours admission
+Pre-hospitalisation Medical Expenses | Covered for 60 days immediately before the date of admission
+Post-hospitalisation Medical Expenses | Covered for 180 days immediately after the date of discharge
+Day Care Treatment | Covered up to Sum Insured for the Day Care procedures listed in Annexure I
+Domiciliary Hospitalisation | Covered up to 10% of Sum Insured
+Maternity Benefit | Covered for Insured Person: Sita Kumar only; Rs. 50,000 normal delivery / Rs. 75,000 caesarean section
+New Born Baby Cover | Covered within the maternity limit
+Modern Treatment Methods | Covered up to 50% of Sum Insured
+AYUSH Treatment | Covered up to Sum Insured
+Organ Donor Expenses | Covered up to Sum Insured
+Road Ambulance | Up to Rs. 3,000 per hospitalisation
+Air Ambulance | Not Covered
+Out-patient (OPD) Treatment | Not Covered
+Tele-consultation | Covered
+Health Check-up | Covered once at every renewal after two continuous claim-free Policy Years
+Mental Illness Treatment | Covered up to Sum Insured
+Home Care Treatment | Covered up to 10% of Sum Insured
+Treatment outside India | Not Covered
+=== PAGE BREAK ===
+SECTION 2 - DEFINITIONS
+
+2.4 AYUSH Hospital is a healthcare facility wherein medical/surgical/para-surgical treatment procedures and interventions are carried out by AYUSH Medical Practitioner(s) comprising of any of the following: a. Central or State Government AYUSH Hospital; or b. Teaching hospital attached to AYUSH College recognised by the Central Government/Central Council of Indian Medicine/Central Council for Homeopathy; or c. AYUSH Hospital, standalone or co-located with in-patient healthcare facility of any recognised system of medicine, registered with the local authorities, wherever applicable.
+
+2.13 Day Care Treatment means medical treatment, and/or surgical procedure which is: i. undertaken under General or Local Anaesthesia in a Hospital/Day Care Centre in less than 24 hours because of technological advancement, and ii. which would have otherwise required Hospitalisation of more than 24 hours. Treatment normally taken on an out-patient basis is not included in the scope of this definition.
+
+2.15 Domiciliary Hospitalisation means medical treatment for an illness/disease/injury which in the normal course would require care and treatment at a Hospital but is actually taken while confined at home under any of the following circumstances: i. the condition of the patient is such that he/she is not in a condition to be removed to a Hospital, or ii. the patient takes treatment at home on account of non-availability of room in a Hospital.
+
+2.22 Hospital means any institution established for in-patient care and day care treatment of disease/injuries and which has been registered as a hospital with the local authorities under the Clinical Establishments (Registration and Regulation) Act, 2010 or under the enactments specified under Schedule of Section 56(1) of the said Act OR complies with all minimum criteria as under: i. has qualified nursing staff under its employment round the clock; ii. has at least 10 in-patient beds in towns having a population of less than 10,00,000 and at least 15 in-patient beds in all other places; iii. has qualified medical practitioner(s) in charge round the clock; iv. has a fully equipped operation theatre of its own where surgical procedures are carried out; v. maintains daily records of patients and makes these accessible to the insurance company's authorised personnel.
+
+2.25 In-patient Care means treatment for which the Insured Person has to stay in a Hospital for more than 24 hours for a covered event.
+
+2.30 Medically Necessary Treatment means any treatment, tests, medication, or stay in Hospital or part of a stay in Hospital which: i. is required for the medical management of the illness or injury suffered by the Insured Person; ii. must not exceed the level of care necessary to provide safe, adequate and appropriate medical care in scope, duration, or intensity; iii. must have been prescribed by a Medical Practitioner; iv. must conform to the professional standards widely accepted in international medical practice or by the medical community in India.
+=== PAGE BREAK ===
+SECTION 3 - BENEFITS COVERED
+
+3.1 In-patient Hospitalisation
+The Company shall indemnify the Medical Expenses incurred for In-patient Care on Hospitalisation of the Insured Person for a minimum period of 24 consecutive hours, for Room, Boarding and Nursing; Intensive Care Unit; Surgeon, Anaesthetist, Medical Practitioner, Consultants and Specialist fees; Anaesthesia, blood, oxygen, operation theatre charges, surgical appliances, medicines and drugs, diagnostic procedures, prosthetic and other devices or equipment implanted internally during a surgical procedure. The time limit of 24 hours shall not apply to Day Care Treatment.
+The Hospitalisation must be for Medically Necessary Treatment. Admission primarily for diagnostic or evaluation purposes only, without active treatment, is not payable.
+In case of an Accident, a copy of the First Information Report or Medico-Legal Certificate, wherever conducted, shall be submitted with the claim.
+
+3.2 Pre-hospitalisation and Post-hospitalisation Medical Expenses
+The Company shall pay Medical Expenses incurred during the 60 days immediately before and the 180 days immediately after the Insured Person's Hospitalisation, provided that a claim for In-patient Hospitalisation or Day Care Treatment has been admitted by the Company under Section 3.1 or 3.3 and the expenses relate to the same condition.
+
+3.3 Day Care Treatment
+The Company shall pay Medical Expenses for the Day Care procedures listed in Annexure I (Day Care Procedures) taken in a Hospital or Day Care Centre. Annexure I contains 586 procedures. Dialysis, chemotherapy and radiotherapy taken as Day Care Treatment are covered under this Section.
+
+3.4 Domiciliary Hospitalisation
+Domiciliary Hospitalisation is payable only if the treatment continues for at least 3 consecutive days and is prescribed by a Medical Practitioner. No pre-hospitalisation or post-hospitalisation expenses are payable under this benefit. The following are not covered under Domiciliary Hospitalisation: asthma, bronchitis, chronic nephritis and nephrotic syndrome, diarrhoea and all types of dysenteries including gastroenteritis, diabetes mellitus and insipidus, epilepsy, hypertension, influenza, cough and cold, pyrexia of unknown origin for less than 10 days, tonsillitis and upper respiratory tract infection, arthritis, gout and rheumatism.
+
+3.5 Home Care Treatment
+Home Care Treatment for the conditions listed in Annexure IV is payable only where the treating Medical Practitioner advises it in writing, prior approval is obtained from the Company or its TPA, and daily monitoring records are maintained.
+
+3.6 Maternity Benefit
+The Company shall pay Medical Expenses for the delivery of a child (normal or caesarean section) including Medical Expenses for a lawful medical termination of pregnancy, up to the limits stated in the Schedule, subject to a waiting period of 24 months of continuous coverage of the female Insured Person. This benefit is available for a maximum of 2 deliveries or terminations during the lifetime of the Policy. Pre-natal and post-natal Medical Expenses are payable only if incurred during Hospitalisation for the delivery. Expenses for complications of pregnancy requiring Hospitalisation are covered within the maternity limit. Ectopic pregnancy is covered under In-patient Hospitalisation and not under this benefit.
+
+3.7 New Born Baby
+Medical Expenses for treatment of the new born baby are covered from day one, within the maternity limit, during the mother's Hospitalisation for delivery.
+
+3.8 Modern Treatment Methods and Advancement in Technologies
+The following procedures/treatments are covered either as In-patient Care or as part of Day Care Treatment in a Hospital, up to the limit stated in the Schedule: A. Uterine Artery Embolization and HIFU; B. Balloon Sinuplasty; C. Deep Brain Stimulation; D. Oral Chemotherapy; E. Immunotherapy - Monoclonal Antibody to be given as injection; F. Intra vitreal injections; G. Robotic surgeries; H. Stereotactic radio surgeries; I. Bronchical Thermoplasty; J. Vaporisation of the prostrate (Green laser treatment or holmium laser treatment); K. IONM - (Intra Operative Neuro Monitoring); L. Stem cell therapy: Hematopoietic stem cells for bone marrow transplant for haematological conditions to be covered.
+
+3.9 AYUSH Treatment
+The Company shall pay Medical Expenses for In-patient Care under Ayurveda, Yoga and Naturopathy, Unani, Siddha and Homeopathy systems of medicine, only when the treatment is taken in an AYUSH Hospital as defined in Section 2.4. Treatment in a wellness centre, spa or resort is not covered.
+
+3.10 Organ Donor Expenses
+The Company shall pay Medical Expenses towards the organ donor's in-patient treatment for harvesting of the organ donated to the Insured Person, provided the organ transplant is payable under Section 3.1. Pre-hospitalisation and post-hospitalisation expenses of the donor and costs of acquiring the organ are not covered.
+
+3.11 Mental Illness
+The Company shall pay Medical Expenses for In-patient Care for treatment of Mental Illness, only if the treatment is taken in a Hospital registered under the Mental Healthcare Act, 2017 and on the advice of a psychiatrist or a mental health professional.
+
+3.12 Tele-consultation and Health Check-up
+Tele-consultations with a Medical Practitioner are available through the Company's mobile application at no additional cost. A health check-up is available once at every renewal after two continuous claim-free Policy Years, for every Insured Person aged 18 years or above, at a network diagnostic centre.
+
+3.13 Dental Treatment
+Dental treatment is covered only when necessitated by an Accident and requiring Hospitalisation.
+
+3.14 Territorial Scope
+All treatment under this Policy shall be taken in India and claims shall be payable in Indian Rupees only. Treatment taken outside India is not covered.

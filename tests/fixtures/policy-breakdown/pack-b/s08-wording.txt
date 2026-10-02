@@ -1,0 +1,40 @@
+Demo General Insurance Company Limited
+Demo Group Health Shield - Policy Wording
+UIN: DEMHLGP26002V012526
+Master Policy No. DG/GHS/2026/004567
+
+SECTION E. CLAIM PROCEDURE
+
+E.1 Notification of Claim
+Notice of claim with particulars shall be given to the Company or the TPA as under:
+(a) In case of emergency hospitalisation, within 24 hours of admission.
+(b) In case of planned hospitalisation, at least 72 hours prior to admission.
+This clause applies to reimbursement claims; the procedure for cashless claims is given in Section D.
+
+E.2 Submission of Claim Documents
+The claim with the necessary documents shall be submitted within 30 days of the date of discharge from the hospital. Documents for post-hospitalisation expenses shall be submitted within 15 days of completion of post-hospitalisation treatment. Delay in intimation or submission may be condoned by the Company where the Insured Person shows that the delay was due to reasons beyond his or her control.
+
+E.3 Necessary Documents for Reimbursement
+i. Duly completed and signed claim form
+ii. Original discharge summary
+iii. Original final hospital bill with itemised break-up and payment receipt
+iv. Investigation reports supported by the prescription of the attending Medical Practitioner
+v. Cancelled cheque or bank account details for NEFT payment
+In case of accident, the First Information Report (FIR) and the Medico-Legal Certificate (MLC), where conducted, shall also be submitted.
+The KYC documents of the employee shall be submitted with the first claim, where not already provided to the Policyholder. The Company or the TPA shall obtain the medical records directly from the hospital and shall not reject the claim for want of such records.
+The status of a claim may be tracked on the TPA portal using the claim reference number communicated in the acknowledgement.
+=== PAGE BREAK ===
+E.4 Claim Settlement
+The Company shall settle or reject a claim within 30 days of receipt of the last necessary document. Where the circumstances of a claim warrant an investigation, the Company shall complete the investigation and settle or reject the claim within 45 days of receipt of the last necessary document.
+In case of delay in payment beyond the above period, the Company shall pay interest at a rate 2% above the bank rate, from the date of receipt of the last necessary document to the date of payment.
+
+E.5 Rejection of Claim
+Rejection of a claim shall be decided by the Claims Review Committee of the Company and shall be communicated to the Insured Person in writing, stating the specific reason and the policy clause relied upon. Where a claim is settled for less than the amount claimed, the settlement letter shall list each deduction with the policy clause relied upon.
+
+E.6 Grievance Redressal
+The Insured Person may contact the Grievance Redressal Officer, Demo General Insurance Company Limited, toll free 1800-333-4444. The Company shall acknowledge the grievance and resolve it within 14 days of receipt.
+If the grievance is not resolved, the Insured Person may register it on the Bima Bharosa portal (Integrated Grievance Management System) of the IRDAI, and may thereafter approach the Insurance Ombudsman.
+
+E.7 Insurance Ombudsman and Consumer Forum
+The Insured Person may approach the Insurance Ombudsman under the Insurance Ombudsman Rules, 2017 for a claim not exceeding Rs. 50,00,000. The complaint shall be made to the Insurance Ombudsman within 1 year (365 days) of the final reply or rejection by the Company.
+Nothing in this policy limits the right of the Insured Person to approach the Consumer Disputes Redressal Commission under the Consumer Protection Act, 2019.

@@ -1,0 +1,56 @@
+DEMO GENERAL INSURANCE COMPANY LIMITED
+IRDAI Registration No. 998 | CIN: U00000KA2005PLC000000
+Registered Office: 10 Sample Road, Bengaluru 560001
+
+MASTER POLICY SCHEDULE AND CERTIFICATE OF INSURANCE
+DEMO GROUP HEALTH SHIELD
+Product UIN: DEMHLGP26002V012526
+Policy Wording Version: 2
+
+Type of Policy: Group Health Insurance (Employer-Employee Master Policy with Certificates)
+Master Policy Number: DG/GHS/2026/004567
+Previous Policy Number: DG/GHS/2025/003311 (renewal of the same group)
+Certificate No.: DG/GHS/2026/004567/0042
+Date of Issue: 20/03/2026
+Period of Insurance: From 00:00 hrs of 01/04/2026 To Midnight of 31/03/2027
+
+Master Policyholder: Demo Software Services Private Limited
+Group Administrator: Demo Software Services Private Limited (HR and Benefits Desk)
+Employee (Certificate Holder): Asha Verma
+
+Insured Members and Member IDs
+| Name         | Relationship | Member ID  |
+| Asha Verma   | Self         | DG0042-01  |
+| Vikram Verma | Spouse       | DG0042-02  |
+| Kamala Verma | Mother       | DG0042-03  |
+| Arjun Verma  | Son          | DG0042-04  |
+
+TPA Name: Demo Care TPA Private Limited
+TPA Cashless Helpline (24x7): 1800-111-2222
+Insurer Helpline: 1800-333-4444
+
+Intermediary Details
+Intermediary Type: Broker
+Intermediary Name: Demo Insurance Brokers Private Limited
+Intermediary Code: BRK-0077
+
+Add-on Covers Opted: None
+
+Endorsement Schedule (issued and attached to this Certificate)
+Endorsement No. 1: Addition of Arjun Verma (Son) as an Insured Member from 15/06/2026
+Endorsement No. 2: Room rent enhancement for maternity admissions
+=== PAGE BREAK ===
+DEMO GROUP HEALTH SHIELD - POLICY WORDING (Version 2)
+GENERAL TERMS AND CONDITIONS
+
+1. Entire Contract
+The Master Policy Schedule, the Policy Wording, the Certificate of Insurance issued to each Employee and any Endorsements issued shall be read together as one contract. The proposal and enrolment data submitted by the Master Policyholder form the basis of this contract.
+
+2. Order of Precedence
+In case of any conflict between the documents forming this contract, an Endorsement shall prevail over the Certificate and the Master Policy Schedule to the extent of the change it records, and the Certificate and the Master Policy Schedule shall prevail over the Policy Wording. The English version of the documents shall prevail over any translation.
+
+3. Role of the Group Administrator
+The Master Policyholder acts as Group Administrator for enrolment of Employees and their dependants, for requesting Endorsements and for forwarding communication to Insured Members.
+
+4. Servicing
+Claims and cashless requests are administered by the Third Party Administrator named in the Certificate. The Intermediary named in the Certificate services the Master Policy.

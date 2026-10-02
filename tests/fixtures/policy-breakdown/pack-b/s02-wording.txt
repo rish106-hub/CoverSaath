@@ -1,0 +1,55 @@
+DEMO GENERAL INSURANCE COMPANY LIMITED
+CERTIFICATE OF INSURANCE - DETAILS OF INSURED PERSONS
+Demo Group Health Shield | Master Policy Number: DG/GHS/2026/004567 | Certificate: DG/GHS/2026/004567/0042
+Proposer: Demo Software Services Private Limited (Master Policyholder)
+Cover Type: Individual sum insured for each member (Individual Sum Insured per Member)
+Plan Type: Group Health Insurance, each Insured Person has an individual sum insured of Rs. 5,00,000
+
+Details of Insured Persons
+| No | Name         | Relationship | Date of Birth |
+| 1  | Asha Verma   | Self         | 02/03/1985    |
+| 2  | Vikram Verma | Spouse       | 20/11/1983    |
+| 3  | Kamala Verma | Mother       | 09/07/1955    |
+| 4  | Arjun Verma  | Son          | 10/01/2026    |
+
+Member Enrolment Details
+| Name         | Date of First Enrolment | Pre-policy Medical Check-up |
+| Asha Verma   | 01/04/2021              | Waived                      |
+| Vikram Verma | 01/04/2021              | Waived                      |
+| Kamala Verma | 01/04/2024              | Done                        |
+| Arjun Verma  | 15/06/2026              | Not required                |
+
+Underwriting Decisions
+| Name         | Decision                                                              |
+| Asha Verma   | Accepted at standard terms                                            |
+| Vikram Verma | Accepted with modified terms (premium loading and PED co-pay below)   |
+| Kamala Verma | Accepted with modified terms (permanent exclusion below)              |
+| Arjun Verma  | Accepted at standard terms                                            |
+
+Declared Conditions
+| Vikram Verma | Declared condition: Type 2 diabetes |
+
+Member-specific Conditions (Special Conditions by Underwriting)
+Vikram Verma: premium loading of 15% on the member premium.
+Vikram Verma: PED co-pay of 10% applies on diabetes-related claims.
+Kamala Verma: Permanent exclusion for chronic kidney disease.
+
+Per-parent Limit
+The sum insured for dependent parents is capped: Kamala Verma (Mother) is covered up to Rs. 3,00,000 under this Certificate.
+=== PAGE BREAK ===
+DEMO GROUP HEALTH SHIELD - POLICY WORDING (Version 2)
+DEFINITIONS AND ELIGIBILITY
+
+Eligibility
+Insured Person means the Employee of the Master Policyholder, the Employee's Spouse, the Employee's dependent children and the Employee's dependent Parents, in each case named in the Certificate.
+
+Dependent Parents means the mother or father of the Employee who are named in the Certificate of Insurance or added by Endorsement.
+
+Sum Insured Structure
+Each Insured Person has an individual sum insured. A claim paid for one Insured Person does not reduce the sum insured of any other Insured Person. A corporate buffer of Rs. 25,00,000 is available to the whole group and is released only on approval of the Master Policyholder.
+
+Addition of Insured Persons During the Policy Period
+A newborn child of an Insured Employee may be added by Endorsement during the policy period. Cover for the added person starts from the effective date of the Endorsement.
+
+Occupation
+Cover under this Policy is available to Employees of the Master Policyholder engaged in software services and office-based duties. Injury arising from hazardous occupations such as underground mining, offshore rig work or armed forces duty is not payable.

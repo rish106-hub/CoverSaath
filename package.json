@@ -15,7 +15,9 @@
     "build": "vite build",
     "test": "node --test tests/*.test.mjs tests/evals/*.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
-    "check": "npm run check:architecture && npm test && npm run build"
+    "check": "npm run check:architecture && npm test && npm run build",
+    "eval:breakdown": "node scripts/eval-breakdown.mjs --set fixtures",
+    "eval:breakdown:live": "node --env-file-if-exists=.env.local scripts/eval-breakdown.mjs --set local"
   },
   "devDependencies": {
     "vite": "8.3.0"
@@ -23,6 +25,7 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.71",
     "@ai-sdk/openai": "^4.0.67",
-    "ai": "^7.0.102"
+    "ai": "^7.0.102",
+    "pdf-lib": "1.17.1"
   }
 }

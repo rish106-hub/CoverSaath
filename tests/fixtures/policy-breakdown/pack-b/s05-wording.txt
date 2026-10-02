@@ -1,0 +1,41 @@
+Demo General Insurance Company Limited
+Demo Group Health Shield | UIN: DEMHLGP26002V012526 | Version 2
+Master Policy No.: DG/GHS/2026/004567 | Certificate No.: DG/GHS/2026/004567/0042
+SECTION 5 - EXCLUSIONS AND DISCLOSURE
+
+5.1 Pre-Existing Disease means any condition, ailment, injury or disease that was diagnosed or for which medical advice or treatment was recommended by, or received from, a physician within 48 months prior to the date of commencement of the Insured Person's first policy with the Company.
+
+5.2 Standard Exclusions. The Company shall not be liable to make any payment under this Policy in respect of any expenses incurred in connection with or in respect of:
+Excl01 Pre-Existing Diseases - subject to the waiting period stated in the Certificate.
+Excl03 30-day waiting period - other than for an Accident.
+Excl04 Investigation & Evaluation - expenses related to any admission primarily for diagnostics and evaluation purposes only.
+Excl06 Obesity/Weight Control - expenses related to the surgical treatment of obesity, except bariatric surgery when the Insured Person is aged 18 years or above and has a Body Mass Index (BMI) of 40 or more, or 35 or more with co-morbidities, and the surgery is prescribed by a Medical Practitioner.
+Excl07 Change-of-Gender treatments - any treatment which results in a change of gender to the opposite sex.
+Excl08 Cosmetic or plastic Surgery - expenses for cosmetic or plastic surgery to change appearance, except reconstruction following an Accident, burns or cancer, certified as medically necessary.
+Excl09 Hazardous or Adventure sports - expenses related to any treatment necessitated due to participation as a professional in hazardous or adventure sports, including para-jumping, rock climbing and scuba diving.
+Excl10 Breach of law - expenses incurred by the Insured Person arising from or traceable to criminal intent or a breach of law.
+Excl12 Alcoholism, drug or substance abuse - treatment for alcoholism, drug or substance abuse or any addictive condition and consequences thereof.
+Excl15 Refractive Error - expenses related to the treatment for correction of eyesight due to refractive error of less than 7.5 dioptres.
+Excl16 Unproven Treatments - treatments, including drugs, experimental therapies and devices, that are not supported by established medical practice or lack significant medical documentation.
+Excl17 Sterility and Infertility - treatments including Assisted Reproduction, IVF, contraception and reversal of sterilisation.
+Excl18 Maternity - expenses for delivery, termination of pregnancy or complications, except as provided under the Maternity Benefit, in which case this exclusion shall not apply to the extent cover is available.
+
+5.3 Other Exclusions. In addition to the Standard Exclusions, the Company shall not be liable for: war, invasion and acts of foreign enemies; nuclear weapons, radiation or contamination; treatment outside India other than as stated in the Certificate; and external durable equipment.
+
+5.4 Self-harm. Expenses arising from intentional self-inflicted injury, attempted suicide or self-harm, whether the Insured Person is sane or insane, are not payable under this Policy.
+=== PAGE BREAK ===
+SECTION 5A - SPECIAL CONDITIONS AND DISCLOSURE
+
+5.5 Permanent Exclusion (underwriting endorsement). For Kamala Verma (Member ID DG0042-03), chronic kidney disease is permanently excluded for the lifetime of the policy and no claim relating to it shall be payable. This Permanent Exclusion was accepted at underwriting and appears in the Special Conditions of the Certificate.
+
+5.6 Pre-existing conditions declared for Vikram Verma are accepted with modified terms and are subject to the waiting period and co-payment stated in the Certificate; they are not permanently excluded.
+
+5.7 Duty of Disclosure. The proposer shall disclose in the proposal form all material facts about each proposed Insured Person, including declarations about medical conditions and treatment. Material facts are those that would influence the Company's decision to accept the risk or the terms of cover.
+
+5.8 Disclosure at Renewal. An Insured Person is not required to disclose at renewal any illness or condition contracted after the inception of the policy. A change in occupation shall be intimated to the Company at renewal.
+
+5.9 Non-disclosure. If there is any misrepresentation, mis-description or non-disclosure of any material fact, this Policy shall be void and all premium paid shall be forfeited, subject to the Moratorium Period.
+
+5.10 Moratorium Period. After completion of 60 continuous months of coverage, no policy or claim shall be contestable by the Company on grounds of non-disclosure or misrepresentation except on grounds of established fraud. Enhanced limits shall be subject to a fresh moratorium only for the enhanced amount.
+
+5.11 Fraud. If a claim is made which is in any respect fraudulent, or if any false statement is made in support of a claim, all benefits under the Policy shall be forfeited, and the persons concerned shall be jointly and severally liable to repay amounts wrongly paid.

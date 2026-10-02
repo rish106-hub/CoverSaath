@@ -67,6 +67,8 @@ const expectedTables = Object.freeze([
   'workflow_events', 'reviewer_findings', 'release_gates', 'human_reviews', 'human_approvals',
   'integration_outbox', 'integration_webhook_events', 'idempotency_keys', 'retention_records',
   'audit_events', 'api_sessions',
+  'policy_records', 'policy_record_documents', 'breakdown_jobs', 'policy_parameters',
+  'policy_parameter_reviews', 'breakdown_model_calls',
 ]);
 
 const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -87,6 +89,7 @@ const criticalTriggers = Object.freeze([
   'consent_scopes_profile_viewer_insert', 'consent_scopes_profile_viewer_update',
   'ocr_jobs_document_ready_insert', 'source_pages_ocr_document_match_insert',
   'source_pages_ocr_document_match_update',
+  'policy_record_documents_same_household',
 ]);
 
 const criticalIndexes = Object.freeze([
@@ -98,9 +101,11 @@ const criticalIndexes = Object.freeze([
   'audit_events_household_chain_idx',
   'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'consent_scopes_field_viewer_idx',
   'ocr_jobs_lifecycle_idx',
+  'policy_records_household_idx', 'breakdown_jobs_status_idx', 'policy_parameters_section_idx',
 ]);
 
 const requiredColumns = Object.freeze({
+  households: ['city'],
   document_uploads: ['logical_document_id', 'source_version'],
   evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status'],
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],

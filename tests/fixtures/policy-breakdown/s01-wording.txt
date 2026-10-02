@@ -1,0 +1,70 @@
+EXAMPLE GENERAL INSURANCE COMPANY LIMITED
+IRDAI Reg. No. 999 | CIN: U00000MH2000PLC000000
+Registered Office: 1 Example Marg, Mumbai 400001
+
+POLICY SCHEDULE — EXAMPLE FAMILY HEALTH PLAN
+Product UIN: EXAHLIP26001V012526
+
+Policy No.: EX/FHP/2026/000123
+Previous Policy No.: EX/FHP/2025/000123
+Date of Issue: 28/03/2026
+Proposer Name: Ram Kumar
+Policy Period: From 00:00 hrs of 01/04/2026 To Midnight of 31/03/2027
+Cover Type: Family Floater
+Sum Insured (Floater): Rs. 10,00,000
+Zone: B
+
+Insured Persons
+| Name           | Relationship | Date of Birth | Member ID        |
+| Ram Kumar      | Self         | 14/05/1988    | EXH-000123-01    |
+| Sita Kumar     | Spouse       | 02/02/1991    | EXH-000123-02    |
+| Luv Kumar      | Son          | 30/09/2018    | EXH-000123-03    |
+| Kaushalya Devi | Mother       | 21/07/1962    | EXH-000123-04    |
+
+TPA Name: Example Health TPA Private Limited
+TPA Helpline (24x7): 1800-000-0000
+
+Add-on Covers Opted:
+1. Example Hospital Daily Cash Add-on (UIN: EXAHLIA26014V012526) — Premium Rs. 1,180 (incl. GST)
+
+Intermediary Details
+Intermediary Type: Corporate Agent (Banca)
+Intermediary Name: Example Bank Limited
+Intermediary Code: CA0000123
+Intermediary Contact: 1800-000-1111
+
+Endorsements: Nil
+
+Certificate No.: NA
+Group Administrator: NA
+
+This Schedule is issued subject to the Policy Wording of Example Family Health Plan (Version 01) and the Add-on wording(s) listed above.
+=== PAGE BREAK ===
+CUSTOMER INFORMATION SHEET
+Example Family Health Plan — UIN: EXAHLIP26001V012526
+Description is illustrative and not exhaustive.
+
+| S.No | Title            | Description                                                                 | Refer to Policy Clause |
+| 1    | Name of Insurance Product/Policy | Example Family Health Plan                                  | —                      |
+| 2    | Policy Number    | EX/FHP/2026/000123                                                          | Schedule               |
+| 3    | Type of Insurance Product/Policy | Indemnity; Individual / Family Floater, as opted in the Schedule | Section 1   |
+| 4    | Claims Administration | Claims are serviced through the TPA named in the Schedule              | Section 6              |
+
+Note: This Customer Information Sheet is a summary. In case of dispute, the terms and conditions mentioned in the Policy Wording shall prevail.
+=== PAGE BREAK ===
+EXAMPLE FAMILY HEALTH PLAN — POLICY WORDING (Version 01)
+UIN: EXAHLIP26001V012526
+
+Section 9. General Terms and Clauses
+
+9.1 Entire Contract
+The proposal form, the Schedule, this Policy Wording and any Endorsements issued shall be read together as one contract.
+
+9.2 Construction and Order of Precedence
+In case of any conflict between the Policy Wording and the Schedule, the Schedule shall prevail. Any Endorsement shall prevail over both the Schedule and the Policy Wording to the extent of the change it records. In case of any conflict between a translation and the English version, the English version shall prevail.
+
+9.3 Add-on Covers
+Each Add-on Cover is a separate contract issued along with this Policy and is governed by its own Add-on wording, premium and terms. The Example Hospital Daily Cash Add-on has its own waiting period of 30 days from the first inception of the Add-on. Exclusions of this Policy shall apply to the Add-on unless the Add-on wording states otherwise. An Add-on cannot be continued without the base Policy.
+
+9.4 Claims Administration
+Claims under this Policy shall be serviced by the Third Party Administrator (TPA) named in the Schedule. The admissibility of a claim shall be decided by the Company.

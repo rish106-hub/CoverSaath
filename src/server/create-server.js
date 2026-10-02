@@ -22,6 +22,7 @@ import {
 import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
 import { readServerConfig } from './config.js';
 import { createGeminiCoverageRegistryFactory } from '../modules/ai-analysis/index.js';
+import { createPolicyBreakdownFromEnv } from '../modules/policy-breakdown/index.js';
 
 function validateInput(value) {
   if (!['planned_care', 'renewal', 'emergency'].includes(value.trigger)) throw failure(400, 'Choose a supported trigger.');
@@ -48,6 +49,7 @@ export function createApiServer({
   databasePath,
   backendServices,
   analysisLiveRegistryFactory,
+  policyBreakdownOverrides,
 } = {}) {
   const config = readServerConfig(env);
   const cases = new Map();
@@ -73,6 +75,7 @@ export function createApiServer({
   const ownsDatabase = !injectedDatabase;
   let database = injectedDatabase ?? null;
   let services = backendServices ?? null;
+  let policy = null;
   const getBackend = () => {
     database ||= openDatabase({ path: databasePath ?? env.DATABASE_PATH ?? '.local/knowvia.sqlite' });
     services ||= createBackendServices(database, {
@@ -80,7 +83,12 @@ export function createApiServer({
       sessionDurationMs: config.sessionTtlMs,
       maxActiveSessions: config.maxSessions,
     });
-    return { database, services };
+    if (!policy) {
+      policy = createPolicyBreakdownFromEnv({ database, services, env, overrides: policyBreakdownOverrides });
+      // Jobs that were running when the process stopped become resumable, never silently lost.
+      policy.recoverInterruptedJobs();
+    }
+    return { database, services, policy };
   };
   const integrations = {
     sarvam: createSarvamOcrProvider({ env }),

@@ -1,0 +1,40 @@
+DEMO GENERAL INSURANCE COMPANY LIMITED
+CERTIFICATE OF INSURANCE - TIME AND WAITING PERIOD SCHEDULE
+Demo Group Health Shield | Master Policy Number: DG/GHS/2026/004567 | Certificate: DG/GHS/2026/004567/0042
+
+Period of Insurance: From 00:00 hrs of 01/04/2026 To Midnight of 31/03/2027
+Group Date of First Inception with the Company: 01/04/2021
+
+Member Since (Date of First Enrolment)
+| Name         | Member Since |
+| Asha Verma   | 01/04/2021   |
+| Vikram Verma | 01/04/2021   |
+| Kamala Verma | 01/04/2024   |
+| Arjun Verma  | 15/06/2026   |
+
+Waiting Periods
+| Member type                      | PED waiting period | Specified disease waiting period | Maternity waiting period |
+| Employee (Self) and Spouse       | Nil                | Nil                              | Nil (day-one cover)      |
+| Dependent Parents                | 12 months          | 12 months                        | Not applicable           |
+
+Waiting Period Buy-down: No waiting-period buy-down option is available under this Group Policy, and none has been opted.
+Continuity Credit: Employees who joined the Master Policyholder from a prior group health policy are given credit for waiting periods already served under that policy, provided there was no break in coverage.
+=== PAGE BREAK ===
+DEMO GROUP HEALTH SHIELD - POLICY WORDING (Version 2)
+WAITING PERIODS AND TIME CLAUSES
+
+A. Pre-existing Diseases (Code-Excl01)
+Pre-existing diseases of Dependent Parents are excluded until the expiry of 12 months of continuous coverage. This waiting period is waived for Employees and their Spouses from day one.
+
+B. Specified Disease/Procedure Waiting Period (Code-Excl02)
+The following listed conditions, surgeries and treatments are excluded until the expiry of the waiting period shown in the Certificate: Cataract; Hernia; Hysterectomy; Kidney stones; Gall bladder stones; Joint replacement surgery unless necessitated by accident.
+Waiting period variations: the specified disease waiting period is waived for Employees and their Spouses, and is 12 months for Dependent Parents.
+
+C. Maternity
+Maternity expenses are covered from day one. Maternity waiting period under this Group Policy: Nil.
+
+D. Counting of Waiting Periods
+The waiting periods are counted from the Date of First Enrolment of each Insured Person under this group, as shown in the Certificate.
+
+E. Relapse
+A relapse of the same illness within 45 days from the date of discharge shall be treated as part of the same illness for the purposes of the limits and conditions of this Policy.

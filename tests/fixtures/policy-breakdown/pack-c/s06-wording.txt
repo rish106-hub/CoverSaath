@@ -1,0 +1,17 @@
+Demo General Insurance Company Limited
+Demo Super Top-Up | UIN: DEMHLGP26003V012526 | Version 1
+Policy Number: DG/STU/2026/000789
+SCHEDULE OF COVER AND DEDUCTIBLE
+
+Sum Insured: ₹20,00,000 per Policy Year
+Deductible: This is a Super Top-Up policy. A Mandatory Aggregate Deductible of ₹5,00,000 applies per Policy Year; the Company pays only the admissible claim amount in excess of the aggregate deductible in a Policy Year
+Inflation Protection: the Sum Insured increases by 10% per year at each renewal, linked to the Consumer Price Index
+ICU: ICU charges are limited to 2% of Sum Insured per day, subject to a maximum of ₹40,000 per day
+=== PAGE BREAK ===
+CLAIM PAYMENT CONDITIONS
+
+6.1 Aggregate deductible. The deductible of ₹5,00,000 shall be satisfied by the sum of admissible claim amounts in the Policy Year, whether paid by the Company or by another health insurance policy.
+
+6.2 Contribution to the deductible. Amounts paid by any other indemnity policy of the Insured Person count toward the deductible, so that the deductible may be satisfied by amounts paid by any other policy.
+
+6.3 Multiple policies. The Insured Person may choose which policy shall settle the claim first, and the balance amount may be claimed from the next policy.

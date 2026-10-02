@@ -1,0 +1,53 @@
+EXAMPLE GENERAL INSURANCE COMPANY LIMITED
+EXAMPLE FAMILY HEALTH PLAN - POLICY SCHEDULE
+UIN: EXAHLIP26001V012526
+Policy No.: EX/FHP/2026/000123
+
+SCHEDULE OF BENEFITS (Family Floater)
+
+Base Sum Insured (Floater): Rs. 10,00,000/- (Rupees Ten Lakh Only)
+Zone of Cover: Zone B
+Deductible: Nil
+Co-payment: As per Section 3.4 of the Policy Wording
+Room Rent: Up to Single Private A/C Room
+ICU / ICCU Charges: Actuals
+Cumulative Bonus: 10% of Base Sum Insured for every claim-free Policy Year, maximum up to 50% of Base Sum Insured
+Restoration of Sum Insured: 100% of Base Sum Insured, once in a Policy Year
+Cataract: Up to INR 40,000 per eye per Policy Year
+Maternity Expenses: Normal delivery up to Rs. 50,000; Caesarean section up to Rs. 75,000
+Road Ambulance: Up to Rs. 3,000 per hospitalisation
+Modern Treatment Methods: Up to 50% of Sum Insured
+AYUSH Treatment: Up to Sum Insured
+Consumables Cover (Optional Add-on): Not Opted
+
+=== PAGE BREAK ===
+
+SECTION 3 - LIMITS, SUB-LIMITS AND CO-PAYMENT
+
+3.1 Room Rent. The Company shall pay room, boarding and nursing expenses up to a Single Private Air-Conditioned Room. Where the Hospital does not offer a Single Private Air-Conditioned Room, room rent shall be payable up to 1% of the Sum Insured per day.
+
+3.2 Intensive Care Unit. Expenses for the Intensive Care Unit (ICU) and Intensive Cardiac Care Unit (ICCU) shall be payable at actuals.
+
+3.3 Proportionate Deduction. If the Insured Person is admitted in a room category higher than the one that is eligible as per the Policy, then the Policyholder shall bear the ratable proportion of the total Associated Medical Expenses (including surcharge or taxes thereon) in the proportion of the difference between the room rent of the entitled room category to the room rent actually incurred. Proportionate deduction shall not apply in respect of the expenses for pharmacy and consumables, cost of implants and diagnostics.
+
+3.4 Co-payment.
+(a) Age related co-payment: A co-payment of 20% shall apply on each and every admissible claim in respect of any Insured Person who is aged 61 years or above at the time of claim.
+(b) Zone related co-payment: This Policy is priced for Zone B. If an Insured Person avails treatment in a Zone A city, a co-payment of 10% shall apply on each and every admissible claim.
+
+3.5 Cumulative Bonus. If a claim is made in any Policy Year, the Cumulative Bonus accrued shall be reduced by 10% of the Base Sum Insured at the next renewal, but the Base Sum Insured shall not be reduced.
+
+3.6 Restoration of Sum Insured. In the event of complete or partial exhaustion of the Base Sum Insured during the Policy Year, the Company shall restore 100% of the Base Sum Insured once in that Policy Year. The restored Sum Insured shall not be available for a claim for the same illness or injury for which a claim has already been paid in that Policy Year. Unutilised restored Sum Insured shall not be carried forward.
+
+3.7 Maternity. Expenses for a maximum of 2 deliveries shall be payable during the lifetime of the Policy.
+
+=== PAGE BREAK ===
+
+SECTION 5 - GENERAL TERMS AND DEFINITIONS (EXTRACT)
+
+5.1 Reasonable and Customary Charges means the charges for services or supplies, which are the standard charges for the specific provider and consistent with the prevailing charges in the geographical area for identical or similar services, taking into account the nature of the illness / injury involved. The Company shall be liable to pay only Reasonable and Customary Charges.
+
+5.2 Non-payable items. Expenses for items listed in Annexure II (List I - Items for which coverage is not available in the Policy) are not payable under this Policy.
+
+5.3 Multiple Policies. If two or more policies are taken by an Insured Person during a period from one or more insurers to cover the same risk on indemnity basis, the Insured Person shall have the right to require a settlement of his/her claim in terms of any of his/her policies. In all such cases the insurer chosen by the Insured Person shall be obliged to settle the claim as long as the claim is within the limits of and according to the terms of the chosen policy. If the amount to be claimed exceeds the Sum Insured under a single policy, the Insured Person shall have the right to choose the insurer from whom he/she wants to claim the balance amount.
+
+5.4 Contribution clause shall not be applicable where the cover/limit under the policy chosen by the Insured Person is adequate to settle the claim.

@@ -1,0 +1,170 @@
+{
+  "section": 3,
+  "expected": [
+    {
+      "key": "policy_start_date", "found": true,
+      "valueText": "2026-04-01", "valueNumber": null, "valueBoolean": null, "valueList": null,
+      "unit": null, "basis": "per_policy", "effect": "inform", "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "high",
+      "notes": "Schedule date 01/04/2026 read as dd/mm/yyyy.",
+      "quote": "Period of Insurance: From 00:00 hrs of 01/04/2026 To Midnight of 31/03/2027"
+    },
+    {
+      "key": "policy_end_date", "found": true,
+      "valueText": "2027-03-31", "valueNumber": null, "valueBoolean": null, "valueList": null,
+      "unit": null, "basis": "per_policy", "effect": "inform", "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "high",
+      "notes": "Schedule date 31/03/2027 read as dd/mm/yyyy.",
+      "quote": "Period of Insurance: From 00:00 hrs of 01/04/2026 To Midnight of 31/03/2027"
+    },
+    {
+      "key": "first_inception_date", "found": true,
+      "valueText": "2023-04-01", "valueNumber": null, "valueBoolean": null, "valueList": null,
+      "unit": null, "basis": "per_policy", "effect": "inform", "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "high",
+      "notes": "Distinct from the current period start and from the date of issue 28/03/2026.",
+      "quote": "Date of First Inception with the Company: 01/04/2023"
+    },
+    {
+      "key": "member_cover_start_dates", "found": true,
+      "valueText": "Ram Kumar, Sita Kumar, Luv Kumar and Kaushalya Devi: member since 2023-04-01", "valueNumber": null, "valueBoolean": null, "valueList": null,
+      "unit": null, "basis": "per_person", "effect": "inform", "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "high",
+      "notes": "All four members share the same start date, so no member-specific item is needed.",
+      "quote": "Ram Kumar              Self            14/05/1988       01/04/2023\nSita Kumar             Spouse          02/02/1991       01/04/2023\nLuv Kumar              Son             30/09/2018       01/04/2023\nKaushalya Devi         Mother          21/07/1962       01/04/2023"
+    },
+    {
+      "key": "grace_period_days", "found": true,
+      "valueText": null, "valueNumber": 30, "valueBoolean": null, "valueList": null,
+      "unit": "days", "basis": "per_policy", "effect": "require", "memberScope": null,
+      "conditions": ["Coverage is not available during the grace period."], "exceptions": [], "confidence": "high",
+      "notes": null,
+      "quote": "can be renewed within the\nGrace Period of 30 days to maintain continuity of benefits without break in policy. Coverage is not\navailable during the grace period."
+    },
+    {
+      "key": "lapse_consequence_rule", "found": true,
+      "valueText": "At the end of the policy period the policy terminates; renewal within the 30-day grace period maintains continuity of benefits without break.", "valueNumber": null, "valueBoolean": null, "valueList": null,
+      "unit": null, "basis": "per_policy", "effect": "void", "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "medium",
+      "notes": "No separate revival terms are stated.",
+      "quote": "At the end of the policy period, the policy shall terminate and can be renewed within the\nGrace Period of 30 days to maintain continuity of benefits without break in policy."
+    },
+    {
+      "key": "initial_waiting_period_days", "found": true,
+      "valueText": null, "valueNumber": 30, "valueBoolean": null, "valueList": null,
+      "unit": "days", "basis": "per_person", "effect": "exclude", "memberScope": null,
+      "conditions": ["Does not apply if the Insured Person has Continuous Coverage for more than twelve months."],
+      "exceptions": ["Claims arising due to an accident."], "confidence": "high",
+      "notes": null,
+      "quote": "Expenses related to the treatment of any illness within 30 days from the first policy commencement date\nshall be excluded except claims arising due to an accident, provided the same are covered."
+    },
+    {
+      "key": "accident_exempt_from_initial_wait", "found": true,
+      "valueText": null, "valueNumber": null, "valueBoolean": true, "valueList": null,
+      "unit": null, "basis": "per_claim", "effect": "pay", "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "high",
+      "notes": null,
+      "quote": "shall be excluded except claims arising due to an accident, provided the same are covered."
+    },
+    {
+      "key": "ped_waiting_period_months", "found": true,
+      "valueText": null, "valueNumber": 36, "valueBoolean": null, "valueList": null,
+      "unit": "months", "basis": "per_person", "effect": "exclude", "memberScope": null,
+      "conditions": ["Counted as continuous coverage after the date of inception of the first policy with the insurer.", "Applies afresh to the extent of any sum insured increase."],
+      "exceptions": ["Reduced to the extent of prior continuous coverage under portability norms."], "confidence": "high",
+      "notes": "The 48-month figure refers to an earlier product version stated as not applicable; it is not this policy's value.",
+      "quote": "excluded until the expiry of 36 months of continuous coverage after the date of inception of the first\npolicy with us."
+    },
+    {
+      "key": "specified_disease_waiting_months", "found": true,
+      "valueText": null, "valueNumber": 24, "valueBoolean": null, "valueList": null,
+      "unit": "months", "basis": "per_illness", "effect": "exclude", "memberScope": null,
+      "conditions": ["Applies afresh to the extent of any sum insured increase."],
+      "exceptions": ["Claims arising due to an accident."], "confidence": "high",
+      "notes": null,
+      "quote": "excluded until\nthe expiry of 24 months of continuous coverage after the date of inception of the first policy with us.\nThis exclusion shall not be applicable for claims arising due to an accident."
+    },
+    {
+      "key": "specified_disease_list", "found": true,
+      "valueText": null, "valueNumber": null, "valueBoolean": null,
+      "valueList": ["Cataract", "Hernia of all types", "Joint replacement surgery unless necessitated by accident", "Kidney stones and urinary tract calculi", "Benign prostatic hypertrophy", "Gall bladder stones", "Varicose veins"],
+      "unit": null, "basis": "per_illness", "effect": "exclude", "memberScope": null,
+      "conditions": [], "exceptions": ["Joint replacement necessitated by accident."], "confidence": "high",
+      "notes": null,
+      "quote": "List of specific diseases/procedures: Cataract; Hernia of all types; Joint replacement surgery unless\nnecessitated by accident; Kidney stones and urinary tract calculi; Benign prostatic hypertrophy; Gall\nbladder stones; Varicose veins."
+    },
+    {
+      "key": "specified_disease_wait_variations", "found": false,
+      "valueText": null, "valueNumber": null, "valueBoolean": null, "valueList": [],
+      "unit": null, "basis": null, "effect": null, "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "high",
+      "notes": "A single 24-month period applies to the whole list.",
+      "quote": null
+    },
+    {
+      "key": "maternity_waiting_period_months", "found": true,
+      "valueText": null, "valueNumber": 24, "valueBoolean": null, "valueList": null,
+      "unit": "months", "basis": "per_person", "effect": "wait_until", "memberScope": null,
+      "conditions": ["Insured Person continuously covered under this Policy."], "exceptions": [], "confidence": "high",
+      "notes": null,
+      "quote": "Maternity Expenses shall be payable only after the Insured Person has been continuously covered under this\nPolicy for a period of 24 months from the date of first inception of the Policy."
+    },
+    {
+      "key": "waiting_period_start_basis", "found": true,
+      "valueText": "member_first_inception", "valueNumber": null, "valueBoolean": null, "valueList": null,
+      "unit": null, "basis": "per_person", "effect": "wait_until", "memberScope": null,
+      "conditions": ["Subject to continuous renewal without break."], "exceptions": [], "confidence": "high",
+      "notes": null,
+      "quote": "The waiting periods shown above are counted from the Date of First Inception of each Insured Person\nwith the Company, subject to continuous renewal without break."
+    },
+    {
+      "key": "waiting_reset_on_si_enhancement", "found": true,
+      "valueText": "On enhancement of sum insured, the PED and specified-disease waiting exclusions apply afresh to the extent of the sum insured increase.", "valueNumber": null, "valueBoolean": null, "valueList": null,
+      "unit": null, "basis": "per_person", "effect": "exclude", "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "high",
+      "notes": "Stated identically in C.2(b) and C.3(b).",
+      "quote": "In case of enhancement of sum insured the exclusion shall apply afresh to the extent of sum insured\nincrease."
+    },
+    {
+      "key": "waiting_period_buydown_rule", "found": false,
+      "valueText": null, "valueNumber": null, "valueBoolean": null, "valueList": [],
+      "unit": null, "basis": null, "effect": null, "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "high",
+      "notes": null,
+      "quote": null
+    },
+    {
+      "key": "continuity_credit_rule", "found": true,
+      "valueText": "A continuously covered person porting from an Indian general/health insurer gets accrued continuity benefits in waiting periods per IRDAI portability guidelines; credit is limited to the sum insured of the previous policy.", "valueNumber": null, "valueBoolean": null, "valueList": null,
+      "unit": null, "basis": "per_person", "effect": "wait_until", "memberScope": null,
+      "conditions": ["Continuously covered without any lapses."], "exceptions": [], "confidence": "high",
+      "notes": null,
+      "quote": "the proposed Insured Person will get the accrued continuity benefits in waiting\nperiods as per IRDAI guidelines on portability. The credit shall be limited to the sum insured of the\nprevious policy."
+    },
+    {
+      "key": "moratorium_period_months", "found": true,
+      "valueText": null, "valueNumber": 60, "valueBoolean": null, "valueList": null,
+      "unit": "months", "basis": "per_person", "effect": "inform", "memberScope": null,
+      "conditions": ["Includes portability and migration.", "For enhanced sums insured, sixty continuous months run from the date of enhancement on the enhanced limits only."],
+      "exceptions": ["Established fraud."], "confidence": "high",
+      "notes": "Wording states 'sixty continuous months'.",
+      "quote": "After completion of sixty continuous months of coverage (including portability and migration), no policy\nand claim shall be contestable by the insurer on grounds of non-disclosure, misrepresentation, except on\ngrounds of established fraud."
+    },
+    {
+      "key": "free_look_period_days", "found": true,
+      "valueText": null, "valueNumber": 30, "valueBoolean": null, "valueList": null,
+      "unit": "days", "basis": "per_policy", "effect": "inform", "memberScope": null,
+      "conditions": ["Applies to new individual policies, not renewals or porting/migration."], "exceptions": [], "confidence": "high",
+      "notes": "Wording states 'thirty days'.",
+      "quote": "The insured person shall be allowed free look period of thirty\ndays from date of receipt of the policy document"
+    },
+    {
+      "key": "relapse_window_days", "found": false,
+      "valueText": null, "valueNumber": null, "valueBoolean": null, "valueList": [],
+      "unit": null, "basis": null, "effect": null, "memberScope": null,
+      "conditions": [], "exceptions": [], "confidence": "high",
+      "notes": null,
+      "quote": null
+    }
+  ]
+}

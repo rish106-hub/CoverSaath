@@ -1,0 +1,37 @@
+Demo General Insurance Company Limited
+Demo Group Health Shield | UIN: DEMHLGP26002V012526 | Version 2
+Master Policy No.: DG/GHS/2026/004567 | Certificate No.: DG/GHS/2026/004567/0042
+SCHEDULE OF LIMITS AND CO-PAYMENTS
+
+Sum Insured Type: Individual per Member | Sum Insured: ₹5,00,000 per Insured Person per Policy Year
+Dependent parents: For Kamala Verma (dependent parent) the Sum Insured is capped at ₹3,00,000
+Corporate Buffer: ₹25,00,000 for the whole group, available only with prior approval of the policyholder
+Guaranteed Bonus: 5% of Sum Insured is added at each renewal irrespective of claims
+Room Rent: Room rent is limited to ₹5,000 per day
+ICU: ICU and ICCU charges are limited to 2% of Sum Insured per day, subject to a maximum of ₹10,000 per day
+Co-payment: A co-payment of 10% applies on every claim of dependent parents (Kamala Verma)
+Non-network co-payment: 20% of the admissible claim for treatment at a non-network hospital, for all Insured Persons
+Co-payment for Vikram Verma: 10% on diabetes-related claims of Vikram Verma
+Voluntary Deductible: An optional Voluntary Deductible is available for a premium discount; no Voluntary Deductible has been opted under this Certificate
+Joint Replacement: up to ₹1,50,000 per joint
+Air Ambulance: up to ₹2,50,000 per hospitalisation
+AYUSH Treatment: fixed ₹25,000 per Policy Year
+Domiciliary Hospitalisation: 10% of Sum Insured up to ₹50,000 per Policy Year
+Organ Donor Expenses: up to ₹1,00,000
+Hospital Daily Cash: ₹1,000 per day for up to 10 days per hospitalisation
+Attendant Allowance: ₹500 per day
+Maternity (Asha Verma only): normal delivery up to ₹60,000; caesarean section up to ₹80,000; maximum 2 deliveries
+=== PAGE BREAK ===
+GENERAL CLAUSES - CLAIM PAYMENT
+
+7.1 Sub-limits. The following sub-limits apply per Policy Year: cardiac procedures up to ₹2,00,000; cancer treatment as per actuals up to the Sum Insured.
+
+7.2 Surgery components. Surgeon and anaesthetist fees together shall not exceed 40% of the surgery package, and operation theatre charges are payable as part of the package.
+
+7.3 Package rates. For procedures listed in the network hospital agreement, the network package rates apply and the claim shall be paid at the package rate irrespective of the actual bill.
+
+7.4 Order of application. Sub-limits shall be applied first, then the co-payment, and then the deductible, on the admissible claim amount.
+
+7.5 Room rent. Room rent is limited to the fixed amount stated in the Schedule of Limits and Co-payments for each day of hospitalisation.
+
+7.6 Deductible. Where the Policyholder has opted for a Voluntary Deductible, it is applied per Policy Year on the claim amount.
