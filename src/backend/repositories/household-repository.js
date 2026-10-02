@@ -61,6 +61,13 @@ export class HouseholdRepository {
     return this.database.prepare('SELECT * FROM household_roles WHERE id = ?').get(roleId);
   }
 
+  setCity({ householdId, city, actorAdultId }) {
+    const at = this.clock().toISOString();
+    this.database.prepare('UPDATE households SET city = ?, updated_at = ? WHERE id = ?').run(city, at, householdId);
+    this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household.city_set', resourceType: 'household', resourceId: householdId });
+    return this.getHousehold(householdId);
+  }
+
   getAdult(adultId) { return this.database.prepare('SELECT * FROM adult_users WHERE id = ?').get(adultId) ?? null; }
   getHousehold(householdId) { return this.database.prepare('SELECT * FROM households WHERE id = ?').get(householdId) ?? null; }
   listMembers(householdId) { return this.database.prepare('SELECT * FROM household_members WHERE household_id = ? ORDER BY created_at').all(householdId); }

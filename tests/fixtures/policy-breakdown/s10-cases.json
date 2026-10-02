@@ -1,0 +1,198 @@
+{
+  "section": 10,
+  "note": "Synthetic disclosures only. No real insurer, statistic or source.",
+  "cases": [
+    {
+      "name": "normal: name variant matches, most recent period wins, city network found",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "insurer_name": { "key": "insurer_name", "value": { "kind": "text", "text": "Example General Insurance Company Limited" }, "evidenceState": "Proven", "memberScope": null },
+          "tpa_name": { "key": "tpa_name", "value": { "kind": "text", "text": "Example Health TPA Private Limited" }, "evidenceState": "Proven", "memberScope": null }
+        },
+        "household": { "members": [ { "id": "m1", "displayName": "Ram Kumar", "relationship": "self", "dateOfBirth": "1988-05-14" } ], "city": "Pune" },
+        "otherRecords": [],
+        "references": {
+          "insurerDisclosures": [
+            { "insurerName": "Example General Insurance Co. Ltd.", "metric": "claim_settlement_ratio_count", "value": 88.4, "period": "FY2024-25", "publishedOn": "2025-08-15", "source": "Synthetic annual disclosure A" },
+            { "insurerName": "EXAMPLE GENERAL INSURANCE COMPANY LTD", "metric": "claim_settlement_ratio_count", "value": 91.25, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "claim_settlement_ratio_amount", "value": 81.5, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "incurred_claim_ratio", "value": 104.2, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "repudiation_ratio", "value": 4.1, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "complaints_per_10k_claims", "value": 27, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "solvency_ratio", "value": 185, "period": "2026-06-30", "publishedOn": "2026-08-20", "source": "Synthetic quarterly solvency disclosure" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "average_settlement_days", "value": 12, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "network_hospitals_in_city", "city": "pune", "value": 142, "period": "2026-09", "publishedOn": "2026-09-05", "source": "Synthetic network list" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "network_hospitals_in_city", "city": "Mumbai", "value": 390, "period": "2026-09", "publishedOn": "2026-09-05", "source": "Synthetic network list" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "public_complaint_patterns", "value": ["delay in reimbursement", "partial settlement disputes"], "period": "FY2025-26", "publishedOn": "2026-07-01", "source": "Synthetic complaint summary" }
+          ]
+        }
+      },
+      "expected": {
+        "claim_settlement_ratio_count": { "evidenceState": "Dynamic", "value": { "kind": "percent", "percent": 91.25 } },
+        "claim_settlement_ratio_amount": { "evidenceState": "Dynamic", "value": { "kind": "percent", "percent": 81.5 } },
+        "incurred_claim_ratio": { "evidenceState": "Dynamic", "value": { "kind": "percent", "percent": 104.2 } },
+        "repudiation_ratio": { "evidenceState": "Dynamic", "value": { "kind": "percent", "percent": 4.1 } },
+        "complaints_per_10k_claims": { "evidenceState": "Dynamic", "value": { "kind": "count", "count": 27 } },
+        "solvency_ratio": { "evidenceState": "Dynamic", "value": { "kind": "percent", "percent": 185 } },
+        "average_settlement_days": { "evidenceState": "Dynamic", "value": { "kind": "days", "count": 12 } },
+        "claims_handling_model": { "evidenceState": "Calculated", "value": { "kind": "enum", "enumValue": "tpa" } },
+        "network_hospitals_in_city": { "evidenceState": "Dynamic", "value": { "kind": "count", "count": 142 } },
+        "public_complaint_patterns": { "evidenceState": "Dynamic", "value": { "kind": "text_list", "items": ["delay in reimbursement", "partial settlement disputes"] } }
+      }
+    },
+    {
+      "name": "missing input: insurer_name and tpa_name absent, disclosures present but unusable",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "insurer_name": { "key": "insurer_name", "value": null, "evidenceState": "Unknown", "memberScope": null }
+        },
+        "household": { "members": [], "city": "Pune" },
+        "otherRecords": [],
+        "references": {
+          "insurerDisclosures": [
+            { "insurerName": "Example General Insurance Company Limited", "metric": "claim_settlement_ratio_count", "value": 91.25, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" }
+          ]
+        }
+      },
+      "expected": {
+        "claim_settlement_ratio_count": { "evidenceState": "Unknown", "value": null },
+        "claim_settlement_ratio_amount": { "evidenceState": "Unknown", "value": null },
+        "incurred_claim_ratio": { "evidenceState": "Unknown", "value": null },
+        "repudiation_ratio": { "evidenceState": "Unknown", "value": null },
+        "complaints_per_10k_claims": { "evidenceState": "Unknown", "value": null },
+        "solvency_ratio": { "evidenceState": "Unknown", "value": null },
+        "average_settlement_days": { "evidenceState": "Unknown", "value": null },
+        "claims_handling_model": { "evidenceState": "Unknown", "value": null },
+        "network_hospitals_in_city": { "evidenceState": "Unknown", "value": null },
+        "public_complaint_patterns": { "evidenceState": "Unknown", "value": null }
+      }
+    },
+    {
+      "name": "conflicting input: same metric and period disagree; duplicate agreeing disclosures stay Dynamic",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "insurer_name": { "key": "insurer_name", "value": { "kind": "text", "text": "Example General Insurance Company Limited" }, "evidenceState": "Proven", "memberScope": null },
+          "tpa_name": { "key": "tpa_name", "value": null, "evidenceState": "Conflicting", "memberScope": null }
+        },
+        "household": { "members": [], "city": "Pune" },
+        "otherRecords": [],
+        "references": {
+          "insurerDisclosures": [
+            { "insurerName": "Example General Insurance Company Limited", "metric": "claim_settlement_ratio_amount", "value": 81.5, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" },
+            { "insurerName": "Example General Insurance Co Ltd", "metric": "claim_settlement_ratio_amount", "value": 79.0, "period": "2025-26", "publishedOn": "2026-09-01", "source": "Synthetic aggregator table" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "claim_settlement_ratio_amount", "value": 70.0, "period": "FY2024-25", "publishedOn": "2025-08-15", "source": "Synthetic annual disclosure A" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "repudiation_ratio", "value": 4.1, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" },
+            { "insurerName": "Example General Insurance Co. Ltd.", "metric": "repudiation_ratio", "value": 4.1, "period": "FY 2025-2026", "publishedOn": "2026-09-01", "source": "Synthetic aggregator table" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "public_complaint_patterns", "value": ["delay in reimbursement"], "period": "FY2025-26", "publishedOn": "2026-07-01", "source": "Synthetic complaint summary" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "public_complaint_patterns", "value": ["cashless denial"], "period": "FY2025-26", "publishedOn": "2026-07-15", "source": "Synthetic complaint summary 2" }
+          ]
+        }
+      },
+      "expected": {
+        "claim_settlement_ratio_count": { "evidenceState": "Unknown", "value": null },
+        "claim_settlement_ratio_amount": { "evidenceState": "Conflicting", "value": null },
+        "incurred_claim_ratio": { "evidenceState": "Unknown", "value": null },
+        "repudiation_ratio": { "evidenceState": "Dynamic", "value": { "kind": "percent", "percent": 4.1 } },
+        "complaints_per_10k_claims": { "evidenceState": "Unknown", "value": null },
+        "solvency_ratio": { "evidenceState": "Unknown", "value": null },
+        "average_settlement_days": { "evidenceState": "Unknown", "value": null },
+        "claims_handling_model": { "evidenceState": "Conflicting", "value": null },
+        "network_hospitals_in_city": { "evidenceState": "Unknown", "value": null },
+        "public_complaint_patterns": { "evidenceState": "Conflicting", "value": null }
+      }
+    },
+    {
+      "name": "edge: sister entity, future publication, out-of-range value, undated period and no household city",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "insurer_name": { "key": "insurer_name", "value": { "kind": "text", "text": "Example General Insurance Company Limited" }, "evidenceState": "Proven", "memberScope": null },
+          "tpa_name": { "key": "tpa_name", "value": null, "evidenceState": "Unknown", "memberScope": null }
+        },
+        "household": { "members": [], "city": null },
+        "otherRecords": [],
+        "references": {
+          "insurerDisclosures": [
+            { "insurerName": "Example General Life Insurance Company Limited", "metric": "claim_settlement_ratio_count", "value": 97.0, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic sister-entity disclosure" },
+            { "insurerName": "Example General", "metric": "incurred_claim_ratio", "value": 90.0, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic brand-name table" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "claim_settlement_ratio_amount", "value": 83.0, "period": "FY2026-27", "publishedOn": "2026-11-30", "source": "Synthetic disclosure published after asOf" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "claim_settlement_ratio_amount", "value": 81.5, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "repudiation_ratio", "value": 140, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic mis-keyed row" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "average_settlement_days", "value": 12, "period": "recent", "publishedOn": "2026-08-14", "source": "Synthetic undated row" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "solvency_ratio", "value": 185, "period": "2026-06-30", "publishedOn": null, "source": "Synthetic row without publication date" },
+            { "insurerName": "Example General Insurance Company Limited", "metric": "network_hospitals_in_city", "city": "Pune", "value": 142, "period": "2026-09", "publishedOn": "2026-09-05", "source": "Synthetic network list" }
+          ]
+        }
+      },
+      "expected": {
+        "claim_settlement_ratio_count": { "evidenceState": "Unknown", "value": null },
+        "claim_settlement_ratio_amount": { "evidenceState": "Dynamic", "value": { "kind": "percent", "percent": 81.5 } },
+        "incurred_claim_ratio": { "evidenceState": "Unknown", "value": null },
+        "repudiation_ratio": { "evidenceState": "Unknown", "value": null },
+        "complaints_per_10k_claims": { "evidenceState": "Unknown", "value": null },
+        "solvency_ratio": { "evidenceState": "Unknown", "value": null },
+        "average_settlement_days": { "evidenceState": "Unknown", "value": null },
+        "claims_handling_model": { "evidenceState": "Unknown", "value": null },
+        "network_hospitals_in_city": { "evidenceState": "Unknown", "value": null },
+        "public_complaint_patterns": { "evidenceState": "Unknown", "value": null }
+      }
+    },
+    {
+      "name": "edge: insurer_name only Reported gives Unknown; NotPermitted tpa_name propagates",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "insurer_name": { "key": "insurer_name", "value": { "kind": "text", "text": "Example General Insurance Company Limited" }, "evidenceState": "Reported", "memberScope": null },
+          "tpa_name": { "key": "tpa_name", "value": null, "evidenceState": "NotPermitted", "memberScope": null }
+        },
+        "household": { "members": [], "city": "Pune" },
+        "otherRecords": [],
+        "references": {
+          "insurerDisclosures": [
+            { "insurerName": "Example General Insurance Company Limited", "metric": "claim_settlement_ratio_count", "value": 91.25, "period": "FY2025-26", "publishedOn": "2026-08-14", "source": "Synthetic annual disclosure B" }
+          ]
+        }
+      },
+      "expected": {
+        "claim_settlement_ratio_count": { "evidenceState": "Unknown", "value": null },
+        "claim_settlement_ratio_amount": { "evidenceState": "Unknown", "value": null },
+        "incurred_claim_ratio": { "evidenceState": "Unknown", "value": null },
+        "repudiation_ratio": { "evidenceState": "Unknown", "value": null },
+        "complaints_per_10k_claims": { "evidenceState": "Unknown", "value": null },
+        "solvency_ratio": { "evidenceState": "Unknown", "value": null },
+        "average_settlement_days": { "evidenceState": "Unknown", "value": null },
+        "claims_handling_model": { "evidenceState": "NotPermitted", "value": null },
+        "network_hospitals_in_city": { "evidenceState": "Unknown", "value": null },
+        "public_complaint_patterns": { "evidenceState": "Unknown", "value": null }
+      }
+    },
+    {
+      "name": "edge: NotPermitted insurer_name propagates to every disclosure metric",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "insurer_name": { "key": "insurer_name", "value": null, "evidenceState": "NotPermitted", "memberScope": null },
+          "tpa_name": { "key": "tpa_name", "value": { "kind": "text", "text": "Example Health TPA Private Limited" }, "evidenceState": "Calculated", "memberScope": null }
+        },
+        "household": { "members": [], "city": "Pune" },
+        "otherRecords": [],
+        "references": {}
+      },
+      "expected": {
+        "claim_settlement_ratio_count": { "evidenceState": "NotPermitted", "value": null },
+        "claim_settlement_ratio_amount": { "evidenceState": "NotPermitted", "value": null },
+        "incurred_claim_ratio": { "evidenceState": "NotPermitted", "value": null },
+        "repudiation_ratio": { "evidenceState": "NotPermitted", "value": null },
+        "complaints_per_10k_claims": { "evidenceState": "NotPermitted", "value": null },
+        "solvency_ratio": { "evidenceState": "NotPermitted", "value": null },
+        "average_settlement_days": { "evidenceState": "NotPermitted", "value": null },
+        "claims_handling_model": { "evidenceState": "Calculated", "value": { "kind": "enum", "enumValue": "tpa" } },
+        "network_hospitals_in_city": { "evidenceState": "NotPermitted", "value": null },
+        "public_complaint_patterns": { "evidenceState": "NotPermitted", "value": null }
+      }
+    }
+  ]
+}

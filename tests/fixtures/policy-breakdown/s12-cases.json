@@ -1,0 +1,242 @@
+{
+  "section": 12,
+  "cases": [
+    {
+      "name": "normal: fixture story policy, ICU not listed as exempt head, cashless timelines not stated",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "ped_waiting_period_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 36 }, "memberScope": null },
+          "specified_disease_waiting_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 24 }, "memberScope": null },
+          "moratorium_period_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 60 }, "memberScope": null },
+          "free_look_period_days": { "evidenceState": "Proven", "value": { "kind": "days", "count": 30 }, "memberScope": null },
+          "initial_waiting_period_days": { "evidenceState": "Proven", "value": { "kind": "days", "count": 30 }, "memberScope": null },
+          "cashless_decision_hours": { "evidenceState": "Unknown", "value": null, "memberScope": null },
+          "discharge_authorisation_hours": { "evidenceState": "Unknown", "value": null, "memberScope": null },
+          "proportionate_deduction_applies": { "evidenceState": "Proven", "value": { "kind": "boolean", "flag": true }, "memberScope": null },
+          "proportionate_deduction_exempt_heads": { "evidenceState": "Proven", "value": { "kind": "text_list", "items": ["pharmacy", "consumables", "implants", "diagnostics"] }, "memberScope": null }
+        },
+        "household": { "members": [], "city": null },
+        "otherRecords": [],
+        "references": {}
+      },
+      "expected": {
+        "regulatory_floor_version": { "evidenceState": "Dynamic", "value": { "kind": "text", "text": "irdai-health-master-circular-2024-as-understood-2026-10-02" } },
+        "ped_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "specified_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "moratorium_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "free_look_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "initial_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "cashless_timeline_within_floor": { "evidenceState": "Unknown", "value": null },
+        "proportionate_deduction_exemptions_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": false } },
+        "regulatory_deviations": { "evidenceState": "Dynamic", "value": { "kind": "text_list", "items": [
+          "Wording lists proportionate-deduction exemptions as pharmacy, consumables, implants, diagnostics; current floor understood to also exempt ICU charges — verify"
+        ] } }
+      }
+    },
+    {
+      "name": "missing input: nothing proven yields Unknown everywhere except the floor version",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {},
+        "household": { "members": [], "city": null },
+        "otherRecords": [],
+        "references": {}
+      },
+      "expected": {
+        "regulatory_floor_version": { "evidenceState": "Dynamic", "value": { "kind": "text", "text": "irdai-health-master-circular-2024-as-understood-2026-10-02" } },
+        "ped_wait_within_floor": { "evidenceState": "Unknown", "value": null },
+        "specified_wait_within_floor": { "evidenceState": "Unknown", "value": null },
+        "moratorium_within_floor": { "evidenceState": "Unknown", "value": null },
+        "free_look_within_floor": { "evidenceState": "Unknown", "value": null },
+        "initial_wait_within_floor": { "evidenceState": "Unknown", "value": null },
+        "cashless_timeline_within_floor": { "evidenceState": "Unknown", "value": null },
+        "proportionate_deduction_exemptions_within_floor": { "evidenceState": "Unknown", "value": null },
+        "regulatory_deviations": { "evidenceState": "Unknown", "value": null }
+      }
+    },
+    {
+      "name": "conflicting input: conflicting and withheld inputs propagate; reported value is not compared; proven worse values become deviations",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "ped_waiting_period_months": { "evidenceState": "Conflicting", "value": null, "memberScope": null },
+          "specified_disease_waiting_months": { "evidenceState": "NotPermitted", "value": null, "memberScope": null },
+          "moratorium_period_months": { "evidenceState": "Reported", "value": { "kind": "months", "count": 96 }, "memberScope": null },
+          "free_look_period_days": { "evidenceState": "Proven", "value": { "kind": "days", "count": 15 }, "memberScope": null },
+          "initial_waiting_period_days": { "evidenceState": "Proven", "value": { "kind": "days", "count": 45 }, "memberScope": null },
+          "cashless_decision_hours": { "evidenceState": "Proven", "value": { "kind": "count", "count": 6 }, "memberScope": null },
+          "discharge_authorisation_hours": { "evidenceState": "Conflicting", "value": null, "memberScope": null },
+          "proportionate_deduction_applies": { "evidenceState": "Proven", "value": { "kind": "boolean", "flag": true }, "memberScope": null },
+          "proportionate_deduction_exempt_heads": { "evidenceState": "Conflicting", "value": null, "memberScope": null }
+        },
+        "household": { "members": [], "city": null },
+        "otherRecords": [],
+        "references": {}
+      },
+      "expected": {
+        "regulatory_floor_version": { "evidenceState": "Dynamic", "value": { "kind": "text", "text": "irdai-health-master-circular-2024-as-understood-2026-10-02" } },
+        "ped_wait_within_floor": { "evidenceState": "Conflicting", "value": null },
+        "specified_wait_within_floor": { "evidenceState": "NotPermitted", "value": null },
+        "moratorium_within_floor": { "evidenceState": "Unknown", "value": null },
+        "free_look_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": false } },
+        "initial_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": false } },
+        "cashless_timeline_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": false } },
+        "proportionate_deduction_exemptions_within_floor": { "evidenceState": "Conflicting", "value": null },
+        "regulatory_deviations": { "evidenceState": "Dynamic", "value": { "kind": "text_list", "items": [
+          "Wording states 15 days free-look period; current floor understood as at least 30 days — verify",
+          "Wording states 45 days initial waiting period; current floor understood as at most 30 days — verify",
+          "Wording states 6 hours cashless authorisation decision time; current floor understood as at most 1 hour — verify"
+        ] } }
+      }
+    },
+    {
+      "name": "edge: every value exactly at the floor, no proportionate deduction at all, no deviations",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "ped_waiting_period_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 36 }, "memberScope": null },
+          "specified_disease_waiting_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 36 }, "memberScope": null },
+          "moratorium_period_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 60 }, "memberScope": null },
+          "free_look_period_days": { "evidenceState": "Proven", "value": { "kind": "days", "count": 30 }, "memberScope": null },
+          "initial_waiting_period_days": { "evidenceState": "Proven", "value": { "kind": "days", "count": 30 }, "memberScope": null },
+          "cashless_decision_hours": { "evidenceState": "Proven", "value": { "kind": "count", "count": 1 }, "memberScope": null },
+          "discharge_authorisation_hours": { "evidenceState": "Proven", "value": { "kind": "count", "count": 3 }, "memberScope": null },
+          "proportionate_deduction_applies": { "evidenceState": "Proven", "value": { "kind": "boolean", "flag": false }, "memberScope": null },
+          "proportionate_deduction_exempt_heads": { "evidenceState": "Unknown", "value": null, "memberScope": null }
+        },
+        "household": { "members": [], "city": null },
+        "otherRecords": [],
+        "references": {}
+      },
+      "expected": {
+        "regulatory_floor_version": { "evidenceState": "Dynamic", "value": { "kind": "text", "text": "irdai-health-master-circular-2024-as-understood-2026-10-02" } },
+        "ped_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "specified_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "moratorium_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "free_look_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "initial_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "cashless_timeline_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "proportionate_deduction_exemptions_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "regulatory_deviations": { "evidenceState": "Dynamic", "value": { "kind": "text_list", "items": [] } }
+      }
+    },
+    {
+      "name": "edge: 48-month PED wait against default floor, full-ICU wording synonyms accepted",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "ped_waiting_period_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 48 }, "memberScope": null },
+          "specified_disease_waiting_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 24 }, "memberScope": null },
+          "moratorium_period_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 96 }, "memberScope": null },
+          "free_look_period_days": { "evidenceState": "Proven", "value": { "kind": "days", "count": 30 }, "memberScope": null },
+          "initial_waiting_period_days": { "evidenceState": "Proven", "value": { "kind": "days", "count": 30 }, "memberScope": null },
+          "cashless_decision_hours": { "evidenceState": "Proven", "value": { "kind": "count", "count": 1 }, "memberScope": null },
+          "discharge_authorisation_hours": { "evidenceState": "Proven", "value": { "kind": "count", "count": 3 }, "memberScope": null },
+          "proportionate_deduction_applies": { "evidenceState": "Proven", "value": { "kind": "boolean", "flag": true }, "memberScope": null },
+          "proportionate_deduction_exempt_heads": { "evidenceState": "Proven", "value": { "kind": "text_list", "items": ["Intensive Care Unit charges", "Medicines and consumables", "Implants and medical devices", "Diagnostic investigations"] }, "memberScope": null }
+        },
+        "household": { "members": [], "city": null },
+        "otherRecords": [],
+        "references": {}
+      },
+      "expected": {
+        "regulatory_floor_version": { "evidenceState": "Dynamic", "value": { "kind": "text", "text": "irdai-health-master-circular-2024-as-understood-2026-10-02" } },
+        "ped_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": false } },
+        "specified_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "moratorium_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": false } },
+        "free_look_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "initial_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "cashless_timeline_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "proportionate_deduction_exemptions_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "regulatory_deviations": { "evidenceState": "Dynamic", "value": { "kind": "text_list", "items": [
+          "Wording states 48 months PED wait; current floor understood as at most 36 months — verify",
+          "Wording states 96 continuous months moratorium period; current floor understood as at most 60 continuous months — verify"
+        ] } }
+      }
+    },
+    {
+      "name": "edge: all inputs withheld by permission propagate NotPermitted, never Unknown",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "ped_waiting_period_months": { "evidenceState": "NotPermitted", "value": null, "memberScope": null },
+          "specified_disease_waiting_months": { "evidenceState": "NotPermitted", "value": null, "memberScope": null },
+          "moratorium_period_months": { "evidenceState": "NotPermitted", "value": null, "memberScope": null },
+          "free_look_period_days": { "evidenceState": "NotPermitted", "value": null, "memberScope": null },
+          "initial_waiting_period_days": { "evidenceState": "NotPermitted", "value": null, "memberScope": null },
+          "cashless_decision_hours": { "evidenceState": "NotPermitted", "value": null, "memberScope": null },
+          "discharge_authorisation_hours": { "evidenceState": "Proven", "value": { "kind": "count", "count": 3 }, "memberScope": null },
+          "proportionate_deduction_applies": { "evidenceState": "NotPermitted", "value": null, "memberScope": null },
+          "proportionate_deduction_exempt_heads": { "evidenceState": "NotPermitted", "value": null, "memberScope": null }
+        },
+        "household": { "members": [], "city": null },
+        "otherRecords": [],
+        "references": {}
+      },
+      "expected": {
+        "regulatory_floor_version": { "evidenceState": "Dynamic", "value": { "kind": "text", "text": "irdai-health-master-circular-2024-as-understood-2026-10-02" } },
+        "ped_wait_within_floor": { "evidenceState": "NotPermitted", "value": null },
+        "specified_wait_within_floor": { "evidenceState": "NotPermitted", "value": null },
+        "moratorium_within_floor": { "evidenceState": "NotPermitted", "value": null },
+        "free_look_within_floor": { "evidenceState": "NotPermitted", "value": null },
+        "initial_wait_within_floor": { "evidenceState": "NotPermitted", "value": null },
+        "cashless_timeline_within_floor": { "evidenceState": "NotPermitted", "value": null },
+        "proportionate_deduction_exemptions_within_floor": { "evidenceState": "NotPermitted", "value": null },
+        "regulatory_deviations": { "evidenceState": "NotPermitted", "value": null }
+      }
+    },
+    {
+      "name": "override: supplied floor table replaces the default and its version is recorded",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "ped_waiting_period_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 48 }, "memberScope": null }
+        },
+        "household": { "members": [], "city": null },
+        "otherRecords": [],
+        "references": {
+          "regulatoryFloor": {
+            "version": "test-override-pre-2024-floor",
+            "asOf": "2023-01-01",
+            "source": "Synthetic test table",
+            "verifyBeforeUse": true,
+            "items": {
+              "ped_waiting_max_months": { "limit": 48 },
+              "specified_disease_waiting_max_months": { "limit": 48 },
+              "moratorium_max_months": { "limit": 96 },
+              "free_look_min_days": { "limit": 15 },
+              "initial_waiting_max_days": { "limit": 30 },
+              "cashless_decision_max_hours": { "limit": 24 },
+              "discharge_authorisation_max_hours": { "limit": 24 },
+              "proportionate_deduction_exempt_heads": { "heads": [ { "id": "icu", "label": "ICU charges", "patterns": ["icu"] } ] }
+            }
+          }
+        }
+      },
+      "expected": {
+        "regulatory_floor_version": { "evidenceState": "Dynamic", "value": { "kind": "text", "text": "test-override-pre-2024-floor" } },
+        "ped_wait_within_floor": { "evidenceState": "Dynamic", "value": { "kind": "boolean", "flag": true } },
+        "specified_wait_within_floor": { "evidenceState": "Unknown", "value": null },
+        "regulatory_deviations": { "evidenceState": "Unknown", "value": null }
+      }
+    },
+    {
+      "name": "override invalid: rejected override yields Unknown comparisons, default version recorded",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "ped_waiting_period_months": { "evidenceState": "Proven", "value": { "kind": "months", "count": 48 }, "memberScope": null }
+        },
+        "household": { "members": [], "city": null },
+        "otherRecords": [],
+        "references": { "regulatoryFloor": { "version": "broken", "items": {} } }
+      },
+      "expected": {
+        "regulatory_floor_version": { "evidenceState": "Dynamic", "value": { "kind": "text", "text": "irdai-health-master-circular-2024-as-understood-2026-10-02" } },
+        "ped_wait_within_floor": { "evidenceState": "Unknown", "value": null },
+        "regulatory_deviations": { "evidenceState": "Unknown", "value": null }
+      }
+    }
+  ]
+}

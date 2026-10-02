@@ -1,0 +1,88 @@
+Example General Insurance Company Limited
+Example Family Health Plan | UIN: EXAHLIP26001V012526
+POLICY SCHEDULE
+
+Policy Number: EX/FHP/2026/000123
+Policy Type: Family Floater
+Period of Insurance: From 00:00 hrs of 01/04/2026 To Midnight of 31/03/2027
+Date of First Inception with the Company: 01/04/2023
+Date of Issue: 28/03/2026
+Previous Policy Number: EX/FHP/2025/000098
+
+Insured Members        Relationship    Date of Birth    Member Since
+Ram Kumar              Self            14/05/1988       01/04/2023
+Sita Kumar             Spouse          02/02/1991       01/04/2023
+Luv Kumar              Son             30/09/2018       01/04/2023
+Kaushalya Devi         Mother          21/07/1962       01/04/2023
+
+Waiting Periods Applicable (refer Section C of the Policy Wording):
+Initial Waiting Period: 30 days
+Pre-Existing Diseases: 36 months
+Specified Diseases / Procedures: 24 months
+Maternity: 24 months
+
+Note: The waiting periods shown above are counted from the Date of First Inception of each Insured Person
+with the Company, subject to continuous renewal without break.
+=== PAGE BREAK ===
+SECTION C - WAITING PERIODS
+
+C.1 Initial Waiting Period (Code-Excl03)
+a. Expenses related to the treatment of any illness within 30 days from the first policy commencement date
+shall be excluded except claims arising due to an accident, provided the same are covered.
+b. This exclusion shall not, however, apply if the Insured Person has Continuous Coverage for more than
+twelve months.
+
+C.2 Pre-Existing Diseases (Code-Excl01)
+a. Expenses related to the treatment of a pre-existing Disease (PED) and its direct complications shall be
+excluded until the expiry of 36 months of continuous coverage after the date of inception of the first
+policy with us.
+b. In case of enhancement of sum insured the exclusion shall apply afresh to the extent of sum insured
+increase.
+c. If the Insured Person is continuously covered without any break as defined under the portability norms
+of the extant IRDAI (Health Insurance) Regulations, then waiting period for the same would be reduced to
+the extent of prior coverage.
+Note: Under the earlier version of this product the PED waiting period was 48 months. That version is not
+applicable to this Policy.
+
+C.3 Specified Disease / Procedure Waiting Period (Code-Excl02)
+a. Expenses related to the treatment of the listed Conditions, surgeries/treatments shall be excluded until
+the expiry of 24 months of continuous coverage after the date of inception of the first policy with us.
+This exclusion shall not be applicable for claims arising due to an accident.
+b. In case of enhancement of sum insured the exclusion shall apply afresh to the extent of sum insured
+increase.
+c. List of specific diseases/procedures: Cataract; Hernia of all types; Joint replacement surgery unless
+necessitated by accident; Kidney stones and urinary tract calculi; Benign prostatic hypertrophy; Gall
+bladder stones; Varicose veins.
+
+C.4 Maternity Waiting Period
+Maternity Expenses shall be payable only after the Insured Person has been continuously covered under this
+Policy for a period of 24 months from the date of first inception of the Policy.
+=== PAGE BREAK ===
+SECTION F - GENERAL TERMS AND CLAUSES
+
+F.4 Moratorium Period
+After completion of sixty continuous months of coverage (including portability and migration), no policy
+and claim shall be contestable by the insurer on grounds of non-disclosure, misrepresentation, except on
+grounds of established fraud. This period of sixty continuous months is called as moratorium period. The
+moratorium would be applicable for the sums insured of the first policy. Wherever the sum insured is
+enhanced, completion of sixty continuous months would be applicable from the date of enhancement of sums
+insured only on the enhanced limits.
+
+F.7 Free Look Period
+The Free Look Period shall be applicable on new individual health insurance policies and not on renewals or
+at the time of porting/migrating the policy. The insured person shall be allowed free look period of thirty
+days from date of receipt of the policy document to review the terms and conditions of the policy, and to
+return the same if not acceptable.
+
+F.9 Renewal of Policy
+Request for renewal along with requisite premium shall be received by the Company before the end of the
+policy period. At the end of the policy period, the policy shall terminate and can be renewed within the
+Grace Period of 30 days to maintain continuity of benefits without break in policy. Coverage is not
+available during the grace period.
+
+F.10 Portability and Continuity of Benefits
+The Insured Person will have the option to port the Policy to other insurers. If the proposed Insured
+Person has been continuously covered without any lapses under any health insurance policy with an Indian
+General/Health insurer, the proposed Insured Person will get the accrued continuity benefits in waiting
+periods as per IRDAI guidelines on portability. The credit shall be limited to the sum insured of the
+previous policy.

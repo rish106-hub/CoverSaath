@@ -32,7 +32,7 @@ test('a fresh local database migrates to the complete v1 schema', async () => {
   const validation = validateSchema(database);
   assert.equal(validation.valid, true);
   assert.equal(validation.integrity, 'ok');
-  assert.equal(validation.migrationCount, 4);
+  assert.equal(validation.migrationCount, 6);
   assert.deepEqual(runMigrations(database), []);
 
   const tables = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name);

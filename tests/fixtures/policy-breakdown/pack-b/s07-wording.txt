@@ -1,0 +1,45 @@
+Demo General Insurance Company Limited
+Demo Group Health Shield - Policy Wording
+UIN: DEMHLGP26002V012526
+Master Policy No. DG/GHS/2026/004567
+
+SECTION D. CASHLESS FACILITY AND HOSPITAL ACCESS
+
+D.1 Availability of Cashless Facility
+Cashless facility shall be available to the Insured Person at Network Providers, subject to pre-authorisation by the Company or its TPA.
+Cashless facility may also be availed at a Non-Network Provider, provided the Insured Person or the Policyholder intimates the TPA at least 48 hours before the planned admission and a co-pay of 20% applies to such admission.
+
+D.2 Network Providers and Preferred Provider Network
+The list of Network Providers is dynamic and is subject to change. The updated list of Network Providers is available on the TPA website at www.democaretpa.example/network and may also be obtained from the Policyholder's human resources desk.
+The Insured Person may search for Network Providers by city and pin code using the hospital locator on the Demo Care TPA mobile application.
+Where treatment is availed at a Preferred Provider Network (PPN) hospital, the admission shall be cashless at agreed package rates and the 20% co-pay applicable to non-network admissions shall not apply.
+
+D.3 Excluded Providers
+Expenses incurred at an Excluded Provider shall not be payable, except that emergency treatment up to the stage of stabilisation shall be payable in case of an accident. The list of Excluded Providers is available on the Company website at www.demogeneral.example/excluded-providers.
+
+D.4 Procedure for Availing Cashless Facility
+(a) In case of planned hospitalisation, the Insured Person shall intimate the TPA and the Network Provider shall submit the pre-authorisation request at least 72 hours prior to the planned date of admission.
+(b) In case of emergency hospitalisation, the Insured Person or the Network Provider shall intimate the TPA within 24 hours of admission or before discharge, whichever is earlier.
+(c) The Network Provider shall send the duly filled pre-authorisation request form, signed by the treating Medical Practitioner and the Insured Person, to the TPA by e-mail at cashless@democaretpa.example or through the TPA portal, along with the following documents:
+   (i) Photo identity proof of the patient;
+   (ii) Employee health card issued by the TPA or the certificate number;
+   (iii) Investigation reports and clinical notes supporting the diagnosis;
+   (iv) Estimate of the cost of treatment from the Network Provider.
+=== PAGE BREAK ===
+D.5 Authorisation, Room Category and Deposits
+(a) The pre-authorisation request shall state the room category for which authorisation is sought. If the Insured Person opts for a room category higher than the eligible category, the Network Provider shall seek authorisation for the eligible category only.
+(b) The TPA shall issue the authorisation letter to the Network Provider, specifying the amount authorised, after verifying the eligibility of the Insured Person and the admissibility of the claim.
+(c) The Network Provider shall not collect any deposit from the Insured Person after cashless authorisation, other than non-payable items, applicable co-pay and any amount in excess of the authorised amount.
+(d) Where the cost of treatment is likely to exceed the amount authorised, the Network Provider shall submit a revised estimate with supporting clinical notes to the TPA for additional authorisation.
+
+D.6 Denial of Cashless Request
+Denial of a pre-authorisation request shall in no way be construed as a denial of treatment or coverage, and the claim shall be considered on merits on submission of documents for reimbursement.
+
+D.7 Timelines for Cashless Decisions
+The Company or its TPA shall decide on a cashless pre-authorisation request within 1 hour of receipt of the complete request, and shall grant final authorisation for discharge within 3 hours of receipt of the discharge request from the Network Provider.
+If the final authorisation for discharge is not granted within 3 hours, the additional amount charged by the hospital beyond that period shall be borne by the Company, and the Company shall pay interest on the amount payable as set out in Section E.
+
+D.8 Contact Details
+TPA cashless helpline (toll free, 24x7): 1800-111-2222
+E-mail for cashless requests: cashless@democaretpa.example
+Company customer care (toll free, 24x7): 1800-333-4444

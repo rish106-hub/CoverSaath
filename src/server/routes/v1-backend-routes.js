@@ -1,4 +1,5 @@
 import { readBody } from '../http/request.js';
+import { handlePolicyRoute } from './policy-routes.js';
 import { validateSchema } from '../../backend/database/index.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../../modules/coverage-analysis/index.js';
@@ -75,6 +76,13 @@ function errorResponse(error) {
     INVALID_CASE_TRANSITION: 409,
     IDEMPOTENCY_CONFLICT: 409,
     CASE_NOT_READY_FOR_ANALYSIS: 409,
+    ACTIVE_CONSENT_REQUIRED: 403,
+    DUPLICATE_DOCUMENT: 409,
+    DOCUMENT_VERSION_EXISTS: 409,
+    FILE_TOO_LARGE: 413,
+    MIME_MISMATCH: 415,
+    EXTENSION_MISMATCH: 415,
+    ENCRYPTION_KEY_REQUIRED: 503,
   };
   const code = error.code || 'BACKEND_REQUEST_FAILED';
   const status = error.statusCode || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
@@ -131,7 +139,7 @@ function createAnalysisRun({ req, database, services, caseId, body, config, live
   });
 }
 
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, policy = null }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -173,6 +181,8 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     }
 
     const principal = services.access.authenticate(req.headers.authorization);
+    const policyResponse = await handlePolicyRoute({ req, url, policy, principal });
+    if (policyResponse) return policyResponse;
     const responses = createReadResponsePolicy({ database, consents: services.consents });
 
     if (req.method === 'GET' && url.pathname === '/api/v1/integrations') {

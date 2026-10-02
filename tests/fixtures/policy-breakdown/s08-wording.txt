@@ -1,0 +1,41 @@
+Example General Insurance Company Limited
+Example Family Health Plan - Policy Wording
+UIN: EXAHLIP26001V012526
+
+SECTION E. CLAIM PROCEDURE
+
+E.1 Notification of Claim
+For cashless claims, the procedure in Section D (Cashless Facility) shall apply.
+For reimbursement claims, the Insured Person shall intimate the claim to the TPA or the Company in writing, by e-mail or on the helpline, within 48 hours of admission in case of emergency hospitalisation and at least 72 hours prior to admission in case of planned hospitalisation.
+
+E.2 Submission of Claim Documents
+For reimbursement of claims, the Insured Person shall submit the necessary documents listed in Clause E.3 to the TPA within 30 days of the date of discharge from the Hospital.
+Claims for post-hospitalisation expenses shall be submitted within 15 days from the completion of post-hospitalisation treatment.
+Delay in intimation or submission of claim documents may be condoned by the Company where the Insured Person shows that the delay was due to reasons beyond his or her control.
+
+E.3 Necessary Documents
+The claim is to be supported with the following documents:
+i. Duly completed and signed claim form
+ii. Original discharge summary
+iii. Original final hospital bill with itemised break-up and payment receipt
+iv. Investigation and diagnostic test reports supported by the prescription of the attending Medical Practitioner
+v. Prescriptions and pharmacy bills
+vi. Operation theatre notes, where surgery was performed
+vii. Cancelled cheque or bank account details of the proposer for NEFT payment
+In case of hospitalisation due to an accident, a copy of the First Information Report (FIR) or Medico-Legal Certificate (MLC), where conducted, shall also be submitted.
+The Company shall complete the KYC of the proposer at the claim stage through the Central KYC (CKYC) identifier or e-KYC, if KYC was not completed at the time of issuance of the Policy.
+Where the Hospital has not provided any of the documents listed above, the TPA shall obtain the medical records directly from the Hospital and shall not reject the claim for want of those records.
+=== PAGE BREAK ===
+E.4 Claim Settlement
+The Company shall settle or reject a claim within 30 days of receipt of the last necessary document.
+Where the circumstances of a claim warrant an investigation, the Company shall complete the investigation and settle or reject the claim within 45 days of receipt of the last necessary document.
+In case of delay in payment of a claim beyond the stipulated timeline, the Company shall pay interest at a rate 2% above the bank rate from the date of receipt of the last necessary document to the date of payment of the claim.
+Any rejection of a claim shall be decided by the Claims Review Committee of the Company and communicated to the Insured Person in writing, stating the specific reason and the Policy clause relied upon.
+Where a claim is settled for less than the amount claimed, the settlement letter shall list each deduction against the bill line and the Policy clause under which it was made.
+The status of a claim may be tracked on the TPA portal or the Company website using the claim reference number.
+
+SECTION F. GRIEVANCE REDRESSAL
+The Insured Person may contact the Grievance Redressal Officer of the Company at grievance@example-general.test or on 1800-000-0001 (toll free).
+The Company shall acknowledge the grievance within 3 days and resolve it within 14 days of receipt.
+If the grievance is not resolved within 14 days, or the Insured Person is not satisfied with the resolution, the complaint may be registered on the Bima Bharosa portal of the Insurance Regulatory and Development Authority of India.
+The Insured Person may approach the Insurance Ombudsman under the Insurance Ombudsman Rules, 2017. The addresses of the Insurance Ombudsman offices are given in Annexure II.

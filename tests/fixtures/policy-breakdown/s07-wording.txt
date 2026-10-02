@@ -1,0 +1,48 @@
+Example General Insurance Company Limited
+Example Family Health Plan - Policy Wording
+UIN: EXAHLIP26001V012526
+
+SECTION D. CASHLESS FACILITY
+
+D.1 Availability of Cashless Facility
+Cashless facility shall be available to the Insured Person only at Network Providers, subject to pre-authorisation by the Company or its TPA.
+Cashless facility is not available at Non-Network Providers; expenses incurred at a Non-Network Provider shall be payable only on reimbursement basis in accordance with Clause E.2.
+
+D.2 Network Providers
+The list of Network Providers is dynamic and is subject to change. The updated list of Network Providers is available on the Company's website at www.example-general.test/network-hospitals and may also be obtained from the TPA.
+The Insured Person may search for Network Providers by city, pin code and speciality using the hospital locator on the Company's mobile application.
+
+D.3 Procedure for Availing Cashless Facility
+(a) In case of planned hospitalisation, the Insured Person shall intimate the TPA and the Network Provider shall submit the pre-authorisation request at least 72 hours prior to the planned date of admission.
+(b) In case of emergency hospitalisation, the Insured Person or the Network Provider shall intimate the TPA within 24 hours of admission.
+(c) The Network Provider shall send the duly filled pre-authorisation request form, signed by the treating Medical Practitioner and the Insured Person, to the TPA by e-mail or through the TPA portal, along with the following documents:
+   (i) Photo identity proof of the patient;
+   (ii) Health card issued by the TPA or the policy number;
+   (iii) KYC documents of the proposer, where not already submitted;
+   (iv) Investigation reports and clinical notes supporting the diagnosis;
+   (v) Estimate of the cost of treatment from the Network Provider.
+(d) The pre-authorisation request shall state the room category for which authorisation is sought. If the Insured Person opts for a room category higher than the eligible category, the Network Provider shall seek authorisation for the eligible category only and any resulting difference shall be dealt with as per the room rent clause in Section C.
+(e) The TPA shall issue the authorisation letter to the Network Provider, specifying the amount authorised, after verifying the eligibility of the Insured Person and the admissibility of the claim.
+=== PAGE BREAK ===
+D.4 Timelines for Cashless Decisions
+The Company or its TPA shall endeavour to decide on a cashless pre-authorisation request within 1 hour of receipt of the complete request, and shall grant final authorisation for discharge within 3 hours of receipt of the discharge request from the Network Provider.
+
+D.5 Enhancement of Authorised Amount
+Where the treatment cost is expected to exceed the amount authorised, the Network Provider may request an enhancement of the authorised amount by submitting a revised estimate along with updated clinical notes. Enhancement shall be considered subject to the available Sum Insured and the terms of the Policy.
+
+D.6 Deposit
+Once cashless authorisation has been granted, the Network Provider shall not collect any deposit from the Insured Person for admissible expenses. The Network Provider may collect amounts towards non-payable items, co-payment and expenses in excess of the authorised amount.
+
+D.7 Denial of Pre-authorisation
+Denial of a pre-authorisation request shall in no way be construed as denial of treatment or denial of coverage. The Insured Person may obtain the treatment and submit the claim documents for reimbursement under Clause E.2, which shall be considered on merits.
+
+D.8 Excluded Providers
+The Company shall not be liable for any claim arising out of treatment at an Excluded Provider, except in a life-threatening situation or following an accident, up to the stage of stabilisation. The list of Excluded Providers is available on the Company's website at www.example-general.test/excluded-providers.
+
+SECTION H. CONTACT DETAILS
+TPA: Example Health TPA Private Limited
+TPA cashless helpline (24x7, toll free): 1800-000-0000
+TPA e-mail for cashless requests: cashless@example-health-tpa.test
+Company customer service (24x7, toll free): 1800-000-1111
+Grievance Redressal Officer (Monday to Saturday, 9:30 am to 6:30 pm, toll free): 1800-000-0001
+For grievance redressal, please refer to Section F.

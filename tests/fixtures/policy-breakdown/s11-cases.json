@@ -1,0 +1,1066 @@
+{
+  "section": 11,
+  "cases": [
+    {
+      "name": "normal: fixture-story family floater, no other records",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "policy_type": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "policy_number": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text",
+              "text": "EX/FHP/2026/000123"
+            },
+            "memberScope": null
+          },
+          "insured_members": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text_list",
+              "items": [
+                "Ram Kumar — Self",
+                "Sita Kumar — Spouse",
+                "Luv Kumar — Son",
+                "Kaushalya Devi — Mother"
+              ]
+            },
+            "memberScope": null
+          },
+          "sum_insured_structure": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "dependent_child_max_age_years": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "years",
+              "count": 25
+            },
+            "memberScope": null
+          },
+          "policy_end_date": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "date",
+              "date": "2027-03-31"
+            },
+            "memberScope": null
+          },
+          "sum_insured_amount": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "money",
+              "amountMinor": 100000000,
+              "currency": "INR"
+            },
+            "memberScope": null
+          },
+          "copay_age_threshold_years": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "years",
+              "count": 61
+            },
+            "memberScope": null
+          },
+          "copay_age_percent": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "percent",
+              "percent": 20
+            },
+            "memberScope": null
+          }
+        },
+        "household": {
+          "members": [
+            {
+              "id": "m1",
+              "displayName": "Ram Kumar",
+              "relationship": "self",
+              "dateOfBirth": "1988-05-14"
+            },
+            {
+              "id": "m2",
+              "displayName": "Sita Kumar",
+              "relationship": "spouse",
+              "dateOfBirth": "1991-02-02"
+            },
+            {
+              "id": "m3",
+              "displayName": "Luv Kumar",
+              "relationship": "son",
+              "dateOfBirth": "2018-09-30"
+            },
+            {
+              "id": "m4",
+              "displayName": "Kaushalya Devi",
+              "relationship": "mother",
+              "dateOfBirth": "1962-07-21"
+            }
+          ],
+          "city": "Example City"
+        },
+        "otherRecords": [],
+        "references": {
+          "insurerDisclosures": [],
+          "procedureCostReference": null
+        }
+      },
+      "expected": {
+        "members_without_evidenced_cover": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "text_list",
+            "items": []
+          }
+        },
+        "members_with_evidenced_cover": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "text_list",
+            "items": [
+              "Ram Kumar",
+              "Sita Kumar",
+              "Luv Kumar",
+              "Kaushalya Devi"
+            ]
+          }
+        },
+        "eldest_member_age_years": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "years",
+            "count": 64
+          }
+        },
+        "members_attracting_age_copay": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "text_list",
+            "items": [
+              "Kaushalya Devi"
+            ]
+          }
+        },
+        "floater_concentration_risk": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "boolean",
+            "flag": true
+          }
+        },
+        "next_cover_change_date": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "date",
+            "date": "2027-03-31"
+          }
+        },
+        "next_cover_change_reason": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "text",
+            "text": "Policy period ends on 2027-03-31 (renewal due)."
+          }
+        },
+        "employer_cover_dependence_percent": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "sum_insured_adequacy": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "layering_gap": {
+          "evidenceState": "Unknown",
+          "value": null
+        }
+      }
+    },
+    {
+      "name": "missing input: insured list, threshold, end date and one DOB not established",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "policy_type": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "policy_number": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text",
+              "text": "EX/FHP/2026/000123"
+            },
+            "memberScope": null
+          },
+          "insured_members": {
+            "evidenceState": "Unknown",
+            "value": null,
+            "memberScope": null
+          },
+          "sum_insured_structure": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "dependent_child_max_age_years": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "years",
+              "count": 25
+            },
+            "memberScope": null
+          },
+          "sum_insured_amount": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "money",
+              "amountMinor": 100000000,
+              "currency": "INR"
+            },
+            "memberScope": null
+          },
+          "copay_age_threshold_years": {
+            "evidenceState": "Unknown",
+            "value": null,
+            "memberScope": null
+          },
+          "copay_age_percent": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "percent",
+              "percent": 20
+            },
+            "memberScope": null
+          }
+        },
+        "household": {
+          "members": [
+            {
+              "id": "m1",
+              "displayName": "Ram Kumar",
+              "relationship": "self",
+              "dateOfBirth": "1988-05-14"
+            },
+            {
+              "id": "m2",
+              "displayName": "Sita Kumar",
+              "relationship": "spouse",
+              "dateOfBirth": "1991-02-02"
+            },
+            {
+              "id": "m3",
+              "displayName": "Luv Kumar",
+              "relationship": "son",
+              "dateOfBirth": "2018-09-30"
+            },
+            {
+              "id": "m4",
+              "displayName": "Kaushalya Devi",
+              "relationship": "mother",
+              "dateOfBirth": null
+            }
+          ],
+          "city": null
+        },
+        "otherRecords": [],
+        "references": {
+          "insurerDisclosures": [],
+          "procedureCostReference": null
+        }
+      },
+      "expected": {
+        "members_without_evidenced_cover": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "members_with_evidenced_cover": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "eldest_member_age_years": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "members_attracting_age_copay": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "floater_concentration_risk": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "next_cover_change_date": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "next_cover_change_reason": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "employer_cover_dependence_percent": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "sum_insured_adequacy": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "layering_gap": {
+          "evidenceState": "Unknown",
+          "value": null
+        }
+      }
+    },
+    {
+      "name": "conflicting and not-permitted inputs propagate",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "policy_type": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "policy_number": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text",
+              "text": "EX/FHP/2026/000123"
+            },
+            "memberScope": null
+          },
+          "insured_members": {
+            "evidenceState": "Conflicting",
+            "value": null,
+            "memberScope": null
+          },
+          "sum_insured_structure": {
+            "evidenceState": "Conflicting",
+            "value": null,
+            "memberScope": null
+          },
+          "dependent_child_max_age_years": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "years",
+              "count": 25
+            },
+            "memberScope": null
+          },
+          "policy_end_date": {
+            "evidenceState": "NotPermitted",
+            "value": null,
+            "memberScope": null
+          },
+          "sum_insured_amount": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "money",
+              "amountMinor": 100000000,
+              "currency": "INR"
+            },
+            "memberScope": null
+          },
+          "copay_age_threshold_years": {
+            "evidenceState": "NotPermitted",
+            "value": null,
+            "memberScope": null
+          },
+          "copay_age_percent": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "percent",
+              "percent": 20
+            },
+            "memberScope": null
+          }
+        },
+        "household": {
+          "members": [
+            {
+              "id": "m1",
+              "displayName": "Ram Kumar",
+              "relationship": "self",
+              "dateOfBirth": "1988-05-14"
+            },
+            {
+              "id": "m2",
+              "displayName": "Sita Kumar",
+              "relationship": "spouse",
+              "dateOfBirth": "1991-02-02"
+            },
+            {
+              "id": "m3",
+              "displayName": "Luv Kumar",
+              "relationship": "son",
+              "dateOfBirth": "2018-09-30"
+            },
+            {
+              "id": "m4",
+              "displayName": "Kaushalya Devi",
+              "relationship": "mother",
+              "dateOfBirth": "1962-07-21"
+            }
+          ],
+          "city": null
+        },
+        "otherRecords": [],
+        "references": {
+          "insurerDisclosures": [],
+          "procedureCostReference": null
+        }
+      },
+      "expected": {
+        "members_without_evidenced_cover": {
+          "evidenceState": "Conflicting",
+          "value": null
+        },
+        "members_with_evidenced_cover": {
+          "evidenceState": "Conflicting",
+          "value": null
+        },
+        "eldest_member_age_years": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "years",
+            "count": 64
+          }
+        },
+        "members_attracting_age_copay": {
+          "evidenceState": "NotPermitted",
+          "value": null
+        },
+        "floater_concentration_risk": {
+          "evidenceState": "Conflicting",
+          "value": null
+        },
+        "next_cover_change_date": {
+          "evidenceState": "NotPermitted",
+          "value": null
+        },
+        "next_cover_change_reason": {
+          "evidenceState": "NotPermitted",
+          "value": null
+        },
+        "employer_cover_dependence_percent": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "sum_insured_adequacy": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "layering_gap": {
+          "evidenceState": "Unknown",
+          "value": null
+        }
+      }
+    },
+    {
+      "name": "edge: eligible mother not enrolled, daughter ages out mid-term, honorific names, group record",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "policy_type": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "policy_number": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text",
+              "text": "EX/FHP/2026/000123"
+            },
+            "memberScope": null
+          },
+          "insured_members": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text_list",
+              "items": [
+                "Mr. Ram  Kumar (Self)",
+                "SMT SITA KUMAR — Spouse",
+                "Kumari Urmila Kumar — Daughter",
+                "Luv Kumar — Son"
+              ]
+            },
+            "memberScope": null
+          },
+          "sum_insured_structure": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "dependent_child_max_age_years": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "years",
+              "count": 25
+            },
+            "memberScope": null
+          },
+          "policy_end_date": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "date",
+              "date": "2027-03-31"
+            },
+            "memberScope": null
+          },
+          "sum_insured_amount": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "money",
+              "amountMinor": 100000000,
+              "currency": "INR"
+            },
+            "memberScope": null
+          },
+          "copay_age_threshold_years": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "years",
+              "count": 61
+            },
+            "memberScope": null
+          },
+          "copay_age_percent": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "percent",
+              "percent": 20
+            },
+            "memberScope": null
+          }
+        },
+        "household": {
+          "members": [
+            {
+              "id": "m1",
+              "displayName": "Ram Kumar",
+              "relationship": "self",
+              "dateOfBirth": "1988-05-14"
+            },
+            {
+              "id": "m2",
+              "displayName": "Sita Kumar",
+              "relationship": "spouse",
+              "dateOfBirth": "1991-02-02"
+            },
+            {
+              "id": "m3",
+              "displayName": "Luv Kumar",
+              "relationship": "son",
+              "dateOfBirth": "2018-09-30"
+            },
+            {
+              "id": "m4",
+              "displayName": "Kaushalya Devi",
+              "relationship": "mother",
+              "dateOfBirth": "1962-07-21"
+            },
+            {
+              "id": "m5",
+              "displayName": "Urmila Kumar",
+              "relationship": "daughter",
+              "dateOfBirth": "2001-11-15"
+            }
+          ],
+          "city": null
+        },
+        "otherRecords": [
+          {
+            "policy_type": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "enum",
+                "enumValue": "group"
+              },
+              "memberScope": null
+            },
+            "policy_number": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "text",
+                "text": "EX/GRP/2026/777"
+              },
+              "memberScope": null
+            },
+            "insured_members": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "text_list",
+                "items": [
+                  "Ram Kumar — Employee",
+                  "Sita Kumar — Spouse",
+                  "Luv Kumar — Child"
+                ]
+              },
+              "memberScope": null
+            },
+            "sum_insured_amount": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "money",
+                "amountMinor": 50000000,
+                "currency": "INR"
+              },
+              "memberScope": null
+            }
+          }
+        ],
+        "references": {
+          "insurerDisclosures": [],
+          "procedureCostReference": null
+        }
+      },
+      "expected": {
+        "members_without_evidenced_cover": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "text_list",
+            "items": [
+              "Kaushalya Devi"
+            ]
+          }
+        },
+        "members_with_evidenced_cover": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "text_list",
+            "items": [
+              "Ram Kumar",
+              "Sita Kumar",
+              "Luv Kumar",
+              "Urmila Kumar"
+            ]
+          }
+        },
+        "eldest_member_age_years": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "years",
+            "count": 64
+          }
+        },
+        "members_attracting_age_copay": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "text_list",
+            "items": []
+          }
+        },
+        "floater_concentration_risk": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "boolean",
+            "flag": false
+          }
+        },
+        "next_cover_change_date": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "date",
+            "date": "2026-11-15"
+          }
+        },
+        "next_cover_change_reason": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "text",
+            "text": "Urmila Kumar reaches the dependent-child maximum age of 25 on 2026-11-15, before the policy end date 2027-03-31."
+          }
+        },
+        "employer_cover_dependence_percent": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "percent",
+            "percent": 33.33
+          }
+        },
+        "sum_insured_adequacy": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "layering_gap": {
+          "evidenceState": "Unknown",
+          "value": null
+        }
+      }
+    },
+    {
+      "name": "edge: super top-up deductible above base sum insured; procedure-cost reference supplied",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "policy_type": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "policy_number": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text",
+              "text": "EX/FHP/2026/000123"
+            },
+            "memberScope": null
+          },
+          "insured_members": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text_list",
+              "items": [
+                "Ram Kumar — Self",
+                "Sita Kumar — Spouse",
+                "Luv Kumar — Son",
+                "Kaushalya Devi — Mother"
+              ]
+            },
+            "memberScope": null
+          },
+          "sum_insured_structure": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "dependent_child_max_age_years": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "years",
+              "count": 25
+            },
+            "memberScope": null
+          },
+          "policy_end_date": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "date",
+              "date": "2027-03-31"
+            },
+            "memberScope": null
+          },
+          "sum_insured_amount": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "money",
+              "amountMinor": 100000000,
+              "currency": "INR"
+            },
+            "memberScope": null
+          },
+          "copay_age_threshold_years": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "years",
+              "count": 61
+            },
+            "memberScope": null
+          },
+          "copay_age_percent": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "percent",
+              "percent": 20
+            },
+            "memberScope": null
+          }
+        },
+        "household": {
+          "members": [
+            {
+              "id": "m1",
+              "displayName": "Ram Kumar",
+              "relationship": "self",
+              "dateOfBirth": "1988-05-14"
+            },
+            {
+              "id": "m2",
+              "displayName": "Sita Kumar",
+              "relationship": "spouse",
+              "dateOfBirth": "1991-02-02"
+            },
+            {
+              "id": "m3",
+              "displayName": "Luv Kumar",
+              "relationship": "son",
+              "dateOfBirth": "2018-09-30"
+            },
+            {
+              "id": "m4",
+              "displayName": "Kaushalya Devi",
+              "relationship": "mother",
+              "dateOfBirth": "1962-07-21"
+            }
+          ],
+          "city": null
+        },
+        "otherRecords": [
+          {
+            "policy_type": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "enum",
+                "enumValue": "super_top_up"
+              },
+              "memberScope": null
+            },
+            "policy_number": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "text",
+                "text": "EX/STU/2026/055"
+              },
+              "memberScope": null
+            },
+            "insured_members": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "text_list",
+                "items": [
+                  "Ram Kumar — Self"
+                ]
+              },
+              "memberScope": null
+            },
+            "deductible_amount": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "money",
+                "amountMinor": 150000000,
+                "currency": "INR"
+              },
+              "memberScope": null
+            },
+            "sum_insured_amount": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "money",
+                "amountMinor": 250000000,
+                "currency": "INR"
+              },
+              "memberScope": null
+            }
+          }
+        ],
+        "references": {
+          "insurerDisclosures": [],
+          "procedureCostReference": {
+            "city": "Example City",
+            "items": []
+          }
+        }
+      },
+      "expected": {
+        "members_without_evidenced_cover": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "text_list",
+            "items": []
+          }
+        },
+        "layering_gap": {
+          "evidenceState": "Calculated",
+          "value": {
+            "kind": "rule",
+            "text": "other record 1 (EX/STU/2026/055) deductible ₹15,00,000 vs this policy (EX/FHP/2026/000123) sum insured ₹10,00,000: gap of ₹5,00,000 paid by the household."
+          }
+        },
+        "employer_cover_dependence_percent": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "sum_insured_adequacy": {
+          "evidenceState": "Unknown",
+          "value": null
+        }
+      }
+    },
+    {
+      "name": "edge: floater with age threshold Unknown stays Unknown even with a 64-year-old; NotPermitted deductible",
+      "context": {
+        "asOf": "2026-10-02",
+        "parameters": {
+          "policy_type": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "policy_number": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text",
+              "text": "EX/FHP/2026/000123"
+            },
+            "memberScope": null
+          },
+          "insured_members": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "text_list",
+              "items": [
+                "Ram Kumar — Self",
+                "Sita Kumar — Spouse",
+                "Luv Kumar — Son",
+                "Kaushalya Devi — Mother"
+              ]
+            },
+            "memberScope": null
+          },
+          "sum_insured_structure": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "enum",
+              "enumValue": "family_floater"
+            },
+            "memberScope": null
+          },
+          "dependent_child_max_age_years": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "years",
+              "count": 25
+            },
+            "memberScope": null
+          },
+          "policy_end_date": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "date",
+              "date": "2027-03-31"
+            },
+            "memberScope": null
+          },
+          "sum_insured_amount": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "money",
+              "amountMinor": 100000000,
+              "currency": "INR"
+            },
+            "memberScope": null
+          },
+          "copay_age_threshold_years": {
+            "evidenceState": "Unknown",
+            "value": null,
+            "memberScope": null
+          },
+          "copay_age_percent": {
+            "evidenceState": "Proven",
+            "value": {
+              "kind": "percent",
+              "percent": 20
+            },
+            "memberScope": null
+          }
+        },
+        "household": {
+          "members": [
+            {
+              "id": "m1",
+              "displayName": "Ram Kumar",
+              "relationship": "self",
+              "dateOfBirth": "1988-05-14"
+            },
+            {
+              "id": "m2",
+              "displayName": "Sita Kumar",
+              "relationship": "spouse",
+              "dateOfBirth": "1991-02-02"
+            },
+            {
+              "id": "m3",
+              "displayName": "Luv Kumar",
+              "relationship": "son",
+              "dateOfBirth": "2018-09-30"
+            },
+            {
+              "id": "m4",
+              "displayName": "Kaushalya Devi",
+              "relationship": "mother",
+              "dateOfBirth": "1962-07-21"
+            }
+          ],
+          "city": null
+        },
+        "otherRecords": [
+          {
+            "policy_type": {
+              "evidenceState": "Proven",
+              "value": {
+                "kind": "enum",
+                "enumValue": "super_top_up"
+              },
+              "memberScope": null
+            },
+            "deductible_amount": {
+              "evidenceState": "NotPermitted",
+              "value": null,
+              "memberScope": null
+            }
+          }
+        ],
+        "references": {
+          "insurerDisclosures": [],
+          "procedureCostReference": null
+        }
+      },
+      "expected": {
+        "floater_concentration_risk": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "members_attracting_age_copay": {
+          "evidenceState": "Unknown",
+          "value": null
+        },
+        "layering_gap": {
+          "evidenceState": "NotPermitted",
+          "value": null
+        }
+      }
+    }
+  ]
+}

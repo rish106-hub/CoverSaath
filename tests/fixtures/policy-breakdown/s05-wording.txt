@@ -1,0 +1,60 @@
+Example General Insurance Company Limited
+Example Family Health Plan — Policy Wording
+UIN: EXAHLIP26001V012526
+
+Section 2. Definitions (extract)
+
+2.31 Pre-Existing Disease (PED)
+Pre-Existing Disease means any condition, ailment, injury or disease:
+a) That is/are diagnosed by a physician not more than 36 months prior to the date of commencement of the policy issued by the insurer; or
+b) For which medical advice or treatment was recommended by, or received from, a physician, not more than 36 months prior to the date of commencement of the policy.
+
+Section 7. Disclosure, Moratorium and Fraud
+
+7.1 Disclosure of Information
+The Policy shall be void and all premium paid thereon shall be forfeited to the Company in the event of misrepresentation, mis-description or non-disclosure of any material fact by the policyholder.
+(Explanation: "Material facts" for the purpose of this policy shall mean all relevant information sought by the company in the proposal form and other connected documents to enable it to take informed decision in the context of underwriting the risk.)
+
+7.2 Disclosure at Renewal
+The Insured Person is not required to disclose at renewal any illness or condition contracted after the inception of the first Policy with the Company. However, any change in occupation of an Insured Person shall be intimated to the Company at the time of renewal.
+
+7.3 Moratorium Period
+After completion of sixty continuous months of coverage (including portability and migration), no policy and claim shall be contestable by the insurer on grounds of non-disclosure, misrepresentation, except on grounds of established fraud. This period of sixty continuous months is called as moratorium period. The moratorium would be applicable for the sums insured of the first policy and subsequently completion of sixty continuous months would be applicable from date of enhancement of sums insured only on the enhanced limits. The policies would however be subject to all limits, sub limits, co-payments, deductibles as per the policy contract.
+
+7.4 Fraud
+If any claim made by the Insured Person, is in any respect fraudulent, or if any false statement, or declaration is made or used in support thereof, or if any fraudulent means or devices are used by the Insured Person or anyone acting on his/her behalf to obtain any benefit under this Policy, all benefits under this Policy and the premium paid shall be forfeited.
+Any amount already paid against claims made under this Policy but which are found fraudulent later shall be repaid by all recipient(s)/policyholder(s), who has made that particular claim, who shall be jointly and severally liable for such repayment to the insurer.
+=== PAGE BREAK ===
+Section 4. Exclusions
+
+4.1 Standard Exclusions
+The Company shall not be liable to make any payment under the Policy in connection with or in respect of the following expenses, which are listed with the code assigned to each:
+
+Excl01 Pre-Existing Diseases: Expenses related to the treatment of a pre-existing disease (PED) and its direct complications shall be excluded until the expiry of the waiting period specified in Section 3 of this Policy.
+Excl02 Specified disease/procedure waiting period: Expenses related to the treatment of the listed conditions, surgeries/treatments shall be excluded until the expiry of the waiting period specified in Section 3 of this Policy.
+Excl03 30-day waiting period: Expenses related to the treatment of any illness within 30 days from the first policy commencement date shall be excluded except claims arising due to an accident, provided the same are covered.
+Excl04 Investigation & Evaluation: Expenses related to any admission primarily for diagnostics and evaluation purposes only are excluded. Any diagnostic expenses which are not related or not incidental to the current diagnosis and treatment are excluded.
+Excl05 Rest Cure, rehabilitation and respite care: Expenses related to any admission primarily for enforced bed rest and not for receiving treatment are excluded.
+Excl06 Obesity/Weight Control: Expenses related to the surgical treatment of obesity that does not fulfil all the below conditions: 1) Surgery to be conducted is upon the advice of the Doctor; 2) The surgery/Procedure conducted should be supported by clinical protocols; 3) The member has to be 18 years of age or older; and 4) Body Mass Index (BMI) greater than or equal to 40, or greater than or equal to 35 in conjunction with severe co-morbidities following failure of less invasive methods of weight loss.
+Excl07 Change-of-Gender treatments: Expenses related to any treatment, including surgical management, to change characteristics of the body to those of the opposite sex.
+Excl08 Cosmetic or plastic Surgery: Expenses for cosmetic or plastic surgery or any treatment to change appearance unless for reconstruction following an Accident, Burn(s) or Cancer or as part of medically necessary treatment to remove a direct and immediate health risk to the insured. For this to be considered a medical necessity, it must be certified by the attending Medical Practitioner.
+Excl09 Hazardous or Adventure sports: Expenses related to any treatment necessitated due to participation as a professional in hazardous or adventure sports, including but not limited to, para-jumping, rock climbing, mountaineering, rafting, motor racing, horse racing or scuba diving, hand gliding, sky diving, deep-sea diving.
+Excl10 Breach of law: Expenses for treatment directly arising from or consequent upon any Insured Person committing or attempting to commit a breach of law with criminal intent.
+Excl11 Excluded Providers: Expenses incurred towards treatment in any hospital or by any Medical Practitioner or any other provider specifically excluded by the Insurer and disclosed in its website / notified to the policyholders are not admissible. However, in case of life threatening situations or following an accident, expenses up to the stage of stabilization are payable but not the complete claim.
+Excl12 Treatment for Alcoholism, drug or substance abuse or any addictive condition and consequences thereof.
+Excl13 Treatments received in health hydros, nature cure clinics, spas or similar establishments or private beds registered as a nursing home attached to such establishments or where admission is arranged wholly or partly for domestic reasons.
+Excl14 Dietary supplements and substances that can be purchased without prescription, including but not limited to Vitamins, minerals and organic substances unless prescribed by a medical practitioner as part of hospitalization claim or day care procedure.
+Excl15 Refractive Error: Expenses related to the treatment for correction of eye sight due to refractive error less than 7.5 dioptres.
+Excl16 Unproven Treatments: Expenses related to any unproven treatment, services and supplies for or in connection with any treatment. Unproven treatments are treatments, procedures or supplies that lack significant medical documentation to support their effectiveness.
+Excl17 Sterility and Infertility: Expenses related to sterility and infertility. This includes: (i) Any type of contraception, sterilization (ii) Assisted Reproduction services including artificial insemination and advanced reproductive technologies such as IVF, ZIFT, GIFT, ICSI (iii) Gestational Surrogacy (iv) Reversal of sterilization
+Excl18 Maternity: Medical treatment expenses traceable to childbirth (including complicated deliveries and caesarean sections incurred during hospitalization) except ectopic pregnancy; expenses towards miscarriage (unless due to an accident) and lawful medical termination of pregnancy during the policy period. This exclusion shall not apply to the extent cover is available under Section 3.6 Maternity Benefit of this Policy.
+=== PAGE BREAK ===
+4.2 Specific Exclusions
+In addition to the Standard Exclusions above, the Company shall not be liable for:
+a) Treatment directly or indirectly arising from or consequent upon war, invasion, acts of foreign enemies, hostilities (whether war be declared or not), civil war, rebellion or revolution.
+b) Treatment directly or indirectly caused by or contributed to by nuclear weapons or materials, ionising radiation or contamination by radioactivity.
+c) Any expenses incurred on treatment taken outside India.
+d) Charges for external durable medical equipment used outside the hospital, such as wheelchairs, walkers and CPAP machines.
+
+Section 8. Proposal and Declaration (extract)
+8.1 The proposer shall disclose in the proposal form, for every person proposed for insurance, all medical conditions, ailments and treatments taken, whether or not considered material by the proposer. The Company's acceptance of the proposal is based on these declarations.

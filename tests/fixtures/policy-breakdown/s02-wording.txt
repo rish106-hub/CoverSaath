@@ -1,0 +1,43 @@
+EXAMPLE GENERAL INSURANCE COMPANY LIMITED
+POLICY SCHEDULE - EXAMPLE FAMILY HEALTH PLAN
+UIN: EXAHLIP26001V012526
+Policy Number: EX/FHP/2026/000123
+Period of Insurance: 01/04/2026 to 31/03/2027
+Plan Type: Family Floater
+Sum Insured: Rs. 10,00,000 (Floater - available for all Insured Persons together)
+Proposer: Ram Kumar
+
+DETAILS OF INSURED PERSONS
+Sr | Name of Insured Person | Relationship to Proposer | Date of Birth | Date of First Enrolment | Pre-policy Medical Check-up
+1 | Ram Kumar | Self | 14/05/1988 | 01/04/2023 | Not required
+2 | Sita Kumar | Spouse | 02/02/1991 | 01/04/2023 | Not required
+3 | Luv Kumar | Son | 30/09/2018 | 01/04/2023 | Not required
+4 | Kaushalya Devi | Mother | 21/07/1962 | 01/04/2023 | Done
+
+Nominee: Sita Kumar (Spouse)
+
+UNDERWRITING DECISION / MEMBER-SPECIFIC ENDORSEMENT
+Insured Persons 1 to 3: Accepted at standard terms.
+Insured Person 4 (Kaushalya Devi): Declared condition - Hypertension. Accepted with a premium loading of 15% on the base premium for this Insured Person. Hypertension and its related complications are covered only after the Pre-existing Disease waiting period of 36 months from the Date of First Enrolment.
+=== PAGE BREAK ===
+POLICY WORDING - EXAMPLE FAMILY HEALTH PLAN
+
+SECTION 2 - DEFINITIONS (EXTRACT)
+2.14 Family means the Proposer and the following relationships, provided each such person is named in the Schedule as an Insured Person: (a) legally wedded Spouse; (b) Dependent Children; (c) Parents; (d) Parents-in-law.
+2.15 Dependent Child means a natural or legally adopted child of the Proposer who is unmarried, financially dependent on the Proposer and does not have an independent source of income.
+2.16 Spouse means the Proposer's legally wedded husband or wife as on the date of proposal, or as added to the Policy by endorsement.
+
+SECTION 3 - ELIGIBILITY
+3.1 Entry age: The minimum entry age is 18 years for adults and 91 days for Dependent Children. The maximum entry age is 65 years for adults. Dependent Children are covered up to the age of 25 years.
+3.2 There is no maximum age at renewal; an Insured Person once covered may continue to renew the Policy for life, subject to the renewal conditions of this Policy.
+3.3 A Dependent Child shall cease to be covered on the renewal date immediately following the child's 25th birthday, or on the child's marriage, or on the child taking up employment, whichever is earliest. Such child may opt for a separate individual policy with credit for waiting periods already served.
+3.4 A maximum of 6 persons may be covered under one Policy, of whom not more than 4 may be adults.
+3.5 The Sum Insured under a family floater Policy is available for any one or all Insured Persons together during the Policy Year. Any claim paid reduces the Sum Insured available to every other Insured Person for the rest of that Policy Year.
+3.6 This Policy is available only to persons who are resident in India.
+=== PAGE BREAK ===
+SECTION 4 - CHANGES IN INSURED PERSONS DURING THE POLICY PERIOD
+4.1 Newborn baby: A child born to a female Insured Person during the Policy Period shall be covered from day one for In-patient Hospitalisation within the floater Sum Insured, provided the Maternity Benefit claim of the mother is admissible under this Policy. The newborn must be added to the Policy by written intimation within 90 days of birth on payment of the applicable pro-rata premium, failing which cover for the newborn ceases on the 91st day after birth.
+4.2 Spouse on marriage and legally adopted child: may be added during the Policy Period by endorsement within 60 days of the marriage or adoption, on payment of pro-rata premium. All waiting periods shall apply afresh to such person from the date of addition.
+
+SECTION 5 - NOMINATION
+5.1 The policyholder is required at the inception of the policy to make a nomination for the purpose of payment of claims under the policy in the event of death of the policyholder. Any change of nomination shall be communicated to the Company in writing and such change shall be effective only when an endorsement on the policy is made.
