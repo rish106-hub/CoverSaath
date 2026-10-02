@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
 const migrationDirectory = fileURLToPath(new URL('./migrations', import.meta.url));
+const legacyMigrationChecksums = Object.freeze({
+  '002_integrity_and_provenance.sql': new Set(['afdfdcf9c4f6425bafe5bd2d3e0d5404bdf6378bdf2b172a74badd27af391110']),
+});
 
 function digest(contents) {
   return createHash('sha256').update(contents).digest('hex');
@@ -26,6 +29,7 @@ export function runMigrations(database, { directory = migrationDirectory } = {})
   `);
   const applied = database.prepare('SELECT checksum FROM schema_migrations WHERE version = ?');
   const record = database.prepare('INSERT INTO schema_migrations (version, checksum, applied_at) VALUES (?, ?, ?)');
+  const refreshChecksum = database.prepare('UPDATE schema_migrations SET checksum = ? WHERE version = ?');
   const completed = [];
 
   for (const version of migrationFiles(directory)) {
@@ -35,7 +39,10 @@ export function runMigrations(database, { directory = migrationDirectory } = {})
     try {
       const existing = applied.get(version);
       if (existing) {
-        if (existing.checksum !== checksum) throw new Error(`Applied migration changed: ${version}`);
+        if (existing.checksum !== checksum) {
+          if (!legacyMigrationChecksums[version]?.has(existing.checksum)) throw new Error(`Applied migration changed: ${version}`);
+          refreshChecksum.run(checksum, version);
+        }
         database.exec('COMMIT');
         continue;
       }
@@ -59,7 +66,7 @@ const expectedTables = Object.freeze([
   'coverage_graph_edges', 'workflow_runs', 'workflow_tasks', 'workflow_task_dependencies',
   'workflow_events', 'reviewer_findings', 'release_gates', 'human_reviews', 'human_approvals',
   'integration_outbox', 'integration_webhook_events', 'idempotency_keys', 'retention_records',
-  'audit_events',
+  'audit_events', 'api_sessions',
 ]);
 
 const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -77,6 +84,9 @@ const criticalTriggers = Object.freeze([
   'evidence_facts_provenance_immutable', 'fact_conflicts_same_fact_insert',
   'coverage_graph_nodes_snapshot_fact_insert', 'coverage_graph_edges_snapshot_nodes_insert',
   'workflow_runs_household_consent_insert',
+  'consent_scopes_profile_viewer_insert', 'consent_scopes_profile_viewer_update',
+  'ocr_jobs_document_ready_insert', 'source_pages_ocr_document_match_insert',
+  'source_pages_ocr_document_match_update',
 ]);
 
 const criticalIndexes = Object.freeze([
@@ -86,12 +96,17 @@ const criticalIndexes = Object.freeze([
   'workflow_task_dependencies_parent_idx', 'integration_outbox_ready_idx',
   'integration_outbox_consent_status_idx', 'idempotency_keys_expiry_idx',
   'audit_events_household_chain_idx',
+  'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'consent_scopes_field_viewer_idx',
+  'ocr_jobs_lifecycle_idx',
 ]);
 
 const requiredColumns = Object.freeze({
+  document_uploads: ['logical_document_id', 'source_version'],
   evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status'],
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],
+  ocr_jobs: ['contract_version', 'authorization_json', 'result_json', 'result_digest', 'updated_at'],
+  source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json'],
 });
 
 export function validateSchema(database) {
@@ -132,7 +147,7 @@ export function purgeExpiredIdempotencyKeys(database, { at = new Date().toISOStr
     WHERE julianday(expires_at) IS NOT NULL AND julianday(expires_at) <= julianday(?)`).run(at).changes;
 }
 
-export function openDatabase({ path = '.local/coversaath.sqlite', migrate = true } = {}) {
+export function openDatabase({ path = '.local/knowvia.sqlite', migrate = true } = {}) {
   if (path !== ':memory:') mkdirSync(dirname(resolve(path)), { recursive: true, mode: 0o700 });
   const database = new DatabaseSync(path);
   database.exec('PRAGMA foreign_keys = ON');

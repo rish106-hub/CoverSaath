@@ -2,6 +2,7 @@ import { normalizeProfileIntake } from '../../agents/profile-agent.js';
 import { analyzeGroupHealthCover } from '../../agents/group-health-agent.js';
 import { analyzePersonalHealthCover } from '../../agents/personal-health-agent.js';
 import { classifyCase } from '../../agents/decision-agent.js';
+import { buildHouseholdAction, decomposePolicySection, POLICY_DECOMPOSITION } from './policy-decomposition.js';
 
 const clone = value => structuredClone(value);
 const verdict = (status, findings = []) => ({ status, findings });
@@ -58,16 +59,12 @@ function assembleCoverageGraph({ input, upstream }) {
   const operator = continuity.operator?.status === 'verified' && continuity.operator?.source
     ? clone(continuity.operator)
     : { status: 'unverified' };
-  const readinessDrill = continuity.readinessDrill?.status === 'passed' && continuity.readinessDrill?.source
-    ? clone(continuity.readinessDrill)
-    : { status: 'not_run_or_unverified' };
   const confirmedProcedure = facts.some(fact => fact.fact === 'procedure_applicability' && fact.status === 'institution-confirmed');
   return {
     kind: 'source_linked_household_coverage_graph',
     facts,
     unknowns: [...new Set([...profileUnknowns, ...groupUnknowns, ...personalUnknowns])],
     operator,
-    readinessDrill,
     institutionalStatus: confirmedProcedure ? 'confirmed_for_case' : 'unresolved',
     boundaries: [
       'Unknown is not false.',
@@ -79,12 +76,21 @@ function assembleCoverageGraph({ input, upstream }) {
 
 function reviewEvidence({ input, upstream }) {
   const allowed = new Set(input.authorizedSourceIds ?? []);
-  const facts = upstream.coverage.facts;
+  const facts = [
+    ...upstream.coverage.facts,
+    ...Object.keys(POLICY_DECOMPOSITION)
+      .filter(key => key !== 'householdAction')
+      .flatMap(key => upstream[key]?.facts ?? []),
+  ];
   const findings = [];
   for (const fact of facts) {
-    const unresolved = ['unknown', 'unresolved', 'conflicting'].includes(fact.status);
-    if ((!Array.isArray(fact.sources) || fact.sources.length === 0) && !unresolved) findings.push({ code: 'SOURCE_REQUIRED', factId: fact.id });
-    for (const source of fact.sources ?? []) if (!allowed.has(source.id)) findings.push({ code: 'SOURCE_NOT_AUTHORIZED', factId: fact.id, sourceId: source.id });
+    const unresolved = ['unknown', 'unresolved', 'conflicting'].includes(fact.status)
+      || ['Unknown', 'Conflicting'].includes(fact.evidenceState);
+    const sources = fact.sources ?? (fact.provenance?.sourceId ? [{ id: fact.provenance.sourceId }] : []);
+    if (sources.length === 0 && !unresolved && fact.evidenceState !== 'Calculated') {
+      findings.push({ code: 'SOURCE_REQUIRED', factId: fact.id });
+    }
+    for (const source of sources) if (!allowed.has(source.id)) findings.push({ code: 'SOURCE_NOT_AUTHORIZED', factId: fact.id, sourceId: source.id });
   }
   return verdict(findings.length ? 'blocked' : 'passed', findings);
 }
@@ -113,18 +119,50 @@ function synthesize({ upstream }) {
     route: upstream.decision.route,
     unknowns: [...upstream.decision.unknowns],
     blockers,
+    questions: clone(upstream.questions.questions),
+    householdAction: clone(upstream.householdAction),
     summary: blockers.length
       ? 'Release blocked by deterministic review.'
       : 'Fixture evidence analysis is ready. No purchase, payment, claim or insurer decision is authorised.',
   };
 }
 
+function draftQuestions({ upstream }) {
+  const unknownFacts = upstream.coverage.facts.filter(fact => ['unknown', 'unresolved', 'conflicting'].includes(fact.status));
+  const factQuestions = unknownFacts.flatMap(fact => {
+    const citations = [...new Set((fact.sources ?? []).map(source => source.id).filter(Boolean))];
+    if (citations.length === 0) return [];
+    const label = fact.field ?? fact.fact ?? fact.id;
+    return [{
+      id: `question:${fact.id}`,
+      text: `What does the current authoritative record confirm for ${label}?`,
+      authorityOwner: 'insurer',
+      citations,
+    }];
+  });
+  const availableSources = [...new Set(upstream.coverage.facts.flatMap(fact => (fact.sources ?? []).map(source => source.id)).filter(Boolean))];
+  const decisionQuestions = availableSources.length === 0 ? [] : upstream.decision.unknowns.map((unknown, index) => ({
+    id: `question:decision:${index + 1}`,
+    text: `Which named authority can confirm this unresolved point: ${unknown.replace(/[.?]+$/, '')}?`,
+    authorityOwner: 'insurer',
+    citations: availableSources.slice(0, 8),
+  }));
+  const questions = [...factQuestions, ...decisionQuestions].slice(0, 16);
+  return {
+    questions,
+    unresolvedSourceIds: [...new Set(questions.flatMap(question => question.citations))],
+  };
+}
+
 export function createFixtureTaskRegistry() {
-  return Object.freeze({
+  const registry = {
     profile: ({ input }) => normalizeProfileIntake(input.profilePacket),
     group: ({ input }) => input.groupPolicies.map(policy => analyzeGroupHealthCover(policy)),
     personal: ({ input }) => analyzePersonalHealthCover(input.personalPacket),
     coverage: assembleCoverageGraph,
+    ...Object.fromEntries(Object.keys(POLICY_DECOMPOSITION)
+      .filter(key => key !== 'householdAction')
+      .map(key => [key, ({ upstream }) => decomposePolicySection(key, upstream.coverage)])),
     decision: ({ input, upstream }) => classifyCase({
       trigger: input.trigger,
       statedEstimate: input.statedEstimate ?? 0,
@@ -133,9 +171,17 @@ export function createFixtureTaskRegistry() {
     evidence: reviewEvidence,
     privacy: reviewPrivacy,
     safety: reviewSafety,
+    questions: draftQuestions,
+    householdAction: ({ upstream }) => buildHouseholdAction({
+      decision: upstream.decision,
+      sections: Object.keys(POLICY_DECOMPOSITION)
+        .filter(key => key !== 'householdAction')
+        .map(key => upstream[key]),
+    }),
     primary: synthesize,
     release: ({ upstream }) => upstream.primary.status === 'blocked'
       ? { status: 'blocked', blockers: clone(upstream.primary.blockers), externalActionsAuthorized: false }
       : { status: 'released', blockers: [], externalActionsAuthorized: false },
-  });
+  };
+  return Object.freeze(registry);
 }

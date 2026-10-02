@@ -1,5 +1,6 @@
 import { ToolLoopAgent, Output, isStepCount, jsonSchema } from 'ai';
 import { PROMPT_VERSION } from './prompts.js';
+import { AI_CONTRACT_VERSION } from './responsibility-matrix.js';
 
 function rate(value, label) {
   if (!Number.isFinite(value) || value <= 0) throw new TypeError(`${label} must be a verified positive rate.`);
@@ -15,9 +16,10 @@ export function createAiSdkRunner({ loadModel, provider, model, modelVersion, in
   const outputRate = rate(outputUsdPerMillion, 'outputUsdPerMillion');
 
   return async function runWithAiSdk({ task, prompt, outputSchema, maxOutputTokens, maxRetries, abortSignal }) {
+    const startedAt = Date.now();
     const languageModel = await loadModel({ provider, model, modelVersion });
     const agent = createAgent({
-      id: `coversaath-${task}`,
+      id: `knowvia-${task}`,
       model: languageModel,
       instructions: prompt.system,
       tools: {},
@@ -35,6 +37,7 @@ export function createAiSdkRunner({ loadModel, provider, model, modelVersion, in
     return {
       output: result.output,
       metadata: {
+        contractVersion: AI_CONTRACT_VERSION,
         mode: 'live',
         provider,
         model,
@@ -42,6 +45,9 @@ export function createAiSdkRunner({ loadModel, provider, model, modelVersion, in
         promptVersion: PROMPT_VERSION,
         inputTokens,
         outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        calls: 1,
+        latencyMs: Date.now() - startedAt,
         costUsd: ((inputTokens * inputRate) + (outputTokens * outputRate)) / 1_000_000,
       },
     };

@@ -4,7 +4,7 @@ import { createApiServer } from '../src/server/server.js';
 import { voiceAdapter, paymentAdapter, capabilities } from '../src/adapters/index.js';
 
 test('case API: isolation, review gates, replies and revocation', async t => {
-  const server = createApiServer();
+  const server = createApiServer({ env: { ENABLE_LEGACY_DEMO_API: 'true' } });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;

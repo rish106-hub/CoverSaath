@@ -20,7 +20,36 @@ export const DETERMINISTIC_TASKS = Object.freeze([
   'deterministic_release_gate',
 ]);
 
-export const RUNTIME_AI_TASK_KEYS = Object.freeze(['profile', 'group', 'personal', 'primary']);
+export const AI_CONTRACT_VERSION = 'knowvia-ai-contract-v1';
+
+export const RUNTIME_RESPONSIBILITIES = Object.freeze({
+  profile: Object.freeze({ owner: 'model_assist', modelTask: 'profile_extraction' }),
+  group: Object.freeze({ owner: 'model_assist', modelTask: 'group_cover_extraction' }),
+  personal: Object.freeze({ owner: 'model_assist', modelTask: 'personal_cover_extraction' }),
+  coverage: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  documentIdentity: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  continuity: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  enrolment: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  financialRules: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  benefits: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  exclusions: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  hospitalAccess: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  claimsProcess: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  renewalChange: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  serviceResearch: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  decision: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  householdAction: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  evidence: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  privacy: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  safety: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  questions: Object.freeze({ owner: 'model_assist', modelTask: 'question_drafting' }),
+  primary: Object.freeze({ owner: 'model_assist', modelTask: 'evidence_synthesis' }),
+  release: Object.freeze({ owner: 'deterministic', modelTask: null }),
+});
+
+export const RUNTIME_AI_TASK_KEYS = Object.freeze(Object.entries(RUNTIME_RESPONSIBILITIES)
+  .filter(([, responsibility]) => responsibility.owner === 'model_assist')
+  .map(([key]) => key));
 
 export function assertModelTask(task) {
   if (!AI_TASKS.includes(task)) {

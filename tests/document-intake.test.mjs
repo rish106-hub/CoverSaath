@@ -104,7 +104,7 @@ test('fixture documents stay quarantined until explicit fixture activation', asy
 });
 
 test('live storage encrypts bytes and refuses a tampered authentication tag', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'coversaath-docs-'));
+  const directory = await mkdtemp(join(tmpdir(), 'knowvia-docs-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const storage = createEncryptedLocalByteStorage({ baseDirectory: directory, key: randomBytes(32) });
   const service = createDocumentIntakeService({
@@ -124,7 +124,7 @@ test('live storage encrypts bytes and refuses a tampered authentication tag', as
 });
 
 test('live OCR readiness requires a clean scan and authenticated storage', async t => {
-  const directory = await mkdtemp(join(tmpdir(), 'coversaath-docs-'));
+  const directory = await mkdtemp(join(tmpdir(), 'knowvia-docs-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const service = createDocumentIntakeService({
     repository: createMemoryDocumentRepository({ consents: [consent()] }),

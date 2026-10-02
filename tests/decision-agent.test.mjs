@@ -17,7 +17,7 @@ test('unknown is not converted to false or a numeric risk score', () => {
       facts: [{ id: 'room', sources: [{ id: 'policy:room' }] }],
       unknowns: ['Therapy applicability is unresolved.'],
       operator: { status: 'unverified' },
-      readinessDrill: { status: 'not_run' },
+      backup: { status: 'unverified' },
     },
   });
   assert.equal(result.dimensions.coverageDeficiency.class, 'unknown');
@@ -32,7 +32,7 @@ test('fully confirmed inputs still require rules and household decision', () => 
     coverageGraph: {
       facts: [{ id: 'term', sources: [{ id: 'policy:term' }] }],
       operator: { status: 'verified' },
-      readinessDrill: { status: 'passed' },
+      backup: { status: 'authorised' },
       institutionalStatus: 'confirmed_for_case',
     },
   });

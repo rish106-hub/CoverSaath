@@ -4,3 +4,5 @@ export { ConsentRepository } from './consent-repository.js';
 export { CaseRepository } from './case-repository.js';
 export { WorkflowRepository } from './workflow-repository.js';
 export { EvidenceRepository } from './evidence-repository.js';
+export { AuthRepository } from './auth-repository.js';
+export { OcrRepository } from './ocr-repository.js';

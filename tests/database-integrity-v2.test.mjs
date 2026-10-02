@@ -36,7 +36,7 @@ function seedCase(database, identity, caseId = `case-${identity.householdId}`) {
 }
 
 test('v1 data migrates to v2 without losing evidence or foreign-key integrity', t => {
-  const directory = mkdtempSync(join(tmpdir(), 'coversaath-v1-v2-'));
+  const directory = mkdtempSync(join(tmpdir(), 'knowvia-v1-v2-'));
   const v1Directory = join(directory, 'migrations');
   mkdirSync(v1Directory);
   copyFileSync(
@@ -54,11 +54,37 @@ test('v1 data migrates to v2 without losing evidence or foreign-key integrity', 
      evidence_kind, asserted_by, observed_at, created_at)
     VALUES ('fact-v1', ?, ?, ?, 'cashless_status', NULL, 'unknown', 'adult_statement', ?, ?, ?)`)
     .run(identity.householdId, caseId, identity.memberId, identity.adultId, baseAt, baseAt);
+  database.prepare(`INSERT INTO consent_grants
+    (id, household_id, subject_adult_id, granted_to_actor, purpose, notice_version, evidence_method,
+     granted_at, created_at) VALUES ('consent-v1', ?, ?, 'local', 'document_processing', 'v1', 'fixture', ?, ?)`)
+    .run(identity.householdId, identity.adultId, baseAt, baseAt);
+  database.prepare(`INSERT INTO document_uploads
+    (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
+     original_filename, storage_path, content_sha256, mime_type, byte_size, uploaded_at)
+    VALUES ('document-v1', ?, ?, ?, 'consent-v1', 'other', 'legacy.txt', 'fixture/legacy', ?,
+      'text/plain', 1, ?)`)
+    .run(identity.householdId, caseId, identity.adultId, 'a'.repeat(64), baseAt);
+  database.prepare(`INSERT INTO source_pages
+    (id, document_upload_id, page_number, source_version, page_sha256, extraction_status, created_at)
+    VALUES ('page-v1', 'document-v1', 1, 'v1', ?, 'manual_verified', ?)`)
+    .run('b'.repeat(64), baseAt);
+  database.prepare(`INSERT INTO evidence_facts
+    (id, household_id, case_id, subject_member_id, fact_key, value_json, epistemic_state,
+     evidence_kind, source_page_id, asserted_by, observed_at, created_at)
+    VALUES ('fact-v1-known', ?, ?, ?, 'preferred_operator', '"Adult one"', 'known',
+      'adult_statement', 'page-v1', ?, ?, ?)`)
+    .run(identity.householdId, caseId, identity.memberId, identity.adultId, baseAt, baseAt);
 
-  assert.deepEqual(runMigrations(database), ['002_integrity_and_provenance.sql']);
+  assert.deepEqual(runMigrations(database), [
+    '002_integrity_and_provenance.sql',
+    '003_tenant_auth_and_permissions.sql',
+    '004_ocr_contract_and_provenance.sql',
+  ]);
   assert.equal(validateSchema(database).valid, true);
   const migrated = database.prepare("SELECT provenance_kind FROM evidence_facts WHERE id = 'fact-v1'").get();
   assert.equal(migrated.provenance_kind, 'adult_statement');
+  const known = database.prepare("SELECT provenance_kind, statement_adult_id FROM evidence_facts WHERE id = 'fact-v1-known'").get();
+  assert.deepEqual({ ...known }, { provenance_kind: 'adult_statement', statement_adult_id: identity.adultId });
   assert.deepEqual(database.prepare('PRAGMA foreign_key_check').all(), []);
 });
 
@@ -156,6 +182,42 @@ test('workflow claims wait for every dependency and persist recoverable inputs a
   const completed = workflows.completeTask(join.id, { workerId: 'worker', output: { status: 'joined' } });
   assert.deepEqual(JSON.parse(completed.output_json), { status: 'joined' });
   assert.equal(workflows.getRun('run-dag').status, 'completed');
+  database.close();
+});
+
+test('scoped workflow claims never take tasks from another run or workflow', () => {
+  const database = openDatabase({ path: ':memory:' });
+  const identity = seedHousehold(database, 'claim-scope');
+  const caseId = seedCase(database, identity, 'case-claim-scope');
+  const workflows = new WorkflowRepository(database, { clock: () => new Date(baseAt) });
+  workflows.createRunWithTasks({
+    id: 'run-other-coverage', caseId, workflowName: 'coverage-analysis',
+    tasks: [{ id: 'task-other-run', agentName: 'coverage', taskKind: 'analyse', input: {} }],
+  });
+  workflows.createRunWithTasks({
+    id: 'run-other-workflow', caseId, workflowName: 'document-intake',
+    tasks: [{ id: 'task-other-workflow', agentName: 'document', taskKind: 'extract', input: {} }],
+  });
+  workflows.createRunWithTasks({
+    id: 'run-requested', caseId, workflowName: 'coverage-analysis',
+    tasks: [{ id: 'task-requested', agentName: 'coverage', taskKind: 'analyse', input: {} }],
+  });
+
+  const claimed = workflows.claimNext({
+    workerId: 'coverage-worker',
+    runId: 'run-requested',
+    workflowName: 'coverage-analysis',
+  });
+  assert.equal(claimed.id, 'task-requested');
+  assert.equal(workflows.getTask('task-other-run').status, 'pending');
+  assert.equal(workflows.getTask('task-other-workflow').status, 'pending');
+
+  assert.equal(workflows.claimNext({
+    workerId: 'coverage-worker',
+    runId: 'run-other-workflow',
+    workflowName: 'coverage-analysis',
+  }), null);
+  assert.equal(workflows.getTask('task-other-workflow').status, 'pending');
   database.close();
 });
 

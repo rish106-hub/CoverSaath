@@ -23,13 +23,13 @@ test('joins three specialist outputs without converting unknowns to false', () =
   assert.ok(graph.unknowns.some(value => /currentlyEmployed/.test(value)));
 });
 
-test('continuity status needs a cited verification event', () => {
-  const withoutSources = buildCoverageGraph({ profilePacket, groupPolicies, personalPacket, continuity: { operator: { status: 'verified' }, readinessDrill: { status: 'passed' } } });
+test('continuity status needs cited operator and backup verification', () => {
+  const withoutSources = buildCoverageGraph({ profilePacket, groupPolicies, personalPacket, continuity: { operator: { status: 'verified' }, backup: { status: 'authorised' } } });
   assert.equal(withoutSources.operator.status, 'unverified');
-  assert.equal(withoutSources.readinessDrill.status, 'not_run_or_unverified');
-  const withSources = buildCoverageGraph({ profilePacket, groupPolicies, personalPacket, continuity: { operator: { status: 'verified', source: { id: 'operator-call' } }, readinessDrill: { status: 'passed', source: { id: 'drill-log' } } } });
+  assert.equal(withoutSources.backup.status, 'unverified');
+  const withSources = buildCoverageGraph({ profilePacket, groupPolicies, personalPacket, continuity: { operator: { status: 'verified', source: { id: 'operator-call' } }, backup: { status: 'authorised', source: { id: 'backup-authorisation' } } } });
   assert.equal(withSources.operator.status, 'verified');
-  assert.equal(withSources.readinessDrill.status, 'passed');
+  assert.equal(withSources.backup.status, 'authorised');
 });
 
 test('case-specific procedure status requires authorised institutional evidence', () => {

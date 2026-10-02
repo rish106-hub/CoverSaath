@@ -7,12 +7,19 @@ import {
 } from './contracts.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from './workflow-definition.js';
 import { createFixtureTaskRegistry } from './task-registry.js';
+import {
+  createTaskOutputEnvelope,
+  unwrapDependencyOutputs,
+  validateTaskInvocation,
+} from './agent-contracts.js';
 
 const clone = value => structuredClone(value);
 const timestamp = () => new Date().toISOString();
 
 function upstreamOutputs(run, task) {
-  return Object.fromEntries(task.dependsOn.map(key => [key, clone(run.tasks[key].output)]));
+  const definition = COVERAGE_ANALYSIS_WORKFLOW.tasks.find(item => item.key === task.key);
+  const envelopes = Object.fromEntries(task.dependsOn.map(key => [key, clone(run.tasks[key].output)]));
+  return unwrapDependencyOutputs(definition, envelopes);
 }
 
 function readyTasks(run) {
@@ -37,8 +44,9 @@ export function createCoverageAnalysisRuntime({ port, registry = createFixtureTa
   const settleStatus = run => {
     const release = run.tasks.release;
     if (release.status === 'completed') {
-      run.status = release.output.status === 'released' ? 'completed' : 'blocked';
-      run.result = clone(release.output);
+      const result = release.output.payload;
+      run.status = result.status === 'released' ? 'completed' : 'blocked';
+      run.result = clone(result);
       run.finishedAt = clock();
     } else if (Object.values(run.tasks).some(task => task.status === 'blocked')) {
       run.status = 'blocked';
@@ -124,7 +132,10 @@ export function createCoverageAnalysisRuntime({ port, registry = createFixtureTa
       const outcomes = await Promise.all(ready.map(async definition => {
         const task = run.tasks[definition.key];
         try {
-          const output = await registry[definition.key]({ input: clone(run.input), upstream: upstreamOutputs(run, task), run: clone(run) });
+          const context = { input: clone(run.input), upstream: upstreamOutputs(run, task), run: clone(run) };
+          validateTaskInvocation(definition.key, context);
+          const payload = await registry[definition.key](context);
+          const output = createTaskOutputEnvelope({ key: definition.key, payload, run });
           return { key: definition.key, output: clone(output) };
         } catch (error) {
           return { key: definition.key, error: error instanceof Error ? error.message : 'Task failed.' };
@@ -155,4 +166,3 @@ export function createCoverageAnalysisRuntime({ port, registry = createFixtureTa
     },
   });
 }
-

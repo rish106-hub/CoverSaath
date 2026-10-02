@@ -64,5 +64,27 @@ export class HouseholdRepository {
   getAdult(adultId) { return this.database.prepare('SELECT * FROM adult_users WHERE id = ?').get(adultId) ?? null; }
   getHousehold(householdId) { return this.database.prepare('SELECT * FROM households WHERE id = ?').get(householdId) ?? null; }
   listMembers(householdId) { return this.database.prepare('SELECT * FROM household_members WHERE household_id = ? ORDER BY created_at').all(householdId); }
-}
 
+  getActiveRole(householdId, adultUserId) {
+    return this.database.prepare(`SELECT * FROM household_roles
+      WHERE household_id = ? AND adult_user_id = ? AND status = 'active'
+        AND (starts_at IS NULL OR julianday(starts_at) <= julianday(?))
+        AND (ends_at IS NULL OR julianday(ends_at) > julianday(?))
+      ORDER BY CASE role WHEN 'owner' THEN 1 WHEN 'operator' THEN 2 WHEN 'member' THEN 3
+        WHEN 'backup_operator' THEN 4 ELSE 5 END LIMIT 1`)
+      .get(householdId, adultUserId, this.clock().toISOString(), this.clock().toISOString()) ?? null;
+  }
+
+  requireAccess(householdId, adultUserId, { write = false } = {}) {
+    const household = this.getHousehold(householdId);
+    const role = household && this.getActiveRole(householdId, adultUserId);
+    const allowed = role && (!write || ['owner', 'member', 'operator', 'backup_operator'].includes(role.role));
+    if (!allowed || household.status !== 'active') {
+      const error = new Error('Household not found.');
+      error.code = 'HOUSEHOLD_NOT_FOUND';
+      error.statusCode = 404;
+      throw error;
+    }
+    return { household, role };
+  }
+}

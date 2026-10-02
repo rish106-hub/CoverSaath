@@ -17,6 +17,10 @@ export function createTaskRecords() {
   return Object.fromEntries(COVERAGE_ANALYSIS_WORKFLOW.tasks.map(definition => [definition.key, {
     key: definition.key,
     kind: definition.kind,
+    owner: definition.owner,
+    modelTask: definition.modelTask,
+    inputSchema: definition.inputSchema,
+    outputSchema: definition.outputSchema,
     dependsOn: [...definition.dependsOn],
     status: 'pending',
     attempts: 0,
@@ -33,11 +37,10 @@ export function validateRunRecord(run) {
   if (!run.tasks || typeof run.tasks !== 'object') throw new TypeError('Persisted task records are required.');
   for (const definition of COVERAGE_ANALYSIS_WORKFLOW.tasks) {
     const task = run.tasks[definition.key];
-    if (!task || task.kind !== definition.kind || !TASK_STATES.includes(task.status)) throw new TypeError(`Invalid persisted task: ${definition.key}.`);
+    if (!task || task.kind !== definition.kind || task.owner !== definition.owner || task.modelTask !== definition.modelTask || task.inputSchema !== definition.inputSchema || task.outputSchema !== definition.outputSchema || !TASK_STATES.includes(task.status)) throw new TypeError(`Invalid persisted task: ${definition.key}.`);
     if (JSON.stringify(task.dependsOn) !== JSON.stringify(definition.dependsOn)) throw new TypeError(`Dependency contract changed for task: ${definition.key}.`);
   }
   return run;
 }
 
 export const isTerminalRun = run => TERMINAL_RUN_STATES.includes(run.status);
-

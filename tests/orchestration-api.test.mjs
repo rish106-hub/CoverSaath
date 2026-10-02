@@ -5,7 +5,8 @@ import { createFixtureExecutor } from '../src/models/index.js';
 import { createMemoryStore } from '../src/orchestration/index.js';
 
 async function setup(t, options = {}) {
-  const server = createApiServer({ store: createMemoryStore(), ...options });
+  const server = createApiServer({ store: createMemoryStore(), ...options,
+    env: { ENABLE_LEGACY_DEMO_API: 'true', ...(options.env ?? {}) } });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
