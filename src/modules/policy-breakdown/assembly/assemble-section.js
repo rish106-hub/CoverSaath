@@ -9,6 +9,20 @@ import { valueSupportedByQuotes, verifyCitations } from '../verification/citatio
 // Conflicting: two different values for the same scope, or the verifier disagrees with the extractor.
 // Unknown    : not found, invalid, unverified, or only member-specific values exist (kept as variants).
 
+// The insurer's official wording (pages with `official: true`) is generic to the product. Values that belong to
+// one policy instance can only come from the household's own pages; a wording page can never prove them.
+export const SCHEDULE_ONLY_KEYS = new Set([
+  'policy_number', 'previous_policy_number', 'certificate_number', 'member_id_numbers', 'policyholder_name', 'group_administrator_name',
+  'tpa_name', 'intermediary_name', 'intermediary_type', 'intermediary_code', 'document_issue_date', 'endorsement_list', 'add_on_covers',
+  'documents_present_in_pack', 'cis_present',
+  'insured_members', 'proposer_name', 'sum_insured_structure', 'member_effective_date', 'member_date_of_birth', 'nominee_name',
+  'member_specific_conditions', 'member_premium_loading_percent', 'declared_conditions', 'underwriting_outcome', 'pre_policy_checkup_status',
+  'policy_start_date', 'policy_end_date', 'first_inception_date', 'member_cover_start_dates',
+  'sum_insured_amount', 'sum_insured_per_member_cap', 'corporate_buffer_amount', 'additional_sum_insured_amount', 'policy_zone',
+  'deductible_amount', 'topup_deductible_amount', 'consumables_cover_addon',
+  'premium_total_amount', 'premium_base_amount', 'premium_tax_amount', 'premium_payment_frequency',
+]);
+
 const tokenOrNull = value => (value == null || value === NOT_STATED ? null : value);
 const trimList = list => (Array.isArray(list) ? list.map(item => String(item).trim()).filter(Boolean) : []);
 const scopeKey = item => (item.memberScope ? item.memberScope.trim().toLowerCase().replace(/\s+/g, ' ') : '');
@@ -48,11 +62,13 @@ function candidateFromItem(parameter, item, pagesByNumber) {
   const valueProblem = normalised.ok && verification.allMatched
     ? valueSupportedByQuotes(normalised.value, verification.results.map(result => result.quote))
     : null;
+  const official = verification.results.length > 0 && verification.results.every(result => pagesByNumber.get(result.pageNumber)?.official === true);
   return {
     item,
     normalised,
     verification,
     valueProblem,
+    official,
     citations: verification.results.map(result => ({
       documentId: pagesByNumber.get(result.pageNumber)?.documentId ?? null,
       pageNumber: pagesByNumber.get(result.pageNumber)?.localPageNumber ?? result.pageNumber,
@@ -69,8 +85,13 @@ function candidateState(candidate) {
   if (!candidate.normalised.ok) return ['Unknown', `value_invalid:${candidate.normalised.reason}`];
   if (!candidate.verification.allMatched) return ['Unknown', candidate.citations.length ? 'citation_not_found_in_page_text' : 'no_citation_supplied'];
   if (candidate.valueProblem) return ['Unknown', candidate.valueProblem];
-  return ['Proven', 'citations_verified'];
+  if (candidate.official && SCHEDULE_ONLY_KEYS.has(candidate.item.key)) return ['Unknown', 'policy_specific_value_cited_only_from_official_wording'];
+  return ['Proven', candidate.official ? 'citations_verified_in_official_wording' : 'citations_verified'];
 }
+
+/** The household's own pages outrank the insurer's generic wording: own-page candidates first. */
+const ownPagesFirst = group => [...group.filter(candidate => !candidate.official), ...group.filter(candidate => candidate.official)];
+const sameTier = (group, primary) => group.filter(candidate => candidate.official === primary.official);
 
 function baseResult(parameter, candidate, extraction) {
   const { item, normalised } = candidate;
@@ -98,7 +119,9 @@ function compareWithVerifier(parameter, candidate, verifierItems, pagesByNumber)
   if (!verifierItems) return { verifier: 'not_run' };
   const sameScope = verifierItems.filter(item => item.found === true && scopeKey(item) === scopeKey(candidate.item));
   if (sameScope.length === 0) return { verifier: 'found_nothing' };
-  const verifierCandidate = candidateFromItem(parameter, sameScope[0], pagesByNumber);
+  // Compare like with like: a verifier value from the same tier (own pages vs official wording) when one exists.
+  const verifierCandidates = sameScope.map(item => candidateFromItem(parameter, item, pagesByNumber));
+  const verifierCandidate = verifierCandidates.find(other => other.official === candidate.official) ?? verifierCandidates[0];
   const equal = verifierCandidate.normalised.ok && candidate.normalised.ok ? valuesEqual(verifierCandidate.normalised.value, candidate.normalised.value) : false;
   return {
     verifier: equal === 'not_comparable' ? 'needs_human_comparison' : equal ? 'agrees' : 'disagrees',
@@ -161,29 +184,34 @@ export function assembleExtractionSection({ section, extracted, verified = null,
     }
 
     // Member-scoped variants: each verified independently; never promoted to the policy-wide value.
-    const variants = [...groups.entries()].filter(([key]) => key !== '').map(([, group]) => {
+    const variants = [...groups.entries()].filter(([key]) => key !== '').map(([, rawGroup]) => {
+      const group = ownPagesFirst(rawGroup);
       const candidate = group[0];
       const variant = baseResult(parameter, candidate, extraction);
-      if (group.some(other => other !== candidate && other.normalised.ok && candidate.normalised.ok && valuesEqual(other.normalised.value, candidate.normalised.value) === false)) {
+      if (sameTier(group, candidate).some(other => other !== candidate && other.normalised.ok && candidate.normalised.ok && valuesEqual(other.normalised.value, candidate.normalised.value) === false)) {
         variant.evidenceState = 'Conflicting'; variant.stateReason = 'pack_states_different_values'; variant.value = null;
       }
       if (parameter.critical) { variant.verification = compareWithVerifier(parameter, candidate, verifierItems, pagesByNumber); applyVerifier(variant, variant.verification); }
       return { memberScope: candidate.item.memberScope, value: variant.value, evidenceState: variant.evidenceState, stateReason: variant.stateReason, conditions: variant.conditions, citations: variant.citations, verification: variant.verification ?? { verifier: 'not_required' } };
     });
 
-    const primaryGroup = groups.get('');
+    const primaryGroup = groups.has('') ? ownPagesFirst(groups.get('')) : undefined;
     let result;
     if (!primaryGroup) {
       result = { ...emptyParameterResult(parameter, { reason: 'member_specific_values_only' }), extraction, verification: { verifier: parameter.critical ? 'see_member_variants' : 'not_required' } };
     } else {
       const primary = primaryGroup[0];
       result = baseResult(parameter, primary, extraction);
-      const disagreement = primaryGroup.some(other => other !== primary && other.normalised.ok && primary.normalised.ok && valuesEqual(other.normalised.value, primary.normalised.value) === false);
+      const differs = other => other !== primary && other.normalised.ok && primary.normalised.ok && valuesEqual(other.normalised.value, primary.normalised.value) === false;
+      const disagreement = sameTier(primaryGroup, primary).some(differs);
       if (result.evidenceState === 'Proven' && disagreement) {
         result.evidenceState = 'Conflicting';
         result.stateReason = 'pack_states_different_values';
         result.alternatives = primaryGroup.filter(other => other !== primary).map(other => ({ value: other.normalised.ok ? other.normalised.value : null, citations: other.citations, conditions: trimList(other.item.conditions) }));
       }
+      // The schedule prevails over the generic wording; a differing wording value is kept for review, not a conflict.
+      const wordingDiffers = primary.official ? [] : primaryGroup.filter(other => other.official && differs(other));
+      if (wordingDiffers.length) result.officialWordingDiffers = wordingDiffers.map(other => ({ value: other.normalised.value, citations: other.citations, conditions: trimList(other.item.conditions) }));
       if (parameter.critical) { result.verification = compareWithVerifier(parameter, primary, verifierItems, pagesByNumber); applyVerifier(result, result.verification); }
       else result.verification = { verifier: 'not_required' };
     }

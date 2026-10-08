@@ -347,6 +347,23 @@
       "quote": "The Master Policy Schedule, the Policy Wording, the Certificate of Insurance issued to each Employee and any Endorsements issued shall be read together as one contract."
     },
     {
+      "key": "documents_present_in_pack",
+      "found": false,
+      "valueText": null,
+      "valueNumber": null,
+      "valueBoolean": null,
+      "valueList": null,
+      "unit": null,
+      "basis": null,
+      "effect": null,
+      "memberScope": null,
+      "conditions": [],
+      "exceptions": [],
+      "confidence": "high",
+      "notes": null,
+      "quote": null
+    },
+    {
       "key": "document_issue_date",
       "found": true,
       "valueText": "2026-03-20",

@@ -1,4 +1,4 @@
-// Section 10 — Insurer quality: will they actually pay, and how fast?
+// Section 10 — Insurer quality: what is the insurer's published claims track record?
 // Analysis section. No model reads the policy for this section. analyze(context) derives every value
 // deterministically from supplied, dated public disclosures (references.insurerDisclosures) that match the
 // policy's own insurer_name, plus Section 1 tpa_name for the claims-handling model. No insurer statistics are
@@ -117,9 +117,20 @@ const readParameter = (store, key) => {
   return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null;
 };
 
+// Same legal entity, renamed (IRDAI-recorded name changes). Old policies keep printing the former name.
+const RENAMED_INSURERS = new Map([
+  ['bajaj allianz general insurance co', 'bajaj general insurance'],
+  ['magma hdi general insurance co', 'magma general insurance co'],
+]);
+
 /** Normalised legal-entity name used for exact matching. */
 export function normaliseInsurerName(name) {
   if (typeof name !== 'string') return '';
+  const normalised = baseInsurerName(name);
+  return RENAMED_INSURERS.get(normalised) ?? normalised;
+}
+
+function baseInsurerName(name) {
   return name
     .toLowerCase()
     .replace(/&/g, ' and ')
@@ -223,6 +234,8 @@ function analyzeMetric(metric, matched, asOf, householdCity) {
   for (const disclosure of matched) {
     if (disclosure.metric !== metric) continue;
     if (spec.byCity && normaliseCity(disclosure.city) !== householdCity) continue;
+    // A figure that names no source is not a dated public disclosure: it never becomes Dynamic.
+    if (typeof disclosure.source !== 'string' || !disclosure.source.trim()) { rejected.push('disclosure_source_not_labelled'); continue; }
     const end = periodEndDate(disclosure.period);
     if (!end || !isIsoDate(disclosure.publishedOn)) { rejected.push('undated_or_unparseable_period'); continue; }
     if (asOf && disclosure.publishedOn > asOf) { rejected.push('published_after_analysis_date'); continue; }
@@ -244,15 +257,17 @@ function analyzeMetric(metric, matched, asOf, householdCity) {
   }
   const periodLabel = latest[0].disclosure.period;
   if (distinct.size > 1) {
-    const detail = [...distinct.values()].map(entries => `${describeValue(entries[0].value)} (${entries.map(e => `${e.disclosure.source ?? 'unlabelled source'}, published ${e.disclosure.publishedOn}`).join('; ')})`).join(' vs ');
+    const detail = [...distinct.values()].map(entries => `${describeValue(entries[0].value)} (${entries.map(e => `${e.disclosure.source}, published ${e.disclosure.publishedOn}`).join('; ')})`).join(' vs ');
     return result(metric, 'Conflicting', `disclosures_disagree_for_period ${periodLabel}`, { notes: `Conflicting values for ${periodLabel}: ${detail}.` });
   }
   const entries = [...distinct.values()][0];
   const publishedOn = entries.map(e => e.disclosure.publishedOn).sort().at(-1);
-  const sources = [...new Set(entries.map(e => e.disclosure.source).filter(Boolean))];
-  return result(metric, 'Dynamic', `public_disclosure period ${periodLabel}, published ${publishedOn}`, {
+  const sources = [...new Set(entries.map(e => e.disclosure.source.trim()))];
+  // An insurer page that carries no date is dated by when it was read, and says so.
+  const insurerReported = entries.every(e => e.disclosure.sourceKind === 'insurer_reported');
+  return result(metric, 'Dynamic', `${insurerReported ? 'insurer_reported_disclosure' : 'public_disclosure'} period ${periodLabel}, ${insurerReported ? 'retrieved' : 'published'} ${publishedOn}`, {
     value: entries[0].value,
-    notes: `Source: ${sources.length ? sources.join('; ') : 'unlabelled'}.${spec.byCity ? ` City: ${entries[0].disclosure.city}.` : ''}`,
+    notes: `Source: ${sources.join('; ')}.${spec.byCity ? ` City: ${entries[0].disclosure.city}.` : ''}`,
   });
 }
 
@@ -285,7 +300,7 @@ export default defineSection({
   number: SECTION_NUMBER,
   id: 'section-10-insurer-quality',
   title: 'Insurer quality',
-  question: 'Will they actually pay, and how fast?',
+  question: 'What does the insurer\'s published claims track record show?',
   kind: 'analysis',
   expertise,
   parameters,

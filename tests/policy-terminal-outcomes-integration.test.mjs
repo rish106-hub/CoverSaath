@@ -55,7 +55,7 @@ function database() {
   };
 }
 
-test('service adds justified terminal metadata to all 314 parameters without changing evidence state', async () => {
+test('service adds justified terminal metadata to all 316 parameters without changing evidence state', async () => {
   const service = createPolicyBreakdownService({
     database: database(),
     services: {
@@ -67,8 +67,8 @@ test('service adds justified terminal metadata to all 314 parameters without cha
   const response = await service.getSections({ adultId }, recordId);
   const parameters = response.sections.flatMap(section => section.parameters);
 
-  assert.equal(PARAMETER_INDEX.size, 314, 'the canonical section registry must retain the 314-parameter contract');
-  assert.equal(parameters.length, 314, 'the service exposes every canonical parameter');
+  assert.equal(PARAMETER_INDEX.size, 316, 'the canonical section registry must retain the 316-parameter contract');
+  assert.equal(parameters.length, 316, 'the service exposes every canonical parameter');
   assert.ok(parameters.every(parameter => parameter.evidenceState === 'Unknown'), 'terminal classification must not rewrite evidenceState');
   assert.ok(parameters.every(parameter => typeof parameter.terminalOutcomeReason === 'string' && Array.isArray(parameter.sourceAttempts)));
   assert.ok(parameters.every(parameter => parameter.sourceAttempts.length === 0), 'no source attempt may be invented');

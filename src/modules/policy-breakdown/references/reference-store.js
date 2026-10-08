@@ -5,6 +5,9 @@ import { join } from 'node:path';
 // reviewed JSON files in BREAKDOWN_REFERENCE_DIR, each carrying its own source and publication date.
 //
 //   insurer-disclosures.json   { "entries": [ { insurerName, metric, value, period, publishedOn, source, city? } ] }
+//   insurer-reported-disclosures.json  same entry shape, written by references/insurer-reported-disclosures.js
+//                              from registry sources (insurer-published claims data); merged after the file above
+//   network-counts.json        network_hospitals_in_city entries, written by references/network-counts.js
 //   regulatory-floor.json      a full floor table (see sections/s12-regulatory.js validateFloorTable)
 //   procedure-costs.json       { version, source, publishedOn, entries: [ { city, procedure, typicalCostMinor, highCostMinor } ] }
 //
@@ -17,6 +20,9 @@ const FILES = Object.freeze({
   regulatoryFloor: 'regulatory-floor.json',
   procedureCostReference: 'procedure-costs.json',
 });
+
+export const INSURER_REPORTED_FILE = 'insurer-reported-disclosures.json';
+export const NETWORK_COUNTS_FILE = 'network-counts.json';
 
 export const EMPTY_REFERENCES = Object.freeze({ insurerDisclosures: [], regulatoryFloor: null, procedureCostReference: null });
 
@@ -37,8 +43,12 @@ export function loadBreakdownReferences({ directory } = {}) {
   const disclosures = readJson(join(directory, FILES.insurerDisclosures), problems, FILES.insurerDisclosures);
   const floor = readJson(join(directory, FILES.regulatoryFloor), problems, FILES.regulatoryFloor);
   const costs = readJson(join(directory, FILES.procedureCostReference), problems, FILES.procedureCostReference);
-  const entries = Array.isArray(disclosures) ? disclosures : Array.isArray(disclosures?.entries) ? disclosures.entries : [];
+  const entries = [...(Array.isArray(disclosures) ? disclosures : Array.isArray(disclosures?.entries) ? disclosures.entries : [])];
   if (disclosures && !entries.length) problems.push(`${FILES.insurerDisclosures}: no entries array, ignored`);
+  const reported = readJson(join(directory, INSURER_REPORTED_FILE), problems, INSURER_REPORTED_FILE);
+  if (Array.isArray(reported?.entries)) entries.push(...reported.entries);
+  const network = readJson(join(directory, NETWORK_COUNTS_FILE), problems, NETWORK_COUNTS_FILE);
+  if (Array.isArray(network?.entries)) entries.push(...network.entries);
   return Object.freeze({
     insurerDisclosures: Object.freeze(entries.slice(0, 20_000)),
     regulatoryFloor: floor && typeof floor === 'object' && !Array.isArray(floor) ? floor : null,
@@ -52,8 +62,11 @@ export function loadBreakdownReferences({ directory } = {}) {
 export function createReferenceProvider({ directory, ttlMs = 60_000, clock = () => Date.now() } = {}) {
   let cached = null;
   let loadedAt = 0;
-  return () => {
+  const provider = () => {
     if (!cached || clock() - loadedAt > ttlMs) { cached = loadBreakdownReferences({ directory }); loadedAt = clock(); }
     return cached;
   };
+  // A refresher that just wrote a file calls this so the next read sees it without waiting for the TTL.
+  provider.invalidate = () => { cached = null; };
+  return provider;
 }

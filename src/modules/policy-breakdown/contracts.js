@@ -386,6 +386,7 @@ export function wrapHandoff({ jobId, agent, next = null, status, promptVersion, 
 
 const MONEY_MAX_MINOR = 1_000_000_000_00; // ₹100 crore
 const isInt = value => Number.isInteger(value);
+const enumSlug = text => (text ? String(text).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') : null);
 
 /**
  * Turns a raw model item into a normalised value for its parameter definition.
@@ -415,10 +416,13 @@ export function normaliseValue(parameter, item) {
       if (typeof item.valueBoolean !== 'boolean') return { ok: false, reason: 'boolean_requires_valueBoolean' };
       value = { kind: 'boolean', flag: item.valueBoolean };
       break;
-    case 'enum':
-      if (!text || !parameter.enumValues.includes(text)) return { ok: false, reason: 'enum_value_not_allowed' };
-      value = { kind: 'enum', enumValue: text };
+    case 'enum': {
+      // Models sometimes return the label form ("India only"); accept it only when it maps exactly to one enum value.
+      const enumValue = parameter.enumValues.includes(text) ? text : enumSlug(text);
+      if (!enumValue || !parameter.enumValues.includes(enumValue)) return { ok: false, reason: 'enum_value_not_allowed' };
+      value = { kind: 'enum', enumValue };
       break;
+    }
     case 'date':
       if (!text || !/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(`${text}T00:00:00Z`))) return { ok: false, reason: 'date_requires_iso_yyyy_mm_dd' };
       value = { kind: 'date', date: text };

@@ -223,6 +223,23 @@
       "quote": null
     },
     {
+      "key": "additional_sum_insured_amount",
+      "found": false,
+      "valueText": null,
+      "valueNumber": null,
+      "valueBoolean": null,
+      "valueList": null,
+      "unit": null,
+      "basis": null,
+      "effect": null,
+      "memberScope": null,
+      "conditions": [],
+      "exceptions": [],
+      "confidence": "high",
+      "notes": null,
+      "quote": null
+    },
+    {
       "key": "cumulative_bonus_percent_per_year",
       "found": false,
       "valueText": null,

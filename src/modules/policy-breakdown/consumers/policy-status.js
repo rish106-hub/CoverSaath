@@ -11,7 +11,7 @@ const addDays = (iso, days) => toIso(new Date(Date.parse(`${iso}T00:00:00Z`) + d
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
 
 export const POLICY_STATUS_GROUPS = Object.freeze({
-  documents: ['product_uin', 'product_version', 'insurer_registration_number', 'policyholder_name', 'proposer_name', 'previous_policy_number', 'document_set', 'document_issue_date', 'cis_present', 'cis_precedence_statement', 'document_precedence', 'endorsement_list', 'add_on_covers', 'add_on_terms'],
+  documents: ['product_uin', 'product_version', 'insurer_registration_number', 'policyholder_name', 'proposer_name', 'previous_policy_number', 'document_set', 'documents_present_in_pack', 'document_issue_date', 'cis_present', 'cis_precedence_statement', 'document_precedence', 'endorsement_list', 'add_on_covers', 'add_on_terms'],
   servicing: ['intermediary_name', 'intermediary_type', 'intermediary_code', 'group_administrator_name', 'grievance_officer_contact', 'insurer_helpline'],
   membership: ['eligible_relationships', 'relationship_definitions', 'min_entry_age_adult_years', 'max_entry_age_years', 'dependent_child_min_entry_age_days', 'max_family_members', 'residency_condition', 'occupation_condition', 'nominee_required', 'nominee_name', 'member_premium_loading_percent', 'pre_policy_checkup_status'],
   otherBenefits: ['opd_covered', 'teleconsultation_covered', 'health_checkup_covered', 'health_checkup_conditions', 'wellness_benefit_rule', 'vaccination_covered', 'second_opinion_covered', 'home_care_covered', 'home_care_conditions', 'rehabilitation_covered', 'dental_vision_rule', 'critical_illness_benefit_covered', 'critical_illness_conditions'],

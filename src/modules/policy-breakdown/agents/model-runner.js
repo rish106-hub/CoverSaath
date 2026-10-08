@@ -98,6 +98,11 @@ export function createJobBudget(maxUsd, { spentUsd = 0 } = {}) {
   });
 }
 
+const providerRejected = error => {
+  const status = Number(error?.statusCode ?? error?.lastError?.statusCode ?? error?.cause?.statusCode);
+  return status >= 400 && status < 500;
+};
+
 const estimateTokens = characters => Math.ceil(characters / 3.5);
 
 /**
@@ -120,6 +125,7 @@ export function createLiveModelRunner({ env = process.env, config = readBreakdow
       let lastError;
       for (let attempt = 1; attempt <= attempts; attempt += 1) {
         const reservation = budget.reserve(worstCaseUsd);
+        let settled = false;
         const started = Date.now();
         await semaphore.acquire();
         try {
@@ -140,11 +146,13 @@ export function createLiveModelRunner({ env = process.env, config = readBreakdow
           const outputTokens = Number.isInteger(usage.outputTokens) ? usage.outputTokens : maxOutputTokens;
           const costUsd = ((inputTokens * config.inputUsdPerMillion) + (outputTokens * config.outputUsdPerMillion)) / 1_000_000;
           budget.settle(reservation, costUsd);
+          settled = true;
           if (result.output == null || typeof result.output !== 'object') fail('BREAKDOWN_OUTPUT_INVALID', `${agent} returned no structured output.`);
           return { output: result.output, usage: { inputTokens, outputTokens }, costUsd, latencyMs: Date.now() - started, model: config.model, provider: config.provider, attempt };
         } catch (error) {
-          // A failed call may still have been billed; settle conservatively at the reservation.
-          budget.settle(reservation, error?.code === 'BREAKDOWN_OUTPUT_INVALID' ? 0 : worstCaseUsd);
+          // A failed call may still have been billed; settle conservatively at the reservation. A provider 4xx
+          // rejection (bad request, auth, rate limit) is refused before generation and is not billed.
+          if (!settled) budget.settle(reservation, providerRejected(error) ? 0 : worstCaseUsd);
           lastError = error;
           const schemaFailure = error?.code === 'BREAKDOWN_OUTPUT_INVALID' || /NoObjectGenerated|schema|parse/i.test(`${error?.name} ${error?.message}`);
           if (!schemaFailure || attempt === attempts || signal?.aborted) break;

@@ -14,6 +14,7 @@ import { buildPolicyStatus } from './consumers/policy-status.js';
 import { resolveForMember } from './consumers/record-values.js';
 import { EMPTY_REFERENCES } from './references/reference-store.js';
 import { withTerminalOutcome } from './references/official/parameter-terminal-outcomes.js';
+import { OFFICIAL_DOCUMENT_PREFIX, officialPageLabel } from './references/official/wording-service.js';
 import { structuralPdfCheck } from './ocr/pdf-tools.js';
 import { createDocumentIntakeService } from '../document-intake/document-intake-service.js';
 import { OCR_OUTPUT_VERSION, validateOcrOutput } from '../document-intake/ocr-contracts.js';
@@ -92,8 +93,10 @@ function publicJob(job, modelCalls = []) {
  * @param deps.pageTextProvider    (mode) => provider with extractPages()
  * @param deps.modelRunner         (mode) => runner with run()
  * @param deps.references          () => dated reference data for sections 10–12 (see references/reference-store.js)
+ * @param deps.officialWording     optional official-wording service (references/official/wording-service.js)
+ * @param deps.networkCounts       optional cashless network count refresher (references/network-counts.js)
  */
-export function createPolicyBreakdownService({ database, services, storage, pageTextProvider, modelRunner, clock = () => new Date(), schedule = task => setImmediate(task), maxUploadBytes, scanMode = 'antivirus_required', references = () => EMPTY_REFERENCES } = {}) {
+export function createPolicyBreakdownService({ database, services, storage, pageTextProvider, modelRunner, clock = () => new Date(), schedule = task => setImmediate(task), maxUploadBytes, scanMode = 'antivirus_required', references = () => EMPTY_REFERENCES, officialWording = null, networkCounts = null } = {}) {
   if (!['antivirus_required', 'structural_only'].includes(scanMode)) throw new TypeError('scanMode must be antivirus_required or structural_only.');
   if (!database || !services) throw new TypeError('database and services are required.');
   const records = new PolicyRecordRepository(database, { clock, audit: services.audit });
@@ -157,7 +160,8 @@ export function createPolicyBreakdownService({ database, services, storage, page
     return Object.fromEntries(Object.entries(parameters).map(([key, result]) => [key, result.visibility === 'protected' || (birthDatesHidden && BIRTH_DATE_DERIVED.has(key)) ? maskProtected(result) : result]));
   }
 
-  async function loadPages(recordId) {
+  /** Uploaded pages, then (for a job that attached one) the insurer's official wording, labelled as such. */
+  async function loadPages(recordId, { job = null } = {}) {
     const docs = await records.recordDocuments(recordId);
     const pages = [];
     for (const document of docs) {
@@ -165,6 +169,12 @@ export function createPolicyBreakdownService({ database, services, storage, page
         WHERE document_upload_id = $1 AND source_version = $2 ORDER BY page_number`, [document.id, document.source_version]);
       for (const row of rows) {
         pages.push({ pageNumber: pages.length + 1, localPageNumber: row.page_number, documentId: document.id, documentLabel: `${document.document_kind}:${document.original_filename}`, text: row.extracted_text ?? '', extractionStatus: row.extraction_status });
+      }
+    }
+    const links = job?.steps?.find(step => step.id === 'ocr')?.metrics?.officialWording?.links ?? [];
+    for (const link of officialWording ? links : []) {
+      for (const page of officialWording.pagesFor(link) ?? []) {
+        pages.push({ pageNumber: pages.length + 1, localPageNumber: page.pageNumber, documentId: `${OFFICIAL_DOCUMENT_PREFIX}${link.registryEntryId}`, documentLabel: officialPageLabel(link), text: page.text, extractionStatus: 'extracted', official: true });
       }
     }
     return pages;
@@ -240,6 +250,11 @@ export function createPolicyBreakdownService({ database, services, storage, page
   async function analyse(record, parameters) {
     const creator = { adultId: record.createdByAdultId };
     const city = (await database.one('SELECT city FROM households WHERE id = $1', [record.householdId]))?.city ?? null;
+    // Public lookup: only the insurer's name and the household city leave the server. Bounded wait; never fatal.
+    const insurer = parameters.insurer_name;
+    if (networkCounts && city && ['Proven', 'Calculated'].includes(insurer?.evidenceState) && insurer.value?.text) {
+      await Promise.race([networkCounts.ensureCount({ insurerName: insurer.value.text, city }), new Promise(resolve => setTimeout(resolve, 8_000).unref?.())]);
+    }
     const analysis = runAnalysisSections({ parameters, household: { members: await householdMembers(creator, record.householdId), city }, otherRecords: await otherRecordParameters(record), references: references() ?? EMPTY_REFERENCES, asOf: now().slice(0, 10) });
     for (const [key, result] of Object.entries(analysis)) {
       const previous = parameters[key];
@@ -260,7 +275,7 @@ export function createPolicyBreakdownService({ database, services, storage, page
 
   async function assembleRecord(job, { runner }) {
     const record = await records.getRecord(job.policyRecordId);
-    const pages = await loadPages(record.id);
+    const pages = await loadPages(record.id, { job });
     const parameters = {};
     const failedSections = [];
     for (const section of EXTRACTION_SECTIONS) {
@@ -329,8 +344,14 @@ export function createPolicyBreakdownService({ database, services, storage, page
             return records.updateJob(job.id, { status: 'failed', errorCode: error.code ?? 'OCR_FAILED', errorMessage: String(error.message).slice(0, 300), completedAt: now() });
           }
         }
+        // Step 1b: attach the insurer's official wording for the policy's exact UIN (once per job; never fatal).
+        const ocrStep = job.steps.find(step => step.id === 'ocr');
+        if (officialWording && !ocrStep.metrics?.officialWording) {
+          const attached = await officialWording.attach(await loadPages(job.policyRecordId));
+          job = await updateStep(job, 'ocr', { metrics: { ...(ocrStep.metrics ?? {}), officialWording: attached } });
+        }
         // Step 2: nine extraction sections in parallel; each persists as it finishes. Step updates are atomic.
-        const pages = await loadPages(job.policyRecordId);
+        const pages = await loadPages(job.policyRecordId, { job });
         const pending = EXTRACTION_SECTIONS.filter(section => job.steps.find(step => step.id === stepId(section)).status !== 'succeeded');
         await Promise.allSettled(pending.map(async section => {
           await updateStep(job, stepId(section), { status: 'running', startedAt: now(), errorCode: null, errorMessage: null });

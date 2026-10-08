@@ -347,6 +347,25 @@
       "quote": "The proposal form, the Schedule, this Policy Wording and any Endorsements issued shall be read together as one contract."
     },
     {
+      "key": "documents_present_in_pack",
+      "found": true,
+      "valueText": null,
+      "valueNumber": null,
+      "valueBoolean": null,
+      "valueList": [
+        "Policy Schedule"
+      ],
+      "unit": null,
+      "basis": "not_applicable",
+      "effect": "inform",
+      "memberScope": null,
+      "conditions": [],
+      "exceptions": [],
+      "confidence": "high",
+      "notes": null,
+      "quote": "POLICY SCHEDULE — EXAMPLE FAMILY HEALTH PLAN"
+    },
+    {
       "key": "document_issue_date",
       "found": true,
       "valueText": "2026-03-28",

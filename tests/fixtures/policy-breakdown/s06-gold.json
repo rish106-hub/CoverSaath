@@ -55,6 +55,25 @@
       "quote": null
     },
     {
+      "key": "additional_sum_insured_amount",
+      "found": true,
+      "valueText": null,
+      "valueNumber": 500000,
+      "valueBoolean": null,
+      "valueList": null,
+      "unit": "INR",
+      "basis": "per_policy_year",
+      "effect": "cap_amount",
+      "memberScope": null,
+      "conditions": [
+        "Plus Benefit, over and above Base Sum Insured"
+      ],
+      "exceptions": [],
+      "confidence": "high",
+      "notes": null,
+      "quote": "Plus Benefit (Additional Sum Insured, over and above Base Sum Insured): Rs. 5,00,000/-"
+    },
+    {
       "key": "cumulative_bonus_percent_per_year",
       "found": true,
       "valueText": null,

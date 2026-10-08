@@ -97,3 +97,18 @@ test('name and period normalisation', () => {
   assert.equal(periodEndDate('2025-27'), null);
   assert.equal(periodEndDate('recent'), null);
 });
+
+test('a disclosure with no source is Unknown, never Dynamic, and the section does not promise a prediction', () => {
+  const parameters = { insurer_name: { key: 'insurer_name', value: { kind: 'text', text: 'Example General Insurance Company Limited' }, evidenceState: 'Proven', memberScope: null } };
+  const entry = { insurerName: 'Example General Insurance Co. Ltd.', metric: 'claim_settlement_ratio_count', value: 90, period: 'FY2024-25', publishedOn: '2025-08-15' };
+  for (const source of [undefined, '', '   ']) {
+    const out = section.analyze({ asOf: '2026-10-02', parameters, references: { insurerDisclosures: [{ ...entry, source }] } });
+    const ratio = out.find(o => o.key === 'claim_settlement_ratio_count');
+    assert.equal(ratio.evidenceState, 'Unknown');
+    assert.equal(ratio.value, null);
+    assert.match(ratio.notes, /source_not_labelled/);
+  }
+  const labelled = section.analyze({ asOf: '2026-10-02', parameters, references: { insurerDisclosures: [{ ...entry, source: 'Synthetic table' }] } });
+  assert.equal(labelled.find(o => o.key === 'claim_settlement_ratio_count').evidenceState, 'Dynamic');
+  assert.doesNotMatch(section.question, /will they|actually pay/i);
+});

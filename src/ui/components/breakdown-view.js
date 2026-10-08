@@ -12,7 +12,10 @@ export function countCriticalUnreviewed(sections) {
 }
 
 function citationItem(citation, documents) {
-  const name = documents.find(document => document.id === citation.documentId)?.filename;
+  // Pages fetched from the insurer's own site carry an `official:` document id, not an upload id.
+  const name = String(citation.documentId ?? '').startsWith('official:')
+    ? 'Insurer\'s official policy wording'
+    : documents.find(document => document.id === citation.documentId)?.filename;
   return el('li', { class: 'citation', 'data-testid': 'citation' },
     el('span', { class: 'citation-page' }, `${name ? `${name}, ` : ''}page ${citation.pageNumber}`),
     el('q', {}, citation.quote),
