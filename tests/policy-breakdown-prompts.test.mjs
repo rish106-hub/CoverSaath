@@ -26,9 +26,9 @@ const allPrompts = pages => SECTIONS.flatMap(section => [
   { agent: `${section.id}:verifier`, ...buildVerifierPrompt(section, pages, verifierParameters(section)) },
 ]);
 
-test('prompt version is bumped to v3', () => {
-  assert.equal(BREAKDOWN_PROMPT_VERSION, 'breakdown-prompts-v3');
-  assert.equal(buildSectionPrompt(SECTIONS[0], jobPages('c')).promptVersion, 'breakdown-prompts-v3');
+test('prompt version is bumped to v4', () => {
+  assert.equal(BREAKDOWN_PROMPT_VERSION, 'breakdown-prompts-v4');
+  assert.equal(buildSectionPrompt(SECTIONS[0], jobPages('c')).promptVersion, 'breakdown-prompts-v4');
 });
 
 test('(a) system is byte-identical for all 12 sections, both roles and different jobs', () => {

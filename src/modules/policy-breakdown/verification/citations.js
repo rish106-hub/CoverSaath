@@ -64,16 +64,25 @@ function matchOnPage(quote, pageText) {
   return null;
 }
 
-// Punctuation/spacing-insensitive match that keeps digits, for OCR and PDF line-break noise around numbers. Every
-// number in the quote must also be a number token on the page (commas ignored, decimal points kept), so "1.5%"
-// can never match "15%" and no digit can be added, dropped or moved across a decimal point.
-const compact = text => normaliseForMatch(text).replace(/[^a-z0-9]+/g, '');
+// Punctuation/spacing-insensitive match that keeps digits, for OCR and PDF line-break noise around numbers. The
+// numbers inside the matched span of the page must equal the quote's numbers, in order (commas ignored, decimal
+// points kept), so "1.5%" can never match "15%" even when another "15" sits elsewhere on the page.
 const numberTokens = text => (normaliseForMatch(text).match(/\d+(?:[.,]\d+)*/g) ?? []).map(token => token.replace(/,/g, ''));
 function compactMatch(quote, pageText) {
-  const needle = compact(quote);
-  if (needle.length < 20 || !compact(pageText).includes(needle)) return false;
-  const onPage = new Set(numberTokens(pageText));
-  return numberTokens(quote).every(token => onPage.has(token));
+  const needle = normaliseForMatch(quote).replace(/[^a-z0-9]+/g, '');
+  if (needle.length < 20) return false;
+  const page = normaliseForMatch(pageText);
+  let compactPage = '';
+  const positions = [];
+  for (let index = 0; index < page.length; index += 1) {
+    if (/[a-z0-9]/.test(page[index])) { compactPage += page[index]; positions.push(index); }
+  }
+  const wanted = JSON.stringify(numberTokens(quote));
+  for (let at = compactPage.indexOf(needle); at >= 0; at = compactPage.indexOf(needle, at + 1)) {
+    const span = page.slice(positions[at], positions[at + needle.length - 1] + 1);
+    if (JSON.stringify(numberTokens(span)) === wanted) return true;
+  }
+  return false;
 }
 
 // Models sometimes join two spans of one page with "..." (or "…"). Each span must match the same page on its own,
