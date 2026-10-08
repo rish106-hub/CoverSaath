@@ -1,0 +1,42 @@
+# Shared exclusions for gcloud source upload (Cloud Build). Keep .dockerignore identical.
+# NOTE: when this file exists gcloud ignores .gitignore, so everything must be listed here.
+# Secrets and personal data: never ship these.
+**/.env*
+.local/
+**/.local/
+private/
+**/private/
+research/
+*.key
+*.pem
+*.p12
+# Dependencies and build output (installed/built inside the image)
+node_modules/
+**/node_modules/
+dist/
+test-results/
+playwright-report/
+coverage/
+# VCS, tooling, editors
+.git/
+.gitignore
+.DS_Store
+**/.DS_Store
+.posthog-wizard-cache/
+.insforge/
+.claude/
+.vscode/
+.idea/
+# Not needed at runtime
+tests/
+docs/
+building/
+working/
+knowvia-website/
+playwright.config.mjs
+*.md
+# scripts/: only the generated public Vite env file may ship
+scripts/*
+!scripts/deploy
+scripts/deploy/*
+!scripts/deploy/vite-public.env

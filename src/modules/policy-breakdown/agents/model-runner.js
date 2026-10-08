@@ -23,6 +23,25 @@ function bounded(value, name, { fallback, min = 0, max, integer = false }) {
   return parsed;
 }
 
+/** Test-only override: BREAKDOWN_LLM_BASE_URL points the Gemini client at a local fake. Unset keeps Google's endpoint. */
+function optionalBaseUrl(value) {
+  if (value === undefined || value === '') return null;
+  let url;
+  try { url = new URL(value); } catch { fail('BREAKDOWN_AI_CONFIG_INVALID', 'BREAKDOWN_LLM_BASE_URL must be a valid URL.'); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    fail('BREAKDOWN_AI_CONFIG_INVALID', 'BREAKDOWN_LLM_BASE_URL must be an http(s) URL without credentials, query or fragment.');
+  }
+  return url.toString().replace(/\/+$/, '');
+}
+
+/** Optional Gemini 3.x thinking level. Unset sends nothing (provider default). */
+function optionalThinkingLevel(value) {
+  if (value === undefined || value === '') return null;
+  const level = String(value).trim().toLowerCase();
+  if (!['minimal', 'low', 'medium', 'high'].includes(level)) fail('BREAKDOWN_AI_CONFIG_INVALID', 'BREAKDOWN_THINKING_LEVEL must be one of minimal, low, medium, high.');
+  return level;
+}
+
 /** Reads live configuration by name only. Throws when anything required is missing. */
 export function readBreakdownModelConfig(env = process.env) {
   if (!['google', 'gemini'].includes(env.LLM_PROVIDER)) fail('BREAKDOWN_AI_NOT_CONFIGURED', 'Live breakdown requires LLM_PROVIDER=google.');
@@ -33,7 +52,9 @@ export function readBreakdownModelConfig(env = process.env) {
   return Object.freeze({
     apiKey,
     provider: 'google',
+    baseUrl: optionalBaseUrl(env.BREAKDOWN_LLM_BASE_URL),
     model,
+    thinkingLevel: optionalThinkingLevel(env.BREAKDOWN_THINKING_LEVEL),
     inputUsdPerMillion: bounded(env.BREAKDOWN_INPUT_USD_PER_MILLION ?? env.LLM_INPUT_USD_PER_MILLION, 'BREAKDOWN_INPUT_USD_PER_MILLION', { max: 100 }),
     outputUsdPerMillion: bounded(env.BREAKDOWN_OUTPUT_USD_PER_MILLION ?? env.LLM_OUTPUT_USD_PER_MILLION, 'BREAKDOWN_OUTPUT_USD_PER_MILLION', { max: 400 }),
     jobBudgetUsd: bounded(env.BREAKDOWN_JOB_BUDGET_USD, 'BREAKDOWN_JOB_BUDGET_USD', { fallback: 5, max: 50 }),
@@ -85,7 +106,7 @@ const estimateTokens = characters => Math.ceil(characters / 3.5);
  */
 export function createLiveModelRunner({ env = process.env, config = readBreakdownModelConfig(env), loadModel, generate = generateText } = {}) {
   const semaphore = createSemaphore(config.maxConcurrentCalls);
-  const languageModel = loadModel ? null : createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model);
+  const languageModel = loadModel ? null : createGoogleGenerativeAI({ apiKey: config.apiKey, ...(config.baseUrl ? { baseURL: config.baseUrl } : {}) })(config.model);
   return Object.freeze({
     mode: 'live',
     provider: config.provider,
@@ -111,6 +132,7 @@ export function createLiveModelRunner({ env = process.env, config = readBreakdow
             maxOutputTokens,
             maxRetries: 1,
             abortSignal: AbortSignal.any([signal, AbortSignal.timeout(config.timeoutMs)].filter(Boolean)),
+            ...(config.thinkingLevel ? { providerOptions: { google: { thinkingConfig: { thinkingLevel: config.thinkingLevel } } } } : {}),
             output: Output.object({ schema: jsonSchema(schema) }),
           });
           const usage = result.totalUsage ?? result.usage ?? {};

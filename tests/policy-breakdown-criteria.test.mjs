@@ -44,7 +44,9 @@ test('pack A: cataract for the 64-year-old mother applies the per-eye sub-limit 
     sumInsuredAlreadyUsedMinor: 0, cumulativeBonusAccruedPercent: 0,
   } });
   // ₹60,000 bill → ₹40,000 per-eye cap → 20% age co-pay → ₹32,000.
-  assert.deepEqual(result.insurerPaysMinor, { low: 3_200_000, high: 3_200_000 });
+  assert.equal(result.status, 'coverage_not_established');
+  assert.deepEqual(result.insurerPaysMinor, { low: 0, high: 0 });
+  assert.deepEqual(result.insurerPaysIfEligibleMinor, { low: 3_200_000, high: 3_200_000 });
   assert.equal(outcome(result, 'specified_disease_wait'), 'met', '24 months from 2023-04-01 ended 2025-04-01');
   assert.equal(outcome(result, 'minimum_stay'), 'attention', 'a 6-hour stay is payable only as a listed day-care procedure');
   assert.equal(outcome(result, 'policy_in_force'), 'met');
@@ -77,9 +79,11 @@ test('pack B: the dependent parent gets her own PED wait, parent cap, member co-
     billLines: [{ head: 'surgeon_fees', amountMinor: 15_000_000 }, { head: 'implants_devices', amountMinor: 20_000_000 }],
     sumInsuredAlreadyUsedMinor: 0, cumulativeBonusAccruedPercent: 0, corporateBufferApproved: false,
   } });
-  // ₹3,70,000 bill → ₹1,50,000 per joint → 10% co-pay for dependent parents → ₹1,35,000.
-  assert.deepEqual(result.insurerPaysMinor, { low: 13_500_000, high: 13_500_000 });
-  assert.equal(result.status, 'conditional', 'a co-pay stated only for another member does not unbound the range');
+  // ₹3,70,000 bill → ₹1,50,000 per joint → 10% co-pay for dependent parents → ₹1,35,000, if eligible.
+  assert.deepEqual(result.insurerPaysIfEligibleMinor, { low: 13_500_000, high: 13_500_000 }, 'a co-pay stated only for another member does not unbound the range');
+  // Pack B's schedule states no initial waiting period, so eligibility stays open and nothing is guaranteed.
+  assert.equal(result.status, 'coverage_not_established');
+  assert.deepEqual(result.insurerPaysMinor, { low: 0, high: 0 });
   assert.ok(result.steps.some(step => step.step === 'member_cap' && /3,00,000/.test(step.description)));
   const ped = result.eligibility.checks.find(check => check.id === 'ped_wait');
   assert.equal(ped.outcome, 'met');
@@ -110,20 +114,23 @@ test('pack B: a non-network admission applies the non-network co-pay and the not
   assert.ok(result.steps.some(step => step.step === 'copay' && step.percent === 20));
   assert.equal(outcome(result, 'cashless_route'), 'attention');
   // ₹7,00,000 bill, 20% co-pay → ₹5,60,000 claimable; SI ₹5,00,000 binds the low bound, the ₹25L buffer may lift the high.
-  assert.equal(result.insurerPaysMinor.low, 50_000_000);
-  assert.equal(result.insurerPaysMinor.high, 56_000_000);
+  assert.equal(result.insurerPaysIfEligibleMinor.low, 50_000_000);
+  assert.equal(result.insurerPaysIfEligibleMinor.high, 56_000_000);
+  assert.equal(result.status, 'coverage_not_established', 'pack B states no initial waiting period');
+  assert.deepEqual(result.insurerPaysMinor, { low: 0, high: 0 });
 });
 
 test('pack C: a super top-up pays above its threshold and never pays what the base policy paid', () => {
   const input = { admissionDate: '2026-12-01', stayHours: 72, condition: { name: 'bypass surgery', preExisting: false }, hospital: { networkStatus: 'network' }, billLines: [{ head: 'other', amountMinor: 80_000_000 }], deductibleAlreadyMetMinor: 0, sumInsuredAlreadyUsedMinor: 0 };
   const withBase = estimatePlannedProcedure({ parameters: packC, asOf, input: { ...input, otherPolicyPaysMinor: 50_000_000 } });
-  assert.deepEqual(withBase.insurerPaysMinor, { low: 30_000_000, high: 30_000_000 });
-  assert.deepEqual(withBase.householdPaysMinor, { low: 0, high: 0 });
+  assert.deepEqual(withBase.insurerPaysMinor, { low: 0, high: 0 });
+  assert.deepEqual(withBase.insurerPaysIfEligibleMinor, { low: 30_000_000, high: 30_000_000 });
+  assert.deepEqual(withBase.householdPaysMinor, { low: 30_000_000, high: 30_000_000 });
   const baseSmall = estimatePlannedProcedure({ parameters: packC, asOf, input: { ...input, otherPolicyPaysMinor: 20_000_000 } });
-  assert.deepEqual(baseSmall.insurerPaysMinor, { low: 30_000_000, high: 30_000_000 }, 'the ₹5L threshold, not the ₹2L base payout, is what the top-up deducts');
-  assert.deepEqual(baseSmall.householdPaysMinor, { low: 30_000_000, high: 30_000_000 });
+  assert.deepEqual(baseSmall.insurerPaysIfEligibleMinor, { low: 30_000_000, high: 30_000_000 }, 'the ₹5L threshold, not the ₹2L base payout, is what the top-up deducts');
+  assert.deepEqual(baseSmall.householdPaysMinor, { low: 60_000_000, high: 60_000_000 });
   const metUnknown = estimatePlannedProcedure({ parameters: packC, asOf, input: { ...input, deductibleAlreadyMetMinor: undefined, otherPolicyPaysMinor: 0 } });
-  assert.deepEqual(metUnknown.insurerPaysMinor, { low: 30_000_000, high: 80_000_000 }, 'aggregate threshold already met is unknown: none to all');
+  assert.deepEqual(metUnknown.insurerPaysIfEligibleMinor, { low: 30_000_000, high: 80_000_000 }, 'aggregate threshold already met is unknown: none to all if coverage is established');
 });
 
 test('policy-checks accept no bill, validate dates, and never claim approval', () => {
@@ -242,7 +249,7 @@ const flatBill = { hospital: { networkStatus: 'network', zone: 'zone_b' }, billL
 test('review H1: a co-pay scoped to a relationship group applies to that member; an unresolved scope stays Unknown', () => {
   const father = { id: 'f', displayName: 'Mr. Ramesh Kumar', relationship: 'father' };
   const groupScoped = minimalRecord({ copay_general_percent: variantOnly('copay_general_percent', [['Dependent Parents', percentValue(20)]]) });
-  assert.equal(estimatePlannedProcedure({ parameters: groupScoped, member: father, asOf, input: flatBill }).insurerPaysMinor.high, 8_000_000);
+  assert.equal(estimatePlannedProcedure({ parameters: groupScoped, member: father, asOf, input: flatBill }).insurerPaysIfEligibleMinor.high, 8_000_000);
   const unresolved = minimalRecord({ copay_general_percent: variantOnly('copay_general_percent', [['Mrs. Sunita Kumar', percentValue(20)]]) });
   assert.equal(limitStatus(resolveForMember(unresolved, father), 'copay_general_percent'), 'unknown');
   assert.equal(estimatePlannedProcedure({ parameters: unresolved, member: father, asOf, input: flatBill }).insurerPaysMinor.low, 0, 'an unresolved scope must widen the range');
@@ -254,9 +261,9 @@ test('review H2: a top-up with an unusable threshold never pays what the base po
   const conflicted = { ...packC, topup_deductible_amount: { ...packC.topup_deductible_amount, evidenceState: 'Conflicting', value: null, stateReason: 'values_disagree' } };
   const input = { admissionDate: '2026-12-01', condition: { name: 'bypass', preExisting: false }, hospital: { networkStatus: 'network' }, billLines: [{ head: 'other', amountMinor: 80_000_000 }], otherPolicyPaysMinor: 50_000_000, deductibleAlreadyMetMinor: 0, sumInsuredAlreadyUsedMinor: 0 };
   const result = estimatePlannedProcedure({ parameters: conflicted, asOf, input });
-  assert.ok(result.insurerPaysMinor.high <= 30_000_000, JSON.stringify(result.insurerPaysMinor));
+  assert.ok(result.insurerPaysIfEligibleMinor.high <= 30_000_000, JSON.stringify(result.insurerPaysIfEligibleMinor));
   assert.equal(result.insurerPaysMinor.low, 0);
-  assert.equal(result.status, 'insufficient_evidence');
+  assert.equal(result.status, 'coverage_not_established');
 });
 
 test('review H3: the age co-pay is judged on the admission date', () => {
@@ -274,9 +281,10 @@ test('review M1: with no member chosen, member co-pays and caps bound the least 
     parent_sum_insured_cap: variantOnly('parent_sum_insured_cap', [['Parents', { kind: 'money', amountMinor: 3_000_000 }]]),
   });
   const result = estimatePlannedProcedure({ parameters: record, asOf, input: flatBill });
-  assert.equal(result.insurerPaysMinor.low, 3_000_000, '₹1,00,000 less the 20% parent co-pay is ₹80,000, then the tightest member cap ₹30,000');
-  assert.equal(result.insurerPaysMinor.high, 9_000_000, 'policy-wide 10% for the best case');
-  assert.notEqual(result.status, 'estimate');
+  assert.equal(result.insurerPaysIfEligibleMinor.low, 3_000_000, '₹1,00,000 less the 20% parent co-pay is ₹80,000, then the tightest member cap ₹30,000');
+  assert.equal(result.insurerPaysIfEligibleMinor.high, 9_000_000, 'policy-wide 10% for the best case');
+  assert.deepEqual(result.insurerPaysMinor, { low: 0, high: 0 }, 'no member chosen: waiting periods unresolved, so nothing is guaranteed');
+  assert.equal(result.status, 'coverage_not_established');
 });
 
 test('review M2/M3: disease sub-limits apply without a condition and parse lakh, percent and several items', async () => {
@@ -286,9 +294,9 @@ test('review M2/M3: disease sub-limits apply without a condition and parse lakh,
   assert.equal(diseaseCap('Cancer: 25% of sum insured', null), null);
   const record = minimalRecord({ other_disease_sublimits: provenValue('other_disease_sublimits', { kind: 'text_list', items: ['Cardiac procedures ₹30,000', 'Cardiac stents Rs. 2,50,000'] }) });
   const unnamed = estimatePlannedProcedure({ parameters: record, asOf, input: flatBill });
-  assert.equal(unnamed.insurerPaysMinor.low, 3_000_000);
+  assert.equal(unnamed.insurerPaysIfEligibleMinor.low, 3_000_000);
   const named = estimatePlannedProcedure({ parameters: record, asOf, input: { ...flatBill, condition: { name: 'cardiac bypass', preExisting: false } } });
-  assert.equal(named.insurerPaysMinor.low, 3_000_000, 'the lowest of every matching item');
+  assert.equal(named.insurerPaysIfEligibleMinor.low, 3_000_000, 'the lowest of every matching item');
 });
 
 test('review M4/M5: an inferred wait start or name formatting never becomes a blocker', () => {

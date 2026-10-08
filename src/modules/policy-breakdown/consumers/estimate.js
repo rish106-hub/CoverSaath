@@ -540,30 +540,59 @@ export function estimatePlannedProcedure({ parameters: recordParameters, input, 
     .map(item => ({ key: item.key, label: item.result.label, text: item.result.value.kind === 'boolean' ? 'Yes' : item.result.value.text }));
 
   const eligibility = checkPlannedProcedure({ parameters, request, member, asOf });
-  if (eligibility.verdict === 'blocker_found') {
-    insurer.low = 0;
-    assumptions.push('The record states at least one blocker for this treatment (see eligibility). The least the insurer may pay is shown as nothing until a person resolves it.');
-  }
   if (unbounded) insurer.low = 0;
   // A top-up never pays what the base policy paid, whatever its threshold status.
   if (isTopUp) {
     const ceiling = Math.max(0, billTotal - (request.otherPolicyPaysMinor ?? 0));
     insurer = { low: Math.min(insurer.low, ceiling), high: Math.min(insurer.high, ceiling) };
   }
+  // What the deductions alone leave, if every unresolved eligibility condition turns out to be met.
+  let insurerIfEligible = { ...insurer };
+  // A waiting period that is not yet served, or not yet known to be served, can make the whole claim payable by the
+  // household. Until each one is resolved the headline range must include the insurer paying nothing — never a
+  // confident "you pay ₹0".
+  const unresolvedCoverage = eligibility.checks.filter(check => check.decisionClass === 'coverage' && ['unknown', 'attention'].includes(check.outcome));
+  const coverageBlockers = eligibility.checks.filter(check => check.decisionClass === 'coverage' && check.outcome === 'not_met');
+  const coverageBlocked = coverageBlockers.length > 0;
+  const coverageNotEstablished = !coverageBlocked && unresolvedCoverage.length > 0;
+  if (coverageBlocked) {
+    insurer = { low: 0, high: 0 };
+    insurerIfEligible = null;
+    assumptions.push('The policy record states at least one eligibility blocker for this treatment (see eligibility), so this scenario shows no insurer payment and the household carrying the bill.');
+  } else if (unresolvedCoverage.length) {
+    insurer = { low: 0, high: 0 };
+    assumptions.push(`Coverage is not established because ${unresolvedCoverage.map(check => check.label.toLowerCase()).join(', ')} ${unresolvedCoverage.length === 1 ? 'is' : 'are'} unresolved for this person. The primary scenario therefore shows the household carrying the bill; the separate if-eligible figure is only conditional.`);
+    for (const check of unresolvedCoverage) {
+      const key = check.parameterKeys?.[0] ?? check.id;
+      if (!blockingUnknowns.some(item => item.key === key)) blockingUnknowns.push({ key, evidenceState: parameters[key]?.evidenceState ?? 'Unknown', bounded: true, message: `${check.label}: ${check.message}` });
+    }
+  }
 
   // For a top-up the base policy's payout is not the household's cost.
   const otherPaid = isTopUp ? Math.min(request.otherPolicyPaysMinor ?? 0, billTotal) : 0;
   const usedParameters = [...used].filter(key => parameters[key]).map(key => ({ key, label: parameters[key].label, evidenceState: parameters[key].evidenceState, reviewState: parameters[key].review?.state ?? 'unreviewed', memberScope: parameters[key].memberScope ?? null }));
+  const resultStatus = coverageBlocked ? 'coverage_blocked'
+    : coverageNotEstablished ? 'coverage_not_established'
+      : unbounded ? 'insufficient_evidence'
+        : blockingUnknowns.length ? 'conditional'
+          : 'estimate';
+  const headline = coverageBlocked ? 'Coverage blocker found'
+    : coverageNotEstablished ? 'Coverage not established'
+      : resultStatus === 'estimate' ? 'Planning estimate'
+        : 'Estimate needs more evidence';
   return {
-    status: unbounded ? 'insufficient_evidence' : blockingUnknowns.length ? 'conditional' : 'estimate',
+    status: resultStatus,
     currency: 'INR',
     billTotalMinor: billTotal,
     insurerPaysMinor: insurer,
+    insurerPaysIfEligibleMinor: insurerIfEligible,
     otherPolicyPaysMinor: otherPaid || null,
     householdPaysMinor: { low: Math.max(0, billTotal - otherPaid - insurer.high), high: Math.max(0, billTotal - otherPaid - insurer.low) },
     display: {
+      headline,
       householdPays: `${formatRupees(Math.max(0, billTotal - otherPaid - insurer.high))} to ${formatRupees(Math.max(0, billTotal - otherPaid - insurer.low))}`,
       insurerPays: `${formatRupees(insurer.low)} to ${formatRupees(insurer.high)}`,
+      insurerPaysIfEligible: insurerIfEligible ? `${formatRupees(insurerIfEligible.low)} to ${formatRupees(insurerIfEligible.high)}` : null,
     },
     steps,
     assumptions,
@@ -571,6 +600,7 @@ export function estimatePlannedProcedure({ parameters: recordParameters, input, 
     additionalBenefits,
     clausesToRead,
     eligibility,
+    coverageBlockers: coverageBlockers.map(check => ({ id: check.id, label: check.label, message: check.message })),
     usedParameters,
     boundaries: [
       'This is a planning range from the policy record, not a claim decision. The insurer decides the final settlement.',

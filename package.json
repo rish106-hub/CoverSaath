@@ -17,15 +17,23 @@
     "check:architecture": "node scripts/check-architecture.mjs",
     "check": "npm run check:architecture && npm test && npm run build",
     "eval:breakdown": "node scripts/eval-breakdown.mjs --set fixtures",
-    "eval:breakdown:live": "node --env-file-if-exists=.env.local scripts/eval-breakdown.mjs --set local"
+    "eval:breakdown:live": "node --env-file-if-exists=.env.local scripts/eval-breakdown.mjs --set local",
+    "test:e2e:api": "node --test tests/e2e/api-journey.test.mjs",
+    "test:e2e:browser": "playwright test",
+    "test:e2e": "npm run test:e2e:api && npm run test:e2e:browser"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@electric-sql/pglite": "0.5.8",
+    "@playwright/test": "1.63.0",
     "vite": "8.3.0"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.71",
     "@ai-sdk/openai": "^4.0.67",
     "ai": "^7.0.102",
-    "pdf-lib": "1.17.1"
+    "pdf-lib": "1.17.1",
+    "pg": "8.23.1",
+    "posthog-js": "1.438.2"
   }
 }

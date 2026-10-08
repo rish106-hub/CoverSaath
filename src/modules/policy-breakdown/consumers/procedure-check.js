@@ -56,6 +56,15 @@ const EXCLUSION_CLAUSES = [
   'exclusion_cosmetic_surgery', 'exclusion_unproven_treatment', 'exclusion_sterility_infertility',
   'exclusion_change_of_gender', 'exclusion_obesity_treatment', 'exclusion_maternity', 'exclusion_refractive_error',
 ];
+const COVERAGE_CHECKS = new Set([
+  'policy_in_force', 'member_insured', 'member_cover_started', 'dependent_child_age',
+  'initial_wait', 'ped_wait', 'specified_disease_wait', 'specified_disease_wait_variations', 'maternity_wait', 'disclosure',
+  'treatment_covered', 'daycare_list', 'domiciliary_minimum', 'domiciliary_excluded', 'organ_donor_scope',
+  'modern_treatment_list', 'maternity_deliveries', 'minimum_stay', 'add_ons_and_endorsements', 'exclusions',
+  'geography', 'excluded_hospital',
+]);
+const OPERATIONAL_CHECKS = new Set(['cashless_route', 'preauth_timing']);
+const decisionClass = id => COVERAGE_CHECKS.has(id) || id.startsWith('exclusion:') ? 'coverage' : OPERATIONAL_CHECKS.has(id) ? 'operational' : 'advisory';
 
 export function checkPlannedProcedure({ parameters, request, member = null, asOf }) {
   const checks = [];
@@ -64,7 +73,7 @@ export function checkPlannedProcedure({ parameters, request, member = null, asOf
   const evidence = keys => keys.filter(key => parameters[key]).map(key => ({ key, evidenceState: parameters[key].evidenceState }));
   const add = (id, label, outcome, message, keys = [], extra = {}) => {
     keys.forEach(key => read.add(key));
-    checks.push({ id, label, outcome, message, parameterKeys: keys, evidence: evidence(keys), ...extra });
+    checks.push({ id, label, outcome, message, decisionClass: decisionClass(id), parameterKeys: keys, evidence: evidence(keys), ...extra });
   };
   const ruleText = key => { read.add(key); return textOf(parameters, key); };
   const admission = request.admissionDate ?? asOf;
@@ -115,10 +124,13 @@ export function checkPlannedProcedure({ parameters, request, member = null, asOf
   const firstInception = dateOf(parameters, 'first_inception_date');
   const periodStart = dateOf(parameters, 'policy_start_date');
   const basis = enumOf(parameters, 'waiting_period_start_basis');
-  const candidates = basis === 'current_period_start' ? [periodStart]
+  const basisCandidates = basis === 'current_period_start' ? [periodStart]
     : basis === 'policy_first_inception' ? [firstInception]
       : basis === 'member_first_inception' ? (memberStart ? [memberStart] : [firstInception, periodStart])
         : [memberStart, firstInception, periodStart];
+  // A member cannot serve a wait before their own cover exists. Even when the wording counts from a policy-level
+  // date, a later Proven/Calculated member effective date is the safe controlling start for that member.
+  const candidates = memberStart ? [...basisCandidates, memberStart] : basisCandidates;
   const starts = candidates.filter(Boolean).sort();
   const waitStart = starts.at(-1) ?? null;
   const earliestStart = starts[0] ?? null;
@@ -133,7 +145,11 @@ export function checkPlannedProcedure({ parameters, request, member = null, asOf
     if (applies === false) { add(id, label, 'not_applicable', `${label} does not apply to this treatment as described.`, [key]); return; }
     const status = limitStatus(parameters, key);
     if (status === 'withheld') { add(id, label, 'unknown', `${label} is withheld by permission.`, keys); return; }
-    if (status === 'absent' || status === 'not_stated') { add(id, label, applies ? 'met' : 'attention', `${label}: the record does not state one${status === 'not_stated' ? ' (unconfirmed)' : ''}.`, keys); return; }
+    if (status === 'absent') { add(id, label, applies ? 'met' : 'attention', `${label}: a person confirmed the policy does not state one.`, keys); return; }
+    if (status === 'not_stated') {
+      add(id, label, applies === true ? 'unknown' : 'attention', `${label}: the uploaded source pack does not state one. Check the controlling policy wording before treating it as absent.`, keys);
+      return;
+    }
     if (status !== 'value') { add(id, label, 'unknown', `${label} is not established in this record.`, keys); return; }
     const length = countOf(parameters, key);
     if (!waitStart) { add(id, label, 'unknown', `${label} is ${length} ${unit}, but no cover start date is established.`, keys); return; }
@@ -152,13 +168,15 @@ export function checkPlannedProcedure({ parameters, request, member = null, asOf
     appliesQuestion: 'Whether accidents are exempt is not established.' });
   if (accident) read.add('accident_exempt_from_initial_wait');
   waitCheck({ id: 'ped_wait', label: 'Pre-existing disease waiting period', key: 'ped_waiting_period_months', unit: 'months',
-    applies: request.condition.preExisting, appliesQuestion: 'Was this condition present or diagnosed before cover started? If yes, this wait applies.' });
+    // A person's "no" is useful Reported context but cannot prove the legal PED definition does not apply.
+    applies: request.condition.preExisting === true ? true : null, appliesQuestion: 'Was this condition present, diagnosed, treated, advised on, or symptomatic before cover started? The insurer may verify medical and proposal records.' });
   const specifiedList = listOf(parameters, 'specified_disease_list');
   const listed = request.condition.name ? mentions(specifiedList, request.condition.name) : [];
   const procedureListed = ['cataract', 'joint_replacement'].includes(request.procedure) && specifiedList?.some(item => words(item).includes(request.procedure === 'cataract' ? 'cataract' : 'joint'));
   // A word match against the list is a hint for a person, never proof; only the person's answer or a procedure the
   // list names outright (cataract, joint replacement) makes the wait certain.
-  const specifiedApplies = request.condition.specifiedDisease ?? (procedureListed ? true : null);
+  // A user-supplied false cannot clear the policy's specified-disease list; only a positive match can establish applicability.
+  const specifiedApplies = request.condition.specifiedDisease === true || procedureListed ? true : null;
   waitCheck({ id: 'specified_disease_wait', label: 'Specified disease waiting period', key: 'specified_disease_waiting_months', unit: 'months',
     applies: specifiedApplies, appliesQuestion: `${listed.length ? `The list mentions: ${listed.join(', ')}. ` : ''}Check whether this condition is in the specified list${specifiedList ? ` (${specifiedList.slice(0, 8).join(', ')}${specifiedList.length > 8 ? ', …' : ''})` : ''}.` });
   read.add('specified_disease_list');
@@ -278,11 +296,18 @@ export function checkPlannedProcedure({ parameters, request, member = null, asOf
 
     const network = request.hospital.networkStatus;
     const keys = ['cashless_network_available', 'cashless_non_network_available', 'network_list_reference', 'network_hospital_locator', 'preferred_provider_rule', 'package_rate_rule'];
-    if (network === 'network') add('cashless_route', 'Cashless at this hospital', flagOf(parameters, 'cashless_network_available') ? 'met' : 'unknown', flagOf(parameters, 'cashless_network_available') ? 'Cashless is available at network hospitals. Network status is Dynamic: confirm it with the hospital desk on the day.' : 'Whether cashless is available at network hospitals is not established.', keys);
+    if (network === 'network') {
+      const networkCashless = flagOf(parameters, 'cashless_network_available');
+      if (networkCashless === true) add('cashless_route', 'Cashless at this hospital', 'met', 'Cashless is available at network hospitals. Network status is Dynamic: confirm it with the hospital desk on the day.', keys);
+      else if (networkCashless === false) add('cashless_route', 'Cashless at this hospital', 'not_met', 'The record states cashless is not available through the network route; plan for reimbursement and confirm with the insurer.', keys);
+      else add('cashless_route', 'Cashless at this hospital', 'unknown', 'Whether cashless is available at network hospitals is not established.', keys);
+    }
     else if (network === 'non_network') {
       const nonNetwork = flagOf(parameters, 'cashless_non_network_available');
       const notice = countOf(parameters, 'non_network_cashless_notice_hours');
-      add('cashless_route', 'Cashless at this hospital', nonNetwork ? 'attention' : 'not_met', nonNetwork ? `Cashless at a non-network hospital is possible${notice != null ? ` with at least ${notice} hours' notice` : ''}.` : 'Cashless is not available at non-network hospitals; plan for reimbursement.', [...keys, 'non_network_cashless_notice_hours']);
+      if (nonNetwork === true) add('cashless_route', 'Cashless at this hospital', 'attention', `Cashless at a non-network hospital is possible${notice != null ? ` with at least ${notice} hours' notice` : ''}.`, [...keys, 'non_network_cashless_notice_hours']);
+      else if (nonNetwork === false) add('cashless_route', 'Cashless at this hospital', 'not_met', 'Cashless is not available at non-network hospitals; plan for reimbursement.', [...keys, 'non_network_cashless_notice_hours']);
+      else add('cashless_route', 'Cashless at this hospital', 'unknown', 'Whether cashless is available at this non-network hospital is not established; plan for reimbursement unless the insurer confirms otherwise.', [...keys, 'non_network_cashless_notice_hours']);
     } else add('cashless_route', 'Cashless at this hospital', 'attention', `Network status of the hospital was not supplied.${textOf(parameters, 'network_hospital_locator') ? ` Check it: ${textOf(parameters, 'network_hospital_locator')}.` : ''}`, keys);
     const preferred = ruleText('preferred_provider_rule');
     if (preferred) add('preferred_provider', 'Preferred provider network', 'attention', `"${preferred}"`, ['preferred_provider_rule']);

@@ -18,40 +18,40 @@ const ok = (body, status = 200) => ({ status, body });
 const ROUTES = [
   ['POST', /^\/api\/v1\/households\/([^/]+)\/documents$/, async ({ req, policy, principal, match }) =>
     ok(await policy.uploadDocument(principal, match[1], await readBody(req, { limitBytes: UPLOAD_BODY_LIMIT_BYTES })), 201)],
-  ['GET', /^\/api\/v1\/households\/([^/]+)\/documents$/, ({ policy, principal, match }) =>
-    ok({ documents: policy.listDocuments(principal, match[1]) })],
+  ['GET', /^\/api\/v1\/households\/([^/]+)\/documents$/, async ({ policy, principal, match }) =>
+    ok({ documents: await policy.listDocuments(principal, match[1]) })],
   ['POST', /^\/api\/v1\/households\/([^/]+)\/members$/, async ({ req, policy, principal, match }) =>
-    ok(policy.addMember(principal, match[1], await readBody(req)), 201)],
+    ok(await policy.addMember(principal, match[1], await readBody(req)), 201)],
   ['PATCH', /^\/api\/v1\/households\/([^/]+)\/city$/, async ({ req, policy, principal, match }) =>
-    ok(policy.setHouseholdCity(principal, match[1], await readBody(req, { limitBytes: 4_096 })))],
+    ok(await policy.setHouseholdCity(principal, match[1], await readBody(req, { limitBytes: 4_096 })))],
   ['POST', /^\/api\/v1\/households\/([^/]+)\/policy-records$/, async ({ req, policy, principal, match }) => {
-    const result = policy.createPolicyRecord(principal, match[1], await readBody(req), idempotencyKey(req));
+    const result = await policy.createPolicyRecord(principal, match[1], await readBody(req), idempotencyKey(req));
     return ok({ record: result.record, job: result.job, dispatchStatus: result.created ? 'started' : 'idempotent_existing_job' }, result.created ? 202 : 200);
   }],
-  ['GET', /^\/api\/v1\/households\/([^/]+)\/policy-records$/, ({ policy, principal, match }) =>
-    ok({ records: policy.listRecords(principal, match[1]) })],
-  ['GET', /^\/api\/v1\/policy-records\/([^/]+)$/, ({ policy, principal, match }) =>
-    ok(policy.getRecord(principal, match[1]))],
-  ['GET', /^\/api\/v1\/policy-records\/([^/]+)\/sections$/, ({ policy, principal, match }) =>
-    ok(policy.getSections(principal, match[1]))],
-  ['GET', /^\/api\/v1\/policy-records\/([^/]+)\/sections\/(\d{1,2})$/, ({ policy, principal, match }) =>
-    ok(policy.getSections(principal, match[1], { sectionNumber: Number(match[2]) }))],
+  ['GET', /^\/api\/v1\/households\/([^/]+)\/policy-records$/, async ({ policy, principal, match }) =>
+    ok({ records: await policy.listRecords(principal, match[1]) })],
+  ['GET', /^\/api\/v1\/policy-records\/([^/]+)$/, async ({ policy, principal, match }) =>
+    ok(await policy.getRecord(principal, match[1]))],
+  ['GET', /^\/api\/v1\/policy-records\/([^/]+)\/sections$/, async ({ policy, principal, match }) =>
+    ok(await policy.getSections(principal, match[1]))],
+  ['GET', /^\/api\/v1\/policy-records\/([^/]+)\/sections\/(\d{1,2})$/, async ({ policy, principal, match }) =>
+    ok(await policy.getSections(principal, match[1], { sectionNumber: Number(match[2]) }))],
   ['POST', /^\/api\/v1\/policy-records\/([^/]+)\/parameters\/([a-z0-9_]{3,64})\/review$/, async ({ req, policy, principal, match }) =>
-    ok({ parameter: policy.reviewParameter(principal, match[1], match[2], await readBody(req)) })],
-  ['POST', /^\/api\/v1\/policy-records\/([^/]+)\/readiness$/, ({ policy, principal, match }) =>
-    ok(policy.checkReadiness(principal, match[1]))],
-  ['GET', /^\/api\/v1\/policy-records\/([^/]+)\/emergency-card$/, ({ policy, principal, match }) =>
-    ok(policy.emergencyCard(principal, match[1]))],
+    ok({ parameter: await policy.reviewParameter(principal, match[1], match[2], await readBody(req)) })],
+  ['POST', /^\/api\/v1\/policy-records\/([^/]+)\/readiness$/, async ({ policy, principal, match }) =>
+    ok(await policy.checkReadiness(principal, match[1]))],
+  ['GET', /^\/api\/v1\/policy-records\/([^/]+)\/emergency-card$/, async ({ policy, principal, match }) =>
+    ok(await policy.emergencyCard(principal, match[1]))],
   ['POST', /^\/api\/v1\/policy-records\/([^/]+)\/procedure-checks$/, async ({ req, policy, principal, match }) =>
-    ok(policy.procedureCheck(principal, match[1], await readBody(req, { limitBytes: 32_768 })))],
-  ['GET', /^\/api\/v1\/policy-records\/([^/]+)\/policy-status$/, ({ policy, principal, match }) =>
-    ok(policy.policyStatus(principal, match[1]))],
+    ok(await policy.procedureCheck(principal, match[1], await readBody(req, { limitBytes: 32_768 })))],
+  ['GET', /^\/api\/v1\/policy-records\/([^/]+)\/policy-status$/, async ({ policy, principal, match }) =>
+    ok(await policy.policyStatus(principal, match[1]))],
   ['POST', /^\/api\/v1\/policy-records\/([^/]+)\/estimates$/, async ({ req, policy, principal, match }) =>
-    ok(policy.estimate(principal, match[1], await readBody(req, { limitBytes: 32_768 })))],
-  ['GET', /^\/api\/v1\/breakdown-jobs\/([^/]+)$/, ({ policy, principal, match }) =>
-    ok(policy.getJob(principal, match[1]))],
-  ['POST', /^\/api\/v1\/breakdown-jobs\/([^/]+)\/resume$/, ({ policy, principal, match }) =>
-    ok(policy.resumeJob(principal, match[1]), 202)],
+    ok(await policy.estimate(principal, match[1], await readBody(req, { limitBytes: 32_768 })))],
+  ['GET', /^\/api\/v1\/breakdown-jobs\/([^/]+)$/, async ({ policy, principal, match }) =>
+    ok(await policy.getJob(principal, match[1]))],
+  ['POST', /^\/api\/v1\/breakdown-jobs\/([^/]+)\/resume$/, async ({ policy, principal, match }) =>
+    ok(await policy.resumeJob(principal, match[1]), 202)],
 ];
 
 /** Returns a response or null when the path is not a policy route. Throws service errors to the caller. */

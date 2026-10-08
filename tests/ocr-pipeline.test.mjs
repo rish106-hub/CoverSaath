@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
+import { createTestDatabase, sql } from './helpers/test-database.js';
 import { OcrRepository } from '../src/backend/repositories/index.js';
 import {
   createFixtureOcrProvider,
@@ -18,41 +18,33 @@ const authorization = Object.freeze({
   purpose: 'document_processing',
 });
 
-function harness({ active = true, expiresAt = '2026-09-19T12:00:00.000Z' } = {}) {
-  const database = openDatabase({ path: ':memory:' });
-  database.prepare('INSERT INTO households (id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)')
-    .run('household-ocr', 'Synthetic OCR household', AT, AT);
-  database.prepare('INSERT INTO adult_users (id, display_name, account_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run('adult-ocr', 'Synthetic adult', 'active', AT, AT);
-  database.prepare(`INSERT INTO household_roles
-    (id, household_id, adult_user_id, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
-    'role-ocr', 'household-ocr', 'adult-ocr', 'owner', 'active', AT,
-  );
-  database.prepare(`INSERT INTO consent_grants
+async function harness({ active = true, expiresAt = '2026-09-19T12:00:00.000Z' } = {}) {
+  const database = await createTestDatabase();
+  await sql.run(database, 'INSERT INTO households (id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)', 'household-ocr', 'Synthetic OCR household', AT, AT);
+  await sql.run(database, 'INSERT INTO adult_users (id, display_name, account_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', 'adult-ocr', 'Synthetic adult', 'active', AT, AT);
+  await sql.run(database, `INSERT INTO household_roles
+    (id, household_id, adult_user_id, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?)`, 'role-ocr', 'household-ocr', 'adult-ocr', 'owner', 'active', AT,);
+  await sql.run(database, `INSERT INTO consent_grants
     (id, household_id, subject_adult_id, granted_to_actor, purpose, notice_version,
      evidence_method, granted_at, expires_at, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    'consent-ocr', 'household-ocr', 'adult-ocr', 'knowvia', 'document_processing',
-    'v1', 'fixture', AT, expiresAt, AT,
-  );
-  database.prepare(`INSERT INTO consent_scopes
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 'consent-ocr', 'household-ocr', 'adult-ocr', 'knowvia', 'document_processing',
+    'v1', 'fixture', AT, expiresAt, AT,);
+  await sql.run(database, `INSERT INTO consent_scopes
     (id, consent_grant_id, resource_type, action, data_category, created_at)
-    VALUES (?, ?, 'document', 'collect', 'insurance_document', ?)`).run('scope-ocr', 'consent-ocr', AT);
-  database.prepare(`INSERT INTO document_uploads
+    VALUES (?, ?, 'document', 'collect', 'insurance_document', ?)`, 'scope-ocr', 'consent-ocr', AT);
+  await sql.run(database, `INSERT INTO document_uploads
     (id, household_id, uploaded_by_adult_id, consent_grant_id, document_kind,
      original_filename, storage_path, content_sha256, mime_type, byte_size,
      malware_status, encryption_status, lifecycle_state, uploaded_at, logical_document_id, source_version)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    'document-ocr', 'household-ocr', 'adult-ocr', 'consent-ocr', 'policy_schedule',
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 'document-ocr', 'household-ocr', 'adult-ocr', 'consent-ocr', 'policy_schedule',
     'synthetic.pdf', 'fixture/document-ocr', SHA, 'application/pdf', 128,
-    'not_scanned_fixture', 'fixture_only', 'quarantined', AT, 'policy-synthetic', '3',
-  );
-  if (active) database.prepare("UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = 'document-ocr'").run();
+    'not_scanned_fixture', 'fixture_only', 'quarantined', AT, 'policy-synthetic', '3',);
+  if (active) await sql.run(database, "UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = 'document-ocr'");
   return { database, repository: new OcrRepository(database) };
 }
 
 test('fixture OCR persists versioned structured output and page provenance with zero provider calls', async t => {
-  const context = harness();
+  const context = await harness();
   t.after(() => context.database.close());
   const provider = createFixtureOcrProvider({ pages: [
     { pageNumber: 2, text: 'Page two synthetic clause.', confidenceBasisPoints: 8000 },
@@ -75,7 +67,7 @@ test('fixture OCR persists versioned structured output and page provenance with 
   assert.equal(provider.health().calls, 0);
   assert.equal(provider.health().accuracyMeasured, false);
 
-  const stored = context.database.prepare('SELECT * FROM source_pages ORDER BY page_number').all();
+  const stored = await sql.all(context.database, 'SELECT * FROM source_pages ORDER BY page_number');
   assert.equal(stored.length, 2);
   assert.equal(stored[0].output_contract_version, 'knowvia.ocr.v1');
   assert.equal(JSON.parse(stored[0].provenance_json).contentSha256, SHA);
@@ -83,21 +75,21 @@ test('fixture OCR persists versioned structured output and page provenance with 
 });
 
 test('authorization, consent and quarantine checks fail closed before OCR work', async t => {
-  const context = harness({ active: false });
+  const context = await harness({ active: false });
   t.after(() => context.database.close());
   const service = createOcrService({ repository: context.repository, provider: createFixtureOcrProvider(), mode: 'fixture', now: () => new Date(AT) });
   await assert.rejects(
     service.start({ documentId: 'document-ocr', authorization }),
     error => error.code === 'DOCUMENT_NOT_OCR_READY',
   );
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get().count, 0);
+  assert.equal((await sql.get(context.database, 'SELECT count(*) AS count FROM ocr_jobs')).count, 0);
 
-  context.database.prepare("UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = 'document-ocr'").run();
+  await sql.run(context.database, "UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = 'document-ocr'");
   await assert.rejects(
     service.start({ documentId: 'document-ocr', authorization: { ...authorization, requestedByAdultId: 'other' } }),
     error => error.code === 'OCR_AUTHORIZATION_REQUIRED',
   );
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get().count, 0);
+  assert.equal((await sql.get(context.database, 'SELECT count(*) AS count FROM ocr_jobs')).count, 0);
 });
 
 test('structured OCR validation rejects source mismatch, duplicate pages and unbounded text', () => {
@@ -122,7 +114,7 @@ test('structured OCR validation rejects source mismatch, duplicate pages and unb
 });
 
 test('live Sarvam path refuses incomplete configuration and records a durable failed job', async t => {
-  const context = harness();
+  const context = await harness();
   t.after(() => context.database.close());
   const service = createOcrService({
     repository: context.repository,
@@ -135,13 +127,13 @@ test('live Sarvam path refuses incomplete configuration and records a durable fa
     service.start({ documentId: 'document-ocr', authorization }),
     error => error.code === 'PROVIDER_NOT_CONFIGURED',
   );
-  const failed = context.database.prepare('SELECT status, error_code FROM ocr_jobs').get();
+  const failed = await sql.get(context.database, 'SELECT status, error_code FROM ocr_jobs');
   assert.equal(failed.status, 'failed');
   assert.equal(failed.error_code, 'PROVIDER_NOT_CONFIGURED');
 });
 
 test('verified live transport normalizes provider data and never persists its raw payload', async t => {
-  const context = harness();
+  const context = await harness();
   t.after(() => context.database.close());
   const raw = { secretDiagnostic: 'must-not-persist', blocks: ['Synthetic provider text.'] };
   const transport = {
@@ -165,5 +157,5 @@ test('verified live transport normalizes provider data and never persists its ra
   const completed = await service.refresh(submitted.id, { authorization });
   assert.equal(completed.status, 'succeeded');
   assert.equal(JSON.stringify(completed).includes('must-not-persist'), false);
-  assert.equal(context.database.prepare('SELECT result_json FROM ocr_jobs WHERE id = ?').get(submitted.id).result_json.includes('must-not-persist'), false);
+  assert.equal((await sql.get(context.database, 'SELECT result_json FROM ocr_jobs WHERE id = ?', submitted.id)).result_json.includes('must-not-persist'), false);
 });

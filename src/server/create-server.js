@@ -9,8 +9,9 @@ import { createOrchestrator } from '../orchestration/index.js';
 import { createModelExecutor, createFixtureExecutor, modelConfigurationStatus } from '../models/index.js';
 import { failure, publicError } from './http/errors.js';
 import { prepareJsonResponse, readBody, sendJson } from './http/request.js';
-import { assertLocalRequest } from './http/security.js';
-import { createRateLimiter } from '../shared/http/index.js';
+import { clientKey, createRateLimiter, createRequestGuard } from '../shared/http/index.js';
+import { createStaticFileHandler } from './http/static-files.js';
+import { createAnalyticsProxy } from './http/analytics-proxy.js';
 import { openDatabase } from '../backend/database/index.js';
 import { createBackendServices } from '../backend/services/index.js';
 import {
@@ -20,7 +21,7 @@ import {
   createSarvamOcrProvider,
 } from '../integrations/index.js';
 import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
-import { readServerConfig } from './config.js';
+import { readHttpConfig, readServerConfig } from './config.js';
 import { createGeminiCoverageRegistryFactory } from '../modules/ai-analysis/index.js';
 import { createPolicyBreakdownFromEnv } from '../modules/policy-breakdown/index.js';
 
@@ -46,12 +47,17 @@ export function createApiServer({
   store,
   env = process.env,
   database: injectedDatabase,
-  databasePath,
+  databaseOptions,
   backendServices,
   analysisLiveRegistryFactory,
   policyBreakdownOverrides,
+  analyticsFetch,
 } = {}) {
   const config = readServerConfig(env);
+  const httpConfig = readHttpConfig(env);
+  const assertAllowedRequest = createRequestGuard(httpConfig);
+  const serveStatic = httpConfig.staticDir ? createStaticFileHandler({ rootDir: httpConfig.staticDir }) : null;
+  const proxyAnalytics = createAnalyticsProxy({ upstream: httpConfig.posthogUpstream, ...(analyticsFetch ? { fetchImpl: analyticsFetch } : {}) });
   const cases = new Map();
   const runOwners = new Map();
   const liveExecutor = executor || createModelExecutor({ env });
@@ -76,19 +82,24 @@ export function createApiServer({
   let database = injectedDatabase ?? null;
   let services = backendServices ?? null;
   let policy = null;
+  // One memoised initialisation: concurrent first requests must not open two pools or recover jobs twice.
+  let backendInit = null;
   const getBackend = () => {
-    database ||= openDatabase({ path: databasePath ?? env.DATABASE_PATH ?? '.local/knowvia.sqlite' });
-    services ||= createBackendServices(database, {
-      env,
-      sessionDurationMs: config.sessionTtlMs,
-      maxActiveSessions: config.maxSessions,
-    });
-    if (!policy) {
-      policy = createPolicyBreakdownFromEnv({ database, services, env, overrides: policyBreakdownOverrides });
-      // Jobs that were running when the process stopped become resumable, never silently lost.
-      policy.recoverInterruptedJobs();
-    }
-    return { database, services, policy };
+    backendInit ??= (async () => {
+      database ||= await openDatabase({ env, ...databaseOptions });
+      services ||= createBackendServices(database, {
+        env,
+        sessionDurationMs: config.sessionTtlMs,
+        maxActiveSessions: config.maxSessions,
+      });
+      if (!policy) {
+        policy = createPolicyBreakdownFromEnv({ database, services, env, overrides: policyBreakdownOverrides });
+        // Jobs that were running when the process stopped become resumable, never silently lost.
+        await policy.recoverInterruptedJobs();
+      }
+      return { database, services, policy };
+    })().catch(error => { backendInit = null; throw error; });
+    return backendInit;
   };
   const integrations = {
     sarvam: createSarvamOcrProvider({ env }),
@@ -100,12 +111,30 @@ export function createApiServer({
     prepareJsonResponse(res);
     const send = (status, value) => sendJson(res, status, value);
     try {
-      // Local-only isolation. Host checks also reduce DNS-rebinding exposure.
-      assertLocalRequest(req);
-      rateLimiter.check(req.socket.remoteAddress ?? 'local-unknown');
       const url = new URL(req.url, 'http://127.0.0.1:8787');
+      // Probes come from the platform with an internal Host header, so they run before the host guard.
+      // Neither reveals data: /live never touches the database; /ready reports only ok or not ready.
+      if (req.method === 'GET' && url.pathname === '/live') return send(200, { status: 'ok' });
+      if (req.method === 'GET' && url.pathname === '/ready') {
+        if (server.draining) return send(503, { status: 'draining' });
+        try {
+          const backend = await getBackend();
+          await backend.database.query('select 1');
+          return send(200, { status: 'ready' });
+        } catch {
+          return send(503, { status: 'not_ready' });
+        }
+      }
+      // Host and Origin allowlists (local hosts plus configured deployed hosts) also reduce DNS-rebinding exposure.
+      assertAllowedRequest(req);
+      rateLimiter.check(clientKey(req, httpConfig));
+      if (!url.pathname.startsWith('/api/')) {
+        if (await proxyAnalytics(req, res, url)) return;
+        if (serveStatic && await serveStatic(req, res, url)) return;
+        return send(404, { error: { code: 'ROUTE_NOT_FOUND', message: 'Not found.' } });
+      }
       if (url.pathname.startsWith('/api/v1/')) {
-        const backend = getBackend();
+        const backend = await getBackend();
         const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory });
         return send(backendResult.status, backendResult.body);
       }
@@ -231,6 +260,8 @@ export function createApiServer({
       send(result.status, result.body);
     }
   });
+  server.draining = false;
+  server.httpConfig = httpConfig;
   if (ownsDatabase) server.once('close', () => database?.close());
   return server;
 }
