@@ -127,7 +127,12 @@ DEDUCTIBLES
   (aggregate_per_year threshold) products. Note whether the base policy's payout counts towards it in
   base_payout_counts_toward_deductible.
 
-BONUSES, RESTORATION
+BONUSES, RESTORATION, ADDITIONAL SUM INSURED
+- additional_sum_insured_amount: a rupee amount added on top of the base SI by a named benefit or opted
+  add-on ("Secure Benefit ₹X", "Plus benefit", "SI booster", "additional sum insured equal to base SI").
+  Schedules often print it in a separate column or row next to the base SI. It is not a cumulative bonus
+  and not restoration. Name the benefit and any condition (e.g. "usable after base SI is exhausted") in
+  conditions. Never add it into sum_insured_amount.
 - cumulative_bonus_percent_per_year ("No Claim Bonus", "Cumulative Bonus", "Loyalty bonus" if claim
   linked), cumulative_bonus_max_percent, cumulative_bonus_reduction_percent (amount lost after a claim year).
 - guaranteed_bonus_percent_per_year: added regardless of claims. inflation_protection_percent: SI indexed.
@@ -150,7 +155,10 @@ up_to_sum_insured enum; otherwise found=false.
 
 OTHER REDUCERS
 - reasonable_customary_clause: true if the policy limits payment to "Reasonable and Customary Charges".
-- non_payable_items_rule: reference to the IRDAI list of non-payable items (Annexure, List I–IV).
+- non_payable_items_rule: the clause saying listed non-payable items (Annexure, IRDAI List I–IV) are NOT
+  paid. A clause that PAYS for those items ("Payment towards Non-Medical Expenses listed under Annexure B",
+  a Protect/consumables benefit) is the opposite meaning: never cite it here; it supports
+  consumables_payable / consumables_cover_addon. found=false if the policy pack only has the paying clause.
 - consumables_payable: true only if the policy (or an opted add-on in this schedule) pays the non-medical
   consumables of List I; false if it says they are not payable. consumables_cover_addon: whether a
   "Consumables Cover"/"Protector" add-on is opted in THIS schedule.
@@ -201,6 +209,11 @@ const parameters = [
     effects: ['cap_amount'], bases: ['per_policy_year', 'per_event'], visibility: 'operational',
     extractionHints: ['Corporate Buffer', 'Family Buffer', 'HR approval'],
     validate: moneyRange(1_000, 10 * CRORE, 'Corporate buffer'),
+  }),
+  money('additional_sum_insured_amount', 'Additional sum insured', 'Extra sum insured in rupees added on top of the base sum insured by a named benefit or opted add-on ("Secure Benefit", "Plus Benefit", "SI Booster", "Double cover"). Not cumulative/no-claim bonus and not restoration, which have their own keys. Record the benefit name and when it applies in conditions.', {
+    effects: ['cap_amount'], bases: ['per_policy_year', 'per_person', 'per_policy'], estimateInput: true,
+    extractionHints: ['Secure Benefit', 'Plus Benefit', 'Additional Sum Insured', 'SI Booster', 'Additional cover equal to'],
+    validate: moneyRange(10_000, 10 * CRORE, 'Additional sum insured'),
   }),
   percent('cumulative_bonus_percent_per_year', 'Cumulative bonus accrual', 'Percent of base sum insured added for each claim-free policy year.', {
     effects: ['pay_percent'], bases: ['per_policy_year'],
@@ -359,7 +372,7 @@ const parameters = [
   money('road_ambulance_limit', 'Road ambulance limit', 'Rupee cap on road ambulance; "per hospitalisation" is basis per_event.', {
     effects: ['cap_amount'], bases: ['per_event', 'per_trip', 'per_policy_year'], estimateInput: true,
     extractionHints: ['Road Ambulance', 'Emergency Ambulance', 'per hospitalisation'],
-    validate: moneyRange(100, 10_00_000, 'Road ambulance limit'),
+    validate: moneyRange(100, SUB_LIMIT_MAX, 'Road ambulance limit'),
   }),
   money('air_ambulance_limit', 'Air ambulance limit', 'Rupee cap on air ambulance.', {
     effects: ['cap_amount'], bases: ['per_event', 'per_policy_year'], estimateInput: true,
@@ -408,8 +421,8 @@ const parameters = [
     extractionHints: ['Preferred Provider Network', 'PPN', 'package rates'] },
   { key: 'reasonable_customary_clause', label: 'Reasonable and customary charges', description: 'True if payment is limited to Reasonable and Customary Charges.', valueType: 'boolean', visibility: 'cover', effects: ['cap_amount'], bases: ['per_claim'],
     extractionHints: ['Reasonable and Customary Charges', 'customary charges'] },
-  { key: 'non_payable_items_rule', label: 'Non-payable items', description: 'Reference to the list of non-payable items (e.g. Annexure II / IRDAI List I).', valueType: 'rule', visibility: 'cover', effects: ['exclude'], bases: ['per_claim'], estimateInput: true,
-    extractionHints: ['Non-payable items', 'Annexure II', 'List I', 'Items for which coverage is not available'] },
+  { key: 'non_payable_items_rule', label: 'Non-payable items', description: 'The clause stating that listed non-payable / non-medical items (e.g. Annexure II / IRDAI List I) are NOT paid. Never cite an add-on or benefit clause that pays for those items (e.g. a consumables/"Protect" benefit); that belongs in consumables_payable / consumables_cover_addon. found=false if only the paying clause is present.', valueType: 'rule', visibility: 'cover', effects: ['exclude'], bases: ['per_claim'], estimateInput: true,
+    extractionHints: ['Non-payable items', 'Annexure II', 'List I', 'Items for which coverage is not available', 'not payable', 'excluded items'] },
   { key: 'consumables_payable', label: 'Consumables payable', description: 'Whether non-medical consumables (List I items) are payable under this policy as issued.', valueType: 'boolean', visibility: 'cover', effects: ['pay', 'exclude'], bases: ['per_claim'], estimateInput: true,
     extractionHints: ['Consumables', 'non-payable', 'Annexure II'] },
   { key: 'consumables_cover_addon', label: 'Consumables add-on opted', description: 'Whether a consumables add-on is opted in this schedule.', valueType: 'boolean', visibility: 'cover', effects: ['pay'], bases: ['per_policy'], estimateInput: true,

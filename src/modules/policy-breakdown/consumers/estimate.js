@@ -506,6 +506,13 @@ export function estimatePlannedProcedure({ parameters: recordParameters, input, 
       if (request.corporateBufferApproved === true) { extraLow += buffer; extraHigh += buffer; }
       else if (request.corporateBufferApproved == null) { extraHigh += buffer; assumptions.push(`A corporate buffer of ${formatRupees(buffer)} may be released with employer approval; the least shown does not count it.`); }
     }
+    // Additional sum insured from a named benefit (e.g. "Secure Benefit"). Its conditions are clause text, so it
+    // only raises the most the insurer may pay.
+    const additional = moneyOf(parameters, use('additional_sum_insured_amount'));
+    if (additional != null) {
+      extraHigh += additional;
+      assumptions.push(`An additional sum insured of ${formatRupees(additional)} is stated on top of the base cover; the least shown does not count it until its conditions are confirmed.`);
+    }
     const inflation = percentOf(parameters, use('inflation_protection_percent'));
     if (inflation != null) assumptions.push(`Inflation protection adds ${inflation}% to the sum insured at renewal; this record's stated sum insured is used as is.`);
     const availableLow = Math.max(0, baseLow - (usedAlready ?? 0)) + extraLow;

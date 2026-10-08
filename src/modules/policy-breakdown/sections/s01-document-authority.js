@@ -105,6 +105,9 @@ DOCUMENT PRECEDENCE
 DOCUMENT SET AND ENDORSEMENTS
 - document_set lists the documents the text says form the contract ("The proposal form, the Schedule, the Policy
   wording and any Endorsements shall be read together as one contract"). Use the document names as written.
+  It records what the text REFERS to. A referenced wording or proposal form is often not in the upload.
+- documents_present_in_pack lists only documents actually contained in this pack. Prove each one by quoting
+  its own title or heading line. Never list a document only because another document names it.
 - endorsement_list lists endorsements actually issued and shown in this pack (number, date, short description).
   An endorsement clause that only says endorsements may be issued is not an issued endorsement.
 
@@ -320,13 +323,23 @@ export default defineSection({
     },
     {
       key: 'document_set',
-      label: 'Documents forming the contract',
-      description: 'Names of the documents that the text says together form the contract (e.g. proposal form, schedule, policy wording, endorsements, CIS, prospectus), as named in the pack.',
+      label: 'Documents the contract refers to',
+      description: 'Names of the documents that the text says together form the contract (e.g. proposal form, schedule, policy wording, endorsements, CIS, prospectus), as named in the pack. This is what the text REFERS to; it does not mean those documents are in the uploaded pack. Use documents_present_in_pack for that.',
       valueType: 'text_list',
       effects: INFORM,
       bases: NOT_APPLICABLE,
       visibility: 'cover',
       extractionHints: ['Entire Contract', 'shall be read together', 'Policy Documents', 'form part of this Policy'],
+    },
+    {
+      key: 'documents_present_in_pack',
+      label: 'Documents present in the upload',
+      description: 'Documents actually contained in the uploaded pack, one item per document, each proven by quoting its own title or heading line (e.g. "Policy Schedule", "Customer Information Sheet"). A document only named or referred to by another document is not present.',
+      valueType: 'text_list',
+      effects: INFORM,
+      bases: NOT_APPLICABLE,
+      visibility: 'cover',
+      extractionHints: ['Policy Schedule', 'Customer Information Sheet', 'Policy Wording', 'Endorsement', 'Proposal Form', 'Policy Certificate'],
     },
     {
       key: 'document_issue_date',

@@ -29,26 +29,147 @@ const lettersOnly = text => normaliseForMatch(text).replace(/[^a-z]+/g, '');
 
 /**
  * Checks one quote. Returns { matched, method, pageNumber, correctedPage }.
- * method: 'exact' | 'normalised' | 'letters' | 'other_page' | 'none'
+ * method: 'exact' | 'normalised' | 'letters' | 'compact' | 'other_page' | 'adjacent_page' | 'table_aligned'
+ *         | 'ellipsis_segments' | 'none'
  */
 export function verifyQuote({ quote, pageNumber }, pagesByNumber) {
   if (typeof quote !== 'string' || quote.trim().length < MIN_QUOTE_CHARACTERS) return { matched: false, method: 'none', pageNumber, correctedPage: null };
   const page = pagesByNumber.get(pageNumber);
   if (page) {
-    if (page.text.includes(quote)) return { matched: true, method: 'exact', pageNumber, correctedPage: null };
-    if (normaliseForMatch(page.text).includes(normaliseForMatch(quote))) return { matched: true, method: 'normalised', pageNumber, correctedPage: null };
-    if (!/\d/.test(quote)) {
-      const needle = lettersOnly(quote);
-      if (needle.length >= 12 && lettersOnly(page.text).includes(needle)) return { matched: true, method: 'letters', pageNumber, correctedPage: null };
-    }
+    const method = matchOnPage(quote, page.text);
+    if (method) return { matched: true, method, pageNumber, correctedPage: null };
   }
   // The model may cite the wrong page; search elsewhere only for distinctive quotes, and record the move.
   if (quote.trim().length >= MIN_CROSS_PAGE_QUOTE_CHARACTERS) {
     const needle = normaliseForMatch(quote);
     const hits = [...pagesByNumber].filter(([number, candidate]) => number !== pageNumber && normaliseForMatch(candidate.text).includes(needle));
     if (hits.length === 1) return { matched: true, method: 'other_page', pageNumber: hits[0][0], correctedPage: hits[0][0] };
+    // Repeated text (e.g. a CIS and the wording both state it): accept only the single neighbour of the cited page.
+    const adjacent = hits.filter(([number]) => Math.abs(number - pageNumber) === 1);
+    if (adjacent.length === 1) return { matched: true, method: 'adjacent_page', pageNumber: adjacent[0][0], correctedPage: adjacent[0][0] };
   }
+  if (page && tableAlignedMatch(quote, page.text)) return { matched: true, method: 'table_aligned', pageNumber, correctedPage: null };
+  if (page && ellipsisSegmentsMatch(quote, page.text)) return { matched: true, method: 'ellipsis_segments', pageNumber, correctedPage: null };
   return { matched: false, method: 'none', pageNumber, correctedPage: null };
+}
+
+function matchOnPage(quote, pageText) {
+  if (pageText.includes(quote)) return 'exact';
+  if (normaliseForMatch(pageText).includes(normaliseForMatch(quote))) return 'normalised';
+  if (!/\d/.test(quote)) {
+    const needle = lettersOnly(quote);
+    if (needle.length >= 12 && lettersOnly(pageText).includes(needle)) return 'letters';
+  }
+  if (compactMatch(quote, pageText)) return 'compact';
+  return null;
+}
+
+// Punctuation/spacing-insensitive match that keeps digits, for OCR and PDF line-break noise around numbers. Every
+// number in the quote must also be a number token on the page (commas ignored, decimal points kept), so "1.5%"
+// can never match "15%" and no digit can be added, dropped or moved across a decimal point.
+const compact = text => normaliseForMatch(text).replace(/[^a-z0-9]+/g, '');
+const numberTokens = text => (normaliseForMatch(text).match(/\d+(?:[.,]\d+)*/g) ?? []).map(token => token.replace(/,/g, ''));
+function compactMatch(quote, pageText) {
+  const needle = compact(quote);
+  if (needle.length < 20 || !compact(pageText).includes(needle)) return false;
+  const onPage = new Set(numberTokens(pageText));
+  return numberTokens(quote).every(token => onPage.has(token));
+}
+
+// Models sometimes join two spans of one page with "..." (or "…"). Each span must match the same page on its own,
+// in order, and be long enough to be distinctive. Nothing between the spans is claimed.
+function ellipsisSegmentsMatch(quote, pageText) {
+  const segments = quote.split(/\s*(?:\.{3,}|…)\s*/).map(segment => segment.trim()).filter(Boolean);
+  if (segments.length < 2 || segments.length > 6 || segments.some(segment => normaliseForMatch(segment).length < MIN_CROSS_PAGE_QUOTE_CHARACTERS)) return false;
+  const haystack = normaliseForMatch(pageText);
+  let from = 0;
+  for (const segment of segments) {
+    const at = haystack.indexOf(normaliseForMatch(segment), from);
+    if (at < 0) return false;
+    from = at + normaliseForMatch(segment).length;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Table-aligned quotes
+// ---------------------------------------------------------------------------
+// Models quote an OCR table as "header\nvalue" or "name\trelation\nname\trelation": cells that are not adjacent
+// in the page text. Such a quote is accepted only when every fragment equals a real cell of ONE table and the
+// cells line up: fragments on one quote line sit in one row, left to right; quote lines sit in later rows; and
+// single-cell lines (a header over its value) share a column. Nothing looser — no cross-table or diagonal joins.
+
+const MAX_TABLE_CELLS = 2_000;
+const decodeEntities = text => text.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
+/** Parses HTML tables into cells with { row, start, end, text } column spans (rowspan/colspan aware). */
+export function parseHtmlTables(pageText) {
+  const tables = [];
+  for (const tableMatch of String(pageText ?? '').matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)) {
+    const cells = [];
+    const occupied = new Map(); // `${row}:${col}` -> true (from rowspans above)
+    let row = 0;
+    for (const rowMatch of tableMatch[1].matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+      let col = 0;
+      for (const cellMatch of rowMatch[1].matchAll(/<t([dh])\b([^>]*)>([\s\S]*?)<\/t\1>/gi)) {
+        while (occupied.has(`${row}:${col}`)) col += 1;
+        const colspan = Math.min(Math.max(Number(/colspan="?(\d+)/i.exec(cellMatch[2])?.[1] ?? 1), 1), 50);
+        const rowspan = Math.min(Math.max(Number(/rowspan="?(\d+)/i.exec(cellMatch[2])?.[1] ?? 1), 1), 50);
+        for (let r = 1; r < rowspan; r += 1) for (let c = col; c < col + colspan; c += 1) occupied.set(`${row + r}:${c}`, true);
+        const text = normaliseForMatch(decodeEntities(cellMatch[3]));
+        if (text) cells.push({ row, start: col, end: col + colspan - 1, text });
+        col += colspan;
+        if (cells.length > MAX_TABLE_CELLS) break;
+      }
+      row += 1;
+    }
+    if (cells.length) tables.push(cells);
+  }
+  return tables;
+}
+
+const cellMatches = (fragment, cell) => fragment === cell.text
+  || (fragment.length >= MIN_QUOTE_CHARACTERS && !/^[\d.,\s-]+$/.test(fragment) && ` ${cell.text} `.includes(` ${fragment} `));
+
+/** True when a multi-fragment quote maps onto aligned cells of a single table on the page. */
+export function tableAlignedMatch(quote, pageText) {
+  if (!/<t[dh]\b/i.test(String(pageText ?? ''))) return false;
+  const lines = String(quote).split(/\r?\n/)
+    .map(line => line.split(/\t|\|/).map(fragment => normaliseForMatch(fragment)).filter(Boolean))
+    .filter(line => line.length);
+  if (lines.reduce((sum, line) => sum + line.length, 0) < 2 || lines.length > 40) return false;
+  const placeLine = (cells, line, minRow) => {
+    // Every way this line fits in one row (left to right), at or after minRow.
+    const options = [];
+    const rows = [...new Set(cells.filter(cell => cell.row >= minRow).map(cell => cell.row))];
+    for (const row of rows) {
+      const rowCells = cells.filter(cell => cell.row === row).sort((a, b) => a.start - b.start);
+      const placed = [];
+      let from = 0;
+      for (const fragment of line) {
+        const index = rowCells.findIndex((cell, i) => i >= from && cellMatches(fragment, cell));
+        if (index < 0) { placed.length = 0; break; }
+        placed.push(rowCells[index]);
+        from = index + 1;
+      }
+      if (placed.length === line.length) options.push({ row, cells: placed });
+    }
+    return options;
+  };
+  const overlaps = (a, b) => a.start <= b.end && b.start <= a.end;
+  return parseHtmlTables(pageText).some(cells => {
+    const search = (index, minRow, previous) => {
+      if (index === lines.length) return true;
+      for (const option of placeLine(cells, lines[index], minRow)) {
+        if (previous && option.row <= previous.row) continue;
+        // A header line over a value line: both single cells, so they must share a column.
+        if (previous && previous.cells.length === 1 && option.cells.length === 1 && !overlaps(previous.cells[0], option.cells[0])) continue;
+        if (search(index + 1, option.row + 1, option)) return true;
+      }
+      return false;
+    };
+    return search(0, 0, null);
+  });
 }
 
 /** Verifies every citation of an item. All must match for the item to be citation-verified. */

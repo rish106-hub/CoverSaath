@@ -26,7 +26,7 @@ const packB = await buildPackRecord({ pack: 'b', household: { members: [vikram, 
 const packC = await buildPackRecord({ pack: 'c', asOf });
 const outcome = (result, id) => result.eligibility.checks.find(check => check.id === id)?.outcome;
 
-test('criteria matrix: every one of the 314 parameters is checked by at least one consumer', () => {
+test('criteria matrix: every one of the 316 parameters is checked by at least one consumer', () => {
   const rows = criteriaMatrix();
   assert.equal(rows.length, SECTIONS.reduce((sum, section) => sum + section.parameters.length, 0));
   assert.deepEqual(rows.filter(row => row.consumers.length === 0).map(row => row.key), []);
@@ -297,6 +297,21 @@ test('review M2/M3: disease sub-limits apply without a condition and parse lakh,
   assert.equal(unnamed.insurerPaysIfEligibleMinor.low, 3_000_000);
   const named = estimatePlannedProcedure({ parameters: record, asOf, input: { ...flatBill, condition: { name: 'cardiac bypass', preExisting: false } } });
   assert.equal(named.insurerPaysIfEligibleMinor.low, 3_000_000, 'the lowest of every matching item');
+});
+
+test('first-inception basis without a first inception date counts from this period and never blocks', () => {
+  const record = {
+    ...packA,
+    waiting_period_start_basis: { ...packA.waiting_period_start_basis, value: { kind: 'enum', enumValue: 'policy_first_inception' } },
+    first_inception_date: { ...packA.first_inception_date, evidenceState: 'Unknown', value: null, stateReason: 'citation_not_found_in_page_text' },
+  };
+  const request = validateEstimateInput({ admissionDate: '2026-04-20', condition: { name: 'fever', preExisting: false } }, { requireBill: false });
+  const check = checkPlannedProcedure({ parameters: record, member: null, asOf: '2026-04-15', request }).checks.find(item => item.id === 'initial_wait');
+  assert.equal(check.outcome, 'attention');
+  assert.match(check.detail ?? check.message ?? JSON.stringify(check), /2026-04-01/);
+  // With the first inception date present, the same admission is past the wait.
+  const known = { ...record, first_inception_date: packA.first_inception_date };
+  assert.equal(checkPlannedProcedure({ parameters: known, member: null, asOf: '2026-04-15', request }).checks.find(item => item.id === 'initial_wait').outcome, 'met');
 });
 
 test('review M4/M5: an inferred wait start or name formatting never becomes a blocker', () => {

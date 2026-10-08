@@ -125,7 +125,7 @@ export function checkPlannedProcedure({ parameters, request, member = null, asOf
   const periodStart = dateOf(parameters, 'policy_start_date');
   const basis = enumOf(parameters, 'waiting_period_start_basis');
   const basisCandidates = basis === 'current_period_start' ? [periodStart]
-    : basis === 'policy_first_inception' ? [firstInception]
+    : basis === 'policy_first_inception' ? [firstInception ?? periodStart]
       : basis === 'member_first_inception' ? (memberStart ? [memberStart] : [firstInception, periodStart])
         : [memberStart, firstInception, periodStart];
   // A member cannot serve a wait before their own cover exists. Even when the wording counts from a policy-level
@@ -135,11 +135,15 @@ export function checkPlannedProcedure({ parameters, request, member = null, asOf
   const waitStart = starts.at(-1) ?? null;
   const earliestStart = starts[0] ?? null;
   // The start is inferred when the basis is not stated, or is per member but no member date is known.
-  const startInferred = !basis || basis === 'not_stated' || (basis === 'member_first_inception' && !memberStart);
+  // The wording counts from first inception but that date is not established: this period's start is the latest
+  // possible start, and an earlier inception (renewals, portability) can only shorten the wait, so never not_met.
+  const inceptionMissing = basis === 'policy_first_inception' && !firstInception;
+  const startInferred = !basis || basis === 'not_stated' || (basis === 'member_first_inception' && !memberStart) || inceptionMissing;
   const startKeys = ['waiting_period_start_basis', 'first_inception_date', 'member_effective_date', 'policy_start_date', 'continuity_credit_rule', 'waiting_period_buydown_rule', 'waiting_reset_on_si_enhancement'];
-  const startNote = startInferred
-    ? ` The start ${basis === 'member_first_inception' ? 'is each member\'s own cover date, which is not known here' : 'basis is not stated'}, so the latest possible start (${waitStart}) was used; portability or continuity credit may shorten it.`
-    : '';
+  const startNote = !startInferred ? ''
+    : inceptionMissing
+      ? ` The wording counts from the first policy inception date, which is not established, so this policy period's start (${waitStart}) was used; if cover began earlier with this insurer, the wait ends sooner.`
+      : ` The start ${basis === 'member_first_inception' ? 'is each member\'s own cover date, which is not known here' : 'basis is not stated'}, so the latest possible start (${waitStart}) was used; portability or continuity credit may shorten it.`;
   const waitCheck = ({ id, label, key, unit, applies, appliesQuestion }) => {
     const keys = [key, ...startKeys];
     if (applies === false) { add(id, label, 'not_applicable', `${label} does not apply to this treatment as described.`, [key]); return; }
@@ -157,7 +161,7 @@ export function checkPlannedProcedure({ parameters, request, member = null, asOf
     const over = admission >= ends;
     // When the start is inferred and the earliest possible start would end the wait, it is not a stated blocker.
     const overFromEarliest = earliestStart ? admission >= (unit === 'days' ? addDays(earliestStart, length) : addMonths(earliestStart, length)) : over;
-    if (applies === true && !over && startInferred && overFromEarliest) { add(id, label, 'attention', `${label} of ${length} ${unit} may run until ${ends}, depending on when cover is counted from.${startNote}`, keys, { waitEnds: ends }); return; }
+    if (applies === true && !over && startInferred && (overFromEarliest || inceptionMissing)) { add(id, label, 'attention', `${label} of ${length} ${unit} may run until ${ends}, depending on when cover is counted from.${startNote}`, keys, { waitEnds: ends }); return; }
     if (applies === null) { add(id, label, over ? 'met' : 'attention', `${label} of ${length} ${unit} ${over ? `ended on ${ends}` : `runs until ${ends}`}. ${appliesQuestion}${startNote}`, keys, { waitEnds: ends }); return; }
     add(id, label, over ? 'met' : 'not_met', `${label} of ${length} ${unit} counted from ${waitStart} ${over ? `ended on ${ends}` : `runs until ${ends}; the admission on ${admission} falls inside it`}.${startNote}`, keys, { waitEnds: ends });
   };

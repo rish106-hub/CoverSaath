@@ -16,7 +16,7 @@ const bootstrapToken = 'knowvia-test-bootstrap-token-00001';
 const pack = loadSyntheticPack();
 const pdf = await buildSyntheticPdf(pack);
 
-async function start(t, { mutate = null, scanMode = 'structural_only' } = {}) {
+async function start(t, { mutate = null, scanMode = 'structural_only', officialWording = undefined, onPrompt = null } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'knowvia-policy-api-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const database = await createTestDatabase();
@@ -33,8 +33,10 @@ async function start(t, { mutate = null, scanMode = 'structural_only' } = {}) {
       },
       modelRunner: mode => {
         if (mode !== 'fixture') throw Object.assign(new Error('live model disabled in tests'), { code: 'BREAKDOWN_AI_NOT_CONFIGURED', statusCode: 503 });
-        return createFixtureModelRunner({ responder: createGoldResponder(pack, { mutate }) });
+        const gold = createGoldResponder(pack, { mutate });
+        return createFixtureModelRunner({ responder: request => { onPrompt?.(request); return gold(request); } });
       },
+      ...(officialWording !== undefined ? { officialWording } : {}),
     },
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -208,6 +210,40 @@ test('policy breakdown runs end to end over HTTP: upload → 12 sections → rev
   const revoked = await call(`/api/v1/policy-records/${recordId}/sections`, { token: ram.token });
   assert.equal(revoked.status, 403);
   assert.equal(revoked.data.error.code, 'CONSENT_REVOKED');
+});
+
+test('official wording for the exact UIN is attached after OCR, shown to every section and cited as official', async t => {
+  const officialPageNumber = pack.pages.length + 1;
+  const link = { registryEntryId: 'example.family-health.wording', uin: 'EXAHLIP26001V012526', publisher: 'Example General Insurance Company Limited', productName: 'Example Family Health Plan', url: 'https://docs.example-insurer.com/w.pdf', contentSha256: 'a'.repeat(64), retrievedAt: '2026-10-08T00:00:00.000Z', pageCount: 1, staleReason: null };
+  const attachedFrom = [];
+  const officialWording = {
+    async attach(pages) { attachedFrom.push(pages.length); return { status: 'attached', uins: [link.uin], links: [link], failures: [] }; },
+    pagesFor: () => [{ pageNumber: 12, text: 'A relapse within 45 days of discharge is treated as part of the same hospitalisation.' }],
+  };
+  const prompts = [];
+  const { call } = await start(t, {
+    officialWording,
+    onPrompt: ({ agent, prompt }) => prompts.push({ agent, sawWording: String(prompt).includes('official_wording: Example General Insurance') }),
+    mutate: ({ sectionId, role, output }) => {
+      if (sectionId === 'section-03-time') {
+        for (const item of output.parameters) if (item.key === 'relapse_window_days') Object.assign(item, { found: true, valueNumber: 45, unit: 'days', basis: 'per_event', effect: 'inform', confidence: 'high', citations: [{ pageNumber: officialPageNumber, quote: 'A relapse within 45 days of discharge' }] });
+      }
+      return output;
+    },
+  });
+  const ram = await household(call);
+  const uploaded = await upload(call, ram);
+  const { created, job } = await breakdown(call, ram, uploaded.data.document.id);
+  assert.equal(job.status, 'succeeded', JSON.stringify(job.error));
+  assert.deepEqual(attachedFrom, [pack.pages.length], 'attach sees the uploaded pages once');
+  assert.equal(job.steps[0].metrics.officialWording.status, 'attached');
+  assert.ok(prompts.length > 0 && prompts.every(item => item.sawWording), 'every section prompt includes the labelled wording page');
+  const sections = await call(`/api/v1/policy-records/${created.data.record.id}/sections`, { token: ram.token });
+  const relapse = sections.data.sections.flatMap(section => section.parameters).find(parameter => parameter.key === 'relapse_window_days');
+  assert.equal(relapse.evidenceState, 'Proven', relapse.stateReason);
+  assert.equal(relapse.stateReason, 'citations_verified_in_official_wording');
+  assert.equal(relapse.citations[0].documentId, 'official:example.family-health.wording');
+  assert.equal(relapse.citations[0].pageNumber, 12);
 });
 
 test('live breakdown requires explicit model permission and a sharing scope', async t => {

@@ -250,3 +250,26 @@ Additional required evidence:
 **Implementation sequence:** safety first; source contracts and UI in parallel; shared integration sequentially; full gates; independent review.  
 **Rollback:** isolated change sets, feature-disabled connectors, compatibility-preserving data transition, issued-pack fallback.  
 **Critical limitation:** READY does not authorise live public-site retrieval or claim/cashless assertions.
+
+## Amendment 1 — live official sources authorised (2026-10-08)
+
+**Trigger:** the user explicitly authorised live retrieval: "on upload, an agent checks the insurer's website and terms", "hardcoded endpoints or Gemini scraping are OK", "fetch the cashless network", "not just HDFC, all insurance companies; AI can navigate to the exact policy PDF", and "fetch another org's CSR ... make sure it updates dynamically and we can show the most updated one".
+
+This amendment narrows two non-goals above. It does not remove the safety rules.
+
+| Former non-goal | Now | Control that replaces the blanket ban |
+|---|---|---|
+| Live production scraping | Allowed for public insurer and IRDAI pages | `OFFICIAL_SOURCE_FETCH_ENABLED=true` kill switch (default false); registry-bound or discovery-bound requests only; SSRF guard on every resolved address; size, MIME, encoding and PDF-magic checks; no cookies or credentials; UA `KnowviaSourceFetcher/1.0`. |
+| AI-selected arbitrary URLs | AI may rank links already extracted from an allowlisted page | The model sees only link text/URL/context from pages on the insurer's reviewed hosts and returns indices into that list. It cannot invent a URL. A fetched PDF is accepted only when its own text prints the exact UIN read from the household's schedule. |
+
+**Resolution order for a policy wording (all insurers):** exact UIN on the uploaded pages → (1) operator-reviewed static registry entry → (2) IRDAI "Health Insurance Products" repository (government, covers every insurer, one PDF per UIN) → (3) insurer-site navigator from the insurer directory's reviewed index pages. Every path ends in the same deterministic check: the PDF prints the exact UIN. Product-name-only matches are never accepted.
+
+**Schedule outranks wording.** Wording pages are labelled `official_wording` in prompts and `official:<id>` in citations. Assembly ranks the household's own pages first. A differing wording value becomes `officialWordingDiffers` for review, not a conflict. Policy-instance keys (`SCHEDULE_ONLY_KEYS`: people, dates, sum insured, premium, zone, numbers, opted add-ons) are never Proven from wording alone.
+
+**Insurer statistics.** The IRDAI handbook stays the government baseline. Insurer-published quarterly claims tables (e.g. HDFC ERGO "Claims Data") are added as `sourceKind: insurer_reported`, refreshed when older than `freshnessDays`, reconciled (opening + intimated − paid − repudiated − closed = closing) or rejected, and labelled "retrieved <date>" because the pages carry no publication date. Section 10 already shows the most recent period per metric. On a failed refresh the last good file is kept.
+
+**Cashless network.** Insurer locator APIs give Dynamic evidence with the retrieval date and a "confirm with the hospital/TPA before admission" note. They never establish cover.
+
+**Still out of scope:** contacting insurers or hospitals; any request that carries household data (only UIN, product name, city, PIN and hospital name may leave the server); claim approval predictions.
+
+**Remaining blockers:** terms/robots review per insurer before production use; named operational owner for the registry and insurer directory; snapshot retention policy (wording cache and disclosure files hold public documents only).

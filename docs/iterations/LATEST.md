@@ -1,3 +1,90 @@
+# Latest iteration: live official sources and extraction root fixes (2026-10-08)
+
+- **Branch:** `claude/web-enrichment` (worktree `../CoverSaath-claude-enrich`), committed on top of `origin/claude/product-beta` 2384943 (Codex), whose tree equals this branch's old snapshot base.
+- **Plan / CERT:** `docs/exec-plans/active/policy-web-enrichment-intake.md`, **Amendment 1**. The user authorised live retrieval of public insurer and IRDAI pages, coverage of all insurers, AI-assisted navigation to the exact policy PDF, and insurer-reported claim ratios that refresh automatically.
+- **Class:** S2 (external data acquisition, sensitive AI extraction).
+
+## Objective
+
+Fix the extraction gaps found on the real policy from the root:
+- A schedule-only upload left 173 of 316 keys `not_found_in_source_pack`.
+- Several values were lost or misleading.
+
+Add live official sources:
+- policy wording by exact UIN, for all insurers
+- claim settlement data
+- the cashless network
+
+## Built
+
+### Extraction fixes
+- **Table quotes:** `verification/citations.js` now has `table_aligned` matching for HTML tables, header over value or one row. The prompt rule is R2a.
+- **More matching rules:**
+  - `compact` matches line-break and punctuation noise around numbers. Every number token must still exist on the page.
+  - `ellipsis_segments` handles spans joined with "...". Each span must be long, on the same page, and in order.
+  - `adjacent_page` corrects a cite that is one page off when the text is repeated.
+- **Validation:**
+  - Enum label forms are normalised: "India only" becomes `india_only`.
+  - Road ambulance is capped at the sub-limit maximum.
+  - `non_payable_items_rule` is now cited only from the refusing clause.
+  - `document_set` means the documents the text refers to.
+  - New keys: `documents_present_in_pack` and `additional_sum_insured_amount` (Secure Benefit). There are now 316 parameters.
+- **Waiting periods:** when the basis is `policy_first_inception` and no first inception date is found, the check counts from `policy_start_date` and returns `attention`, never `not_met`.
+- **Budget:** a provider 4xx settles at $0. A double settle on an empty output, which had loosened the cap, is fixed.
+- **Prompt:** version v3. R12 says how to use official wording pages.
+
+### Official wording (`references/official/`)
+- **Order of attempts:** exact UIN on the uploaded pages → `registry.js` (operator-reviewed) → `irdai-product-repository.js` (IRDAI Health Insurance Products, all insurers, filings only up to June 2022) → `wording-navigator.js` + `insurer-directory.js` + `insurer-site-sources.js`.
+- **The navigator:**
+  - The directory has 32 insurers; 19 have server-rendered wording pages.
+  - It uses a deterministic link chooser. `createGeminiLinkChooser` is available but not wired.
+- **Acceptance:** a PDF is accepted only when it prints the exact UIN as its own.
+- **Fetching:** all fetches go through `live-adapter.js`:
+  - `fetch` for registry entries and `fetchDiscovered` for discovery sources (`discovery.js`)
+  - SSRF lookup guard, redirect re-validation, MIME, size, encoding and PDF-magic checks
+  - kill switch `OFFICIAL_SOURCE_FETCH_ENABLED`
+- **Service wiring (`service.js`):**
+  - The wording is attached after OCR (step 1b, recorded in `ocr.metrics.officialWording`).
+  - Its text comes from the PDF text layer via `pdfjs-dist` 6.4.299 (new dependency, Apache-2.0).
+  - It is cached by content SHA.
+  - Pages are labelled `official_wording` and cited as `official:<id>`.
+- **Precedence:** assembly ranks the household's own pages first. A differing wording value goes to `officialWordingDiffers`. `SCHEDULE_ONLY_KEYS` are never Proven from wording alone.
+
+### Insurer statistics and cashless network
+- **Claims data:** `references/insurer-reported-disclosures.js` and `insurer-claims-sources.js` hold insurer-published claims data:
+  - HDFC ERGO HTML
+  - Form NL-37 PDFs from Go Digit, Bajaj General, Tata AIG and IFFCO-Tokio
+- **Claims-data checks:** each is reconciled or rejected, refreshed once `freshnessDays` (7) have passed since the last successful fetch, keeps the last good file, and is labelled "insurer-reported, retrieved <date>".
+- **Section 10:** the latest period wins. Renamed insurers are aliased.
+- **Network counts:** `references/network-counts.js` + `official/network-locators.js` read the HDFC ERGO locator API and give `network_hospitals_in_city`. The value is Dynamic, carries a "confirm before admission" note, and is fetched once a day per (insurer, city).
+
+## Verification
+
+- **Checks:**
+  - `npm run check`: architecture (171 files), 456/456 tests, build.
+  - `npm run test:e2e`: API 9/9 and browser 24/24, run before the final citation changes.
+  - `npm run eval:breakdown`: packs A/B/C 100%, 0 dangerous; found-path 287/287.
+- **Live official sources:**
+  - HDFC wording: same SHA as the saved copy, 69 pages.
+  - Navigator: exact-UIN wording found for Tata AIG, Bajaj, Go Digit, IndusInd and Acko in 1.6–4.4 s each.
+  - IRDAI repository: found a Star product.
+  - Claims data: all 5 refreshes reconciled. HDFC ERGO retail health CSR was 98.31% for Apr–Jun 2026.
+  - Locator: Pune 635, Bengaluru 436.
+- **Live re-run on the real policy (stored OCR + attached wording):**
+  - Model: Gemini 3.5 flash-lite (`thinkingLevel` minimal). Cost $0.84, about ₹70.
+  - Proven went from 94 to **155** (56 schedule + 99 wording), plus 8 member-scoped keys whose variants are Proven.
+  - Spot checks match the wording: initial wait 30 days, pre-existing disease 36 months, specified diseases 24 months, pre/post 60/180 days, restore 100%, SI ₹15L plus Secure Benefit ₹15L.
+  - Artefacts are in `.local/replay/run3/` (gitignored; contains personal data).
+
+## Risks and next
+
+1. **Lost keys:** 15 keys Proven in the schedule-only run were not returned with the larger context (for example air ambulance, the non-payable rule, consumables add-on). Consider a schedule-first pass or a gap-fill call for keys missing after wording.
+2. **The HDFC add-on (`HDFHLIA…`)** has not been found. Add-on wordings are listed by name, not UIN. Pass the add-on product name to the navigator, or register the add-on in the registry.
+3. **Unreachable sites:** 13 insurer sites are blocked (403 or TLS) or render their links in JavaScript. They rely on the IRDAI repository (to 2022) or need a registry entry.
+4. **Upkeep:** NL-37 PDF links change each quarter for Bajaj, Tata AIG and IFFCO and need updating. Only HDFC ERGO has a locator.
+5. **Before production:** terms/robots review per host, an operational owner for the registry and directory, and a snapshot retention policy.
+6. **Still not done:** the cashless check for a specific hospital (`findHospital`) is not exposed in the API, and the Gemini link chooser is not wired.
+
 # Latest iteration: product beta, M0 + live run (2026-10-07)
 
 - **Branch:** `claude/product-beta`, cut from local `main` (095b1d9). The policy breakdown backend was committed in 095b1d9. Local `main` is one commit ahead of origin.
