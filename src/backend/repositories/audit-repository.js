@@ -1,4 +1,5 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { jsonParam } from '../database/value-codec.js';
 
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
@@ -14,28 +15,30 @@ export class AuditRepository {
     this.clock = clock;
   }
 
-  append({ householdId = null, caseId = null, actorType = 'system', actorId = 'local-backend', action, resourceType, resourceId, payload = {} }) {
+  /**
+   * Appends to the household's hash chain. A transaction-scoped advisory lock serialises writers per household
+   * (it is held until the enclosing transaction ends); a unique index on the previous hash is the backstop.
+   */
+  async append({ householdId = null, caseId = null, actorType = 'system', actorId = 'local-backend', action, resourceType, resourceId, payload = {} }) {
     if (!action || !resourceType || !resourceId) throw new Error('Audit action, resource type and resource id are required.');
-    const previous = this.database.prepare(`
-      SELECT event_hash FROM audit_events
-      WHERE (household_id = ? OR (? IS NULL AND household_id IS NULL))
-      ORDER BY id DESC LIMIT 1
-    `).get(householdId, householdId)?.event_hash ?? null;
-    const occurredAt = this.clock().toISOString();
-    const payloadJson = JSON.stringify(stable(payload));
-    const material = JSON.stringify(stable({ householdId, caseId, actorType, actorId, action, resourceType, resourceId, payload, previous, occurredAt }));
-    const eventHash = createHash('sha256').update(material).digest('hex');
-    const result = this.database.prepare(`
-      INSERT INTO audit_events
-        (household_id, case_id, actor_type, actor_id, action, resource_type, resource_id,
-         event_payload_json, previous_event_hash, event_hash, occurred_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(householdId, caseId, actorType, actorId, action, resourceType, resourceId, payloadJson, previous, eventHash, occurredAt);
-    return { id: Number(result.lastInsertRowid), eventHash, previousEventHash: previous, occurredAt };
+    return this.database.transaction(async tx => {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`audit:${householdId ?? ''}`]);
+      const previous = (await tx.one(`SELECT event_hash FROM audit_events
+        WHERE household_id = $1::text OR ($1::text IS NULL AND household_id IS NULL)
+        ORDER BY id DESC LIMIT 1`, [householdId]))?.event_hash ?? null;
+      const occurredAt = this.clock().toISOString();
+      const material = JSON.stringify(stable({ householdId, caseId, actorType, actorId, action, resourceType, resourceId, payload, previous, occurredAt }));
+      const eventHash = createHash('sha256').update(material).digest('hex');
+      const row = await tx.one(`INSERT INTO audit_events
+          (household_id, case_id, actor_type, actor_id, action, resource_type, resource_id,
+           event_payload_json, previous_event_hash, event_hash, occurred_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+      [householdId, caseId, actorType, actorId, action, resourceType, resourceId, jsonParam(stable(payload)), previous, eventHash, occurredAt]);
+      return { id: Number(row.id), eventHash, previousEventHash: previous, occurredAt };
+    });
   }
 
   listForCase(caseId) {
-    return this.database.prepare('SELECT * FROM audit_events WHERE case_id = ? ORDER BY id').all(caseId);
+    return this.database.query('SELECT * FROM audit_events WHERE case_id = $1 ORDER BY id', [caseId]);
   }
 }
-

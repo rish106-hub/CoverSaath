@@ -125,9 +125,10 @@ function applyVerifier(target, outcome) {
 export function assembleExtractionSection({ section, extracted, verified = null, pages, extraction, verifierExtraction = null }) {
   const pagesByNumber = new Map(pages.map(page => [page.pageNumber, page]));
   const byKey = new Map(section.parameters.map(parameter => [parameter.key, []]));
-  for (const item of extracted?.parameters ?? []) if (byKey.has(item?.key)) byKey.get(item.key).push(item);
+  const maxItems = section.parameters.length * 3;
+  for (const item of (extracted?.parameters ?? []).slice(0, maxItems)) if (byKey.has(item?.key)) byKey.get(item.key).push(item);
   const verifierByKey = new Map();
-  for (const item of verified?.parameters ?? []) {
+  for (const item of (verified?.parameters ?? []).slice(0, maxItems)) {
     if (!byKey.has(item?.key)) continue;
     if (!verifierByKey.has(item.key)) verifierByKey.set(item.key, []);
     verifierByKey.get(item.key).push(item);

@@ -1,6 +1,6 @@
 // Deterministic citation verification. A value can only become Proven when every quote is found in the
 // stored page text AND the value itself appears in a quote. Matching tolerates whitespace, case,
-// quote/dash style and rupee notation only — never digits, decimal points or digit separators.
+// quote/dash style, rupee notation and HTML table markup only — never digits, decimal points or digit separators.
 
 const REPLACEMENTS = [
   [/[‘’‚‛′]/g, "'"],
@@ -8,6 +8,10 @@ const REPLACEMENTS = [
   [/[‐-―−]/g, '-'],
   [/ /g, ' '],
   [/₹|\brs\.?(?=\s*\d)|\binr\b/gi, 'rs '],
+  // Sarvam returns tables as HTML; models quote them as "cell | cell". Table markup and pipes become spaces.
+  // Only named tags are stripped (never a bare <…>), so text such as "<18 years" is kept.
+  [/<\/?(?:table|thead|tbody|tfoot|tr|td|th|br|p|div|span)\b[^>]*>/gi, ' '],
+  [/\|/g, ' '],
 ];
 
 export const MIN_QUOTE_CHARACTERS = 6;

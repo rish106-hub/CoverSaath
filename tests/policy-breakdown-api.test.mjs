@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
-import { openDatabase } from '../src/backend/database/index.js';
+import { createTestDatabase, sql } from './helpers/test-database.js';
 import { createApiServer } from '../src/server/server.js';
 import { createEncryptedLocalByteStorage } from '../src/modules/document-intake/encrypted-local-storage.js';
 import { createFixtureModelRunner } from '../src/modules/policy-breakdown/agents/model-runner.js';
@@ -19,7 +19,7 @@ const pdf = await buildSyntheticPdf(pack);
 async function start(t, { mutate = null, scanMode = 'structural_only' } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'knowvia-policy-api-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const database = openDatabase({ path: join(directory, 'knowvia.sqlite') });
+  const database = await createTestDatabase();
   const storage = createEncryptedLocalByteStorage({ baseDirectory: join(directory, 'documents'), key: randomBytes(32) });
   const server = createApiServer({
     database,
@@ -38,7 +38,7 @@ async function start(t, { mutate = null, scanMode = 'structural_only' } = {}) {
     },
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(async () => { await new Promise(resolve => server.close(resolve)); try { database.close(); } catch {} });
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); await database.close().catch(() => {}); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (path, { method = 'GET', body, idempotencyKey, token } = {}) => {
     const response = await fetch(base + path, {
@@ -171,8 +171,10 @@ test('policy breakdown runs end to end over HTTP: upload → 12 sections → rev
   });
   assert.equal(estimate.status, 200, JSON.stringify(estimate.data));
   assert.equal(estimate.data.billTotalMinor, 6400000);
-  assert.deepEqual(estimate.data.insurerPaysMinor, { low: 3200000, high: 3200000 }, 'cataract cap ₹40,000 then 20% age co-pay');
-  assert.deepEqual(estimate.data.householdPaysMinor, { low: 3200000, high: 3200000 });
+  assert.equal(estimate.data.status, 'coverage_not_established');
+  assert.deepEqual(estimate.data.insurerPaysMinor, { low: 0, high: 0 }, 'unresolved eligibility keeps the primary scenario fail-closed');
+  assert.deepEqual(estimate.data.insurerPaysIfEligibleMinor, { low: 3200000, high: 3200000 }, 'cataract cap and age co-pay remain a secondary if-eligible calculation');
+  assert.deepEqual(estimate.data.householdPaysMinor, { low: 6400000, high: 6400000 });
   assert.ok(estimate.data.steps.some(step => step.step === 'procedure_sublimit'));
   assert.match(estimate.data.boundaries[0], /not a claim decision/);
 
@@ -291,9 +293,9 @@ test('review H1/M2: protected values are masked for other adults, and conflicts 
   const recordId = created.data.record.id;
 
   const services = createBackendServices(database, { env: {} });
-  const sita = services.households.createAdult({ displayName: 'Sita Kumar' });
-  services.households.addRole({ householdId: ram.householdId, adultUserId: sita.id, role: 'member', status: 'active' });
-  const sitaToken = services.auth.issueSession({ adultUserId: sita.id }).token;
+  const sita = await services.households.createAdult({ displayName: 'Sita Kumar' });
+  await services.households.addRole({ householdId: ram.householdId, adultUserId: sita.id, role: 'member', status: 'active' });
+  const sitaToken = (await services.auth.issueSession({ adultUserId: sita.id })).token;
 
   const ownerView = (await call(`/api/v1/policy-records/${recordId}/sections/2`, { token: ram.token })).data.sections[0].parameters;
   const otherView = (await call(`/api/v1/policy-records/${recordId}/sections/2`, { token: sitaToken })).data.sections[0].parameters;
@@ -303,7 +305,7 @@ test('review H1/M2: protected values are masked for other adults, and conflicts 
   assert.equal(otherConditions.evidenceState, 'NotPermitted');
   const leaked = JSON.stringify(otherView.filter(parameter => parameter.visibility === 'protected'));
   assert.ok(!/hypertension/i.test(leaked), 'no protected text in any field, including verifier output');
-  assert.deepEqual(Object.keys(otherConditions).sort(), ['citations', 'conditions', 'critical', 'evidenceState', 'exceptions', 'key', 'label', 'review', 'section', 'stateReason', 'value', 'valueType', 'visibility'].sort());
+  assert.deepEqual(Object.keys(otherConditions).sort(), ['citations', 'conditions', 'critical', 'evidenceState', 'exceptions', 'key', 'label', 'review', 'section', 'sourceAttempts', 'stateReason', 'terminalOutcome', 'terminalOutcomeReason', 'value', 'valueType', 'visibility'].sort());
   const otherReview = await call(`/api/v1/policy-records/${recordId}/parameters/member_specific_conditions/review`, { method: 'POST', token: sitaToken, body: { action: 'confirm' } });
   assert.equal(otherReview.status, 403);
 
@@ -325,7 +327,7 @@ test('review M4: consent revoked mid-job stops further provider work', async t =
   const ram = await household(call);
   const uploaded = await upload(call, ram);
   const recordConsent = await consent(call, ram, 'coverage_reconstruction', [{ resourceType: 'policy', action: 'derive', dataCategory: 'insurance_document' }]);
-  revoke = () => database.prepare('UPDATE consent_grants SET revoked_at = ? WHERE id = ?').run(new Date().toISOString(), recordConsent);
+  revoke = () => { sql.run(database, 'UPDATE consent_grants SET revoked_at = ? WHERE id = ?', new Date().toISOString(), recordConsent).catch(() => {}); };
   const created = await call(`/api/v1/households/${ram.householdId}/policy-records`, { method: 'POST', token: ram.token, idempotencyKey: 'revoke-key-0001', body: { documentIds: [uploaded.data.document.id], consentGrantId: recordConsent, executionMode: 'fixture' } });
   assert.equal(created.status, 202);
   let job;
@@ -335,8 +337,11 @@ test('review M4: consent revoked mid-job stops further provider work', async t =
     await new Promise(resolve => setTimeout(resolve, 25));
   }
   assert.equal(job.data.status, 'failed');
-  assert.ok(job.data.steps.some(step => step.errorCode === 'CONSENT_REVOKED'));
-  const record = database.prepare('SELECT status FROM policy_records WHERE id = ?').get(created.data.record.id);
+  // Sections now run concurrently against an async database, so calls already in flight when consent is revoked
+  // can finish. What must hold: the job fails with CONSENT_REVOKED, assembly never runs, and the record is revoked.
+  assert.equal(job.data.error.code, 'CONSENT_REVOKED');
+  assert.equal(job.data.steps.find(step => step.id === 'assemble').status, 'pending');
+  const record = await sql.get(database, 'SELECT status FROM policy_records WHERE id = ?', created.data.record.id);
   assert.equal(record.status, 'revoked');
 });
 

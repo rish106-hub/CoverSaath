@@ -10,6 +10,20 @@
 // independent of application modules.
 
 export const SARVAM_DOC_AI_BASE_URL = 'https://api.sarvam.ai/doc-ai/v1';
+/**
+ * Test-only override: SARVAM_BASE_URL points the client at a local fake. It must be an http(s) URL without
+ * credentials, query or fragment. Unset keeps the real endpoint.
+ */
+export function resolveSarvamBaseUrl(value = process.env.SARVAM_BASE_URL) {
+  if (value === undefined || value === '') return SARVAM_DOC_AI_BASE_URL;
+  let url;
+  try { url = new URL(value); } catch { throw new SarvamError('SARVAM_BASE_URL_INVALID', 'SARVAM_BASE_URL must be a valid URL.'); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new SarvamError('SARVAM_BASE_URL_INVALID', 'SARVAM_BASE_URL must be an http(s) URL without credentials, query or fragment.');
+  }
+  return url.toString().replace(/\/+$/, '');
+}
+
 export const SARVAM_LIMITS = Object.freeze({ maxPagesPerJob: 10, maxBytes: 200 * 1024 * 1024, requestsPerMinute: 10, maxResultBytes: 100 * 1024 * 1024 });
 const TERMINAL = new Set(['completed', 'partially_completed', 'failed', 'rejected']);
 
@@ -105,7 +119,7 @@ export function pagesFromResultZip(zipBuffer, { expectedPages, readZip }) {
 
 export function createSarvamDocAiClient({
   apiKey,
-  baseUrl = SARVAM_DOC_AI_BASE_URL,
+  baseUrl = resolveSarvamBaseUrl(),
   fetchImpl = globalThis.fetch,
   limiter = createRequestLimiter(),
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),

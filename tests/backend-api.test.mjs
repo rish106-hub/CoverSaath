@@ -1,9 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { openDatabase } from '../src/backend/database/index.js';
+import { createDurableTestDatabase, sql } from './helpers/test-database.js';
 import { createBackendServices } from '../src/backend/services/index.js';
 import { createApiServer } from '../src/server/server.js';
 
@@ -33,15 +30,15 @@ async function start(database) {
 const stop = server => new Promise(resolve => server.close(resolve));
 
 test('versioned backend persists cases and queued analysis across restart', async t => {
-  const directory = mkdtempSync(join(tmpdir(), 'knowvia-backend-api-'));
-  const databasePath = join(directory, 'knowvia.sqlite');
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  // A durable on-disk PGlite so reopening it proves cases and jobs persist across a server restart.
+  const durable = await createDurableTestDatabase();
+  t.after(() => durable.cleanup());
 
-  let database = openDatabase({ path: databasePath });
+  let database = await durable.open();
   let app = await start(database);
   t.after(async () => {
     if (app?.server?.listening) await stop(app.server);
-    try { database.close(); } catch {}
+    await database.close().catch(() => {});
   });
 
   const health = await app.call('/api/v1/health');
@@ -81,13 +78,13 @@ test('versioned backend persists cases and queued analysis across restart', asyn
   assert.equal(hiddenMatrix.status, 404);
 
   const setup = createBackendServices(database, { env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken } });
-  const householdViewer = setup.households.createAdult({ displayName: 'Synthetic household viewer' });
-  setup.households.addRole({
+  const householdViewer = await setup.households.createAdult({ displayName: 'Synthetic household viewer' });
+  await setup.households.addRole({
     householdId: identity.data.household.id,
     adultUserId: householdViewer.id,
     role: 'viewer',
   });
-  const viewerToken = setup.auth.issueSession({ adultUserId: householdViewer.id }).token;
+  const viewerToken = (await setup.auth.issueSession({ adultUserId: householdViewer.id })).token;
 
   const emergency = await app.call('/api/v1/cases', {
     method: 'POST',
@@ -232,17 +229,14 @@ test('versioned backend persists cases and queued analysis across restart', asyn
     },
   });
   assert.equal(sourceGrant.status, 201);
-  database.prepare(`INSERT INTO document_uploads
+  await sql.run(database, `INSERT INTO document_uploads
     (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
      original_filename, storage_path, content_sha256, mime_type, byte_size, malware_status,
      encryption_status, lifecycle_state, uploaded_at)
     VALUES (?, ?, ?, ?, ?, 'medical_record', 'private-medical-record.pdf', ?, ?,
-      'application/pdf', 2048, 'pending', 'required', 'quarantined', ?)`)
-    .run(
-      'document-sensitive-fixture', identity.data.household.id, emergency.data.id,
+      'application/pdf', 2048, 'pending', 'required', 'quarantined', ?)`, 'document-sensitive-fixture', identity.data.household.id, emergency.data.id,
       identity.data.owner.id, sourceGrant.data.id, '/encrypted/private-medical-record.pdf',
-      'a'.repeat(64), new Date().toISOString(),
-    );
+      'a'.repeat(64), new Date().toISOString(),);
   const sourcePack = await app.call(`/api/v1/cases/${emergency.data.id}/source-pack`, { token });
   assert.equal(sourcePack.status, 200);
   assert.equal(sourcePack.data.sources[0].documentKind, 'medical_record');
@@ -284,8 +278,8 @@ test('versioned backend persists cases and queued analysis across restart', asyn
   assert.equal(otherTenantJob.status, 404);
 
   await stop(app.server);
-  database.close();
-  database = openDatabase({ path: databasePath });
+  await database.close();
+  database = await durable.open();
   app = await start(database);
 
   const persistedCase = await app.call(`/api/v1/cases/${emergency.data.id}`, { token });
@@ -325,5 +319,5 @@ test('versioned backend persists cases and queued analysis across restart', asyn
   assert.equal(revokedJob.status, 403);
 
   await stop(app.server);
-  database.close();
+  await database.close();
 });

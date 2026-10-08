@@ -157,7 +157,19 @@ export function defineSection(raw) {
 // Model output contract (extraction sections)
 // ---------------------------------------------------------------------------
 
-/** JSON schema the section agent must return. Enumerates only that section's keys. */
+/** Name the prompt's output-contract block refers to; bump when the shape below changes. */
+export const SECTION_OUTPUT_SCHEMA_NAME = 'knowvia.breakdown.section-output/v2';
+
+/** Every field of a model item, in schema order. Only `key` and `found` are required (compact abstain). */
+export const MODEL_ITEM_FIELDS = Object.freeze(['key', 'found', 'valueText', 'valueNumber', 'valueBoolean', 'valueList', 'unit', 'basis', 'effect', 'memberScope', 'conditions', 'exceptions', 'citations', 'confidence', 'notes']);
+export const MAX_OPEN_QUESTIONS = 5;
+
+/**
+ * JSON schema the section agent must return. Enumerates only that section's keys.
+ * v2: not-found items may be the compact abstain shape { key, found:false }; every other field is optional in
+ * the schema and the prompt requires all of them when found=true. Assembly already treats a missing field as
+ * empty, and a found=true item without citations or a value can never become Proven (fail-safe).
+ */
 export function sectionOutputSchema(section) {
   const keys = section.parameters.map(parameter => parameter.key);
   return {
@@ -166,12 +178,13 @@ export function sectionOutputSchema(section) {
     required: ['parameters'],
     properties: {
       parameters: {
+        // No top-level maxItems: Gemini 3.x rejects it (HTTP 400 INVALID_ARGUMENT, verified 2026-10-07).
+        // The per-section cap (keys × 3) is enforced deterministically in assembleExtractionSection.
         type: 'array',
-        maxItems: keys.length * 3,
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['key', 'found', 'valueText', 'valueNumber', 'valueBoolean', 'valueList', 'unit', 'basis', 'effect', 'memberScope', 'conditions', 'exceptions', 'citations', 'confidence', 'notes'],
+          required: ['key', 'found'],
           properties: {
             key: { type: 'string', enum: keys },
             found: { type: 'boolean' },
@@ -203,8 +216,168 @@ export function sectionOutputSchema(section) {
           },
         },
       },
+      openQuestions: { type: 'array', maxItems: MAX_OPEN_QUESTIONS, items: { type: 'string', maxLength: 300 } },
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Compact abstain normalisation (deterministic; downstream always sees the full item shape)
+// ---------------------------------------------------------------------------
+
+const listOrEmpty = value => (Array.isArray(value) ? value : []);
+const valueOrNull = value => (value === undefined ? null : value);
+
+/** Expands a model item (possibly the compact `{ key, found:false }`) to the full item shape. */
+export function expandModelItem(item) {
+  if (!item || typeof item !== 'object') return item;
+  return {
+    key: item.key,
+    found: item.found === true,
+    valueText: valueOrNull(item.valueText),
+    valueNumber: valueOrNull(item.valueNumber),
+    valueBoolean: valueOrNull(item.valueBoolean),
+    valueList: valueOrNull(item.valueList),
+    unit: valueOrNull(item.unit),
+    basis: item.basis ?? NOT_STATED,
+    effect: item.effect ?? NOT_STATED,
+    memberScope: valueOrNull(item.memberScope),
+    conditions: listOrEmpty(item.conditions),
+    exceptions: listOrEmpty(item.exceptions),
+    citations: listOrEmpty(item.citations),
+    confidence: valueOrNull(item.confidence),
+    notes: valueOrNull(item.notes),
+  };
+}
+
+const MANDATORY_FOUND_FIELDS = new Set(['key', 'found', 'unit', 'basis', 'effect', 'citations', 'confidence']);
+const isEmptyField = value => value === null || value === undefined || (Array.isArray(value) && value.length === 0);
+
+/**
+ * The compact wire shape the v2 prompt asks for: a not-found item becomes `{ key, found:false }`; a found item
+ * drops optional fields that are null or empty. expandModelItem() is its inverse for everything assembly reads.
+ */
+export function compactModelItem(item) {
+  if (!item || typeof item !== 'object') return item;
+  if (item.found !== true) return { key: item.key, found: false };
+  return Object.fromEntries(Object.entries(item).filter(([field, value]) => MANDATORY_FOUND_FIELDS.has(field) || !isEmptyField(value)));
+}
+
+/** Normalises a raw section output: full item shapes plus a bounded openQuestions list. */
+export function normaliseSectionOutput(output) {
+  const parameters = Array.isArray(output?.parameters) ? output.parameters.map(expandModelItem) : [];
+  const openQuestions = listOrEmpty(output?.openQuestions)
+    .filter(question => typeof question === 'string' && question.trim())
+    .map(question => question.trim().slice(0, 300))
+    .slice(0, MAX_OPEN_QUESTIONS);
+  return { parameters, openQuestions };
+}
+
+// ---------------------------------------------------------------------------
+// Agent handoff envelope `knowvia.handoff/v1`
+// The model emits only items (+ open questions); code fills every other field. Validated before the next
+// agent or the assembler reads it. Spec: docs/ai/prompt-contract.md.
+// ---------------------------------------------------------------------------
+
+export const HANDOFF_SCHEMA = 'knowvia.handoff/v1';
+export const HANDOFF_STATUSES = Object.freeze(['ok', 'partial', 'abstain', 'error']);
+const HANDOFF_KEYS = Object.freeze(['schema', 'job_id', 'agent', 'next', 'status', 'prompt_version', 'model', 'items', 'open_questions', 'usage']);
+const HANDOFF_USAGE_KEYS = Object.freeze(['input_tokens', 'cached_tokens', 'output_tokens', 'cost_micro_usd']);
+const HANDOFF_MAX_ITEMS = LIMITS.maxParametersPerSection * 3;
+const HANDOFF_MAX_OPEN_QUESTIONS = 10;
+const AGENT_PATTERN = /^[a-z0-9][a-z0-9._:-]{1,95}$/;
+const JOB_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const PROMPT_VERSION_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+const MODEL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$/;
+
+const handoffFail = message => fail('HANDOFF_INVALID', message);
+const isPlainObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const nonNegativeInteger = value => Number.isSafeInteger(value) && value >= 0;
+
+function validateHandoffItem(item, index) {
+  const at = `items[${index}]`;
+  if (!isPlainObject(item)) handoffFail(`${at} must be an object.`);
+  for (const key of Object.keys(item)) if (!MODEL_ITEM_FIELDS.includes(key)) handoffFail(`${at} has unknown field ${key}.`);
+  if (typeof item.key !== 'string' || !KEY_PATTERN.test(item.key)) handoffFail(`${at}.key must be a snake_case parameter key.`);
+  if (typeof item.found !== 'boolean') handoffFail(`${at}.found must be a boolean.`);
+  if (item.citations !== undefined) {
+    if (!Array.isArray(item.citations) || item.citations.length > LIMITS.maxCitationsPerParameter) handoffFail(`${at}.citations must be a list of at most ${LIMITS.maxCitationsPerParameter}.`);
+    item.citations.forEach((citation, position) => {
+      if (!isPlainObject(citation) || Object.keys(citation).some(key => !['pageNumber', 'quote'].includes(key))) handoffFail(`${at}.citations[${position}] must be { pageNumber, quote }.`);
+      if (!Number.isInteger(citation.pageNumber) || citation.pageNumber < 1) handoffFail(`${at}.citations[${position}].pageNumber must be a positive integer.`);
+      if (typeof citation.quote !== 'string' || !citation.quote || citation.quote.length > LIMITS.maxQuoteCharacters) handoffFail(`${at}.citations[${position}].quote must be 1–${LIMITS.maxQuoteCharacters} characters.`);
+    });
+  }
+  if (item.confidence != null && !CONFIDENCE_LEVELS.includes(item.confidence)) handoffFail(`${at}.confidence must be one of ${CONFIDENCE_LEVELS.join(', ')}.`);
+}
+
+/**
+ * Strict validator. Returns the envelope unchanged when valid; throws BreakdownContractError
+ * (code HANDOFF_INVALID) on unknown keys, wrong enums, non-integer usage or inconsistent status.
+ */
+export function validateHandoff(envelope) {
+  if (!isPlainObject(envelope)) handoffFail('Handoff envelope must be an object.');
+  for (const key of Object.keys(envelope)) if (!HANDOFF_KEYS.includes(key)) handoffFail(`Handoff has unknown key ${key}.`);
+  for (const key of HANDOFF_KEYS) if (!(key in envelope)) handoffFail(`Handoff is missing ${key}.`);
+  if (envelope.schema !== HANDOFF_SCHEMA) handoffFail(`schema must be ${HANDOFF_SCHEMA}.`);
+  if (typeof envelope.job_id !== 'string' || !JOB_ID_PATTERN.test(envelope.job_id)) handoffFail('job_id must be 1–128 safe characters.');
+  if (typeof envelope.agent !== 'string' || !AGENT_PATTERN.test(envelope.agent)) handoffFail('agent must be a lowercase agent name such as section-04-treatment:extractor.');
+  if (envelope.next !== null && (typeof envelope.next !== 'string' || !AGENT_PATTERN.test(envelope.next))) handoffFail('next must be an agent name or null.');
+  if (!HANDOFF_STATUSES.includes(envelope.status)) handoffFail(`status must be one of ${HANDOFF_STATUSES.join(', ')}.`);
+  if (typeof envelope.prompt_version !== 'string' || !PROMPT_VERSION_PATTERN.test(envelope.prompt_version)) handoffFail('prompt_version must be a lowercase version token.');
+  if (typeof envelope.model !== 'string' || !MODEL_PATTERN.test(envelope.model)) handoffFail('model must be a model identifier.');
+  if (!Array.isArray(envelope.items) || envelope.items.length > HANDOFF_MAX_ITEMS) handoffFail(`items must be a list of at most ${HANDOFF_MAX_ITEMS}.`);
+  envelope.items.forEach(validateHandoffItem);
+  if (!Array.isArray(envelope.open_questions) || envelope.open_questions.length > HANDOFF_MAX_OPEN_QUESTIONS
+    || envelope.open_questions.some(question => typeof question !== 'string' || !question.trim() || question.length > 300)) {
+    handoffFail(`open_questions must be at most ${HANDOFF_MAX_OPEN_QUESTIONS} non-empty strings of ≤300 characters.`);
+  }
+  const { usage } = envelope;
+  if (!isPlainObject(usage)) handoffFail('usage must be an object.');
+  for (const key of Object.keys(usage)) if (!HANDOFF_USAGE_KEYS.includes(key)) handoffFail(`usage has unknown key ${key}.`);
+  for (const key of HANDOFF_USAGE_KEYS) if (!nonNegativeInteger(usage[key])) handoffFail(`usage.${key} must be a non-negative integer.`);
+  if (usage.cached_tokens > usage.input_tokens) handoffFail('usage.cached_tokens cannot exceed usage.input_tokens.');
+  const anyFound = envelope.items.some(item => item.found === true);
+  if (envelope.status === 'abstain' && anyFound) handoffFail('status abstain cannot carry found=true items.');
+  if (envelope.status === 'error' && envelope.items.length > 0) handoffFail('status error cannot carry items.');
+  if (envelope.status === 'ok' && envelope.items.length === 0) handoffFail('status ok requires items.');
+  return envelope;
+}
+
+const usageInteger = (value, name) => {
+  const number = value ?? 0;
+  if (!nonNegativeInteger(number)) handoffFail(`usage.${name} must be a non-negative integer.`);
+  return number;
+};
+
+/**
+ * Wraps one agent's model output in the handoff envelope. The model supplies only `items` (its `parameters`)
+ * and `openQuestions`; everything else comes from code. Items are expanded to the full shape so the next reader
+ * never sees the compact abstain form. `status` defaults to ok (any found item) or abstain (none).
+ * usage: { inputTokens, cachedTokens, outputTokens, costMicroUsd } (or costUsd, converted to micro-USD).
+ */
+export function wrapHandoff({ jobId, agent, next = null, status, promptVersion, model, items = [], openQuestions = [], usage = {} } = {}) {
+  if (!Array.isArray(items)) handoffFail('items must be a list.');
+  const expanded = items.map(expandModelItem);
+  const costMicroUsd = usage.costMicroUsd ?? (typeof usage.costUsd === 'number' && Number.isFinite(usage.costUsd) && usage.costUsd >= 0 ? Math.round(usage.costUsd * 1_000_000) : 0);
+  const envelope = {
+    schema: HANDOFF_SCHEMA,
+    job_id: jobId,
+    agent,
+    next,
+    status: status ?? (expanded.some(item => item.found) ? 'ok' : 'abstain'),
+    prompt_version: promptVersion,
+    model,
+    items: expanded,
+    open_questions: Array.isArray(openQuestions) ? openQuestions.map(question => (typeof question === 'string' ? question.trim() : question)) : openQuestions,
+    usage: {
+      input_tokens: usageInteger(usage.inputTokens, 'input_tokens'),
+      cached_tokens: usageInteger(usage.cachedTokens, 'cached_tokens'),
+      output_tokens: usageInteger(usage.outputTokens, 'output_tokens'),
+      cost_micro_usd: usageInteger(costMicroUsd, 'cost_micro_usd'),
+    },
+  };
+  return validateHandoff(envelope);
 }
 
 // ---------------------------------------------------------------------------

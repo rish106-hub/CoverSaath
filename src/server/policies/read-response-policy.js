@@ -5,10 +5,10 @@ export const READ_FIELDS = Object.freeze({
   analysisSummary: Object.freeze({ purpose: 'coverage_reconstruction', dataCategory: 'analysis_summary' }),
 });
 
-function caseSubject(database, caseRecord) {
+async function caseSubject(database, caseRecord) {
   if (caseRecord.subject_member_id) {
-    const member = database.prepare(`SELECT adult_user_id FROM household_members
-      WHERE id = ? AND household_id = ?`).get(caseRecord.subject_member_id, caseRecord.household_id);
+    const member = await database.one(`SELECT adult_user_id FROM household_members
+      WHERE id = $1 AND household_id = $2`, [caseRecord.subject_member_id, caseRecord.household_id]);
     if (member?.adult_user_id) return member.adult_user_id;
   }
   return caseRecord.opened_by_adult_id;
@@ -16,10 +16,10 @@ function caseSubject(database, caseRecord) {
 
 export function createReadResponsePolicy({ database, consents }) {
   return Object.freeze({
-    requireCaseField({ principal, caseRecord, field }) {
-      consents.requireResourceAccess({
+    async requireCaseField({ principal, caseRecord, field }) {
+      await consents.requireResourceAccess({
         householdId: caseRecord.household_id,
-        subjectAdultId: caseSubject(database, caseRecord),
+        subjectAdultId: await caseSubject(database, caseRecord),
         viewerAdultId: principal.adultId,
         purpose: field.purpose,
         resourceType: 'case',
@@ -143,7 +143,7 @@ export function caseSummaryDto(record) {
     subjectMemberId: record.subject_member_id,
     triggerType: record.trigger_type,
     status: record.status,
-    emergencyMode: record.emergency_mode === 1,
+    emergencyMode: Number(record.emergency_mode) === 1,
     statedEstimateMinor: record.stated_estimate_minor,
     currency: record.currency,
     revision: record.updated_at,

@@ -31,3 +31,47 @@ export function readServerConfig(env = process.env) {
     projectBudgetUsd: positiveAmount(env.ORCHESTRATION_PROJECT_BUDGET_USD, 'ORCHESTRATION_PROJECT_BUDGET_USD'),
   });
 }
+
+function csv(value) {
+  return String(value ?? '').split(',').map(part => part.trim()).filter(Boolean);
+}
+
+// PostHog ingestion hosts are fixed per region; the proxy never derives an upstream from the request.
+export const POSTHOG_UPSTREAMS = Object.freeze({
+  eu: Object.freeze({ api: 'https://eu.i.posthog.com', assets: 'https://eu-assets.i.posthog.com' }),
+  us: Object.freeze({ api: 'https://us.i.posthog.com', assets: 'https://us-assets.i.posthog.com' }),
+});
+
+/** Listen address, deployed hosts/origins, proxy trust, static build and the analytics proxy. */
+export function readHttpConfig(env = process.env) {
+  const allowedHosts = csv(env.ALLOWED_HOSTS).map(host => host.toLowerCase());
+  for (const host of allowedHosts) if (!/^[a-z0-9.-]+(:\d{1,5})?$/.test(host)) throw new Error('Invalid ALLOWED_HOSTS.');
+  const allowedOrigins = csv(env.ALLOWED_ORIGINS);
+  for (const origin of allowedOrigins) {
+    let parsed;
+    try { parsed = new URL(origin); } catch { throw new Error('Invalid ALLOWED_ORIGINS.'); }
+    if (parsed.origin !== origin || !['https:', 'http:'].includes(parsed.protocol)) throw new Error('Invalid ALLOWED_ORIGINS.');
+  }
+  const trustProxyHops = env.TRUST_PROXY_HOPS === undefined || env.TRUST_PROXY_HOPS === '0' ? 0 : boundedInteger(env.TRUST_PROXY_HOPS, 0, 'TRUST_PROXY_HOPS', 5);
+  const posthogRegion = env.POSTHOG_REGION || null;
+  if (posthogRegion && !POSTHOG_UPSTREAMS[posthogRegion]) throw new Error('Invalid POSTHOG_REGION.');
+  // Test-only override so E2E never reaches PostHog: loopback upstreams only, and never in production.
+  let posthogUpstream = posthogRegion ? POSTHOG_UPSTREAMS[posthogRegion] : null;
+  if (env.POSTHOG_TEST_UPSTREAM) {
+    const parsed = new URL(env.POSTHOG_TEST_UPSTREAM);
+    if (env.NODE_ENV === 'production' || parsed.hostname !== '127.0.0.1') throw new Error('Invalid POSTHOG_TEST_UPSTREAM.');
+    posthogUpstream = Object.freeze({ api: parsed.origin, assets: parsed.origin });
+  }
+  const host = env.HOST || '127.0.0.1';
+  if (host !== '127.0.0.1' && host !== 'localhost' && !allowedHosts.length) throw new Error('ALLOWED_HOSTS is required when HOST is not loopback.');
+  return Object.freeze({
+    host,
+    port: env.PORT === undefined ? 8787 : boundedInteger(env.PORT, 8787, 'PORT', 65_535),
+    allowedHosts: Object.freeze(allowedHosts),
+    allowedOrigins: Object.freeze(allowedOrigins),
+    trustProxyHops,
+    staticDir: env.STATIC_DIR || null,
+    posthogUpstream,
+    shutdownGraceMs: boundedInteger(env.SHUTDOWN_GRACE_MS, 8_000, 'SHUTDOWN_GRACE_MS', 60_000),
+  });
+}

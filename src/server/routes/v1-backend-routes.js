@@ -89,16 +89,16 @@ function errorResponse(error) {
   return { status, body: { error: { code, message: error.message } } };
 }
 
-function job(database, runId) {
-  const run = database.prepare('SELECT * FROM workflow_runs WHERE id = ?').get(runId);
+async function job(database, runId) {
+  const run = await database.one('SELECT * FROM workflow_runs WHERE id = $1', [runId]);
   if (!run) return null;
-  const tasks = database.prepare('SELECT * FROM workflow_tasks WHERE workflow_run_id = ? ORDER BY created_at, id').all(runId);
+  const tasks = await database.query('SELECT * FROM workflow_tasks WHERE workflow_run_id = $1 ORDER BY created_at, id', [runId]);
   return analysisJobDto(run, tasks, ANALYSIS_DAG);
 }
 
-function createAnalysisRun({ req, database, services, caseId, body, config, liveRegistryFactory }) {
-  const activeRuns = database.prepare(`SELECT count(*) AS count FROM workflow_runs
-    WHERE case_id = ? AND status IN ('queued', 'running')`).get(caseId).count;
+async function createAnalysisRun({ req, database, services, caseId, body, config, liveRegistryFactory }) {
+  const { count: activeRuns } = await database.one(`SELECT count(*) AS count FROM workflow_runs
+    WHERE case_id = $1 AND status IN ('queued', 'running')`, [caseId]);
   if (activeRuns >= config.maxRunsPerCase) {
     const error = new Error('Active analysis capacity reached for this case.');
     error.code = 'ANALYSIS_CAPACITY_REACHED';
@@ -131,7 +131,7 @@ function createAnalysisRun({ req, database, services, caseId, body, config, live
     return {
       status: created ? 202 : 200,
       body: {
-        ...job(database, settled.id),
+        ...await job(database, settled.id),
         dispatchStatus: created ? `${executionMode}_completed` : 'idempotent_existing_run',
         externalProviderCalls: executionMode === 'live' && created,
       },
@@ -149,7 +149,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       };
     }
     if (req.method === 'GET' && url.pathname === '/api/v1/ready') {
-      const schema = validateSchema(database);
+      const schema = await validateSchema(database);
       const ready = schema.valid && services.access.bootstrapConfigured;
       return { status: ready ? 200 : 503, body: {
         status: ready ? 'ready' : 'not_ready',
@@ -161,26 +161,26 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     if (req.method === 'POST' && url.pathname === '/api/v1/households') {
       services.access.requireBootstrap(req.headers.authorization);
       const body = await readBody(req);
-      const adult = services.households.createAdult({
+      const adult = await services.households.createAdult({
         displayName: requiredString(body.owner?.displayName, 'owner.displayName'),
         contactEmail: body.owner?.contactEmail ?? null,
         contactPhone: body.owner?.contactPhone ?? null,
         locale: body.owner?.locale ?? 'en-IN',
       });
-      const household = services.households.createHousehold({
+      const household = await services.households.createHousehold({
         displayName: requiredString(body.displayName, 'displayName'),
         ownerAdultId: adult.id,
       });
-      const ownerMember = services.households.addMember({
+      const ownerMember = await services.households.addMember({
         householdId: household.id,
         adultUserId: adult.id,
         displayName: adult.display_name,
       });
-      const session = services.auth.issueSession({ adultUserId: adult.id });
+      const session = await services.auth.issueSession({ adultUserId: adult.id });
       return { status: 201, body: { household, owner: adult, ownerMember, session } };
     }
 
-    const principal = services.access.authenticate(req.headers.authorization);
+    const principal = await services.access.authenticate(req.headers.authorization);
     const policyResponse = await handlePolicyRoute({ req, url, policy, principal });
     if (policyResponse) return policyResponse;
     const responses = createReadResponsePolicy({ database, consents: services.consents });
@@ -196,25 +196,25 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       };
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/sessions/current/revoke') {
-      services.auth.revokeSession({ sessionId: principal.sessionId, adultUserId: principal.adultId });
+      await services.auth.revokeSession({ sessionId: principal.sessionId, adultUserId: principal.adultId });
       return { status: 200, body: { status: 'revoked' } };
     }
     const householdMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)$/);
     if (req.method === 'GET' && householdMatch) {
-      return { status: 200, body: services.access.householdMatrix(principal, householdMatch[1]) };
+      return { status: 200, body: await services.access.householdMatrix(principal, householdMatch[1]) };
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/consents') {
       const body = await readBody(req);
       const householdId = requiredString(body.householdId, 'householdId');
       const subjectAdultId = requiredString(body.subjectAdultId, 'subjectAdultId');
-      services.access.requireHousehold(principal, householdId, { write: true });
+      await services.access.requireHousehold(principal, householdId, { write: true });
       if (subjectAdultId !== principal.adultId) {
         const error = new Error('Only the subject adult may grant field and processing access.');
         error.code = 'CONSENT_SUBJECT_REQUIRED';
         error.statusCode = 403;
         throw error;
       }
-      const grant = services.consents.grant({
+      const grant = await services.consents.grant({
         householdId,
         subjectAdultId,
         purpose: requiredString(body.purpose, 'purpose'),
@@ -228,12 +228,12 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     const revokeMatch = url.pathname.match(/^\/api\/v1\/consents\/([^/]+)\/revoke$/);
     if (req.method === 'POST' && revokeMatch) {
       const body = await readBody(req);
-      const existing = services.consents.get(revokeMatch[1]);
+      const existing = await services.consents.get(revokeMatch[1]);
       if (!existing || existing.subject_adult_id !== principal.adultId) {
         return { status: 404, body: { error: { code: 'CONSENT_NOT_FOUND', message: 'Consent grant not found.' } } };
       }
-      services.access.requireHousehold(principal, existing.household_id, { write: true });
-      return { status: 200, body: services.consents.revoke({
+      await services.access.requireHousehold(principal, existing.household_id, { write: true });
+      return { status: 200, body: await services.consents.revoke({
         grantId: revokeMatch[1],
         revokedByAdultId: principal.adultId,
         reason: body.reason ?? null,
@@ -241,8 +241,8 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     }
     const permissionMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/members\/([^/]+)\/fields\/([^/]+)\/access$/);
     if (req.method === 'GET' && permissionMatch) {
-      services.access.requireHousehold(principal, permissionMatch[1]);
-      const allowed = services.consents.canAccessField({
+      await services.access.requireHousehold(principal, permissionMatch[1]);
+      const allowed = await services.consents.canAccessField({
         householdId: permissionMatch[1],
         subjectAdultId: permissionMatch[2],
         viewerAdultId: principal.adultId,
@@ -253,16 +253,16 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     if (req.method === 'POST' && url.pathname === '/api/v1/cases') {
       const body = await readBody(req);
       const householdId = requiredString(body.householdId, 'householdId');
-      services.access.requireHousehold(principal, householdId, { write: true });
-      const activeCases = database.prepare(`SELECT count(*) AS count FROM service_cases
-        WHERE status NOT IN ('closed', 'revoked')`).get().count;
+      await services.access.requireHousehold(principal, householdId, { write: true });
+      const { count: activeCases } = await database.one(`SELECT count(*) AS count FROM service_cases
+        WHERE status NOT IN ('closed', 'revoked')`);
       if (activeCases >= config.maxCases) {
         const error = new Error('Active case capacity reached.');
         error.code = 'CASE_CAPACITY_REACHED';
         error.statusCode = 429;
         throw error;
       }
-      const record = services.cases.create({
+      const record = await services.cases.create({
         householdId,
         subjectMemberId: body.subjectMemberId ?? null,
         openedByAdultId: principal.adultId,
@@ -274,28 +274,28 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     }
     const caseMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)$/);
     if (req.method === 'GET' && caseMatch) {
-      const caseRecord = services.access.requireCase(principal, caseMatch[1]);
-      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.caseSummary });
+      const caseRecord = await services.access.requireCase(principal, caseMatch[1]);
+      await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.caseSummary });
       return { status: 200, body: caseSummaryDto(caseRecord) };
     }
     const sourcePackMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/source-pack$/);
     if (req.method === 'GET' && sourcePackMatch) {
-      const caseRecord = services.access.requireCase(principal, sourcePackMatch[1]);
-      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
-      const sources = database.prepare(`SELECT id, document_kind,
+      const caseRecord = await services.access.requireCase(principal, sourcePackMatch[1]);
+      await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      const sources = await database.query(`SELECT id, document_kind,
           mime_type, byte_size, malware_status, encryption_status, lifecycle_state, uploaded_at
-        FROM document_uploads WHERE case_id = ? AND household_id = ? AND lifecycle_state <> 'deleted'
-        ORDER BY uploaded_at, id`).all(caseRecord.id, caseRecord.household_id);
-      const workflows = database.prepare(`SELECT id, workflow_name, workflow_version, execution_mode,
+        FROM document_uploads WHERE case_id = $1 AND household_id = $2 AND lifecycle_state <> 'deleted'
+        ORDER BY uploaded_at, id`, [caseRecord.id, caseRecord.household_id]);
+      const workflows = await database.query(`SELECT id, workflow_name, workflow_version, execution_mode,
           status, terminal_reason, created_at, finished_at
-        FROM workflow_runs WHERE case_id = ? ORDER BY created_at, id`).all(caseRecord.id);
+        FROM workflow_runs WHERE case_id = $1 ORDER BY created_at, id`, [caseRecord.id]);
       return { status: 200, body: sourcePackDto(caseRecord.id, sources, workflows) };
     }
     const transitionMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/transitions$/);
     if (req.method === 'POST' && transitionMatch) {
       const body = await readBody(req);
-      services.access.requireCase(principal, transitionMatch[1], { write: true });
-      return { status: 200, body: services.cases.transition(
+      await services.access.requireCase(principal, transitionMatch[1], { write: true });
+      return { status: 200, body: await services.cases.transition(
         transitionMatch[1],
         requiredString(body.toStatus, 'toStatus'),
         {
@@ -308,28 +308,28 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     }
     const runMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/analysis-runs$/);
     if (req.method === 'POST' && runMatch) {
-      services.access.requireCase(principal, runMatch[1], { write: true });
-      return createAnalysisRun({ req, database, services, caseId: runMatch[1], body: await readBody(req), config, liveRegistryFactory });
+      await services.access.requireCase(principal, runMatch[1], { write: true });
+      return await createAnalysisRun({ req, database, services, caseId: runMatch[1], body: await readBody(req), config, liveRegistryFactory });
     }
     const auditMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/audit-events$/);
     if (req.method === 'GET' && auditMatch) {
-      const caseRecord = services.access.requireCase(principal, auditMatch[1]);
-      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.auditSummary });
-      return { status: 200, body: auditSummaryDto(services.audit.listForCase(auditMatch[1])) };
+      const caseRecord = await services.access.requireCase(principal, auditMatch[1]);
+      await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.auditSummary });
+      return { status: 200, body: auditSummaryDto(await services.audit.listForCase(auditMatch[1])) };
     }
     const jobMatch = url.pathname.match(/^\/api\/v1\/jobs\/([^/]+)$/);
     if (req.method === 'GET' && jobMatch) {
-      const run = services.access.requireRun(principal, jobMatch[1]);
-      const caseRecord = services.access.requireCase(principal, run.case_id);
-      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.analysisSummary });
-      return { status: 200, body: job(database, jobMatch[1]) };
+      const run = await services.access.requireRun(principal, jobMatch[1]);
+      const caseRecord = await services.access.requireCase(principal, run.case_id);
+      await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.analysisSummary });
+      return { status: 200, body: await job(database, jobMatch[1]) };
     }
     const taskMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)$/);
     if (req.method === 'GET' && taskMatch) {
-      const task = services.access.requireTask(principal, taskMatch[1]);
-      const run = services.access.requireRun(principal, task.workflow_run_id);
-      const caseRecord = services.access.requireCase(principal, run.case_id);
-      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.analysisSummary });
+      const task = await services.access.requireTask(principal, taskMatch[1]);
+      const run = await services.access.requireRun(principal, task.workflow_run_id);
+      const caseRecord = await services.access.requireCase(principal, run.case_id);
+      await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.analysisSummary });
       return { status: 200, body: analysisTaskDto(task) };
     }
     return { status: 404, body: { error: { code: 'ROUTE_NOT_FOUND', message: 'Versioned backend route not found.' } } };

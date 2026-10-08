@@ -1,9 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { openDatabase } from '../src/backend/database/index.js';
+import { createTestDatabase, sql } from './helpers/test-database.js';
 import { createApiServer } from '../src/server/server.js';
 import { createGeminiCoverageRegistryFactory } from '../src/modules/ai-analysis/index.js';
 
@@ -75,13 +72,11 @@ async function start(database) {
 }
 
 test('persistent HTTP workflow executes only model-eligible roles with explicit permission and usage metadata', async t => {
-  const directory = mkdtempSync(join(tmpdir(), 'knowvia-live-analysis-'));
-  const database = openDatabase({ path: join(directory, 'knowvia.sqlite') });
+  const database = await createTestDatabase();
   const app = await start(database);
   t.after(async () => {
     await new Promise(resolve => app.server.close(resolve));
-    database.close();
-    rmSync(directory, { recursive: true, force: true });
+    await database.close();
   });
 
   const identity = await app.call('/api/v1/households', { method: 'POST', token: bootstrapToken, body: { displayName: 'Synthetic live household', owner: { displayName: 'Synthetic owner' } } });
@@ -98,28 +93,25 @@ test('persistent HTTP workflow executes only model-eligible roles with explicit 
     body: { householdId: identity.data.household.id, subjectAdultId: identity.data.owner.id, purpose: 'document_processing', scopes: [{ resourceType: 'document', action: 'collect', dataCategory: 'insurance_document' }] },
   });
   const at = new Date().toISOString();
-  database.prepare(`INSERT INTO document_uploads
+  await sql.run(database, `INSERT INTO document_uploads
     (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
      original_filename, storage_path, content_sha256, mime_type, byte_size, malware_status,
      encryption_status, lifecycle_state, uploaded_at, logical_document_id, source_version)
     VALUES ('document-live', ?, ?, ?, ?, 'policy_schedule', 'synthetic.pdf',
       'protected/document-live', ?, 'application/pdf', 128, 'clean', 'encrypted_local',
-      'active', ?, 'logical-live', '1')`)
-    .run(identity.data.household.id, created.data.id, identity.data.owner.id, documentConsent.data.id, 'a'.repeat(64), at);
-  database.prepare(`INSERT INTO ocr_jobs
+      'active', ?, 'logical-live', '1')`, identity.data.household.id, created.data.id, identity.data.owner.id, documentConsent.data.id, 'a'.repeat(64), at);
+  await sql.run(database, `INSERT INTO ocr_jobs
     (id, document_upload_id, provider, provider_job_ref, status, attempt_count, requested_at,
      completed_at, contract_version, authorization_json, result_json, result_digest, updated_at)
     VALUES ('ocr-live', 'document-live', 'fixture', 'fixture-live', 'succeeded', 1, ?, ?,
-      'knowvia.ocr.v1', '{}', '{}', ?, ?)`)
-    .run(at, at, 'b'.repeat(64), at);
-  database.prepare(`INSERT INTO source_pages
+      'knowvia.ocr.v1', '{}', '{}', ?, ?)`, at, at, 'b'.repeat(64), at);
+  await sql.run(database, `INSERT INTO source_pages
     (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
      extracted_text, extraction_status, confidence_basis_points, created_at,
      output_contract_version, text_sha256, provider_page_ref, provenance_json)
     VALUES ('page-live', 'document-live', 'ocr-live', 1, '1', ?,
       'Synthetic schedule: room rent limit is 5000.', 'extracted', 9000, ?,
-      'knowvia.ocr.v1', ?, 'fixture-page-1', '{}')`)
-    .run('c'.repeat(64), at, 'd'.repeat(64));
+      'knowvia.ocr.v1', ?, 'fixture-page-1', '{}')`, 'c'.repeat(64), at, 'd'.repeat(64));
 
   const denied = await app.call(`/api/v1/cases/${created.data.id}/analysis-runs`, { method: 'POST', token, idempotencyKey: 'live-no-permission', body: { consentGrantId: consent.data.id, executionMode: 'live', modelPermission: false } });
   assert.equal(denied.status, 403);
@@ -139,9 +131,9 @@ test('persistent HTTP workflow executes only model-eligible roles with explicit 
   assert.deepEqual(analysis.data.modelUsage.providers, ['google']);
   assert.deepEqual(analysis.data.modelUsage.models, ['mock-gemini']);
 
-  const persisted = JSON.parse(database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(analysis.data.id).input_json);
+  const persisted = JSON.parse((await sql.get(database, 'SELECT input_json FROM workflow_runs WHERE id = ?', analysis.data.id)).input_json);
   assert.equal(persisted.modelPermission, true);
-  const outputs = database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(analysis.data.id).map(row => ({ taskKind: row.task_kind, output: JSON.parse(row.output_json) }));
+  const outputs = (await sql.all(database, 'SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?', analysis.data.id)).map(row => ({ taskKind: row.task_kind, output: JSON.parse(row.output_json) }));
   const modelOutputs = outputs.filter(item => item.output.producer.execution);
   assert.equal(modelOutputs.length, 5);
   assert.ok(modelOutputs.every(item => item.output.producer.owner === 'model_assist'));
