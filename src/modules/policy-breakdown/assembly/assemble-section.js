@@ -63,12 +63,16 @@ function candidateFromItem(parameter, item, pagesByNumber) {
     ? valueSupportedByQuotes(normalised.value, verification.results.map(result => result.quote))
     : null;
   const official = verification.results.length > 0 && verification.results.every(result => pagesByNumber.get(result.pageNumber)?.official === true);
+  // A quote joined with "..." omits text that could reverse it ("not", "except"); it may support a clause summary
+  // but never a number, date, flag or category.
+  const ellipsisForValue = !['rule', 'text', 'text_list'].includes(parameter.valueType) && verification.results.some(result => result.method === 'ellipsis_segments');
   return {
     item,
     normalised,
     verification,
     valueProblem,
     official,
+    ellipsisForValue,
     citations: verification.results.map(result => ({
       documentId: pagesByNumber.get(result.pageNumber)?.documentId ?? null,
       pageNumber: pagesByNumber.get(result.pageNumber)?.localPageNumber ?? result.pageNumber,
@@ -85,6 +89,7 @@ function candidateState(candidate) {
   if (!candidate.normalised.ok) return ['Unknown', `value_invalid:${candidate.normalised.reason}`];
   if (!candidate.verification.allMatched) return ['Unknown', candidate.citations.length ? 'citation_not_found_in_page_text' : 'no_citation_supplied'];
   if (candidate.valueProblem) return ['Unknown', candidate.valueProblem];
+  if (candidate.ellipsisForValue) return ['Unknown', 'joined_quote_cannot_prove_value'];
   if (candidate.official && SCHEDULE_ONLY_KEYS.has(candidate.item.key)) return ['Unknown', 'policy_specific_value_cited_only_from_official_wording'];
   return ['Proven', candidate.official ? 'citations_verified_in_official_wording' : 'citations_verified'];
 }

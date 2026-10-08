@@ -64,6 +64,10 @@ test('punctuation and line-break noise is tolerated around numbers, but never a 
   const pages = pagesOf(['Hospitalisation means admission for a minimum period of 24 consecutive ‘In-\npatient Care’ hours.\nCo-payment of 1.5% applies.']);
   assert.equal(verifyQuote({ quote: "minimum period of 24 consecutive 'In-patient Care' hours", pageNumber: 1 }, pages).method, 'compact');
   assert.equal(verifyQuote({ quote: 'Co-payment of 15% applies', pageNumber: 1 }, pages).matched, false);
+  // A decoy "15" elsewhere on the page must not let "1.5%" read as "15%".
+  const decoy = pagesOf(['Co-payment of 1.5% applies to every claim. Claims must be filed within 15 days of discharge.']);
+  assert.equal(verifyQuote({ quote: 'Co-payment of 15% applies to every claim', pageNumber: 1 }, decoy).matched, false);
+  assert.equal(verifyQuote({ quote: 'Co-payment of 1.5 % applies to every claim', pageNumber: 1 }, decoy).matched, true);
   assert.equal(verifyQuote({ quote: 'minimum period of 42 consecutive In-patient Care hours', pageNumber: 1 }, pages).matched, false);
 });
 

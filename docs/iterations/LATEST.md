@@ -62,7 +62,7 @@ Add live official sources:
 
 - **Checks:**
   - `npm run check`: architecture (171 files), 456/456 tests, build.
-  - `npm run test:e2e`: API 9/9 and browser 24/24, run before the final citation changes.
+  - `npm run test:e2e`: API 9/9 and browser 24/24, rerun after the final changes.
   - `npm run eval:breakdown`: packs A/B/C 100%, 0 dangerous; found-path 287/287.
 - **Live official sources:**
   - HDFC wording: same SHA as the saved copy, 69 pages.
@@ -72,13 +72,15 @@ Add live official sources:
   - Locator: Pune 635, Bengaluru 436.
 - **Live re-run on the real policy (stored OCR + attached wording):**
   - Model: Gemini 3.5 flash-lite (`thinkingLevel` minimal). Cost $0.84, about ₹70.
-  - Proven went from 94 to **155** (56 schedule + 99 wording), plus 8 member-scoped keys whose variants are Proven.
+  - Proven went from 94 to **154** (56 schedule + 98 wording), plus 8 member-scoped keys whose variants are Proven. Part of the gain comes from citation rules tuned on this same run; 10 values rely on the looser rules, and all 10 were read against their pages.
+  - Hand check of all 25 newly Proven numbers, flags and categories: 1 wrong (`vaccination_covered` = true, cited from an item in the exclusion list). Prompt rule R4a (v4) now forbids that. 2 are correct but cite a weak definition (`modern_treatments_covered`, `mental_illness_covered`).
+  - `compact` first checked numbers anywhere on the page. That could let "1.5%" read as "15%" when another 15 sat on the page. It is fixed to check the numbers inside the matched span only, with a decoy test. Ellipsis-joined quotes can no longer prove a number, date, flag or category.
   - Spot checks match the wording: initial wait 30 days, pre-existing disease 36 months, specified diseases 24 months, pre/post 60/180 days, restore 100%, SI ₹15L plus Secure Benefit ₹15L.
   - Artefacts are in `.local/replay/run3/` (gitignored; contains personal data).
 
 ## Risks and next
 
-1. **Lost keys:** 15 keys Proven in the schedule-only run were not returned with the larger context (for example air ambulance, the non-payable rule, consumables add-on). Consider a schedule-first pass or a gap-fill call for keys missing after wording.
+1. **Regression, fails safe:** with the wording attached, 15 keys Proven in the schedule-only run were not returned. The most important is the critical `ped_waiting_period_months`, now Conflicting because the verifier found nothing. Others include `consumables_cover_addon` (schedule-only), air ambulance and the non-payable rule. Root fix, not yet started: run the extractor and verifier over the household pages and over the wording pages as separate calls, then merge in assembly. The own-pages-first ranking already handles precedence. Estimated extra cost is about $0.14 per policy.
 2. **The HDFC add-on (`HDFHLIA…`)** has not been found. Add-on wordings are listed by name, not UIN. Pass the add-on product name to the navigator, or register the add-on in the registry.
 3. **Unreachable sites:** 13 insurer sites are blocked (403 or TLS) or render their links in JavaScript. They rely on the IRDAI repository (to 2022) or need a registry entry.
 4. **Upkeep:** NL-37 PDF links change each quarter for Bajaj, Tata AIG and IFFCO and need updating. Only HDFC ERGO has a locator.
