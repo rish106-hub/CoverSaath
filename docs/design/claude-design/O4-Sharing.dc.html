@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Onboarding step 4: sharing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&amp;family=Source+Sans+3:wght@400;600;700&amp;display=swap">
+<style>
+body{margin:0}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}}
+a{color:#176F69}a:hover{color:#125A55}
+:focus-visible{outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B !important}
+</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;background:#F3F7F6;font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1A3034;display:flex;flex-direction:column">
+<div style="height:64px;padding:0 12px;display:flex;align-items:center;justify-content:space-between">
+<a href="O3-People.dc.html" aria-label="Back" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:#163F42"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg></a>
+<span style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D;padding-right:8px">Step 4 of 5</span>
+</div>
+<div style="flex:1 1 auto;padding:12px 20px 0;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:32px;line-height:1.15;letter-spacing:-0.01em;color:#163F42">Choose what you share.</h1>
+<p style="margin:0;font-size:17px;line-height:1.5">You decide for your own record. Each adult you added decides for theirs.</p>
+
+<div style="background:#FFFFFF;border:1px solid #CFDCDA;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column">
+<span style="font-size:19px;font-weight:600;color:#163F42;padding-bottom:4px">You</span>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;border-top:1px solid #CFDCDA">
+<label for="o4-cover" style="font-size:17px;font-weight:600">Cover amount</label>
+<select id="o4-cover" style="height:44px;max-width:180px;padding:0 10px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034"><option>Shared with family</option><option>Only me</option><option>Choose people</option></select>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;border-top:1px solid #CFDCDA">
+<label for="o4-policy" style="font-size:17px;font-weight:600">Policy details</label>
+<select id="o4-policy" style="height:44px;max-width:180px;padding:0 10px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034"><option>Shared with family</option><option>Only me</option><option>Choose people</option></select>
+</div>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;border-top:1px solid #CFDCDA">
+<label for="o4-med" style="font-size:17px;font-weight:600;display:flex;align-items:center;gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#55696D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Medical details</label>
+<select id="o4-med" style="height:44px;max-width:180px;padding:0 10px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034"><option>Only me</option><option>Choose people</option></select>
+</div>
+</div>
+
+<div style="background:#FFFFFF;border:1px solid #CFDCDA;border-radius:16px;padding:12px 8px 12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+<div style="display:flex;flex-direction:column;gap:2px">
+<span id="o4-emergency" style="font-size:17px;font-weight:600;color:#163F42">Emergency access, set in advance</span>
+<span style="font-size:17px;line-height:1.45;color:#55696D">One person you choose sees everything if you cannot speak for yourself.</span>
+</div>
+<button type="button" role="switch" onClick="{{ toggle }}" aria-checked="{{ onStr }}" aria-labelledby="o4-emergency" style="flex:0 0 auto;width:60px;height:44px;padding:0;border:0;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer"><span aria-hidden="true" style="{{ trackStyle }}"><span style="{{ knobStyle }}"></span></span></button>
+</div>
+
+<div style="background:transparent;border:1.5px dashed #7B918E;border-radius:16px;padding:12px 16px;display:flex;flex-direction:column;gap:4px">
+<span style="font-size:17px;font-weight:600;color:#163F42">Maa, Papa and your sister decide for themselves</span>
+<span style="font-size:17px;line-height:1.45;color:#55696D">Invites sent. Until they confirm, we suggest: cover amount shared, medical details private.</span>
+</div>
+</div>
+<div style="padding:12px 20px 20px">
+<a href="O5-Upload.dc.html" style="display:flex;align-items:center;justify-content:center;height:56px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600;text-decoration:none">Continue</a>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { on: false }; }
+  renderVals() {
+    var self = this;
+    var on = this.state.on;
+    return {
+      onStr: on ? 'true' : 'false',
+      trackStyle: 'position:relative;display:block;width:52px;height:32px;box-sizing:border-box;border-radius:999px;transition:background-color 180ms ease-out;' + (on ? 'background:#176F69;border:1px solid #176F69;' : 'background:#E6EFEC;border:1.5px solid #55696D;'),
+      knobStyle: 'position:absolute;top:3px;width:24px;height:24px;border-radius:50%;box-shadow:0 1px 3px rgba(22,62,54,0.3);transition:left 240ms cubic-bezier(0.165,0.84,0.44,1);' + (on ? 'left:24px;background:#FFFFFF;' : 'left:3px;background:#55696D;')
+    , toggle: function () { self.setState({ on: !on }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

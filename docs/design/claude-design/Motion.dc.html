@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Knowvia motion</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&amp;family=Source+Sans+3:wght@400;600;700&amp;display=swap">
+<style>
+body{margin:0}
+:focus-visible{outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B !important}
+@keyframes kvIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes kvLine{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes kvDrop{from{opacity:0;transform:scale(0.4)}to{opacity:1;transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}}
+</style>
+</helmet>
+<div style="width:1440px;min-height:1200px;box-sizing:border-box;background:#FFFFFF;font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1A3034;padding:80px 120px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:24px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:56px;line-height:1.05;letter-spacing:-0.015em;color:#163F42">Motion</h1>
+<p style="margin:0;font-size:19px;line-height:1.6;max-width:70ch">One orchestrated moment: the reading sequence in the hero. It plays once, in 2.2 seconds, with one easing curve: cubic-bezier(0.165, 0.84, 0.44, 1). Under reduced motion the final state shows immediately; the static design is the final state.</p>
+</div>
+<button type="button" onClick="{{ replay }}" style="flex:0 0 auto;height:52px;padding:0 28px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;cursor:pointer">Replay the sequence</button>
+</div>
+
+<div style="display:flex;gap:64px;align-items:flex-start">
+<div style="flex:0 0 440px;background:#F3F7F6;border-radius:24px;padding:28px">
+<sc-if value="{{ playing }}" hint-placeholder-val="{{ true }}">
+<div style="position:relative;padding-left:34px;display:flex;flex-direction:column;gap:18px">
+<div aria-hidden="true" class="kv-m" style="position:absolute;left:8px;top:8px;bottom:22px;width:2px;background:#163F42;transform-origin:top;animation:kvLine 1700ms cubic-bezier(0.165,0.84,0.44,1) 200ms both"></div>
+<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 300ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600">Known</span><span style="font-size:17px">Your base cover is ₹8,00,000</span></div>
+<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 520ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600">Known</span><span style="font-size:17px">The top-up pays only after ₹10,00,000</span></div>
+<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 740ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600">Known</span><span style="font-size:17px">A bill between ₹8 and ₹10 lakh is yours to pay</span></div>
+<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1050ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#FBF1DD;color:#7A5207;border:1.5px dashed #7A5207;box-sizing:border-box;font-size:15px;font-weight:600">Not confirmed</span><span style="font-size:17px">Room-rent limit in your base policy</span></div>
+<div class="kv-m" style="position:relative;display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1500ms both"><span aria-hidden="true" class="kv-m" style="position:absolute;left:-34px;top:4px;width:16px;height:16px;border-radius:50%;background:#E0A02B;box-shadow:0 0 0 4px #F3F7F6;animation:kvDrop 400ms cubic-bezier(0.165,0.84,0.44,1) 1800ms both"></span><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#163F42;color:#FFFFFF;font-size:15px;font-weight:600">Next</span><span style="font-size:17px;font-weight:600;color:#163F42">Before you pay ₹9,400, ask the seller about the ₹2,00,000 gap.</span></div>
+</div>
+</sc-if>
+</div>
+
+<div style="flex:1 1 auto;display:flex;flex-direction:column;gap:14px">
+<h2 style="margin:0 0 6px;font-size:22px;font-weight:600;color:#163F42">Timeline, 0 to 2200ms</h2>
+<sc-for list="{{ tracks }}" as="t" hint-placeholder-count="8">
+<div style="display:flex;align-items:center;gap:16px">
+<span style="flex:0 0 220px;font-size:15px;line-height:1.3">{{ t.label }}</span>
+<div style="flex:1 1 auto;position:relative;height:20px;background:#F3F7F6;border-radius:4px">
+<span style="{{ t.barStyle }}"></span>
+</div>
+<span style="flex:0 0 110px;font-size:14px;color:#55696D;font-variant-numeric:tabular-nums">{{ t.timing }}</span>
+</div>
+</sc-for>
+<div style="display:flex;gap:16px;margin-left:236px;margin-right:126px;justify-content:space-between;font-size:14px;color:#55696D;font-variant-numeric:tabular-nums"><span>0</span><span>550</span><span>1100</span><span>1650</span><span>2200ms</span></div>
+</div>
+</div>
+
+<section style="display:flex;flex-direction:column;gap:16px">
+<h2 style="margin:0;font-size:22px;font-weight:600;color:#163F42">Every motion on the page</h2>
+<table style="width:100%;border-collapse:collapse;font-size:17px;line-height:1.5">
+<thead><tr style="text-align:left;border-bottom:1px solid #CFDCDA"><th scope="col" style="padding:10px 16px 10px 0;font-size:15px;color:#55696D;font-weight:600">Motion</th><th scope="col" style="padding:10px 16px;font-size:15px;color:#55696D;font-weight:600">Trigger</th><th scope="col" style="padding:10px 16px;font-size:15px;color:#55696D;font-weight:600">Timing</th><th scope="col" style="padding:10px 0 10px 16px;font-size:15px;color:#55696D;font-weight:600">Why it exists</th></tr></thead>
+<tbody>
+<tr style="border-bottom:1px solid #CFDCDA"><td style="padding:12px 16px 12px 0;font-weight:600">M1 Reading sequence</td><td style="padding:12px 16px">Page load, once</td><td style="padding:12px 16px">2200ms total</td><td style="padding:12px 0 12px 16px">Shows the product's real job in one glance</td></tr>
+<tr style="border-bottom:1px solid #CFDCDA"><td style="padding:12px 16px 12px 0;font-weight:600">M2 Button</td><td style="padding:12px 16px">Hover, press</td><td style="padding:12px 16px">180ms, 120ms</td><td style="padding:12px 0 12px 16px">Confirms the control heard you</td></tr>
+<tr style="border-bottom:1px solid #CFDCDA"><td style="padding:12px 16px 12px 0;font-weight:600">M3 Question</td><td style="padding:12px 16px">Open, close</td><td style="padding:12px 16px">240ms</td><td style="padding:12px 0 12px 16px">Shows where the answer came from</td></tr>
+<tr style="border-bottom:1px solid #CFDCDA"><td style="padding:12px 16px 12px 0;font-weight:600">M4 Permission demo</td><td style="padding:12px 16px">Choosing a viewer</td><td style="padding:12px 16px">180ms cross-fade</td><td style="padding:12px 0 12px 16px">Makes the difference between viewers visible</td></tr>
+<tr style="border-bottom:1px solid #CFDCDA"><td style="padding:12px 16px 12px 0;font-weight:600">M5 Form</td><td style="padding:12px 16px">Submit</td><td style="padding:12px 16px">Loading line, then 420ms settle</td><td style="padding:12px 0 12px 16px">Honest progress, then a clear result</td></tr>
+<tr><td style="padding:12px 16px 12px 0;font-weight:600">M6 Onboarding reading</td><td style="padding:12px 16px">Each item found</td><td style="padding:12px 16px">420ms settle per item</td><td style="padding:12px 0 12px 16px">Real progress instead of a fake percentage</td></tr>
+</tbody>
+</table>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Never: scroll reveals, parallax, smooth-scroll libraries, marquees, counters, carousels, autoplay video, scale above 1.02, bounce or overshoot.</p>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { playing: true }; }
+  renderVals() {
+    var self = this;
+    var total = 2200;
+    var rows = [
+      ['Route line draws', 200, 1700, '#163F42'],
+      ['Known 1 settles', 300, 420, '#176F69'],
+      ['Known 2 settles', 520, 420, '#176F69'],
+      ['Known 3 (calculated)', 740, 420, '#176F69'],
+      ['Sources fade in', 420, 740, '#7B918E'],
+      ['Not confirmed appears', 1050, 420, '#7A5207'],
+      ['Next step settles', 1500, 420, '#163F42'],
+      ['Gold marker lands', 1800, 400, '#E0A02B']
+    ];
+    var tracks = rows.map(function (r) {
+      var left = (r[1] / total) * 100;
+      var width = Math.min((r[2] / total) * 100, 100 - left);
+      return {
+        label: r[0],
+        timing: r[1] + ' + ' + r[2] + 'ms',
+        barStyle: 'position:absolute;top:4px;height:12px;border-radius:3px;background:' + r[3] + ';left:' + left.toFixed(2) + '%;width:' + width.toFixed(2) + '%'
+      };
+    });
+    return {
+      playing: this.state.playing,
+      tracks: tracks,
+      replay: function () {
+        self.setState({ playing: false });
+        setTimeout(function () { self.setState({ playing: true }); }, 60);
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

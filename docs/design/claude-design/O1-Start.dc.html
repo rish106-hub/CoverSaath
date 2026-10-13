@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Onboarding step 1: start</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&amp;family=Source+Sans+3:wght@400;600;700&amp;display=swap">
+<style>
+body{margin:0}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}}
+a{color:#176F69}a:hover{color:#125A55}
+:focus-visible{outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B !important}
+</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;background:#F3F7F6;font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1A3034;display:flex;flex-direction:column">
+<div style="height:64px;padding:0 20px;display:flex;align-items:center;justify-content:space-between">
+<div style="display:flex;align-items:center;gap:8px;color:#163F42">
+<svg width="28" height="28" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" rx="144" fill="#163F42"></rect><path d="M258 194v412M265 404l274 210" fill="none" stroke="#F3F7F6" stroke-width="58" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="58" stroke-linecap="round"></path><path d="M557 150l46 46-46 46-46-46z" fill="#E0A02B"></path></svg>
+<span style="font-size:19px;font-weight:600">Knowvia</span>
+</div>
+<span style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Step 1 of 5</span>
+</div>
+<div style="flex:1 1 auto;padding:32px 20px 0;display:flex;flex-direction:column;gap:16px">
+<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:32px;line-height:1.15;letter-spacing:-0.01em;color:#163F42">Start with your own cover.</h1>
+<p style="margin:0;font-size:17px;line-height:1.6">Use your email or phone. We will send a one-time code, so there is no password to remember.</p>
+<div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+<label for="o1-id" style="font-size:15px;font-weight:600;letter-spacing:0.01em">Email or phone</label>
+<input id="o1-id" type="text" autocomplete="username" value="you@example.in" style="height:56px;box-sizing:border-box;padding:0 16px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034">
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">If you use a phone number, enter the 10 digits without the country code.</p>
+</div>
+</div>
+<div style="padding:20px;display:flex;flex-direction:column;gap:12px">
+<a href="O2-Event.dc.html" style="display:flex;align-items:center;justify-content:center;height:56px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600;text-decoration:none">Send code</a>
+<p style="margin:0;text-align:center;font-size:17px;line-height:1.5;color:#55696D">By continuing you agree to the <a href="#terms">terms</a> and <a href="#privacy">privacy notice</a>.</p>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

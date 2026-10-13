@@ -1,0 +1,15 @@
+{
+  "name": "Knowvia design import",
+  "id": "knowvia-design-import",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": [
+    "figma"
+  ],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": [
+      "none"
+    ]
+  }
+}
