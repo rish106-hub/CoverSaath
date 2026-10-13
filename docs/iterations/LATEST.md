@@ -26,4 +26,8 @@ and 18 Low; every High is fixed in the design, and the resolution table is in 08
 optional "Planned treatment" field and all [LEGAL REVIEW] text; a rendered check of the hero headline break and the
 `aria-disabled` behaviour; name clearance; real photography (placeholders P1 to P6).
 
+**Landing rounds 2 and 3 (versions 22 to 24).** Iterated on user feedback; see docs/design/09-landing-v2.md. Round 3:
+horizontal, user-scrollable industry statistics with auto-advance, a continuous clause band, a complete FAQ, typographic
+source marks instead of government emblems (State Emblem Act), a pop-out "With Knowvia" card, and the partners email removed.
+
 **Next action.** The user reviews the canvas and comments on it; then implementation planning in the landing-page repo.
