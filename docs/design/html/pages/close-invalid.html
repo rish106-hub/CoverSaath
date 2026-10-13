@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en"><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
+<title>Knowvia: Closing form state: invalid email</title>
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&amp;family=Source+Sans+3:wght@400;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#F3F7F6}
+a{color:#176F69}a:hover{color:#125A55}
+:focus-visible{outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B !important}
+.kv-skip{position:absolute;left:-9999px;top:0}
+.kv-skip:focus{left:16px;top:16px;z-index:40;background:#FFFFFF;color:#163F42;padding:12px 16px;border-radius:10px;font-weight:600}
+.kv-nav{position:sticky;top:0;z-index:30;background:rgba(243,247,246,0.92);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+.kv-nav-link{position:relative;color:#1A3034;text-decoration:none;padding:6px 0}
+.kv-nav-link::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:2px;background:#163F42;transform:scaleX(0);transform-origin:left;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1)}
+.kv-nav-link:hover{color:#163F42}.kv-nav-link:hover::after{transform:scaleX(1)}
+.kv-btn{transition:background-color 180ms ease-out,transform 180ms ease-out,box-shadow 180ms ease-out}
+.kv-btn:hover{background:#125A55 !important;transform:translateY(-1px);box-shadow:0 10px 24px rgba(18,90,85,0.24)}
+.kv-btn:active{transform:translateY(1px);box-shadow:none}
+.kv-out{transition:background-color 180ms ease-out}
+.kv-out:hover{background:#E3F0EE !important}
+.kv-light{transition:background-color 180ms ease-out,transform 180ms ease-out,box-shadow 180ms ease-out}
+.kv-light:hover{background:#E3F0EE !important;transform:translateY(-1px);box-shadow:0 10px 24px rgba(0,0,0,0.22)}
+.kv-light-link:hover{color:#C8E6A0 !important}
+.kv-chip-opt{transition:background-color 180ms ease-out,border-color 180ms ease-out}
+.kv-chip-opt:hover{border-color:#176F69 !important}
+.kv-foot-link{position:relative;color:#C9DDD9;text-decoration:none;align-self:flex-start}
+.kv-foot-link::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:1px;background:#FFFFFF;transform:scaleX(0);transform-origin:left;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1)}
+.kv-foot-link:hover{color:#FFFFFF}.kv-foot-link:hover::after{transform:scaleX(1)}
+.kv-tile{transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),box-shadow 240ms ease-out}
+.kv-tile:hover{transform:translateY(-4px);box-shadow:0 18px 50px rgba(22,62,54,0.12)}
+.kv-march{background-image:linear-gradient(90deg,#7A5207 50%,transparent 0),linear-gradient(90deg,#7A5207 50%,transparent 0),linear-gradient(0deg,#7A5207 50%,transparent 0),linear-gradient(0deg,#7A5207 50%,transparent 0);background-repeat:repeat-x,repeat-x,repeat-y,repeat-y;background-size:14px 2px,14px 2px,2px 14px,2px 14px;background-position:0 0,0 100%,0 0,100% 0}
+.kv-march:hover{animation:kvMarch 900ms linear infinite}
+.kv-marquee{display:flex;gap:0;width:max-content;animation:kvScroll 26s linear infinite;will-change:transform}
+.kv-hscroll{scrollbar-width:none}.kv-hscroll::-webkit-scrollbar{display:none}
+.kv-src{display:block;transition:transform 180ms ease-out,box-shadow 180ms ease-out}
+.kv-src:hover{transform:translateY(-2px);box-shadow:0 0 0 2px #C8E6A0}
+.kv-overhang{margin-bottom:-64px}
+.kv-strike{background-image:linear-gradient(#2E6B4A,#2E6B4A);background-repeat:no-repeat;background-position:0 58%;background-size:100% 0.07em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.kv-refuse{transition:padding-left 300ms cubic-bezier(0.165,0.84,0.44,1)}
+.kv-refuse:hover{padding-left:12px}
+.kv-refuse:hover .kv-strike-text{color:#163F42}
+.kv-pulse{position:relative}
+.kv-pulse::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid #176F69;animation:kvPulse 2.4s ease-out infinite}
+@keyframes kvIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes kvFade{from{opacity:0}to{opacity:1}}
+@keyframes kvLine{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes kvDrop{from{opacity:0;transform:scale(0.4)}to{opacity:1;transform:scale(1)}}
+@keyframes kvLoad{to{background-position:-200% 0}}
+@keyframes kvPage{from{opacity:0;transform:translate(24px,16px) rotate(0deg)}to{opacity:1;transform:rotate(3deg)}}
+@keyframes kvHighlight{from{background-size:0% 100%}to{background-size:100% 100%}}
+@keyframes kvScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes kvMarch{to{background-position:14px 0,-14px 100%,0 -14px,100% 14px}}
+@keyframes kvPulse{from{opacity:0.8;transform:scale(0.6)}to{opacity:0;transform:scale(1.8)}}
+@keyframes kvGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes kvSlideL{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
+@keyframes kvSlideR{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+@keyframes kvRedact{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes kvUnlock{0%{transform:none}60%{transform:translateY(-4px) rotate(-28deg)}100%{transform:translateY(-3px) rotate(-24deg)}}
+@keyframes kvReveal{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes kvShake{0%,100%{transform:none}25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
+@keyframes kvStrike{from{background-size:0% 0.07em}to{background-size:100% 0.07em}}
+@keyframes kvMark{from{background-size:0% 0.26em}to{background-size:100% 0.26em}}
+@keyframes kvPop{from{opacity:0;transform:scale(0.6)}to{opacity:1;transform:scale(1)}}
+@keyframes kvRise{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
+@supports (animation-timeline: view()){
+.kv-strike{animation:kvStrike linear both;animation-timeline:view();animation-range:entry 30% cover 45%}
+.kv-grow{transform-origin:left;animation:kvGrow linear both;animation-timeline:view();animation-range:entry 10% cover 35%}
+.kv-rise{animation:kvRise linear both;animation-timeline:view();animation-range:entry 0% entry 60%}
+}
+@supports (animation-timeline: scroll()){
+.kv-nav{animation:kvNavSolid linear both;animation-timeline:scroll(root);animation-range:0 160px}
+@keyframes kvNavSolid{from{background:rgba(243,247,246,0.6);box-shadow:none}to{background:rgba(255,255,255,0.9);box-shadow:0 1px 0 #CFDCDA,0 12px 30px rgba(22,62,54,0.08)}}
+}
+.kv-mobile{display:none}
+@media (max-width:760px){.kv-desktop{display:none !important}.kv-mobile{display:block}.kv-overhang{margin-bottom:0}.kv-hero-btn{flex:1 1 100% !important;height:56px !important}.kv-hero-art{min-height:600px !important}.kv-win{top:0 !important;margin-top:12px}.kv-srclogo{height:32px !important}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}.kv-marquee{flex-wrap:wrap;width:auto}.kv-dup{display:none !important}}
+</style>
+</head>
+<body>
+<x-dc>
+
+<div style="font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1A3034;background:#F3F7F6;-webkit-font-smoothing:antialiased">
+
+<a class="kv-skip" href="#main">Skip to main content</a>
+
+<!-- 0. Nav: sticky, frosts on scroll -->
+<header class="kv-nav" style="border-bottom:1px solid rgba(207,220,218,0.7);padding:0 clamp(20px,5vw,80px)">
+<nav aria-label="Main" style="max-width:1200px;margin:0 auto;height:72px;display:flex;align-items:center;justify-content:space-between;gap:24px">
+<div style="display:flex;align-items:center;gap:16px">
+<a href="#top" aria-label="Knowvia home" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:#163F42">
+<svg width="34" height="34" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" rx="144" fill="#163F42"></rect><path d="M258 194v412M265 404l274 210" fill="none" stroke="#F3F7F6" stroke-width="58" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="58" stroke-linecap="round"></path><path d="M557 150l46 46-46 46-46-46z" fill="#E0A02B"></path></svg>
+<span style="font-size:22px;font-weight:600;letter-spacing:-0.01em">Knowvia</span>
+</a>
+</div>
+<div class="kv-desktop" style="display:flex;align-items:center;gap:32px;font-size:16px;font-weight:600">
+<a class="kv-nav-link" href="#how">How it works</a>
+<a class="kv-nav-link" href="#privacy">Privacy</a>
+<a class="kv-nav-link" href="#partners">For partners</a>
+<a class="kv-nav-link" href="#questions">Questions</a>
+</div>
+<a class="kv-btn kv-desktop" href="#early-list" style="display:inline-flex;align-items:center;height:44px;padding:0 22px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:16px;font-weight:600;text-decoration:none;white-space:nowrap">Join the early list</a>
+<div class="kv-mobile">
+<button type="button" aria-expanded="false" aria-controls="mobile-menu" style="display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF;color:#163F42;font:inherit;font-size:16px;font-weight:600;cursor:pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>Menu</button>
+</div>
+</nav>
+
+</header>
+
+<main id="main">
+
+<!-- 1. Hero -->
+<section id="top" style="position:relative;overflow:hidden;padding:clamp(40px,6vw,88px) clamp(20px,5vw,80px) clamp(80px,9vw,128px);background:radial-gradient(1200px 600px at 85% 10%,#E3F0EE 0%,rgba(227,240,238,0) 60%),#F3F7F6">
+<svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;right:-220px;top:-160px;width:900px;height:900px;opacity:0.06;pointer-events:none"><path d="M258 194v412M265 404l274 210M265 404l274-210" fill="none" stroke="#163F42" stroke-width="40" stroke-linecap="round"></path><circle cx="400" cy="400" r="290" fill="none" stroke="#163F42" stroke-width="4"></circle><circle cx="400" cy="400" r="240" fill="none" stroke="#163F42" stroke-width="4"></circle><circle cx="400" cy="400" r="190" fill="none" stroke="#163F42" stroke-width="4"></circle></svg>
+<div style="position:relative;max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:clamp(48px,5vw,64px);align-items:center">
+
+<div style="flex:1 1 500px;min-width:0;display:flex;flex-direction:column;gap:24px;animation:kvIn 600ms cubic-bezier(0.165,0.84,0.44,1) both">
+<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(44px,5.4vw,78px);line-height:1.02;letter-spacing:-0.02em;color:#163F42;max-width:13ch"><span style="background-image:linear-gradient(#C8E6A0,#C8E6A0);background-repeat:no-repeat;background-position:0 86%;background-size:100% 0.26em;animation:kvMark 800ms cubic-bezier(0.165,0.84,0.44,1) 500ms both">Health insurance</span>, read before the hospital does.</h1>
+<p style="margin:0;font-size:clamp(19px,1.5vw,22px);line-height:1.5;max-width:46ch;color:#1A3034">Knowvia reads every health policy in your family: employer, personal and parents'. See what is covered, what is unclear, and what to do next.</p>
+<ul aria-label="Health policies Knowvia reads" style="list-style:none;margin:4px 0 0;padding:0;display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px">
+<li style="display:flex;align-items:center;height:40px;padding:0 16px;border-radius:12px 12px 4px 4px;background:#E3F0EE;border-bottom:3px solid #163F42;font-size:15px;font-weight:600;color:#163F42;transform:translateY(0);animation:kvIn 500ms cubic-bezier(0.165,0.84,0.44,1) 700ms both">Employer group cover</li>
+<li style="display:flex;align-items:center;height:40px;padding:0 16px;border-radius:12px 12px 4px 4px;background:#DDF0DC;border-bottom:3px solid #2E6B4A;font-size:15px;font-weight:600;color:#0F4A3A;animation:kvIn 500ms cubic-bezier(0.165,0.84,0.44,1) 800ms both">Family floater</li>
+<li style="display:flex;align-items:center;height:40px;padding:0 16px;border-radius:12px 12px 4px 4px;background:#CDEBE5;border-bottom:3px solid #163F42;font-size:15px;font-weight:600;color:#163F42;animation:kvIn 500ms cubic-bezier(0.165,0.84,0.44,1) 900ms both">Parents' policy</li>
+<li style="display:flex;align-items:center;height:40px;padding:0 16px;border-radius:12px 12px 4px 4px;background:#FBF1DD;border-bottom:3px solid #7A5207;font-size:15px;font-weight:600;color:#7A5207;animation:kvIn 500ms cubic-bezier(0.165,0.84,0.44,1) 1000ms both">Super top-up</li>
+</ul>
+
+<div id="hero-form" style="margin-top:8px;max-width:560px">
+
+<form novalidate="novalidate" style="display:flex;flex-direction:column;gap:8px">
+<label for="hero-email" style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#1A3034">Email</label>
+<div style="display:flex;flex-wrap:wrap;gap:12px">
+<input id="hero-email" name="email" type="email" autocomplete="email" aria-invalid="false" aria-describedby="hero-error hero-help" style="flex:1 1 260px;min-width:0;height:56px;box-sizing:border-box;padding:0 18px;border-radius:12px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034;border:1px solid #7B918E;">
+<button class="kv-btn kv-hero-btn" type="submit" aria-disabled="false" style="flex:0 0 auto;height:56px;padding:0 30px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;letter-spacing:0.005em;white-space:nowrap;cursor:pointer">Join the early list</button>
+</div>
+
+<p id="hero-error" role="alert" style="margin:0;color:#A74335;font-size:17px;line-height:1.45;font-weight:600"></p>
+<p id="hero-help" style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D">Knowvia is not open yet. We will email you the day it is.</p>
+</form>
+
+
+<div style="margin-top:28px;display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px">
+<span style="font-size:15px;font-weight:600;color:#55696D">Supported by</span>
+<img src="../assets/lightspeed.png" alt="Lightspeed" style="height:26px;width:auto;display:block">
+<span aria-hidden="true" style="width:1px;height:28px;background:#CFDCDA"></span>
+<img src="../assets/insurance-samadhan.png" alt="Insurance Samadhan" style="height:32px;width:auto;display:block">
+</div>
+</div>
+</div>
+
+<!-- Hero art: the quote page being read -->
+<div class="kv-hero-art kv-overhang" role="group" aria-label="Example: Knowvia reading a health top-up quote" style="flex:1 1 480px;min-width:min(100%,330px);position:relative;min-height:600px">
+
+<div aria-hidden="true" style="position:absolute;right:0;top:0;width:min(78%,380px);background:#FFFFFF;border-radius:18px;padding:26px 26px 30px;box-shadow:0 30px 60px rgba(22,62,54,0.14);transform:rotate(3deg);animation:kvPage 700ms cubic-bezier(0.165,0.84,0.44,1) 100ms both;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:13px;font-weight:700;letter-spacing:0.02em;color:#55696D">SUPER TOP-UP QUOTE</span><span style="font-size:13px;color:#55696D">Page 1 of 6</span></div>
+<span style="display:block;height:10px;width:70%;border-radius:4px;background:#E6EFEC"></span>
+<div style="display:flex;justify-content:space-between;font-size:16px;padding:8px 0;border-bottom:1px solid #E6EFEC"><span style="color:#55696D">Sum insured</span><span style="font-weight:600">₹20,00,000</span></div>
+<div style="display:flex;justify-content:space-between;font-size:16px;padding:8px 6px;margin:0 -6px;border-radius:6px;background-image:linear-gradient(#F6D38A,#F6D38A);background-repeat:no-repeat;background-size:100% 100%;animation:kvHighlight 700ms cubic-bezier(0.165,0.84,0.44,1) 900ms both"><span style="color:#1A3034">Deductible</span><span style="font-weight:700;color:#163F42">₹10,00,000</span></div>
+<div style="display:flex;justify-content:space-between;font-size:16px;padding:8px 0;border-bottom:1px solid #E6EFEC"><span style="color:#55696D">Annual premium</span><span style="font-weight:600">₹9,400</span></div>
+<span style="display:block;height:8px;width:92%;border-radius:4px;background:#E6EFEC"></span>
+<span style="display:block;height:8px;width:84%;border-radius:4px;background:#E6EFEC"></span>
+<span style="display:block;height:8px;width:60%;border-radius:4px;background:#E6EFEC"></span>
+</div>
+
+<div style="position:absolute;left:0;bottom:0;width:min(92%,420px);background:#FFFFFF;border-radius:24px;padding:24px 26px;box-shadow:0 18px 50px rgba(22,62,54,0.16);display:flex;flex-direction:column;gap:16px;animation:kvIn 600ms cubic-bezier(0.165,0.84,0.44,1) 300ms both">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+<span style="display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:6px;background:#E6EFEC;color:#163F42;font-size:14px;font-weight:600">Example</span>
+<span style="font-size:15px;color:#55696D">2 documents read</span>
+</div>
+<p style="margin:0;font-size:20px;font-weight:600;line-height:1.3;color:#163F42">A top-up quote, read before paying</p>
+<div style="position:relative;padding-left:32px;display:flex;flex-direction:column;gap:14px">
+<div aria-hidden="true" style="position:absolute;left:7px;top:8px;bottom:18px;width:2px;background:#163F42;transform-origin:top;animation:kvLine 1500ms cubic-bezier(0.165,0.84,0.44,1) 700ms both"></div>
+<div style="position:relative;display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 800ms both">
+<span aria-hidden="true" style="position:absolute;left:-30px;top:6px;width:12px;height:12px;border-radius:50%;background:#FFFFFF;border:2px solid #163F42;box-sizing:border-box"></span>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:14px;font-weight:600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
+<p style="margin:0;font-size:18px;line-height:1.45">Your base cover is ₹8,00,000</p>
+</div>
+<div style="position:relative;display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1100ms both">
+<span aria-hidden="true" style="position:absolute;left:-30px;top:6px;width:12px;height:12px;border-radius:50%;background:#FFFFFF;border:2px solid #163F42;box-sizing:border-box"></span>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:14px;font-weight:600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
+<p style="margin:0;font-size:18px;line-height:1.45">The top-up pays only after ₹10,00,000</p>
+</div>
+<div style="position:relative;display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1400ms both">
+<span aria-hidden="true" style="position:absolute;left:-30px;top:6px;width:12px;height:12px;border-radius:50%;background:#FFFFFF;border:2px dashed #7A5207;box-sizing:border-box"></span>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:6px;background:#FBF1DD;color:#7A5207;border:1.5px dashed #7A5207;box-sizing:border-box;font-size:14px;font-weight:600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-0.7 0.3-1 0.8-1 1.5v0.4"></path></svg>Not confirmed</span>
+<p style="margin:0;font-size:18px;line-height:1.45">Room-rent limit in your base policy</p>
+</div>
+<div style="position:relative;display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1700ms both">
+<span aria-hidden="true" style="position:absolute;left:-33px;top:4px;width:16px;height:16px;border-radius:50%;background:#E0A02B;box-shadow:0 0 0 4px #FFFFFF;animation:kvDrop 400ms cubic-bezier(0.165,0.84,0.44,1) 2000ms both"></span>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border-radius:6px;background:#163F42;color:#FFFFFF;font-size:14px;font-weight:600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>Next</span>
+<p style="margin:0;font-size:18px;line-height:1.45;font-weight:600;color:#163F42">Before you pay ₹9,400, ask about the ₹2,00,000 gap.</p>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</section>
+
+<!-- 2b. Industry numbers: sourced, moving, counting up -->
+<section id="industry" aria-labelledby="industry-h" style="position:relative;overflow:hidden;background:#0F4A3A;color:#FFFFFF;padding:clamp(72px,9vw,128px) 0">
+<svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;right:-240px;top:-200px;width:820px;height:820px;opacity:0.08"><circle cx="400" cy="400" r="290" fill="none" stroke="#A8DCCB" stroke-width="3"></circle><circle cx="400" cy="400" r="240" fill="none" stroke="#A8DCCB" stroke-width="3"></circle><circle cx="400" cy="400" r="190" fill="none" stroke="#A8DCCB" stroke-width="3"></circle></svg>
+<div style="position:relative;max-width:1200px;margin:0 auto 48px;padding:0 clamp(20px,5vw,80px);display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px 48px">
+<div style="display:flex;flex-direction:column;gap:14px">
+<p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#C8E6A0">Across India, not just in our research</p>
+<h2 id="industry-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(36px,4vw,60px);line-height:1.04;letter-spacing:-0.02em;color:#FFFFFF;max-width:14ch">This keeps happening to families.</h2>
+</div>
+</div>
+<div style="position:relative;max-width:1200px;margin:0 auto 40px;padding:0 clamp(20px,5vw,80px);box-sizing:border-box">
+<div style="background:#FFFFFF;border-radius:20px;padding:18px clamp(18px,2.4vw,32px) 20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 44px rgba(0,0,0,0.18)">
+<p style="margin:0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Where these numbers come from</p>
+<ul aria-label="Data sources" style="list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px 20px"><li><a class="kv-src" href="https://www.moneylife.in/article/health-insurance-claims-worth-rs2603765-crore-rejected-by-insurers-in-fy2324-govt/76282.html" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="../assets/lok-sabha.png" alt="Lok Sabha, Parliament of India" style="display:block;height:44px;width:auto"></a></li><li><a class="kv-src" href="https://www.moneylife.in/article/health-insurance-claims-worth-rs2603765-crore-rejected-by-insurers-in-fy2324-govt/76282.html" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="../assets/ministry-of-finance.png" alt="Ministry of Finance, Government of India" style="display:block;height:44px;width:auto"></a></li><li><a class="kv-src" href="https://www.moneylife.in/article/health-insurance-claims-worth-rs2603765-crore-rejected-by-insurers-in-fy2324-govt/76282.html" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="../assets/irdai.png" alt="Insurance Regulatory and Development Authority of India (IRDAI)" style="display:block;height:36px;width:auto"></a></li><li><a class="kv-src" href="https://www.pib.gov.in/PressReleasePage.aspx?PRID=2265816&amp;lang=1&amp;reg=3" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="../assets/ministry-of-health.png" alt="Ministry of Health and Family Welfare, Government of India" style="display:block;height:40px;width:auto"></a></li><li><a class="kv-src" href="https://www.localcircles.com/a/press/page/health-insurance-claim-survey" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="../assets/localcircles.png" alt="LocalCircles" style="display:block;height:30px;width:auto"></a></li></ul>
+</div>
+</div>
+<div style="position:relative">
+<div id="stats-track" class="kv-hscroll" tabindex="0" role="region" aria-label="Industry numbers. Scroll sideways for more." style="display:flex;gap:24px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-left:clamp(20px,5vw,80px);padding:4px clamp(20px,5vw,80px) 24px;-webkit-overflow-scrolling:touch">
+
+<article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:rgba(255,255,255,0.07);border:1px solid rgba(168,220,203,0.32);">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(76px,8vw,128px);line-height:0.9;letter-spacing:-0.03em;color:#C8E6A0;font-variant-numeric:tabular-nums">44%</p>
+<p style="margin:0;font-size:clamp(18px,1.5vw,21px);line-height:1.45;color:#FFFFFF">of people who claimed on health insurance say it was <strong style="font-weight:700">rejected or only partly paid</strong>, for reasons they found invalid.</p>
+<div role="img" aria-label="Ten people, four highlighted" style="display:flex;gap:8px">
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 0ms both"><circle cx="17" cy="10" r="8" fill="#C8E6A0"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="#C8E6A0"></path></svg>
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 60ms both"><circle cx="17" cy="10" r="8" fill="#C8E6A0"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="#C8E6A0"></path></svg>
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 120ms both"><circle cx="17" cy="10" r="8" fill="#C8E6A0"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="#C8E6A0"></path></svg>
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 180ms both"><circle cx="17" cy="10" r="8" fill="#C8E6A0"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="#C8E6A0"></path></svg>
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 240ms both"><circle cx="17" cy="10" r="8" fill="rgba(168,220,203,0.35)"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="rgba(168,220,203,0.35)"></path></svg>
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 300ms both"><circle cx="17" cy="10" r="8" fill="rgba(168,220,203,0.35)"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="rgba(168,220,203,0.35)"></path></svg>
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 360ms both"><circle cx="17" cy="10" r="8" fill="rgba(168,220,203,0.35)"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="rgba(168,220,203,0.35)"></path></svg>
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 420ms both"><circle cx="17" cy="10" r="8" fill="rgba(168,220,203,0.35)"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="rgba(168,220,203,0.35)"></path></svg>
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 480ms both"><circle cx="17" cy="10" r="8" fill="rgba(168,220,203,0.35)"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="rgba(168,220,203,0.35)"></path></svg>
+
+<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="animation:kvPop 360ms cubic-bezier(0.165,0.84,0.44,1) 540ms both"><circle cx="17" cy="10" r="8" fill="rgba(168,220,203,0.35)"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="rgba(168,220,203,0.35)"></path></svg>
+
+</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;border-radius:16px;padding:14px 18px;box-shadow:0 6px 18px rgba(15,74,58,0.12)"><span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Source</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px"><img src="../assets/localcircles.png" alt="LocalCircles" style="display:block;height:26px;width:auto"></div></div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#A8DCCB">LocalCircles national survey, claims made 2023 to 2025: 15% rejected and 29% partly approved for invalid reasons (18,989 responses). Published 7 March 2026.</p>
+</article>
+<article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#DDF0DC;color:#0F4A3A;">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(52px,5vw,76px);line-height:0.9;letter-spacing:-0.03em;color:#0F4A3A;font-variant-numeric:tabular-nums;white-space:nowrap">₹26,037 cr</p>
+<p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#1A3034">of health insurance claims were rejected or disallowed by insurers in a single year, 2023-24.</p>
+<div role="img" aria-label="Split: ₹15,100 crore disallowed, ₹10,937 crore repudiated" style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;height:16px;border-radius:5px;overflow:hidden"><span class="kv-grow" style="flex:15100 1 0;background:#0F4A3A"></span><span class="kv-grow" style="flex:10937 1 0;background:#2E6B4A;opacity:0.55"></span></div>
+<div style="display:flex;justify-content:space-between;font-size:14px;color:#2E6B4A;font-weight:600"><span>₹15,100 cr disallowed</span><span>₹10,937 cr repudiated</span></div>
+</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;border-radius:16px;padding:14px 18px;box-shadow:0 6px 18px rgba(15,74,58,0.12)"><span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Sources</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px"><img src="../assets/ministry-of-finance.png" alt="Ministry of Finance, Government of India" style="display:block;height:38px;width:auto"><img src="../assets/lok-sabha.png" alt="Lok Sabha, Parliament of India" style="display:block;height:38px;width:auto"><img src="../assets/irdai.png" alt="Insurance Regulatory and Development Authority of India (IRDAI)" style="display:block;height:34px;width:auto"></div></div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#2E6B4A">Minister of State for Finance, reply in the Lok Sabha, using data shared by IRDAI. Reported 7 February 2025.</p>
+</article>
+<article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#CDEBE5;color:#163F42;">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#163F42;font-variant-numeric:tabular-nums">48 hours</p>
+<p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#1A3034">is the longest wait families reported. 5 in 10 claimants waited 6 to 48 hours for approval and discharge. The rule for discharge is 3 hours.</p>
+<div role="img" aria-label="Bar chart: the 3 hour rule against waits of up to 48 hours" style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:12px"><span style="flex:0 0 120px;font-size:15px;font-weight:600">The rule</span><span class="kv-grow" style="display:block;height:14px;width:6.25%;min-width:8px;border-radius:4px;background:#163F42"></span><span style="font-size:15px;font-weight:600">3 h</span></div>
+<div style="display:flex;align-items:center;gap:12px"><span style="flex:0 0 120px;font-size:15px;font-weight:600">What families saw</span><span style="flex:1 1 auto;display:flex;height:14px;border-radius:4px;overflow:hidden"><span class="kv-grow" style="display:block;width:12.5%;background:#7B918E"></span><span class="kv-grow" style="display:block;flex:1 1 auto;background:#1D8A80"></span></span><span style="font-size:15px;font-weight:600">48 h</span></div>
+</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;border-radius:16px;padding:14px 18px;box-shadow:0 6px 18px rgba(15,74,58,0.12)"><span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Sources</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px"><img src="../assets/localcircles.png" alt="LocalCircles" style="display:block;height:26px;width:auto"><img src="../assets/irdai.png" alt="Insurance Regulatory and Development Authority of India (IRDAI)" style="display:block;height:34px;width:auto"></div></div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#163F42">LocalCircles survey, 18,119 responses, 7 March 2026, citing the IRDAI directive: cashless authorisation within 1 hour, discharge within 3 hours.</p>
+</article>
+<article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:rgba(255,255,255,0.07);border:1px solid rgba(168,220,203,0.32);">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#A8DCCB;font-variant-numeric:tabular-nums">₹43 of ₹100</p>
+<p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#FFFFFF">spent on health in India comes straight out of people's own pockets.</p>
+<div role="img" aria-label="Grid of 100 squares, 43 filled" style="display:grid;grid-template-columns:repeat(20,minmax(0,1fr));gap:4px">
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:#C8E6A0"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+<span style="display:block;aspect-ratio:1/1;border-radius:3px;background:rgba(168,220,203,0.22)"></span>
+
+</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;border-radius:16px;padding:14px 18px;box-shadow:0 6px 18px rgba(15,74,58,0.12)"><span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Source</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px"><img src="../assets/ministry-of-health.png" alt="Ministry of Health and Family Welfare, Government of India" style="display:block;height:38px;width:auto"></div></div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#A8DCCB">National Health Accounts 2022-23, Ministry of Health and Family Welfare: out-of-pocket spending was 43.4% of total health expenditure.</p>
+</article>
+<div aria-hidden="true" style="flex:0 0 1px"></div>
+</div>
+<div style="max-width:1200px;margin:8px auto 0;padding:0 clamp(20px,5vw,80px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+<div aria-hidden="true" style="flex:1 1 auto;max-width:320px;height:3px;border-radius:3px;background:rgba(168,220,203,0.25);overflow:hidden"><span style="display:block;height:100%;border-radius:3px;background:#C8E6A0;width:18%;transition:width 200ms ease-out"></span></div>
+<div style="display:flex;gap:10px">
+<button type="button" aria-label="Previous number" style="width:48px;height:48px;border-radius:50%;border:1px solid rgba(168,220,203,0.6);background:transparent;color:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></button>
+<button type="button" aria-label="Next number" style="width:48px;height:48px;border-radius:50%;border:0;background:#C8E6A0;color:#0F4A3A;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button>
+</div>
+</div>
+</div>
+<p style="position:relative;max-width:1200px;margin:48px auto 0;padding:0 clamp(20px,5vw,80px);box-sizing:border-box;font-size:clamp(19px,1.6vw,23px);line-height:1.5;color:#FFFFFF">Knowvia cannot overrule an insurer. <strong style="font-weight:700;color:#C8E6A0">It changes the part you control:</strong> knowing your cover, and its rules, before the desk does.</p>
+</section>
+
+<!-- 3. Category band: health insurance terms -->
+<section aria-labelledby="terms-h" style="background:#DDF0DC;padding:clamp(48px,6vw,72px) 0;overflow:hidden">
+<div style="max-width:1200px;margin:0 auto clamp(24px,3vw,36px);padding:0 clamp(20px,5vw,80px);display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px 48px">
+<h2 id="terms-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(30px,3vw,42px);line-height:1.12;letter-spacing:-0.01em;color:#0F4A3A;max-width:18ch">Every clause that decides your bill.</h2>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:44ch;color:#1A3034">Built only for health cover. We explain each of these in plain words, with the page it sits on.</p>
+</div>
+<div class="kv-marquee-wrap" style="overflow:hidden">
+<ul class="kv-marquee" style="list-style:none;margin:0;padding:0">
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Room rent limit</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Co-pay</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Waiting period</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Sub-limit</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Deductible</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Network hospital</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Pre-existing disease</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Cashless claim</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Portability</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Restoration benefit</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">No-claim bonus</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="" aria-hidden="false" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Day-care procedure</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Room rent limit</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Co-pay</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Waiting period</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Sub-limit</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Deductible</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Network hospital</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Pre-existing disease</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Cashless claim</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Portability</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Restoration benefit</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">No-claim bonus</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+<li class="kv-dup" aria-hidden="true" style="display:flex;align-items:center;gap:22px;padding-right:22px;flex:0 0 auto"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(26px,2.6vw,38px);line-height:1.2;color:#0F4A3A;white-space:nowrap">Day-care procedure</span><svg width="12" height="12" viewBox="0 0 800 800" aria-hidden="true"><path d="M400 80l320 320-320 320-320-320z" fill="#2E6B4A"></path></svg></li>
+
+</ul>
+</div>
+</section>
+
+<!-- 4. Contrast -->
+<section aria-labelledby="contrast-h" style="background:#FFFFFF;padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:16px;max-width:720px">
+<h2 id="contrast-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#163F42;max-width:16ch;text-wrap:balance">Stop finding out at the hospital desk.</h2>
+<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5">The same five moments, two ways.</p>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:24px">
+<div class="kv-rise" style="flex:1 1 440px;background:#F3F7F6;border-radius:24px;padding:clamp(24px,3vw,40px);display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
+<p style="margin:0;font-size:22px;font-weight:600;color:#55696D">At the hospital desk</p>
+<span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:32px;color:#55696D">2 a.m.</span>
+</div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid #CFDCDA"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#55696D" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="flex:0 0 auto;margin-top:4px"><path d="M6 6l12 12M18 6L6 18"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D"><span style="font-weight:600">Room rent.</span> You learn the room limit when the bill arrives.</p></div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid #CFDCDA"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#55696D" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="flex:0 0 auto;margin-top:4px"><path d="M6 6l12 12M18 6L6 18"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D"><span style="font-weight:600">Who is covered.</span> You are not sure who is still on the family policy.</p></div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid #CFDCDA"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#55696D" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="flex:0 0 auto;margin-top:4px"><path d="M6 6l12 12M18 6L6 18"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D"><span style="font-weight:600">Cash.</span> You look for an ATM while the admission waits.</p></div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid #CFDCDA"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#55696D" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="flex:0 0 auto;margin-top:4px"><path d="M6 6l12 12M18 6L6 18"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D"><span style="font-weight:600">Leaving a job.</span> You get an end date. Nobody tells you how to keep your cover.</p></div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid #CFDCDA"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#55696D" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="flex:0 0 auto;margin-top:4px"><path d="M6 6l12 12M18 6L6 18"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D"><span style="font-weight:600">Buying more.</span> A relative says the top-up is cheap.</p></div>
+
+</div>
+<div class="kv-rise kv-win" style="flex:1 1 440px;position:relative;top:-20px;background:#0F4A3A;color:#FFFFFF;border-radius:28px;padding:clamp(28px,3.2vw,44px);display:flex;flex-direction:column;gap:6px;box-shadow:0 0 0 1px rgba(200,230,160,0.35),0 34px 80px rgba(15,74,58,0.34),0 10px 24px rgba(15,74,58,0.18)">
+<p style="position:absolute;top:-17px;left:clamp(28px,3.2vw,44px);margin:0;display:inline-flex;align-items:center;gap:10px;height:34px;padding:0 16px 0 12px;border-radius:999px;background:#C8E6A0;color:#0F4A3A;font-size:15px;font-weight:700;letter-spacing:0.01em;box-shadow:0 8px 20px rgba(15,74,58,0.22)"><span aria-hidden="true" style="position:relative;display:inline-block;width:10px;height:10px;border-radius:50%;background:#0F4A3A"><span style="position:absolute;inset:0;border-radius:50%;background:#0F4A3A;animation:kvPulse 1.8s ease-out infinite"></span></span>The better way</p>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 12px">
+<p style="margin:0;font-size:22px;font-weight:600;color:#FFFFFF">With Knowvia</p>
+<span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:32px;color:#C8E6A0">Any calm day</span>
+</div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid rgba(255,255,255,0.16)"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;margin-top:1px;border-radius:50%;background:#C8E6A0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0F4A3A" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#E6F2EE"><span style="font-weight:600;color:#FFFFFF">Room rent.</span> You see the room limit, and its page, before you choose a room.</p></div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid rgba(255,255,255,0.16)"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;margin-top:1px;border-radius:50%;background:#C8E6A0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0F4A3A" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#E6F2EE"><span style="font-weight:600;color:#FFFFFF">Who is covered.</span> Every person has a row: known, not confirmed, or missing.</p></div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid rgba(255,255,255,0.16)"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;margin-top:1px;border-radius:50%;background:#C8E6A0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0F4A3A" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#E6F2EE"><span style="font-weight:600;color:#FFFFFF">Cash.</span> You know how much cash to keep ready, and why.</p></div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid rgba(255,255,255,0.16)"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;margin-top:1px;border-radius:50%;background:#C8E6A0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0F4A3A" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#E6F2EE"><span style="font-weight:600;color:#FFFFFF">Leaving a job.</span> The deadline to keep your cover is already on your page.</p></div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid rgba(255,255,255,0.16)"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;margin-top:1px;border-radius:50%;background:#C8E6A0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0F4A3A" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#E6F2EE"><span style="font-weight:600;color:#FFFFFF">Buying more.</span> You see what the top-up adds, and what it does not.</p></div>
+
+<div style="margin-top:14px;padding-top:24px;border-top:1px solid rgba(200,230,160,0.45);display:flex;flex-direction:column;gap:18px">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(24px,2vw,28px);line-height:1.2;color:#FFFFFF;max-width:24ch">Walk in already knowing your limits, your gaps and your next step.</p>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px">
+<a class="kv-light" href="#early-list" style="display:inline-flex;align-items:center;height:52px;padding:0 26px;border-radius:999px;background:#FFFFFF;color:#176F69;font-size:17px;font-weight:600;text-decoration:none;white-space:nowrap">Join the early list</a>
+<a class="kv-light-link" href="#partners" style="font-size:16px;font-weight:600;color:#FFFFFF;text-underline-offset:4px">Run an HR or insurance platform? Partner with us</a>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- 5. How it works: bento -->
+<section id="how" aria-labelledby="how-h" style="padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px 48px">
+<h2 id="how-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#163F42;max-width:14ch;text-wrap:balance">See three answers for every person.</h2>
+<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;max-width:42ch">When Knowvia opens, add the health policies you already have. It reads them person by person.</p>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:24px">
+<article class="kv-tile kv-rise" style="flex:7 1 520px;background:#FFFFFF;border-radius:24px;padding:clamp(24px,3vw,40px);display:flex;flex-direction:column;gap:20px;border:1px solid #CFDCDA">
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:8px;background:#E3F0EE;color:#163F42;font-size:16px;font-weight:600"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
+<h3 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(28px,2.4vw,36px);line-height:1.12;color:#163F42">What your documents prove, with the page.</h3>
+<ul aria-label="Example known facts" style="list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:10px">
+<li style="display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 18px;border-radius:12px;background:#F3F7F6"><span style="font-size:18px">Sum insured ₹5,00,000</span><span style="flex:0 0 auto;font-size:14px;font-weight:600;color:#163F42;background:#E3F0EE;border-radius:6px;padding:4px 8px">Page 2</span></li>
+<li style="display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 18px;border-radius:12px;background:#F3F7F6"><span style="font-size:18px">Maa is enrolled as a dependant</span><span style="flex:0 0 auto;font-size:14px;font-weight:600;color:#163F42;background:#E3F0EE;border-radius:6px;padding:4px 8px">Page 4</span></li>
+<li style="display:flex;justify-content:space-between;gap:16px;align-items:center;padding:14px 18px;border-radius:12px;background:#F3F7F6"><span style="font-size:18px">Waiting period for cataract: 2 years</span><span style="flex:0 0 auto;font-size:14px;font-weight:600;color:#163F42;background:#E3F0EE;border-radius:6px;padding:4px 8px">Page 11</span></li>
+</ul>
+<p style="margin:0;font-size:15px;color:#55696D">Example values</p>
+</article>
+<div style="flex:5 1 380px;display:flex;flex-direction:column;gap:24px">
+<article class="kv-tile kv-march kv-rise" style="background-color:#FBF1DD;border-radius:24px;padding:clamp(24px,3vw,36px);display:flex;flex-direction:column;gap:14px">
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:8px;background:#FFFFFF;color:#7A5207;border:1.5px dashed #7A5207;box-sizing:border-box;font-size:16px;font-weight:600"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-0.7 0.3-1 0.8-1 1.5v0.4"></path></svg>Not confirmed</span>
+<h3 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(26px,2.2vw,32px);line-height:1.15;color:#163F42">Missing or unclear? We mark it.</h3>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#1A3034"><strong style="font-weight:700">We never guess.</strong> If two documents disagree, both stay visible and we name who can answer.</p>
+</article>
+<article class="kv-tile kv-rise" style="position:relative;overflow:hidden;background:#163F42;color:#FFFFFF;border-radius:24px;padding:clamp(24px,3vw,36px);display:flex;flex-direction:column;gap:14px">
+<svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;right:-90px;bottom:-110px;width:320px;height:320px;opacity:0.18"><path d="M258 194v412M265 404l274 210" fill="none" stroke="#C9DDD9" stroke-width="44" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="44" stroke-linecap="round"></path></svg>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 12px;border-radius:8px;background:#FFFFFF;color:#163F42;font-size:16px;font-weight:600"><span aria-hidden="true" style="width:10px;height:10px;border-radius:50%;background:#E0A02B"></span>Next</span>
+<h3 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(26px,2.2vw,32px);line-height:1.15;color:#FFFFFF">One step, who does it, and by when.</h3>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#C9DDD9">Not a lecture about what you should have done.</p>
+</article>
+</div>
+</div>
+</div>
+</section>
+
+<!-- 6. Quote -->
+<section aria-label="What a family told us" style="background:#E3F0EE;padding:clamp(72px,9vw,120px) clamp(20px,5vw,80px)">
+<figure style="max-width:1000px;margin:0 auto;padding:0;display:flex;flex-direction:column;gap:24px;position:relative">
+<span aria-hidden="true" style="position:absolute;left:-12px;top:-72px;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:220px;line-height:1;color:#163F42;opacity:0.1">“</span>
+<blockquote style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-style:italic;font-weight:400;font-size:clamp(30px,3.6vw,52px);line-height:1.18;letter-spacing:-0.01em;color:#163F42;max-width:24ch">I can't say ‘an app told me.’ I can say ‘it says here, <span style="font-style:normal;background:linear-gradient(transparent 62%,#F6D38A 62%)">page fourteen</span>.’</blockquote>
+<figcaption style="display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline"><span style="font-size: 17px; font-weight: 600; color: rgb(22, 63, 66)">M., 29, Bengaluru</span><span style="font-size: 15px; line-height: 1.45; color: rgb(85, 105, 109)">Recorded conversation, 5 September 2026.&nbsp;</span></figcaption>
+</figure>
+</section>
+
+<!-- 7. Stories: big numbers with their own charts -->
+<section id="stories" aria-labelledby="stories-h" style="background:#FFFFFF;padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px 48px">
+<h2 id="stories-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#163F42;max-width:14ch;text-wrap:balance">Four details hid in plain sight.</h2>
+<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;max-width:40ch">Each one was in a health policy the family already had.</p>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:24px">
+<article class="kv-tile kv-rise" style="flex:7 1 540px;background:#163F42;color:#FFFFFF;border-radius:24px;padding:clamp(28px,3.4vw,48px);display:flex;flex-direction:column;gap:22px">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(64px,8vw,120px);line-height:0.95;letter-spacing:-0.02em;color:#FFFFFF;font-variant-numeric:tabular-nums">₹80,000</p>
+<p style="margin:0;font-size:clamp(18px,1.5vw,21px);line-height:1.5;color:#C9DDD9;max-width:36ch">A ₹1,200 room choice, made with no information, cost one family <strong style="color:#FFFFFF;font-weight:700">₹80,000</strong>.</p>
+<div role="img" aria-label="Bar chart: a ₹1,200 room choice against an ₹80,000 cost" style="display:flex;flex-direction:column;gap:12px;margin-top:8px">
+<div style="display:flex;align-items:center;gap:14px"><span style="flex:0 0 120px;font-size:15px;color:#C9DDD9">Room choice</span><span class="kv-grow" style="display:block;height:14px;width:1.5%;min-width:6px;border-radius:4px;background:#C9DDD9"></span><span style="font-size:15px;font-weight:600">₹1,200</span></div>
+<div style="display:flex;align-items:center;gap:14px"><span style="flex:0 0 120px;font-size:15px;color:#C9DDD9">What it cost</span><span class="kv-grow" style="display:block;height:14px;flex:1 1 auto;border-radius:4px;background:#E0A02B"></span><span style="font-size:15px;font-weight:600">₹80,000</span></div>
+</div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#C9DDD9">A., 26, Gurugram. Recorded conversation, September 2026. [CONSENT RE-CHECK]</p>
+</article>
+
+<article class="kv-tile kv-rise" style="flex:5 1 380px;background:#F3F7F6;border-radius:24px;padding:clamp(28px,3vw,40px);display:flex;flex-direction:column;gap:18px">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(52px,5.6vw,84px);line-height:0.95;letter-spacing:-0.02em;color:#163F42;font-variant-numeric:tabular-nums">₹2,00,000</p>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55">A gap neither policy would pay. She found it before paying ₹9,400 for the top-up.</p>
+<div role="img" aria-label="Cover bar: base pays up to ₹8 lakh, nothing pays from ₹8 to ₹10 lakh, the top-up pays after ₹10 lakh" style="display:flex;flex-direction:column;gap:8px;margin-top:auto">
+<div style="display:flex;height:40px;border-radius:8px;overflow:hidden">
+<span style="flex:8 1 0;background:#E3F0EE;display:flex;align-items:center;padding-left:10px;font-size:14px;font-weight:600;color:#163F42">Base</span>
+<span style="flex:2 1 0;background:repeating-linear-gradient(45deg,#FBF1DD 0 6px,#F3DFB4 6px 12px);border-left:2px dashed #7A5207;border-right:2px dashed #7A5207;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#7A5207">Gap</span>
+<span style="flex:10 1 0;background:#163F42;display:flex;align-items:center;padding-left:10px;font-size:14px;font-weight:600;color:#FFFFFF">Top-up pays</span>
+</div>
+<div style="display:flex;font-size:14px;color:#55696D"><span style="flex:8 1 0">₹0</span><span style="flex:2 1 0">₹8L</span><span style="flex:10 1 0">₹10L</span><span>₹20L</span></div>
+</div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">M., 29, Bengaluru. Recorded conversation, September 2026. [CONSENT RE-CHECK]</p>
+</article>
+
+<article class="kv-tile kv-rise" style="flex:1 1 380px;background:#CDEBE5;border-radius:24px;padding:clamp(28px,3vw,40px);display:flex;flex-direction:column;gap:18px">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(52px,5.6vw,84px);line-height:0.95;letter-spacing:-0.02em;color:#163F42;font-variant-numeric:tabular-nums">7 hours</p>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55">Spent at the hospital finding a brother's employer cover.</p>
+<div role="img" aria-label="Timeline from 2 a.m. to 9 a.m." style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;gap:4px"><span class="kv-grow" style="flex:1 1 0;height:12px;border-radius:3px;background:#163F42"></span><span class="kv-grow" style="flex:1 1 0;height:12px;border-radius:3px;background:#163F42"></span><span class="kv-grow" style="flex:1 1 0;height:12px;border-radius:3px;background:#163F42"></span><span class="kv-grow" style="flex:1 1 0;height:12px;border-radius:3px;background:#163F42"></span><span class="kv-grow" style="flex:1 1 0;height:12px;border-radius:3px;background:#163F42"></span><span class="kv-grow" style="flex:1 1 0;height:12px;border-radius:3px;background:#163F42"></span><span class="kv-grow" style="flex:1 1 0;height:12px;border-radius:3px;background:#163F42"></span></div>
+<div style="display:flex;justify-content:space-between;font-size:14px;color:#55696D"><span>2 a.m.</span><span>9 a.m.</span></div>
+</div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">S., 31, Kolkata. Recorded conversation, September 2026. [CONSENT RE-CHECK]</p>
+</article>
+
+<article class="kv-tile kv-rise" style="flex:1 1 380px;background:#DDF0DC;border-radius:24px;padding:clamp(28px,3vw,40px);display:flex;flex-direction:column;gap:18px">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(52px,5.6vw,84px);line-height:0.95;letter-spacing:-0.02em;color:#0F4A3A;font-variant-numeric:tabular-nums">17 days</p>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55">The window to keep cover after leaving a job. No reminder came. It closed.</p>
+<div role="img" aria-label="Seventeen days, the last one closed" style="display:flex;flex-wrap:wrap;gap:5px">
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.39;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.42;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.45;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.49;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.53;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.56;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.59;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.63;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.67;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.70;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.73;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.77;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.81;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.84;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.88;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#163F42;opacity:0.91;"></span>
+
+<span style="width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:#FBF1DD;border:2px dashed #7A5207;color:#7A5207;box-sizing:border-box;">17</span>
+
+</div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">N., 33, Pune. Recorded conversation, September 2026. [CONSENT RE-CHECK]</p>
+</article>
+
+<article class="kv-tile kv-rise" style="flex:1 1 380px;background:#FBF1DD;border-radius:24px;padding:clamp(28px,3vw,40px);display:flex;flex-direction:column;gap:18px">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(52px,5.6vw,84px);line-height:0.95;letter-spacing:-0.02em;color:#163F42;font-variant-numeric:tabular-nums">7 of 19</p>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55">policy documents had a detail that did not match what the family believed.</p>
+<div role="img" aria-label="Nineteen documents, seven with a mismatch" style="display:flex;flex-wrap:wrap;gap:6px">
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#FFFFFF;border:2px dashed #7A5207;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#FFFFFF;border:2px dashed #7A5207;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#FFFFFF;border:2px dashed #7A5207;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#FFFFFF;border:2px dashed #7A5207;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#FFFFFF;border:2px dashed #7A5207;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#FFFFFF;border:2px dashed #7A5207;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+<span style="width:22px;height:28px;border-radius:4px;box-sizing:border-box;background:#163F42;"></span>
+
+</div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Documents families shared with us during this research.</p>
+</article>
+</div>
+</div>
+</section>
+
+<!-- 8. Household control -->
+<section id="privacy" aria-labelledby="privacy-h" style="position:relative;overflow:hidden;background:#163F42;color:#FFFFFF;padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
+<svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;left:-200px;bottom:-260px;width:760px;height:760px;opacity:0.08"><circle cx="400" cy="400" r="290" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><circle cx="400" cy="400" r="240" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><circle cx="400" cy="400" r="190" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><path d="M258 194v412M265 404l274 210M265 404l274-210" fill="none" stroke="#C9DDD9" stroke-width="30" stroke-linecap="round"></path></svg>
+<div style="position:relative;max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:48px 72px;align-items:center">
+<div style="flex:1 1 420px;display:flex;flex-direction:column;gap:20px">
+<h2 id="privacy-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#FFFFFF;max-width:14ch;text-wrap:balance">Each person decides what family sees.</h2>
+<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;color:#C9DDD9;max-width:44ch">Share the cover amount with your family. Keep medical details to yourself. Change it whenever you like.</p>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#FFFFFF;max-width:44ch">Every adult controls their own record. <strong style="font-weight:700">Medical details are never shared by default.</strong></p>
+</div>
+<div style="flex:1 1 440px;background:#FFFFFF;color:#1A3034;border-radius:24px;padding:clamp(24px,2.6vw,36px);display:flex;flex-direction:column;gap:20px;box-shadow:0 30px 60px rgba(0,0,0,0.25)">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+<span style="display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:6px;background:#E6EFEC;color:#163F42;font-size:15px;font-weight:600">Example</span>
+</div>
+<div role="group" aria-label="Seen by" style="display:flex;padding:4px;background:#E6EFEC;border-radius:12px;gap:4px">
+<button type="button" aria-pressed="false" style="flex:1 1 0;min-height:44px;border:0;border-radius:9px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:transparent;color:#55696D;">You</button>
+<button type="button" aria-pressed="true" style="flex:1 1 0;min-height:44px;border:0;border-radius:9px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;color:#163F42;box-shadow:inset 0 0 0 2px #163F42;">Your brother</button>
+</div>
+
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:12px;animation:kvSlideR 420ms cubic-bezier(0.165,0.84,0.44,1) both">
+<span aria-hidden="true" style="width:40px;height:40px;border-radius:50%;background:#CDEBE5;color:#163F42;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700">Bro</span>
+<div><p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">What your brother sees</p><p style="margin:0;font-size:15px;color:#55696D;font-weight:600">Only what you chose to share.</p></div>
+</div>
+<dl style="margin:0;display:flex;flex-direction:column">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA;animation:kvSlideR 420ms cubic-bezier(0.165,0.84,0.44,1) 80ms both"><dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Cover amount</dt><dd style="margin:0;font-size:18px;line-height:1.5">₹5,00,000 floater</dd></div>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA;animation:kvSlideR 420ms cubic-bezier(0.165,0.84,0.44,1) 160ms both"><dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Policy details</dt><dd style="margin:0;font-size:18px;line-height:1.5">Policy number, TPA, hospital desk contact</dd></div>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;padding:14px 0;animation:kvSlideR 420ms cubic-bezier(0.165,0.84,0.44,1) 240ms both"><dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Medical details</dt><dd style="margin:0;font-size:18px;line-height:1.5;display:flex;align-items:center;gap:10px">
+<span style="position:relative;display:inline-block"><span aria-hidden="true" style="color:#1A3034">Declared conditions</span><span aria-hidden="true" style="position:absolute;left:-4px;right:-4px;top:2px;bottom:2px;border-radius:4px;background:#163F42;transform-origin:left;animation:kvRedact 520ms cubic-bezier(0.165,0.84,0.44,1) 450ms both"></span></span>
+<span style="display:inline-flex;align-items:center;gap:6px;color:#55696D;font-weight:600;animation:kvIn 360ms cubic-bezier(0.165,0.84,0.44,1) 1000ms both"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="animation:kvShake 400ms ease-in-out 1150ms both"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Not shared</span>
+</dd></div>
+</dl>
+</div>
+
+<p style="margin:0;font-size:17px;line-height:1.5;color:#55696D">You can also set emergency access in advance, for a moment you cannot speak for yourself.</p>
+</div>
+</div>
+</section>
+
+<!-- 10. Partners -->
+<section id="partners" aria-labelledby="partners-h" style="background:#E6EFEC;padding:clamp(72px,7vw,96px) clamp(20px,5vw,80px)">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:40px 72px;align-items:flex-start">
+<div style="flex:1 1 460px;display:flex;flex-direction:column;gap:16px">
+<p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#163F42">For HR platforms, insurance platforms and advisers</p>
+<h2 id="partners-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:18ch;text-wrap:balance">Cut “what does my policy cover?” calls.</h2>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:52ch">Knowvia can sit where your customers and employees already meet their health cover. They get a clear view of every policy in their household. You keep your own support relationship.</p>
+<a class="kv-out" href="#ask" style="margin-top:12px;align-self:flex-start;display:inline-flex;align-items:center;height:52px;padding:0 26px;border-radius:999px;border:2px solid #176F69;color:#176F69;font-size:17px;font-weight:600;text-decoration:none;white-space:nowrap">Talk to us about a pilot</a>
+</div>
+<ul style="flex:1 1 400px;list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:16px">
+<li style="display:flex;gap:16px;align-items:flex-start;background:#FFFFFF;border-radius:16px;padding:20px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#163F42" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;margin-top:2px"><rect x="4" y="3" width="16" height="18" rx="1.5"></rect><path d="M9 7h2M13 7h2M9 11h2M13 11h2M10 21v-4h4v4"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6"><span style="font-weight:600;color:#163F42">HR platforms:</span> at joining or a benefits change, with the employee's permission.</p></li>
+<li style="display:flex;gap:16px;align-items:flex-start;background:#FFFFFF;border-radius:16px;padding:20px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#163F42" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;margin-top:2px"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path><path d="M9 13h6M9 17h4"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6"><span style="font-weight:600;color:#163F42">Insurance platforms and advisers:</span> after a purchase or renewal, linked to the issued policy.</p></li>
+<li style="display:flex;gap:16px;align-items:flex-start;background:#FFFFFF;border-radius:16px;padding:20px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#163F42" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;margin-top:2px"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">No data moves without the person's consent, field by field.</p></li>
+</ul>
+</div>
+</section>
+
+<!-- 11. Questions -->
+<section id="questions" aria-labelledby="faq-h" style="padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:32px 72px">
+<div style="flex:1 1 280px;display:flex;flex-direction:column;gap:28px;align-self:flex-start">
+<h2 id="faq-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#163F42;max-width:10ch">Questions families ask us</h2>
+<div id="ask" style="background:#0F4A3A;color:#FFFFFF;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:12px;max-width:340px;scroll-margin-top:96px">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:26px;line-height:1.15">Still have a question?</p>
+<p style="margin:0;font-size:17px;line-height:1.5;color:#DDF0DC">Write to us. A person replies, not a bot.</p>
+<a class="kv-light" href="#contact" style="align-self:flex-start;display:inline-flex;align-items:center;height:44px;padding:0 18px;border-radius:999px;background:#FFFFFF;color:#176F69;font-size:16px;font-weight:700;text-decoration:none">[CONTACT EMAIL]</a>
+</div>
+</div>
+<div style="flex:2 1 560px;display:flex;flex-direction:column;gap:12px">
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#FFFFFF;box-shadow:0 12px 30px rgba(22,62,54,0.08);">
+<h3 style="margin:0"><button type="button" aria-expanded="true" aria-controls="faq-answer-0" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>When can I use it, and what will it cost?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(45deg);background:#163F42;color:#FFFFFF;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-0">
+
+<p style="margin:0;padding:0 24px 24px;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:62ch;animation:kvIn 240ms cubic-bezier(0.165,0.84,0.44,1) both">Knowvia is not open yet, and pricing is not set. Join the early list and you will hear about both first.</p>
+
+</div>
+</div>
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#E6EFEC;">
+<h3 style="margin:0"><button type="button" aria-expanded="false" aria-controls="faq-answer-1" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>Is this only for health insurance?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(0deg);background:#FFFFFF;color:#163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-1">
+
+</div>
+</div>
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#E6EFEC;">
+<h3 style="margin:0"><button type="button" aria-expanded="false" aria-controls="faq-answer-2" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>Is Knowvia an insurance company?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(0deg);background:#FFFFFF;color:#163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-2">
+
+</div>
+</div>
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#E6EFEC;">
+<h3 style="margin:0"><button type="button" aria-expanded="false" aria-controls="faq-answer-3" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>Will you sell me a policy?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(0deg);background:#FFFFFF;color:#163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-3">
+
+</div>
+</div>
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#E6EFEC;">
+<h3 style="margin:0"><button type="button" aria-expanded="false" aria-controls="faq-answer-4" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>Can Knowvia tell me if a claim will be approved?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(0deg);background:#FFFFFF;color:#163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-4">
+
+</div>
+</div>
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#E6EFEC;">
+<h3 style="margin:0"><button type="button" aria-expanded="false" aria-controls="faq-answer-5" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>What should I do in an emergency?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(0deg);background:#FFFFFF;color:#163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-5">
+
+</div>
+</div>
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#E6EFEC;">
+<h3 style="margin:0"><button type="button" aria-expanded="false" aria-controls="faq-answer-6" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>Does it work with my employer's group health policy?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(0deg);background:#FFFFFF;color:#163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-6">
+
+</div>
+</div>
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#E6EFEC;">
+<h3 style="margin:0"><button type="button" aria-expanded="false" aria-controls="faq-answer-7" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>Do I need all my documents to start?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(0deg);background:#FFFFFF;color:#163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-7">
+
+</div>
+</div>
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#E6EFEC;">
+<h3 style="margin:0"><button type="button" aria-expanded="false" aria-controls="faq-answer-8" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>How is my data kept safe?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(0deg);background:#FFFFFF;color:#163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-8">
+
+</div>
+</div>
+
+<div style="border-radius:16px;transition:background-color 240ms ease-out;background:#E6EFEC;">
+<h3 style="margin:0"><button type="button" aria-expanded="false" aria-controls="faq-answer-9" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 24px;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>Who can see my family's information?</span><span aria-hidden="true" style="flex:0 0 auto;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1),background-color 240ms;transform:rotate(0deg);background:#FFFFFF;color:#163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span></button></h3>
+<div id="faq-answer-9">
+
+</div>
+</div>
+
+</div>
+</div>
+</section>
+
+<!-- 11b. What we will not do: manifesto -->
+<section id="promises" aria-labelledby="not-h" style="background:#FFFFFF;padding:clamp(80px,10vw,144px) clamp(20px,5vw,80px)">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:clamp(32px,4vw,56px)">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px 48px">
+<h2 id="not-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(40px,5vw,72px);line-height:1;letter-spacing:-0.02em;color:#163F42;max-width:10ch">What we will not do</h2>
+<p style="margin:0;font-size:clamp(18px,1.46vw,21px);line-height:1.5;max-width:36ch;color:#1A3034">Five lines we will not cross. Hold us to them.</p>
+</div>
+<ul style="list-style:none;margin:0;padding:0;border-bottom:1px solid #CFDCDA">
+
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
+<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Promise a claim</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">Only your insurer decides a claim. We show which clauses apply and what is still open.</p>
+</li>
+
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
+<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Guess</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">A fact we cannot find stays marked Not confirmed until someone who knows confirms it.</p>
+</li>
+
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
+<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Push a policy</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">Sometimes the right answer is to buy nothing yet. We will say so.</p>
+</li>
+
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
+<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Show medical details</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">Not to anyone, unless that person chose to share them.</p>
+</li>
+
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
+<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Replace your insurer</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">We are not your insurer, TPA or hospital desk. We help you ask them better questions.</p>
+</li>
+
+</ul>
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:clamp(26px,2.8vw,40px);line-height:1.2;color:#0F4A3A;max-width:30ch">That leaves the one job that matters: reading your family's health cover with you, before you need it.</p>
+</div>
+</section>
+
+<!-- 12. Closing -->
+<section id="early-list" aria-labelledby="close-h" style="position:relative;overflow:hidden;background:#163F42;color:#FFFFFF;padding:clamp(80px,10vw,144px) clamp(20px,5vw,80px)">
+<svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;right:-180px;top:-120px;width:820px;height:820px;opacity:0.09"><circle cx="400" cy="400" r="290" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><circle cx="400" cy="400" r="240" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><path d="M258 194v412M265 404l274 210" fill="none" stroke="#C9DDD9" stroke-width="34" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="34" stroke-linecap="round"></path></svg>
+<div style="position:relative;max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:48px 72px;align-items:center">
+<div style="flex:1 1 460px;display:flex;flex-direction:column;gap:20px">
+<h2 id="close-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(44px,5.4vw,78px);line-height:1.02;letter-spacing:-0.02em;color:#FFFFFF;max-width:12ch">Know your cover. Before you need it.</h2>
+<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;color:#C9DDD9;max-width:40ch">Built for health insurance, and nothing else. Join the early list and be first in.</p>
+</div>
+
+<div style="flex:1 1 440px;background:#FFFFFF;color:#1A3034;border-radius:24px;padding:clamp(24px,2.8vw,40px);box-shadow:0 30px 60px rgba(0,0,0,0.25)">
+
+<form novalidate="novalidate" style="display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<label for="close-email" style="font-size:15px;font-weight:600;letter-spacing:0.01em">Email</label>
+<input id="close-email" name="email" type="email" autocomplete="email" aria-invalid="true" aria-describedby="close-error close-consent" style="flex:1 1 260px;min-width:0;height:56px;box-sizing:border-box;padding:0 18px;border-radius:12px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034;border:2px solid #A74335;">
+<p id="close-error" role="alert" style="margin:0;color:#A74335;font-size:17px;line-height:1.45;font-weight:600">Enter an email address like name@example.com.</p>
+</div>
+<fieldset aria-describedby="events-purpose" style="margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px">
+<legend style="padding:0;margin-bottom:6px;font-size:15px;font-weight:600;letter-spacing:0.01em">What is coming up for your family? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
+<p id="events-purpose" style="margin:0 0 4px;font-size:17px;line-height:1.5;color:#55696D">We use this only to decide what Knowvia reads first for you. [LEGAL REVIEW: retention and whether to ask this before launch]</p>
+<div style="display:flex;flex-wrap:wrap;gap:10px">
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>A renewal</span></button>
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>Planned treatment</span></button>
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>A job change</span></button>
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>Parents' cover</span></button>
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>Nothing yet, just getting organised</span></button>
+
+</div>
+</fieldset>
+<div style="display:flex;flex-direction:column;gap:10px">
+<button class="kv-btn" type="submit" aria-disabled="false" style="width:100%;height:56px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;letter-spacing:0.005em;cursor:pointer">Join the early list</button>
+
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<p style="margin:0;font-size:18px;line-height:1.5;font-weight:600;color:#163F42">Not an insurer. Not selling your data. One email when we open.</p>
+<p id="close-consent" style="margin:0;font-size:17px;line-height:1.5;color:#55696D">We use your email only to tell you when Knowvia opens. Read the <a href="#privacy-notice">privacy notice</a>.</p>
+</div>
+</form>
+
+
+</div>
+</div>
+</section>
+</main>
+
+<!-- 13. Footer: giant wordmark -->
+<footer style="position:relative;overflow:hidden;background:#0B383B;color:#C9DDD9;padding:clamp(56px,6vw,88px) clamp(20px,5vw,80px) 0">
+<div style="position:relative;max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-wrap:wrap;gap:40px 72px">
+<div style="flex:2 1 300px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:10px;color:#FFFFFF">
+<svg width="34" height="34" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" rx="144" fill="#163F42"></rect><path d="M258 194v412M265 404l274 210" fill="none" stroke="#F3F7F6" stroke-width="58" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="58" stroke-linecap="round"></path><path d="M557 150l46 46-46 46-46-46z" fill="#E0A02B"></path></svg>
+<span style="font-size:22px;font-weight:600">Knowvia</span>
+</div>
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:26px;line-height:1.25;color:#FFFFFF;max-width:16ch">Know your cover. Before you need it.</p>
+<p style="margin:0;font-size:15px;line-height:1.5">Health insurance only. Supported by Lightspeed India and Insurance Samadhan. [CONFIRM WORDING]</p>
+</div>
+<nav aria-label="Knowvia" style="flex:1 1 160px;display:flex;flex-direction:column;gap:12px;font-size:16px">
+<p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#FFFFFF">Knowvia</p>
+<a class="kv-foot-link" href="#how">How it works</a><a class="kv-foot-link" href="#privacy">Privacy</a><a class="kv-foot-link" href="#partners">For partners</a><a class="kv-foot-link" href="#questions">Questions</a>
+</nav>
+<div style="flex:1 1 160px;display:flex;flex-direction:column;gap:12px;font-size:16px">
+<p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#FFFFFF">Contact</p>
+<span>[CONTACT EMAIL]</span>
+</div>
+<nav aria-label="Legal" style="flex:1 1 160px;display:flex;flex-direction:column;gap:12px;font-size:16px">
+<p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#FFFFFF">Legal</p>
+<a class="kv-foot-link" id="privacy-notice" href="#privacy-notice">Privacy notice [LEGAL REVIEW]</a><a class="kv-foot-link" href="#terms">Terms [LEGAL REVIEW]</a>
+<a class="kv-foot-link" href="#top" style="margin-top:12px;display:inline-flex;align-items:center;gap:8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg>Back to top</a>
+</nav>
+</div>
+<div style="border-top:1px solid rgba(255,255,255,0.16);padding-top:24px;display:flex;flex-direction:column;gap:12px;font-size:15px;line-height:1.5;max-width:880px">
+<p style="margin:0">Knowvia is not an insurer, broker or TPA, and does not decide claims. [LEGAL REVIEW: registration and partner disclosure]</p>
+<p style="margin:0">Where our numbers come from: recorded conversations with seven family members and one hospital insurance-desk executive, 5 to 8 September 2026. They took place in Kolkata, Bengaluru, Pune, Mumbai and Delhi NCR. Names are withheld. [CONSENT RE-CHECK BEFORE LAUNCH] Figures are what people told us and what their documents showed. They are examples, not averages.</p>
+<p style="margin:0">© 2026 Knowvia</p>
+</div>
+</div>
+<p aria-hidden="true" style="margin:32px 0 0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(110px,22vw,340px);line-height:0.78;letter-spacing:-0.04em;color:#1E4F52;text-align:center;white-space:nowrap;transform:translateY(12%)">Knowvia</p>
+</footer>
+</div>
+</x-dc>
+
+
+
+</body></html>
