@@ -99,3 +99,17 @@ attributions. Before going public, counsel should confirm this use, or the plate
 - New canvas tweaks: `closingMode` (write or voice) and `closingVoiceState` (idle, recording or recorded).
 - Open before launch: [CONFIRM LANGUAGES] for voice notes; [LEGAL REVIEW] for voice-note retention, transcription and deletion. Voice about health is sensitive personal data under the DPDP Act, so consent must be explicit and specific.
 - The Figma plugin and HTML pack are regenerated, with three new voice-note state boards (32 boards in all).
+
+## Round 6 changes (13 October 2026)
+
+- Alignment. Every section heading, the "Where these numbers come from" strip, the first statistic card and the closing line of the industry section now start on the same 1200 px content edge as the rest of the page (checked at 1440, 1280 and 390 px). The statistic track uses `max(gutter, (100% - 1200px) / 2)` as its start padding, so it stays aligned at every width while still scrolling to the screen edge.
+- "This keeps happening to families" and "Every clause that decides your bill" use the standard H2 scale. The clause band's heading and line are stacked on the left like the other sections, instead of being split to opposite edges.
+- Source logos no longer sit on white plates. The top strip sits between two hairlines on the Pine ground with the marks in white; each card ends with a hairline and a "Source" row, with white marks on dark cards and dark marks on light cards.
+- Favicon: the Knowvia K mark (docs/design/assets/favicon.svg), also inlined as a data URI in the landing boards.
+- Research claim: the page now says "more than 50 recorded conversations with people in Delhi, Mumbai, Bengaluru, Chennai and many other Tier 1, 2 and 3 cities across India" (user, 13 October 2026). The stories section intro says the same. The quote and story captions keep their individual city and month.
+- Bracketed review notes are removed from the visible copy. "[CONTACT EMAIL]" became "Write to us" links. These items are still open and are tracked here instead:
+  - Legal review: licensed partner disclosure (FAQ "Will you sell me a policy?"), security and data-handling wording (FAQ), retention of form answers, voice-note retention, transcription and deletion, registration and partner disclosure (footer), privacy notice and terms, onboarding consent line (O1).
+  - Consent re-check for every quote and story caption.
+  - Confirm: voice-note languages, the words "Supported by", the sign-in code expiry (Extra states), and the real contact email for the "Write to us" links.
+  - State Emblem Act view on the ministry and Lok Sabha marks (round 4) still applies.
+- The standalone HTML pack (docs/design/html) and Figma plugin were not regenerated this round; they still show round 5.
