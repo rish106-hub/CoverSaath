@@ -39,8 +39,8 @@ a{color:#176F69}a:hover{color:#125A55}
 .kv-march:hover{animation:kvMarch 900ms linear infinite}
 .kv-marquee{display:flex;gap:0;width:max-content;animation:kvScroll 26s linear infinite;will-change:transform}
 .kv-hscroll{scrollbar-width:none}.kv-hscroll::-webkit-scrollbar{display:none}
-.kv-src{transition:background-color 180ms ease-out,border-color 180ms ease-out}
-.kv-src:hover{background:rgba(255,255,255,0.08);border-color:#C8E6A0 !important}
+.kv-src{display:block;transition:transform 180ms ease-out,box-shadow 180ms ease-out}
+.kv-src:hover{transform:translateY(-2px);box-shadow:0 0 0 2px #C8E6A0}
 .kv-overhang{margin-bottom:-64px}
 .kv-strike{background-image:linear-gradient(#2E6B4A,#2E6B4A);background-repeat:no-repeat;background-position:0 58%;background-size:100% 0.07em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .kv-refuse{transition:padding-left 300ms cubic-bezier(0.165,0.84,0.44,1)}
@@ -79,7 +79,7 @@ a{color:#176F69}a:hover{color:#125A55}
 @keyframes kvNavSolid{from{background:rgba(243,247,246,0.6);box-shadow:none}to{background:rgba(255,255,255,0.9);box-shadow:0 1px 0 #CFDCDA,0 12px 30px rgba(22,62,54,0.08)}}
 }
 .kv-mobile{display:none}
-@media (max-width:760px){.kv-desktop{display:none !important}.kv-mobile{display:block}.kv-overhang{margin-bottom:0}.kv-hero-btn{flex:1 1 100% !important;height:56px !important}.kv-hero-art{min-height:600px !important}.kv-win{top:0 !important;margin-top:12px}}
+@media (max-width:760px){.kv-desktop{display:none !important}.kv-mobile{display:block}.kv-overhang{margin-bottom:0}.kv-hero-btn{flex:1 1 100% !important;height:56px !important}.kv-hero-art{min-height:600px !important}.kv-win{top:0 !important;margin-top:12px}.kv-srclogo{height:32px !important}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}.kv-marquee{flex-wrap:wrap;width:auto}.kv-dup{display:none !important}}
 </style>
 </helmet>
@@ -225,13 +225,11 @@ a{color:#176F69}a:hover{color:#125A55}
 <p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#C8E6A0">Across India, not just in our research</p>
 <h2 id="industry-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(36px,4vw,60px);line-height:1.04;letter-spacing:-0.02em;color:#FFFFFF;max-width:14ch">This keeps happening to families.</h2>
 </div>
-<div style="display:flex;flex-direction:column;gap:14px;align-items:flex-start">
-<p style="margin:0;font-size:15px;font-weight:600;color:#A8DCCB">Where these numbers come from</p>
-<ul aria-label="Data sources" style="list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:10px">
-<li><a class="kv-src" href="https://www.moneylife.in/article/health-insurance-claims-worth-rs2603765-crore-rejected-by-insurers-in-fy2324-govt/76282.html" style="display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 16px;border-radius:12px;border:1px solid rgba(168,220,203,0.45);color:#FFFFFF;text-decoration:none"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:19px">Lok Sabha</span><span style="font-size:13px;color:#A8DCCB">reply, 2025</span></a></li>
-<li><a class="kv-src" href="https://www.pib.gov.in/PressReleasePage.aspx?PRID=2265816&amp;lang=1&amp;reg=3" style="display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 16px;border-radius:12px;border:1px solid rgba(168,220,203,0.45);color:#FFFFFF;text-decoration:none"><span style="font-size:16px;font-weight:700;letter-spacing:0.01em">Ministry of Health and Family Welfare</span><span style="font-size:13px;color:#A8DCCB">NHA 2022-23</span></a></li>
-<li><a class="kv-src" href="https://www.localcircles.com/a/press/page/health-insurance-claim-survey" style="display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 16px;border-radius:12px;border:1px solid rgba(168,220,203,0.45);color:#FFFFFF;text-decoration:none"><span style="font-size:17px;font-weight:700;letter-spacing:-0.01em">LocalCircles</span><span style="font-size:13px;color:#A8DCCB">survey, 2026</span></a></li>
-</ul>
+</div>
+<div style="position:relative;max-width:1200px;margin:0 auto 40px;padding:0 clamp(20px,5vw,80px);box-sizing:border-box">
+<div style="background:#FFFFFF;border-radius:20px;padding:18px clamp(18px,2.4vw,32px) 20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 18px 44px rgba(0,0,0,0.18)">
+<p style="margin:0;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Where these numbers come from</p>
+<ul aria-label="Data sources" style="list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px 20px"><li><a class="kv-src" href="https://www.moneylife.in/article/health-insurance-claims-worth-rs2603765-crore-rejected-by-insurers-in-fy2324-govt/76282.html" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="/_blob/9a2b8696a1d51206c59a50d670254089" alt="Lok Sabha, Parliament of India" style="display:block;height:44px;width:auto"></a></li><li><a class="kv-src" href="https://www.moneylife.in/article/health-insurance-claims-worth-rs2603765-crore-rejected-by-insurers-in-fy2324-govt/76282.html" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="/_blob/edbf1335c75fd8e4d5f7d7f0630ae2d5" alt="Ministry of Finance, Government of India" style="display:block;height:44px;width:auto"></a></li><li><a class="kv-src" href="https://www.moneylife.in/article/health-insurance-claims-worth-rs2603765-crore-rejected-by-insurers-in-fy2324-govt/76282.html" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="/_blob/059f472400fa02700367e16735c0a120" alt="Insurance Regulatory and Development Authority of India (IRDAI)" style="display:block;height:36px;width:auto"></a></li><li><a class="kv-src" href="https://www.pib.gov.in/PressReleasePage.aspx?PRID=2265816&amp;lang=1&amp;reg=3" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="/_blob/f9a6c8a2c18175956a0442f5c421f7aa" alt="Ministry of Health and Family Welfare, Government of India" style="display:block;height:40px;width:auto"></a></li><li><a class="kv-src" href="https://www.localcircles.com/a/press/page/health-insurance-claim-survey" style="display:block;border-radius:10px;padding:4px"><img class="kv-srclogo" src="/_blob/91d2cb88644951b75a2a8fcbadb2400e" alt="LocalCircles" style="display:block;height:30px;width:auto"></a></li></ul>
 </div>
 </div>
 <div style="position:relative">
@@ -245,16 +243,18 @@ a{color:#176F69}a:hover{color:#125A55}
 <svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="{{ pp.style }}"><circle cx="17" cy="10" r="8" fill="{{ pp.fill }}"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="{{ pp.fill }}"></path></svg>
 </sc-for>
 </div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;border-radius:16px;padding:14px 18px;box-shadow:0 6px 18px rgba(15,74,58,0.12)"><span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Source</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px"><img src="/_blob/91d2cb88644951b75a2a8fcbadb2400e" alt="LocalCircles" style="display:block;height:26px;width:auto"></div></div>
 <p style="margin:0;font-size:15px;line-height:1.45;color:#A8DCCB">LocalCircles national survey, claims made 2023 to 2025: 15% rejected and 29% partly approved for invalid reasons (18,989 responses). Published 7 March 2026.</p>
 </article>
 <article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#DDF0DC;color:#0F4A3A;">
-<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#0F4A3A;font-variant-numeric:tabular-nums">{{ n.crore }}</p>
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(52px,5vw,76px);line-height:0.9;letter-spacing:-0.03em;color:#0F4A3A;font-variant-numeric:tabular-nums;white-space:nowrap">{{ n.crore }}</p>
 <p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#1A3034">of health insurance claims were rejected or disallowed by insurers in a single year, 2023-24.</p>
 <div role="img" aria-label="Split: ₹15,100 crore disallowed, ₹10,937 crore repudiated" style="display:flex;flex-direction:column;gap:8px">
 <div style="display:flex;height:16px;border-radius:5px;overflow:hidden"><span class="kv-grow" style="flex:15100 1 0;background:#0F4A3A"></span><span class="kv-grow" style="flex:10937 1 0;background:#2E6B4A;opacity:0.55"></span></div>
 <div style="display:flex;justify-content:space-between;font-size:14px;color:#2E6B4A;font-weight:600"><span>₹15,100 cr disallowed</span><span>₹10,937 cr repudiated</span></div>
 </div>
-<p style="margin:auto 0 0;font-size:15px;line-height:1.45;color:#2E6B4A">Minister of State for Finance, reply in the Lok Sabha, reported 7 February 2025.</p>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;border-radius:16px;padding:14px 18px;box-shadow:0 6px 18px rgba(15,74,58,0.12)"><span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Sources</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px"><img src="/_blob/edbf1335c75fd8e4d5f7d7f0630ae2d5" alt="Ministry of Finance, Government of India" style="display:block;height:38px;width:auto"><img src="/_blob/9a2b8696a1d51206c59a50d670254089" alt="Lok Sabha, Parliament of India" style="display:block;height:38px;width:auto"><img src="/_blob/059f472400fa02700367e16735c0a120" alt="Insurance Regulatory and Development Authority of India (IRDAI)" style="display:block;height:34px;width:auto"></div></div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#2E6B4A">Minister of State for Finance, reply in the Lok Sabha, using data shared by IRDAI. Reported 7 February 2025.</p>
 </article>
 <article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#CDEBE5;color:#163F42;">
 <p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#163F42;font-variant-numeric:tabular-nums">{{ n.hours }}</p>
@@ -263,6 +263,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <div style="display:flex;align-items:center;gap:12px"><span style="flex:0 0 120px;font-size:15px;font-weight:600">The rule</span><span class="kv-grow" style="display:block;height:14px;width:6.25%;min-width:8px;border-radius:4px;background:#163F42"></span><span style="font-size:15px;font-weight:600">3 h</span></div>
 <div style="display:flex;align-items:center;gap:12px"><span style="flex:0 0 120px;font-size:15px;font-weight:600">What families saw</span><span style="flex:1 1 auto;display:flex;height:14px;border-radius:4px;overflow:hidden"><span class="kv-grow" style="display:block;width:12.5%;background:#7B918E"></span><span class="kv-grow" style="display:block;flex:1 1 auto;background:#1D8A80"></span></span><span style="font-size:15px;font-weight:600">48 h</span></div>
 </div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;border-radius:16px;padding:14px 18px;box-shadow:0 6px 18px rgba(15,74,58,0.12)"><span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Sources</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px"><img src="/_blob/91d2cb88644951b75a2a8fcbadb2400e" alt="LocalCircles" style="display:block;height:26px;width:auto"><img src="/_blob/059f472400fa02700367e16735c0a120" alt="Insurance Regulatory and Development Authority of India (IRDAI)" style="display:block;height:34px;width:auto"></div></div>
 <p style="margin:0;font-size:15px;line-height:1.45;color:#163F42">LocalCircles survey, 18,119 responses, 7 March 2026, citing the IRDAI directive: cashless authorisation within 1 hour, discharge within 3 hours.</p>
 </article>
 <article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:rgba(255,255,255,0.07);border:1px solid rgba(168,220,203,0.32);">
@@ -273,6 +274,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <span style="{{ g.style }}"></span>
 </sc-for>
 </div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:10px;background:#FFFFFF;border-radius:16px;padding:14px 18px;box-shadow:0 6px 18px rgba(15,74,58,0.12)"><span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#55696D">Source</span><div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 22px"><img src="/_blob/f9a6c8a2c18175956a0442f5c421f7aa" alt="Ministry of Health and Family Welfare, Government of India" style="display:block;height:38px;width:auto"></div></div>
 <p style="margin:0;font-size:15px;line-height:1.45;color:#A8DCCB">National Health Accounts 2022-23, Ministry of Health and Family Welfare: out-of-pocket spending was 43.4% of total health expenditure.</p>
 </article>
 <div aria-hidden="true" style="flex:0 0 1px"></div>

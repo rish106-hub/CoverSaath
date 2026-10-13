@@ -57,8 +57,34 @@ overrule an insurer. It changes the part you control: knowing your cover, and it
 
 - "This keeps happening to families" is now a horizontal track the visitor controls: drag, trackpad or touch scroll, with scroll snap, previous and next buttons and a progress bar. It still moves on its own, one card every 3.8 seconds, and stops while the pointer, focus or a finger is on it. Reduced motion stops the auto-advance.
 - The clause band (room rent limit, co-pay, waiting period, sub-limit, deductible, network hospital and six more) runs continuously at 26 seconds per loop; hover no longer pauses it.
-- Source marks: the user asked for the logos of the Ministry of Finance, the Government of India and Parliament. These are not used. The State Emblem of India (Prohibition of Improper Use) Act, 2005 bars its use in a way that suggests government endorsement, and ministry and Parliament marks are built on it. A private, pre-launch company page showing them beside its own call to action would read as endorsement. The strip instead shows typographic source marks (Lok Sabha, Ministry of Health and Family Welfare, LocalCircles), each linking to the primary source.
+- Source marks (superseded in round 4): typographic marks were used first because of the State Emblem Act concern below.
 - "Questions families ask us" now has ten answers (three added: employer group policy, documents needed to start, who can see family information) and a "Still have a question?" card with a contact slot.
 - Contrast section: the "With Knowvia" card now stands out. It has a Pine ground, sits 20 px higher than the hospital desk card, carries a "The better way" badge with a pulsing dot, has Lime check discs and a deeper shadow, and ends on a benefit line ("Walk in already knowing your limits, your gaps and your next step.") with "Join the early list" and a partner link to the partners section. It makes no outcome promise about claims.
 - The partners email block is removed. "Talk to us about a pilot" now points to the contact card in the questions section; the footer keeps only [CONTACT EMAIL].
 - Merged the user's canvas edit: the consent marker was removed from the quote caption. The consent re-check itself is still open (see 08-review.md).
+
+## Round 4 changes (13 October 2026, version 25)
+
+The user asked for the official logos of the organisations behind each number. Each statistic card now ends with a
+white "Source" plate showing those marks, and a full-width plate under the heading lists all five.
+
+| Card | Number | Marks shown | Why |
+|---|---|---|---|
+| 1 | 44% | LocalCircles | Survey publisher |
+| 2 | ₹26,037 cr | Ministry of Finance, Lok Sabha, IRDAI | Minister of State for Finance answered in the Lok Sabha using data shared by IRDAI (Moneylife, 7 February 2025, re-read on 13 October 2026) |
+| 3 | 48 hours | LocalCircles, IRDAI | Survey publisher; the 1 hour and 3 hour rule is IRDAI's |
+| 4 | ₹43 of ₹100 | Ministry of Health and Family Welfare | National Health Accounts 2022-23, released by the ministry |
+
+How the files were made (docs/design/assets/sources/):
+- IRDAI: the official SVG from irdai.gov.in, rendered to PNG.
+- LocalCircles: cropped from the official sprite on localcircles.com (177 x 53 px, low resolution; ask them for a vector before launch).
+- Ministry of Finance, Ministry of Health and Family Welfare, Lok Sabha: the government sites refused automated access, so these
+  are lockups in the standard government format (the Emblem of India SVG from Wikimedia Commons, a rule, then the Hindi and
+  English names and "Government of India" or "Parliament of India"). Swap in the files the ministries publish if the team
+  obtains them.
+
+[LEGAL REVIEW] before launch: the State Emblem of India (Prohibition of Improper Use) Act, 2005 restricts use of the emblem
+for any trade, business or profession, and the ministry and Lok Sabha marks carry it. The user chose to show them as source
+attributions. Before going public, counsel should confirm this use, or the plate should fall back to the typographic marks
+(kept in round 3). IRDAI and LocalCircles marks also need permission or a fair-use view. The plates say "Source", never
+"in partnership with" or "endorsed by".
