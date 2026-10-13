@@ -31,5 +31,8 @@ horizontal, user-scrollable industry statistics with auto-advance, a continuous 
 source marks instead of government emblems (State Emblem Act), a pop-out "With Knowvia" card, and the partners email removed.
 Round 4 (version 25): official source logos (Ministry of Finance, Lok Sabha, IRDAI, Ministry of Health, LocalCircles)
 on each industry number, flagged [LEGAL REVIEW] under the State Emblem Act.
+Figma export: docs/design/figma-plugin/ (and knowvia-figma-plugin.zip) is a development plugin that rebuilds every board,
+state, token, text style and effect style on one Figma page. The Figma MCP Starter-plan call limit was reached mid-build, so the
+boards are built by the user running the plugin in Figma desktop; File > Save local copy then gives the .fig.
 
 **Next action.** The user reviews the canvas and comments on it; then implementation planning in the landing-page repo.
