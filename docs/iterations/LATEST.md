@@ -29,5 +29,7 @@ optional "Planned treatment" field and all [LEGAL REVIEW] text; a rendered check
 **Landing rounds 2 and 3 (versions 22 to 24).** Iterated on user feedback; see docs/design/09-landing-v2.md. Round 3:
 horizontal, user-scrollable industry statistics with auto-advance, a continuous clause band, a complete FAQ, typographic
 source marks instead of government emblems (State Emblem Act), a pop-out "With Knowvia" card, and the partners email removed.
+Round 4 (version 25): official source logos (Ministry of Finance, Lok Sabha, IRDAI, Ministry of Health, LocalCircles)
+on each industry number, flagged [LEGAL REVIEW] under the State Emblem Act.
 
 **Next action.** The user reviews the canvas and comments on it; then implementation planning in the landing-page repo.
