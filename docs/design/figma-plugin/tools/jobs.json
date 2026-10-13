@@ -146,6 +146,42 @@
   "title": "Closing form state: server error"
  },
  {
+  "id": "voice-idle",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#early-list",
+  "props": {
+   "closingMode": "voice",
+   "closingVoiceState": "idle"
+  },
+  "title": "Closing form: voice note, before recording"
+ },
+ {
+  "id": "voice-recording",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#early-list",
+  "props": {
+   "closingMode": "voice",
+   "closingVoiceState": "recording"
+  },
+  "title": "Closing form: voice note, recording"
+ },
+ {
+  "id": "voice-recorded",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#early-list",
+  "props": {
+   "closingMode": "voice",
+   "closingVoiceState": "recorded"
+  },
+  "title": "Closing form: voice note, ready to send"
+ },
+ {
   "id": "privacy-you",
   "file": "Main.dc.html",
   "w": 1440,

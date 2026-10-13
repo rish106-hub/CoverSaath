@@ -3,7 +3,7 @@ OUT = 'plugin'
 os.makedirs(OUT, exist_ok=True)
 rows = [
   ('Landing page', ['main', 'mobile'], 9),
-  ('Landing page states', ['hero-empty','hero-invalid','hero-submitting','hero-success','hero-network','hero-server','close-empty','close-invalid','close-submitting','close-success','close-network','close-server','privacy-family','privacy-you','mobile-menu'], 6),
+  ('Landing page states', ['hero-empty','hero-invalid','hero-submitting','hero-success','hero-network','hero-server','close-empty','close-invalid','close-submitting','close-success','close-network','close-server','voice-idle','voice-recording','voice-recorded','privacy-family','privacy-you','mobile-menu'], 6),
   ('Onboarding (future state)', ['o1-start','o2-event','o3-people','o4-sharing','o5-upload','o6-reading','o7-matrix-mobile','o7-matrix-desktop','extra-states'], 9),
   ('Design system', ['foundations','components','motion'], 9),
 ]

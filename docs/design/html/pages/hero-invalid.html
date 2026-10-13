@@ -27,6 +27,8 @@ a{color:#176F69}a:hover{color:#125A55}
 .kv-light-link:hover{color:#C8E6A0 !important}
 .kv-chip-opt{transition:background-color 180ms ease-out,border-color 180ms ease-out}
 .kv-chip-opt:hover{border-color:#176F69 !important}
+.kv-rec::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid #176F69;animation:kvPulse 1.6s ease-out infinite}
+@keyframes kvBar{0%,100%{transform:scaleY(0.3)}50%{transform:scaleY(1)}}
 .kv-foot-link{position:relative;color:#C9DDD9;text-decoration:none;align-self:flex-start}
 .kv-foot-link::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:1px;background:#FFFFFF;transform:scaleX(0);transform-origin:left;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1)}
 .kv-foot-link:hover{color:#FFFFFF}.kv-foot-link:hover::after{transform:scaleX(1)}
@@ -929,66 +931,107 @@ a{color:#176F69}a:hover{color:#125A55}
 </div>
 </section>
 
-<!-- 11b. What we will not do: manifesto -->
-<section id="promises" aria-labelledby="not-h" style="background:#FFFFFF;padding:clamp(80px,10vw,144px) clamp(20px,5vw,80px)">
-<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:clamp(32px,4vw,56px)">
-<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px 48px">
-<h2 id="not-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(40px,5vw,72px);line-height:1;letter-spacing:-0.02em;color:#163F42;max-width:10ch">What we will not do</h2>
-<p style="margin:0;font-size:clamp(18px,1.46vw,21px);line-height:1.5;max-width:36ch;color:#1A3034">Five lines we will not cross. Hold us to them.</p>
+<!-- 11b. What we will not do: a short, struck list beside its heading -->
+<section id="promises" aria-labelledby="not-h" style="background:#FFFFFF;padding:clamp(72px,8vw,112px) clamp(20px,5vw,80px)">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:40px 80px;align-items:flex-start">
+<div style="flex:1 1 300px;display:flex;flex-direction:column;gap:16px;max-width:400px">
+<p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#2E6B4A">Our limits</p>
+<h2 id="not-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#163F42;max-width:11ch">What we will not do</h2>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:32ch">Five lines we will not cross. Hold us to them.</p>
+<p style="margin:12px 0 0;padding-top:20px;border-top:1px solid #CFDCDA;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:clamp(20px,1.7vw,24px);line-height:1.3;color:#0F4A3A;max-width:26ch">That leaves the one job that matters: reading your family's health cover with you, before you need it.</p>
 </div>
-<ul style="list-style:none;margin:0;padding:0;border-bottom:1px solid #CFDCDA">
+<ol style="flex:1.5 1 560px;list-style:none;margin:0;padding:0;border-bottom:1px solid #CFDCDA">
 
-<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
-<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Promise a claim</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
-<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">Only your insurer decides a claim. We show which clauses apply and what is still open.</p>
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 28px;padding:20px 0;border-top:1px solid #CFDCDA">
+<span aria-hidden="true" style="flex:0 0 32px;font-size:14px;font-weight:600;color:#55696D;font-variant-numeric:tabular-nums">01</span>
+<p style="flex:1 1 220px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(24px,2.2vw,30px);line-height:1.15;letter-spacing:-0.01em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Promise a claim</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1.3 1 260px;margin:0;font-size:17px;line-height:1.55;color:#1A3034">Only your insurer decides a claim. We show which clauses apply and what is still open.</p>
 </li>
 
-<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
-<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Guess</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
-<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">A fact we cannot find stays marked Not confirmed until someone who knows confirms it.</p>
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 28px;padding:20px 0;border-top:1px solid #CFDCDA">
+<span aria-hidden="true" style="flex:0 0 32px;font-size:14px;font-weight:600;color:#55696D;font-variant-numeric:tabular-nums">02</span>
+<p style="flex:1 1 220px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(24px,2.2vw,30px);line-height:1.15;letter-spacing:-0.01em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Guess</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1.3 1 260px;margin:0;font-size:17px;line-height:1.55;color:#1A3034">A fact we cannot find stays marked Not confirmed until someone who knows confirms it.</p>
 </li>
 
-<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
-<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Push a policy</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
-<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">Sometimes the right answer is to buy nothing yet. We will say so.</p>
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 28px;padding:20px 0;border-top:1px solid #CFDCDA">
+<span aria-hidden="true" style="flex:0 0 32px;font-size:14px;font-weight:600;color:#55696D;font-variant-numeric:tabular-nums">03</span>
+<p style="flex:1 1 220px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(24px,2.2vw,30px);line-height:1.15;letter-spacing:-0.01em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Push a policy</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1.3 1 260px;margin:0;font-size:17px;line-height:1.55;color:#1A3034">Sometimes the right answer is to buy nothing yet. We will say so.</p>
 </li>
 
-<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
-<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Show medical details</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
-<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">Not to anyone, unless that person chose to share them.</p>
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 28px;padding:20px 0;border-top:1px solid #CFDCDA">
+<span aria-hidden="true" style="flex:0 0 32px;font-size:14px;font-weight:600;color:#55696D;font-variant-numeric:tabular-nums">04</span>
+<p style="flex:1 1 220px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(24px,2.2vw,30px);line-height:1.15;letter-spacing:-0.01em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Show medical details</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1.3 1 260px;margin:0;font-size:17px;line-height:1.55;color:#1A3034">Not to anyone, unless that person chose to share them.</p>
 </li>
 
-<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
-<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Replace your insurer</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
-<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">We are not your insurer, TPA or hospital desk. We help you ask them better questions.</p>
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 28px;padding:20px 0;border-top:1px solid #CFDCDA">
+<span aria-hidden="true" style="flex:0 0 32px;font-size:14px;font-weight:600;color:#55696D;font-variant-numeric:tabular-nums">05</span>
+<p style="flex:1 1 220px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(24px,2.2vw,30px);line-height:1.15;letter-spacing:-0.01em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">Replace your insurer</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1.3 1 260px;margin:0;font-size:17px;line-height:1.55;color:#1A3034">We are not your insurer, TPA or hospital desk. We help you ask them better questions.</p>
 </li>
 
-</ul>
-<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:clamp(26px,2.8vw,40px);line-height:1.2;color:#0F4A3A;max-width:30ch">That leaves the one job that matters: reading your family's health cover with you, before you need it.</p>
+</ol>
 </div>
 </section>
 
-<!-- 12. Closing -->
-<section id="early-list" aria-labelledby="close-h" style="position:relative;overflow:hidden;background:#163F42;color:#FFFFFF;padding:clamp(80px,10vw,144px) clamp(20px,5vw,80px)">
-<svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;right:-180px;top:-120px;width:820px;height:820px;opacity:0.09"><circle cx="400" cy="400" r="290" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><circle cx="400" cy="400" r="240" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><path d="M258 194v412M265 404l274 210" fill="none" stroke="#C9DDD9" stroke-width="34" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="34" stroke-linecap="round"></path></svg>
-<div style="position:relative;max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:48px 72px;align-items:center">
-<div style="flex:1 1 460px;display:flex;flex-direction:column;gap:20px">
-<h2 id="close-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(44px,5.4vw,78px);line-height:1.02;letter-spacing:-0.02em;color:#FFFFFF;max-width:12ch">Know your cover. Before you need it.</h2>
-<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;color:#C9DDD9;max-width:40ch">Built for health insurance, and nothing else. Join the early list and be first in.</p>
+<!-- 12. Closing: join the early list, in writing or by voice note -->
+<section id="early-list" aria-labelledby="close-h" style="position:relative;overflow:hidden;background:#163F42;color:#FFFFFF;padding:clamp(72px,8vw,112px) clamp(20px,5vw,80px)">
+<svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;left:-260px;bottom:-300px;width:760px;height:760px;opacity:0.08"><circle cx="400" cy="400" r="290" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><circle cx="400" cy="400" r="240" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><path d="M258 194v412M265 404l274 210" fill="none" stroke="#C9DDD9" stroke-width="34" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="34" stroke-linecap="round"></path></svg>
+<div style="position:relative;max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:40px 72px;align-items:flex-start">
+<div style="flex:1 1 360px;display:flex;flex-direction:column;gap:18px;max-width:460px">
+<p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#C8E6A0">The early list</p>
+<h2 id="close-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(36px,4vw,56px);line-height:1.05;letter-spacing:-0.015em;color:#FFFFFF;max-width:12ch">Know your cover. Before you need it.</h2>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#C9DDD9;max-width:38ch">Tell us a little about your family's health cover, in writing or in your own voice. It helps us decide what Knowvia reads first for you.</p>
+<ul style="list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:12px">
+<li style="display:flex;gap:12px;align-items:center;font-size:17px;color:#FFFFFF"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(200,230,160,0.16)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8E6A0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span>Not an insurer, and not selling you one.</li>
+<li style="display:flex;gap:12px;align-items:center;font-size:17px;color:#FFFFFF"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(200,230,160,0.16)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8E6A0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span>Your answers are never sold or shared.</li>
+<li style="display:flex;gap:12px;align-items:center;font-size:17px;color:#FFFFFF"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(200,230,160,0.16)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8E6A0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span>One email when we open. Nothing before.</li>
+</ul>
 </div>
 
-<div style="flex:1 1 440px;background:#FFFFFF;color:#1A3034;border-radius:24px;padding:clamp(24px,2.8vw,40px);box-shadow:0 30px 60px rgba(0,0,0,0.25)">
+<div style="flex:1.2 1 480px;max-width:620px;background:#FFFFFF;color:#1A3034;border-radius:24px;padding:clamp(22px,2.6vw,36px);box-shadow:0 30px 60px rgba(0,0,0,0.25)">
 
-<form novalidate="novalidate" style="display:flex;flex-direction:column;gap:22px">
-<div style="display:flex;flex-direction:column;gap:8px">
+<form novalidate="novalidate" style="display:flex;flex-direction:column;gap:20px">
+<div role="group" aria-label="How do you want to tell us?" style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#E6EFEC">
+<button type="button" aria-pressed="true" style="flex:1 1 0;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border:0;border-radius:9px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;color:#163F42;box-shadow:0 1px 2px rgba(22,62,54,0.12),inset 0 0 0 2px #163F42;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13 7l4 4"></path></svg>Write it</button>
+<button type="button" aria-pressed="false" style="flex:1 1 0;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border:0;border-radius:9px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:transparent;color:#55696D;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>Say it</button>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:14px">
+<div style="flex:1 1 180px;display:flex;flex-direction:column;gap:8px">
+<label for="close-name" style="font-size:15px;font-weight:600;letter-spacing:0.01em">First name <span style="font-weight:400;color:#55696D">(optional)</span></label>
+<input id="close-name" name="given-name" type="text" autocomplete="given-name" style="height:52px;box-sizing:border-box;padding:0 16px;border-radius:12px;border:1px solid #7B918E;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034">
+</div>
+<div style="flex:1.4 1 240px;display:flex;flex-direction:column;gap:8px">
 <label for="close-email" style="font-size:15px;font-weight:600;letter-spacing:0.01em">Email</label>
-<input id="close-email" name="email" type="email" autocomplete="email" aria-invalid="false" aria-describedby="close-error close-consent" style="flex:1 1 260px;min-width:0;height:56px;box-sizing:border-box;padding:0 18px;border-radius:12px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034;border:1px solid #7B918E;">
-<p id="close-error" role="alert" style="margin:0;color:#A74335;font-size:17px;line-height:1.45;font-weight:600"></p>
+<input id="close-email" name="email" type="email" autocomplete="email" aria-invalid="false" aria-describedby="close-error close-consent" style="height:52px;box-sizing:border-box;padding:0 16px;border-radius:12px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034;border:1px solid #7B918E;">
 </div>
+</div>
+<p id="close-error" role="alert" style="margin:-8px 0 0;color:#A74335;font-size:16px;line-height:1.45;font-weight:600"></p>
+
+
+<div style="display:flex;flex-direction:column;gap:18px;animation:kvIn 320ms cubic-bezier(0.165,0.84,0.44,1) both">
+<fieldset style="margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px">
+<legend style="padding:0;margin-bottom:6px;font-size:15px;font-weight:600;letter-spacing:0.01em">Which health policies does your family have? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>Employer group cover</span></button>
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>Family floater</span></button>
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>Parents' policy</span></button>
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>Super top-up</span></button>
+
+<button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>Not sure</span></button>
+
+</div>
+</fieldset>
 <fieldset aria-describedby="events-purpose" style="margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px">
-<legend style="padding:0;margin-bottom:6px;font-size:15px;font-weight:600;letter-spacing:0.01em">What is coming up for your family? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
-<p id="events-purpose" style="margin:0 0 4px;font-size:17px;line-height:1.5;color:#55696D">We use this only to decide what Knowvia reads first for you. [LEGAL REVIEW: retention and whether to ask this before launch]</p>
-<div style="display:flex;flex-wrap:wrap;gap:10px">
+<legend style="padding:0;margin-bottom:6px;font-size:15px;font-weight:600;letter-spacing:0.01em">What is coming up? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
 
 <button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>A renewal</span></button>
 
@@ -1001,15 +1044,18 @@ a{color:#176F69}a:hover{color:#125A55}
 <button class="kv-chip-opt" type="button" aria-pressed="false" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;"><span>Nothing yet, just getting organised</span></button>
 
 </div>
+<p id="events-purpose" style="margin:0;font-size:15px;line-height:1.5;color:#55696D">We use your answers only to decide what Knowvia reads first for you. [LEGAL REVIEW: retention]</p>
 </fieldset>
+</div>
+
+
+
+
 <div style="display:flex;flex-direction:column;gap:10px">
 <button class="kv-btn" type="submit" aria-disabled="false" style="width:100%;height:56px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;letter-spacing:0.005em;cursor:pointer">Join the early list</button>
 
 </div>
-<div style="display:flex;flex-direction:column;gap:6px">
-<p style="margin:0;font-size:18px;line-height:1.5;font-weight:600;color:#163F42">Not an insurer. Not selling your data. One email when we open.</p>
-<p id="close-consent" style="margin:0;font-size:17px;line-height:1.5;color:#55696D">We use your email only to tell you when Knowvia opens. Read the <a href="#privacy-notice">privacy notice</a>.</p>
-</div>
+<p id="close-consent" style="margin:0;font-size:15px;line-height:1.5;color:#55696D">We use your email only to tell you when Knowvia opens. Read the <a href="#privacy-notice">privacy notice</a>.</p>
 </form>
 
 

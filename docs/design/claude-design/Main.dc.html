@@ -30,6 +30,8 @@ a{color:#176F69}a:hover{color:#125A55}
 .kv-light-link:hover{color:#C8E6A0 !important}
 .kv-chip-opt{transition:background-color 180ms ease-out,border-color 180ms ease-out}
 .kv-chip-opt:hover{border-color:#176F69 !important}
+.kv-rec::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid #176F69;animation:kvPulse 1.6s ease-out infinite}
+@keyframes kvBar{0%,100%{transform:scaleY(0.3)}50%{transform:scaleY(1)}}
 .kv-foot-link{position:relative;color:#C9DDD9;text-decoration:none;align-self:flex-start}
 .kv-foot-link::after{content:"";position:absolute;left:0;right:0;bottom:-3px;height:1px;background:#FFFFFF;transform:scaleX(0);transform-origin:left;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1)}
 .kv-foot-link:hover{color:#FFFFFF}.kv-foot-link:hover::after{transform:scaleX(1)}
@@ -549,67 +551,132 @@ a{color:#176F69}a:hover{color:#125A55}
 </div>
 </section>
 
-<!-- 11b. What we will not do: manifesto -->
-<section id="promises" aria-labelledby="not-h" style="background:#FFFFFF;padding:clamp(80px,10vw,144px) clamp(20px,5vw,80px)">
-<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:clamp(32px,4vw,56px)">
-<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px 48px">
-<h2 id="not-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(40px,5vw,72px);line-height:1;letter-spacing:-0.02em;color:#163F42;max-width:10ch">What we will not do</h2>
-<p style="margin:0;font-size:clamp(18px,1.46vw,21px);line-height:1.5;max-width:36ch;color:#1A3034">Five lines we will not cross. Hold us to them.</p>
+<!-- 11b. What we will not do: a short, struck list beside its heading -->
+<section id="promises" aria-labelledby="not-h" style="background:#FFFFFF;padding:clamp(72px,8vw,112px) clamp(20px,5vw,80px)">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:40px 80px;align-items:flex-start">
+<div style="flex:1 1 300px;display:flex;flex-direction:column;gap:16px;max-width:400px">
+<p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#2E6B4A">Our limits</p>
+<h2 id="not-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#163F42;max-width:11ch">What we will not do</h2>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:32ch">Five lines we will not cross. Hold us to them.</p>
+<p style="margin:12px 0 0;padding-top:20px;border-top:1px solid #CFDCDA;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:clamp(20px,1.7vw,24px);line-height:1.3;color:#0F4A3A;max-width:26ch">That leaves the one job that matters: reading your family's health cover with you, before you need it.</p>
 </div>
-<ul style="list-style:none;margin:0;padding:0;border-bottom:1px solid #CFDCDA">
+<ol style="flex:1.5 1 560px;list-style:none;margin:0;padding:0;border-bottom:1px solid #CFDCDA">
 <sc-for list="{{ promises }}" as="p" hint-placeholder-count="5">
-<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
-<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">{{ p.term }}</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
-<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">{{ p.text }}</p>
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 28px;padding:20px 0;border-top:1px solid #CFDCDA">
+<span aria-hidden="true" style="flex:0 0 32px;font-size:14px;font-weight:600;color:#55696D;font-variant-numeric:tabular-nums">{{ p.num }}</span>
+<p style="flex:1 1 220px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(24px,2.2vw,30px);line-height:1.15;letter-spacing:-0.01em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">{{ p.term }}</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1.3 1 260px;margin:0;font-size:17px;line-height:1.55;color:#1A3034">{{ p.text }}</p>
 </li>
 </sc-for>
-</ul>
-<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:clamp(26px,2.8vw,40px);line-height:1.2;color:#0F4A3A;max-width:30ch">That leaves the one job that matters: reading your family's health cover with you, before you need it.</p>
+</ol>
 </div>
 </section>
 
-<!-- 12. Closing -->
-<section id="early-list" aria-labelledby="close-h" style="position:relative;overflow:hidden;background:#163F42;color:#FFFFFF;padding:clamp(80px,10vw,144px) clamp(20px,5vw,80px)">
-<svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;right:-180px;top:-120px;width:820px;height:820px;opacity:0.09"><circle cx="400" cy="400" r="290" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><circle cx="400" cy="400" r="240" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><path d="M258 194v412M265 404l274 210" fill="none" stroke="#C9DDD9" stroke-width="34" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="34" stroke-linecap="round"></path></svg>
-<div style="position:relative;max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:48px 72px;align-items:center">
-<div style="flex:1 1 460px;display:flex;flex-direction:column;gap:20px">
-<h2 id="close-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(44px,5.4vw,78px);line-height:1.02;letter-spacing:-0.02em;color:#FFFFFF;max-width:12ch">Know your cover. Before you need it.</h2>
-<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;color:#C9DDD9;max-width:40ch">Built for health insurance, and nothing else. Join the early list and be first in.</p>
+<!-- 12. Closing: join the early list, in writing or by voice note -->
+<section id="early-list" aria-labelledby="close-h" style="position:relative;overflow:hidden;background:#163F42;color:#FFFFFF;padding:clamp(72px,8vw,112px) clamp(20px,5vw,80px)">
+<svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;left:-260px;bottom:-300px;width:760px;height:760px;opacity:0.08"><circle cx="400" cy="400" r="290" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><circle cx="400" cy="400" r="240" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><path d="M258 194v412M265 404l274 210" fill="none" stroke="#C9DDD9" stroke-width="34" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="34" stroke-linecap="round"></path></svg>
+<div style="position:relative;max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:40px 72px;align-items:flex-start">
+<div style="flex:1 1 360px;display:flex;flex-direction:column;gap:18px;max-width:460px">
+<p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#C8E6A0">The early list</p>
+<h2 id="close-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(36px,4vw,56px);line-height:1.05;letter-spacing:-0.015em;color:#FFFFFF;max-width:12ch">Know your cover. Before you need it.</h2>
+<p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#C9DDD9;max-width:38ch">Tell us a little about your family's health cover, in writing or in your own voice. It helps us decide what Knowvia reads first for you.</p>
+<ul style="list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:12px">
+<li style="display:flex;gap:12px;align-items:center;font-size:17px;color:#FFFFFF"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(200,230,160,0.16)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8E6A0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span>Not an insurer, and not selling you one.</li>
+<li style="display:flex;gap:12px;align-items:center;font-size:17px;color:#FFFFFF"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(200,230,160,0.16)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8E6A0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span>Your answers are never sold or shared.</li>
+<li style="display:flex;gap:12px;align-items:center;font-size:17px;color:#FFFFFF"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(200,230,160,0.16)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8E6A0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span>One email when we open. Nothing before.</li>
+</ul>
 </div>
 
-<div style="flex:1 1 440px;background:#FFFFFF;color:#1A3034;border-radius:24px;padding:clamp(24px,2.8vw,40px);box-shadow:0 30px 60px rgba(0,0,0,0.25)">
+<div style="flex:1.2 1 480px;max-width:620px;background:#FFFFFF;color:#1A3034;border-radius:24px;padding:clamp(22px,2.6vw,36px);box-shadow:0 30px 60px rgba(0,0,0,0.25)">
 <sc-if value="{{ close.showForm }}" hint-placeholder-val="{{ true }}">
-<form onSubmit="{{ close.submit }}" novalidate="novalidate" style="display:flex;flex-direction:column;gap:22px">
-<div style="display:flex;flex-direction:column;gap:8px">
-<label for="close-email" style="font-size:15px;font-weight:600;letter-spacing:0.01em">Email</label>
-<input id="close-email" name="email" type="email" autocomplete="email" onChange="{{ close.setEmail }}" aria-invalid="{{ close.invalid }}" aria-describedby="close-error close-consent" style="{{ close.inputStyle }}">
-<p id="close-error" role="alert" style="margin:0;color:#A74335;font-size:17px;line-height:1.45;font-weight:600">{{ close.error }}</p>
+<form onSubmit="{{ close.submit }}" novalidate="novalidate" style="display:flex;flex-direction:column;gap:20px">
+<div role="group" aria-label="How do you want to tell us?" style="display:flex;gap:4px;padding:4px;border-radius:12px;background:#E6EFEC">
+<button type="button" onClick="{{ cm.setWrite }}" aria-pressed="{{ cm.isWriteStr }}" style="{{ cm.writeStyle }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"></path><path d="M13 7l4 4"></path></svg>Write it</button>
+<button type="button" onClick="{{ cm.setVoice }}" aria-pressed="{{ cm.isVoiceStr }}" style="{{ cm.voiceStyle }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg>Say it</button>
 </div>
-<fieldset aria-describedby="events-purpose" style="margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px">
-<legend style="padding:0;margin-bottom:6px;font-size:15px;font-weight:600;letter-spacing:0.01em">What is coming up for your family? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
-<p id="events-purpose" style="margin:0 0 4px;font-size:17px;line-height:1.5;color:#55696D">We use this only to decide what Knowvia reads first for you. [LEGAL REVIEW: retention and whether to ask this before launch]</p>
-<div style="display:flex;flex-wrap:wrap;gap:10px">
-<sc-for list="{{ events }}" as="ev" hint-placeholder-count="5">
-<button class="kv-chip-opt" type="button" onClick="{{ ev.toggle }}" aria-pressed="{{ ev.on }}" style="{{ ev.style }}"><sc-if value="{{ ev.isOn }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg></sc-if><span>{{ ev.label }}</span></button>
+
+<div style="display:flex;flex-wrap:wrap;gap:14px">
+<div style="flex:1 1 180px;display:flex;flex-direction:column;gap:8px">
+<label for="close-name" style="font-size:15px;font-weight:600;letter-spacing:0.01em">First name <span style="font-weight:400;color:#55696D">(optional)</span></label>
+<input id="close-name" name="given-name" type="text" autocomplete="given-name" style="height:52px;box-sizing:border-box;padding:0 16px;border-radius:12px;border:1px solid #7B918E;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034">
+</div>
+<div style="flex:1.4 1 240px;display:flex;flex-direction:column;gap:8px">
+<label for="close-email" style="font-size:15px;font-weight:600;letter-spacing:0.01em">Email</label>
+<input id="close-email" name="email" type="email" autocomplete="email" onChange="{{ close.setEmail }}" aria-invalid="{{ close.invalid }}" aria-describedby="close-error close-consent" style="{{ cm.emailStyle }}">
+</div>
+</div>
+<p id="close-error" role="alert" style="margin:-8px 0 0;color:#A74335;font-size:16px;line-height:1.45;font-weight:600">{{ close.error }}</p>
+
+<sc-if value="{{ cm.isWrite }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:18px;animation:kvIn 320ms cubic-bezier(0.165,0.84,0.44,1) both">
+<fieldset style="margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px">
+<legend style="padding:0;margin-bottom:6px;font-size:15px;font-weight:600;letter-spacing:0.01em">Which health policies does your family have? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<sc-for list="{{ policies }}" as="pc" hint-placeholder-count="5">
+<button class="kv-chip-opt" type="button" onClick="{{ pc.toggle }}" aria-pressed="{{ pc.on }}" style="{{ pc.style }}"><sc-if value="{{ pc.isOn }}" hint-placeholder-val="{{ false }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg></sc-if><span>{{ pc.label }}</span></button>
 </sc-for>
 </div>
 </fieldset>
+<fieldset aria-describedby="events-purpose" style="margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:10px">
+<legend style="padding:0;margin-bottom:6px;font-size:15px;font-weight:600;letter-spacing:0.01em">What is coming up? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<sc-for list="{{ events }}" as="ev" hint-placeholder-count="5">
+<button class="kv-chip-opt" type="button" onClick="{{ ev.toggle }}" aria-pressed="{{ ev.on }}" style="{{ ev.style }}"><sc-if value="{{ ev.isOn }}" hint-placeholder-val="{{ false }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg></sc-if><span>{{ ev.label }}</span></button>
+</sc-for>
+</div>
+<p id="events-purpose" style="margin:0;font-size:15px;line-height:1.5;color:#55696D">We use your answers only to decide what Knowvia reads first for you. [LEGAL REVIEW: retention]</p>
+</fieldset>
+</div>
+</sc-if>
+
+<sc-if value="{{ cm.isVoice }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:14px;animation:kvIn 320ms cubic-bezier(0.165,0.84,0.44,1) both">
+<div style="display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:16px;background:#F3F7F6;border:1px solid #CFDCDA">
+<div style="display:flex;align-items:center;gap:16px">
+<sc-if value="{{ vn.isIdle }}" hint-placeholder-val="{{ true }}">
+<button type="button" onClick="{{ vn.start }}" aria-disabled="{{ vn.lockedStr }}" aria-label="Start recording a voice note" style="{{ vn.micStyle }}"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path></svg></button>
+</sc-if>
+<sc-if value="{{ vn.isRec }}" hint-placeholder-val="{{ false }}">
+<button class="kv-rec" type="button" onClick="{{ vn.stop }}" aria-label="Stop recording" style="position:relative;flex:0 0 auto;width:60px;height:60px;border-radius:50%;border:0;background:#176F69;color:#FFFFFF;display:flex;align-items:center;justify-content:center;cursor:pointer"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"></rect></svg></button>
+</sc-if>
+<sc-if value="{{ vn.isDone }}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{ vn.play }}" aria-label="{{ vn.playLabel }}" style="flex:0 0 auto;width:60px;height:60px;border-radius:50%;border:2px solid #176F69;background:#FFFFFF;color:#176F69;display:flex;align-items:center;justify-content:center;cursor:pointer"><sc-if value="{{ vn.playing }}" hint-placeholder-val="{{ false }}"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" fill="currentColor"></rect><rect x="14" y="5" width="4" height="14" rx="1" fill="currentColor"></rect></svg></sc-if><sc-if value="{{ vn.paused }}" hint-placeholder-val="{{ true }}"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"></path></svg></sc-if></button>
+</sc-if>
+<div style="flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:8px">
+<div aria-hidden="true" style="display:flex;align-items:center;gap:3px;height:36px">
+<sc-for list="{{ vn.bars }}" as="b" hint-placeholder-count="32">
+<span style="{{ b.style }}"></span>
+</sc-for>
+</div>
+<p aria-live="polite" style="margin:0;display:flex;justify-content:space-between;gap:12px;font-size:15px;color:#55696D;font-variant-numeric:tabular-nums"><span style="font-weight:600;color:#163F42">{{ vn.status }}</span><span>{{ vn.time }}</span></p>
+</div>
+</div>
+<p style="margin:0;font-size:16px;line-height:1.5;color:#1A3034">Up to 60 seconds. Tell us which policies your family has and what is on your mind. Speak in English or Hindi. [CONFIRM LANGUAGES]</p>
+<sc-if value="{{ vn.isDone }}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{ vn.redo }}" style="align-self:flex-start;min-height:44px;padding:0;border:0;background:transparent;font:inherit;font-size:16px;font-weight:600;color:#176F69;text-decoration:underline;text-underline-offset:4px;cursor:pointer">Record again</button>
+</sc-if>
+</div>
+<label style="display:flex;gap:12px;align-items:flex-start;font-size:16px;line-height:1.5;color:#1A3034;cursor:pointer">
+<sc-if value="{{ vn.consentOn }}" hint-placeholder-val="{{ false }}"><input type="checkbox" checked="checked" onChange="{{ vn.toggleConsent }}" style="flex:0 0 auto;width:22px;height:22px;margin:1px 0 0;accent-color:#176F69"></sc-if><sc-if value="{{ vn.consentOff }}" hint-placeholder-val="{{ true }}"><input type="checkbox" onChange="{{ vn.toggleConsent }}" style="flex:0 0 auto;width:22px;height:22px;margin:1px 0 0;accent-color:#176F69"></sc-if>
+<span>I agree that Knowvia can store this voice note to understand my family's cover. [LEGAL REVIEW: retention, transcription and deletion]</span>
+</label>
+</div>
+</sc-if>
+
 <div style="display:flex;flex-direction:column;gap:10px">
-<button class="kv-btn" type="submit" aria-disabled="{{ close.busyStr }}" style="width:100%;height:56px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;letter-spacing:0.005em;cursor:pointer">{{ close.buttonLabel }}</button>
+<button class="kv-btn" type="submit" aria-disabled="{{ close.busyStr }}" style="width:100%;height:56px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;letter-spacing:0.005em;cursor:pointer">{{ cm.buttonLabel }}</button>
 <sc-if value="{{ close.busy }}" hint-placeholder-val="{{ false }}">
 <div aria-hidden="true" style="height:3px;border-radius:3px;background:linear-gradient(90deg,#E6EFEC,#176F69,#E6EFEC);background-size:200% 100%;animation:kvLoad 1.2s linear infinite"></div>
 </sc-if>
 </div>
-<div style="display:flex;flex-direction:column;gap:6px">
-<p style="margin:0;font-size:18px;line-height:1.5;font-weight:600;color:#163F42">Not an insurer. Not selling your data. One email when we open.</p>
-<p id="close-consent" style="margin:0;font-size:17px;line-height:1.5;color:#55696D">We use your email only to tell you when Knowvia opens. Read the <a href="#privacy-notice">privacy notice</a>.</p>
-</div>
+<p id="close-consent" style="margin:0;font-size:15px;line-height:1.5;color:#55696D">We use your email only to tell you when Knowvia opens. Read the <a href="#privacy-notice">privacy notice</a>.</p>
 </form>
 </sc-if>
 <sc-if value="{{ close.showSuccess }}" hint-placeholder-val="{{ false }}">
-<div role="status" style="display:flex;flex-direction:column;gap:8px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) both">
+<div role="status" style="display:flex;flex-direction:column;gap:10px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) both">
+<span aria-hidden="true" style="display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:50%;background:#E3F0EE"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#176F69" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span>
 <p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">You are on the list.</p>
-<p style="margin:0;font-size:17px;line-height:1.6">We will email {{ close.emailShown }} when Knowvia opens. While you wait, find your policy schedule and your employer's benefits booklet.</p>
+<p style="margin:0;font-size:17px;line-height:1.6">We will email {{ close.emailShown }} when Knowvia opens. {{ cm.successExtra }} While you wait, find your policy schedule and your employer's benefits booklet.</p>
 </div>
 </sc-if>
 </div>
@@ -653,11 +720,11 @@ a{color:#176F69}a:hover{color:#125A55}
 </footer>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"heroFormState":{"editor":"enum","options":["default","empty","invalid","submitting","success","network","server"],"default":"default","section":"Form states"},"closingFormState":{"editor":"enum","options":["default","empty","invalid","submitting","success","network","server"],"default":"default","section":"Form states"},"privacyViewer":{"editor":"enum","options":["family","you"],"default":"family","section":"Permission panel"},"mobileMenuOpen":{"editor":"boolean","default":false,"section":"Mobile"},"$preview":{"width":1440,"height":8000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"heroFormState":{"editor":"enum","options":["default","empty","invalid","submitting","success","network","server"],"default":"default","section":"Form states"},"closingFormState":{"editor":"enum","options":["default","empty","invalid","submitting","success","network","server"],"default":"default","section":"Form states"},"privacyViewer":{"editor":"enum","options":["family","you"],"default":"family","section":"Permission panel"},"mobileMenuOpen":{"editor":"boolean","default":false,"section":"Mobile"},"closingMode":{"editor":"enum","options":["write","voice"],"default":"write","section":"Closing form"},"closingVoiceState":{"editor":"enum","options":["idle","recording","recorded"],"default":"idle","section":"Closing form"},"$preview":{"width":1440,"height":8000}}'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { faqOpen: 0, events: {} };
+    this.state = { faqOpen: 0, events: {}, policies: {} };
     this.timers = {};
     this.raf = {};
     this.done = {};
@@ -723,6 +790,8 @@ class Component extends DCLogic {
     if (prev.closingFormState !== this.props.closingFormState) reset.closeState = null;
     if (prev.privacyViewer !== this.props.privacyViewer) reset.viewer = null;
     if (prev.mobileMenuOpen !== this.props.mobileMenuOpen) reset.menu = null;
+    if (prev.closingMode !== this.props.closingMode) reset.mode = null;
+    if (prev.closingVoiceState !== this.props.closingVoiceState) { reset.voice = null; reset.voiceSecs = null; }
     if (Object.keys(reset).length) this.setState(reset);
   }
   componentWillUnmount() {
@@ -730,6 +799,8 @@ class Component extends DCLogic {
     Object.keys(this.raf).forEach(function (k) { cancelAnimationFrame(this.raf[k]); }, this);
     if (this.io) this.io.disconnect();
     if (this.auto) clearInterval(this.auto);
+    if (this.recTick) clearInterval(this.recTick);
+    if (this.playTick) clearInterval(this.playTick);
   }
   formModel(key, propState) {
     var self = this;
@@ -825,7 +896,7 @@ class Component extends DCLogic {
       ['Push a policy', 'Sometimes the right answer is to buy nothing yet. We will say so.'],
       ['Show medical details', 'Not to anyone, unless that person chose to share them.'],
       ['Replace your insurer', 'We are not your insurer, TPA or hospital desk. We help you ask them better questions.']
-    ].map(function (p) { return { term: p[0], text: p[1] }; });
+    ].map(function (p, i) { return { term: p[0], text: p[1], num: '0' + (i + 1) }; });
     var faqData = [
       ['When can I use it, and what will it cost?', 'Knowvia is not open yet, and pricing is not set. Join the early list and you will hear about both first.'],
       ['Is this only for health insurance?', 'Yes. Knowvia reads health insurance only: employer group cover, personal and family floater policies, parents\' and senior citizen policies, and top-ups. Not motor, not life.'],
@@ -858,6 +929,77 @@ class Component extends DCLogic {
         toggle: function () { var ev = Object.assign({}, self.state.events); ev[i] = !ev[i]; self.setState({ events: ev }); }
       };
     });
+    var polLabels = ['Employer group cover', 'Family floater', 'Parents\' policy', 'Super top-up', 'Not sure'];
+    var policies = polLabels.map(function (label, i) {
+      var isOn = !!self.state.policies[i];
+      return {
+        label: label, isOn: isOn, on: isOn ? 'true' : 'false',
+        style: chipBase + (isOn ? 'background:#E3F0EE;border:2px solid #176F69;color:#163F42;' : 'background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;'),
+        toggle: function () { var pp = Object.assign({}, self.state.policies); pp[i] = !pp[i]; self.setState({ policies: pp }); }
+      };
+    });
+    var mode = this.state.mode || this.props.closingMode || 'write';
+    var closeModel = this.formModel('close', this.props.closingFormState);
+    var tab = 'flex:1 1 0;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border:0;border-radius:9px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;';
+    var voice = this.state.voice || this.props.closingVoiceState || 'idle';
+    var secs = this.state.voiceSecs != null ? this.state.voiceSecs : (voice === 'recording' ? 18 : voice === 'recorded' ? 42 : 0);
+    var consent = this.state.consent != null ? this.state.consent : voice !== 'idle';
+    var fmt = function (v) { return Math.floor(v / 60) + ':' + ('0' + (v % 60)).slice(-2); };
+    var heights = [10, 18, 26, 14, 30, 22, 34, 16, 24, 32, 12, 28, 20, 36, 18, 26, 14, 30, 22, 12, 28, 34, 16, 24, 20, 32, 14, 26, 18, 30, 12, 22];
+    var playedBars = voice === 'recorded' ? Math.round(heights.length * ((this.state.playPos || 0))) : 0;
+    var bars = heights.map(function (h, i) {
+      var st = 'display:block;flex:1 1 0;max-width:6px;border-radius:3px;height:' + h + 'px;';
+      if (voice === 'idle') return { style: st + 'height:4px;background:#CFDCDA;' };
+      if (voice === 'recording') return { style: st + 'background:#176F69;transform-origin:center;animation:kvBar ' + (700 + (i % 5) * 120) + 'ms ease-in-out ' + (i * 45) + 'ms infinite;' };
+      return { style: st + 'background:' + (i < playedBars ? '#176F69' : '#7B918E') + ';' };
+    });
+    var stopRec = function () { clearInterval(self.recTick); self.setState({ voice: 'recorded', playPos: 0 }); };
+    var vn = {
+      isIdle: voice === 'idle', isRec: voice === 'recording', isDone: voice === 'recorded',
+      consentOn: consent, consentOff: !consent,
+      lockedStr: consent ? 'false' : 'true',
+      micStyle: 'flex:0 0 auto;width:60px;height:60px;border-radius:50%;border:0;display:flex;align-items:center;justify-content:center;cursor:pointer;' + (consent ? 'background:#176F69;color:#FFFFFF;' : 'background:#E6EFEC;color:#55696D;'),
+      status: voice === 'idle' ? (consent ? 'Tap to record' : 'Tick the box below to record') : voice === 'recording' ? 'Recording' : 'Voice note ready',
+      time: voice === 'idle' ? '0:00 / 1:00' : voice === 'recording' ? fmt(secs) + ' / 1:00' : fmt(secs),
+      bars: bars,
+      playing: !!this.state.playing, paused: !this.state.playing,
+      playLabel: this.state.playing ? 'Pause voice note' : 'Play voice note',
+      toggleConsent: function () { self.setState({ consent: !consent }); },
+      start: function () {
+        if (!consent) return;
+        self.setState({ voice: 'recording', voiceSecs: 0 });
+        clearInterval(self.recTick);
+        self.recTick = setInterval(function () {
+          var v = (self.state.voiceSecs || 0) + 1;
+          if (v >= 60) { stopRec(); self.setState({ voiceSecs: 60 }); return; }
+          self.setState({ voiceSecs: v });
+        }, 1000);
+      },
+      stop: stopRec,
+      redo: function () { clearInterval(self.recTick); self.setState({ voice: 'idle', voiceSecs: 0, playing: false, playPos: 0 }); },
+      play: function () {
+        if (self.state.playing) { clearInterval(self.playTick); self.setState({ playing: false }); return; }
+        self.setState({ playing: true, playPos: 0 });
+        clearInterval(self.playTick);
+        self.playTick = setInterval(function () {
+          var p = (self.state.playPos || 0) + 0.05;
+          if (p >= 1) { clearInterval(self.playTick); self.setState({ playing: false, playPos: 1 }); return; }
+          self.setState({ playPos: p });
+        }, 150);
+      }
+    };
+    var emailInvalid = closeModel.invalid === 'true';
+    var cm = {
+      isWrite: mode === 'write', isVoice: mode === 'voice',
+      isWriteStr: mode === 'write' ? 'true' : 'false', isVoiceStr: mode === 'voice' ? 'true' : 'false',
+      writeStyle: tab + (mode === 'write' ? 'background:#FFFFFF;color:#163F42;box-shadow:0 1px 2px rgba(22,62,54,0.12),inset 0 0 0 2px #163F42;' : 'background:transparent;color:#55696D;'),
+      voiceStyle: tab + (mode === 'voice' ? 'background:#FFFFFF;color:#163F42;box-shadow:0 1px 2px rgba(22,62,54,0.12),inset 0 0 0 2px #163F42;' : 'background:transparent;color:#55696D;'),
+      setWrite: function () { self.setState({ mode: 'write' }); },
+      setVoice: function () { self.setState({ mode: 'voice' }); },
+      emailStyle: 'height:52px;box-sizing:border-box;padding:0 16px;border-radius:12px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034;' + (emailInvalid ? 'border:2px solid #A74335;' : 'border:1px solid #7B918E;'),
+      buttonLabel: closeModel.busy ? 'Joining' : (mode === 'voice' && voice === 'recorded' ? 'Send voice note and join' : closeModel.buttonLabel),
+      successExtra: mode === 'voice' && voice === 'recorded' ? 'We have your voice note too.' : ''
+    };
     var isYou = viewer === 'you';
     var pi = this.state.pInd != null ? this.state.pInd : 1;
     var ps = this.state.pSto != null ? this.state.pSto : 1;
@@ -872,7 +1014,10 @@ class Component extends DCLogic {
       n: n,
       st: st,
       hero: this.formModel('hero', this.props.heroFormState),
-      close: this.formModel('close', this.props.closingFormState),
+      close: closeModel,
+      cm: cm,
+      vn: vn,
+      policies: policies,
       menuOpen: menuOpen,
       menuOpenStr: menuOpen ? 'true' : 'false',
       toggleMenu: function () { self.setState({ menu: !menuOpen }); },

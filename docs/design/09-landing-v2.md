@@ -88,3 +88,14 @@ for any trade, business or profession, and the ministry and Lok Sabha marks carr
 attributions. Before going public, counsel should confirm this use, or the plate should fall back to the typographic marks
 (kept in round 3). IRDAI and LocalCircles marks also need permission or a fair-use view. The plates say "Source", never
 "in partnership with" or "endorsed by".
+
+## Round 5 changes (13 October 2026, version 28)
+
+- "What we will not do" is now in proportion with the rest of the page. The heading uses the standard H2 size beside a numbered list of five struck terms (24 to 30 px, down from 64 px), each with one line of explanation; the sign-off line sits under the heading. Section padding drops to the standard 72 to 112 px.
+- The closing section is no longer a giant headline beside an email box. The H2 drops to the standard display size, with three trust lines beside a compact form card. The card offers two ways in:
+  - **Write it:** first name (optional), email, "Which health policies does your family have?" chips and "What is coming up?" chips.
+  - **Say it:** a voice note of up to 60 seconds. A consent checkbox must be ticked before the record button works. States: before recording, recording (pulsing ring, live waveform, timer), and ready to send (play or pause, Record again). The send button becomes "Send voice note and join".
+- Fixed a bug: the closing email field inherited `flex:1 1 260px` from the hero form and rendered about 260 px tall.
+- New canvas tweaks: `closingMode` (write or voice) and `closingVoiceState` (idle, recording or recorded).
+- Open before launch: [CONFIRM LANGUAGES] for voice notes; [LEGAL REVIEW] for voice-note retention, transcription and deletion. Voice about health is sensitive personal data under the DPDP Act, so consent must be explicit and specific.
+- The Figma plugin and HTML pack are regenerated, with three new voice-note state boards (32 boards in all).
