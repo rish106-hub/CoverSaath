@@ -1,28 +1,29 @@
-# Latest iteration: Knowvia landing and onboarding design brief, CP0
+# Latest iteration: Knowvia landing and onboarding design, CP0 to CP7
 
 Updated 13 October 2026.
 
-**Objective.** Produce an evidence-backed design brief (copy, layout, design language, dependencies) for the
-Knowvia landing page and onboarding, to hand to Claude Design.
+**Objective.** Design the Knowvia landing page and onboarding in Claude Design, backed by an evidence-traced brief, before
+any implementation.
 
-**Classification.** S1, documentation only. CERT = READY for CP1 to CP4.
+**Classification.** S1, documentation and design only. No product code changed.
 
-**Done.** CP0. The research report was read in full (11 sites). Product, brand and customer-evidence files were
-read. The repo map was built. The design-taste-frontend skill was reviewed and installed at user scope. Eight user
-decisions were recorded. Requirements, non-negotiables, metrics, checkpoint procedure and the evidence register
-were written to `docs/design/00-requirements-and-framework.md`.
+**Built.**
+- Claude Design canvas "Knowvia landing and onboarding" (https://claude.ai/artifact/Ghw2c9rV2yhCDoekLTFFpS, private until
+  shared). 14 artboards: landing desktop and mobile (interactive form states, FAQ, permission toggle, mobile menu, hero
+  reading sequence), onboarding O1 to O7, an Extra states board, and Foundations, Components and Motion boards.
+  Source mirrored in docs/design/claude-design/.
+- docs/design/00 to 08, cp1/ (eleven-site teardown in four group files), tokens.json.
 
-**Key decisions.** Brand name Knowvia. Households first, plus a partner block. Landing plus onboarding. CTA "Join
-the early list". Calm editorial direction (Mist ground, Deep Tide bands, Newsreader over Source Sans 3, Harbour
-pill CTA). Research-backed proof only. Hand-off to Claude Design, no Figma connector.
+**Tools and agents.** repomap (MAP gate), design-taste-frontend and frontend-design skills (reviewed, installed at user
+scope), Playwright capture script for the eleven sites, four parallel research agents for CP1, one independent review
+agent for CP7.
 
-**Changed files.** `docs/design/README.md`, `docs/design/00-requirements-and-framework.md`,
-`docs/exec-plans/active/landing-design-intake.md`, this file.
+**Verification.** Every evidence number checked against the transcripts. Token contrast computed with the WCAG formula.
+All artboards pass format checks (JSON, holes, tag balance, no dashes). The independent review found 7 High, 16 Medium
+and 18 Low; every High is fixed in the design, and the resolution table is in 08-review.md.
 
-**Verification.** Every evidence-register number was checked against the transcripts. Repo map queries
-succeeded. Skill frontmatter was checked and the skill is callable.
+**Open.** Public re-consent for quotes and stories; sign-off on the generic permission example; a legal decision on the
+optional "Planned treatment" field and all [LEGAL REVIEW] text; a rendered check of the hero headline break and the
+`aria-disabled` behaviour; name clearance; real photography (placeholders P1 to P6).
 
-**Risks.** Quote consent re-check, legal text, and name clearance are open (requirements section 14).
-`docs/CERT.md` and `docs/agent-tooling.md`, which `CLAUDE.md` references, do not exist.
-
-**Next action.** CP1 reference teardown and CP2 product audit (can run in parallel), then CP3 for user approval.
+**Next action.** The user reviews the canvas and comments on it; then implementation planning in the landing-page repo.
