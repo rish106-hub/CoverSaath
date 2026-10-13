@@ -37,6 +37,10 @@ a{color:#176F69}a:hover{color:#125A55}
 .kv-marquee{display:flex;gap:0;width:max-content;animation:kvScroll 48s linear infinite}
 .kv-marquee-wrap:hover .kv-marquee{animation-play-state:paused}
 .kv-overhang{margin-bottom:-64px}
+.kv-strike{background-image:linear-gradient(#2E6B4A,#2E6B4A);background-repeat:no-repeat;background-position:0 58%;background-size:100% 0.07em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.kv-refuse{transition:padding-left 300ms cubic-bezier(0.165,0.84,0.44,1)}
+.kv-refuse:hover{padding-left:12px}
+.kv-refuse:hover .kv-strike-text{color:#163F42}
 .kv-pulse{position:relative}
 .kv-pulse::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid #176F69;animation:kvPulse 2.4s ease-out infinite}
 @keyframes kvIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
@@ -50,10 +54,18 @@ a{color:#176F69}a:hover{color:#125A55}
 @keyframes kvMarch{to{background-position:14px 0,-14px 100%,0 -14px,100% 14px}}
 @keyframes kvPulse{from{opacity:0.8;transform:scale(0.6)}to{opacity:0;transform:scale(1.8)}}
 @keyframes kvGrow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes kvSlideL{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
+@keyframes kvSlideR{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+@keyframes kvRedact{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes kvUnlock{0%{transform:none}60%{transform:translateY(-4px) rotate(-28deg)}100%{transform:translateY(-3px) rotate(-24deg)}}
+@keyframes kvReveal{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes kvShake{0%,100%{transform:none}25%{transform:rotate(-10deg)}75%{transform:rotate(10deg)}}
+@keyframes kvStrike{from{background-size:0% 0.07em}to{background-size:100% 0.07em}}
 @keyframes kvMark{from{background-size:0% 0.26em}to{background-size:100% 0.26em}}
 @keyframes kvPop{from{opacity:0;transform:scale(0.6)}to{opacity:1;transform:scale(1)}}
 @keyframes kvRise{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
 @supports (animation-timeline: view()){
+.kv-strike{animation:kvStrike linear both;animation-timeline:view();animation-range:entry 30% cover 45%}
 .kv-grow{transform-origin:left;animation:kvGrow linear both;animation-timeline:view();animation-range:entry 10% cover 35%}
 .kv-rise{animation:kvRise linear both;animation-timeline:view();animation-range:entry 0% entry 60%}
 }
@@ -78,7 +90,6 @@ a{color:#176F69}a:hover{color:#125A55}
 <svg width="34" height="34" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" rx="144" fill="#163F42"></rect><path d="M258 194v412M265 404l274 210" fill="none" stroke="#F3F7F6" stroke-width="58" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="58" stroke-linecap="round"></path><path d="M557 150l46 46-46 46-46-46z" fill="#E0A02B"></path></svg>
 <span style="font-size:22px;font-weight:600;letter-spacing:-0.01em">Knowvia</span>
 </a>
-<span class="kv-desktop" style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:999px;background:#E3F0EE;color:#163F42;font-size:14px;font-weight:600"><span class="kv-pulse" aria-hidden="true" style="width:8px;height:8px;border-radius:50%;background:#176F69"></span>Launching soon</span>
 </div>
 <div class="kv-desktop" style="display:flex;align-items:center;gap:32px;font-size:16px;font-weight:600">
 <a class="kv-nav-link" href="#how">How it works</a>
@@ -134,7 +145,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <div aria-hidden="true" style="height:3px;border-radius:3px;background:linear-gradient(90deg,#E6EFEC,#176F69,#E6EFEC);background-size:200% 100%;animation:kvLoad 1.2s linear infinite"></div>
 </sc-if>
 <p id="hero-error" role="alert" style="margin:0;color:#A74335;font-size:17px;line-height:1.45;font-weight:600">{{ hero.error }}</p>
-<p id="hero-help" style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D">Launching soon. We will email you when Knowvia opens.</p>
+<p id="hero-help" style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D">Knowvia is not open yet. We will email you the day it is.</p>
 </form>
 </sc-if>
 <sc-if value="{{ hero.showSuccess }}" hint-placeholder-val="{{ false }}">
@@ -475,40 +486,36 @@ a{color:#176F69}a:hover{color:#125A55}
 <button type="button" onClick="{{ viewYou }}" aria-pressed="{{ isYouStr }}" style="{{ segYouStyle }}">You</button>
 <button type="button" onClick="{{ viewFamily }}" aria-pressed="{{ isFamilyStr }}" style="{{ segFamilyStyle }}">Your brother</button>
 </div>
-<p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">{{ panelTitle }}</p>
+<sc-if value="{{ isYou }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:12px;animation:kvSlideL 420ms cubic-bezier(0.165,0.84,0.44,1) both">
+<span aria-hidden="true" style="width:40px;height:40px;border-radius:50%;background:#DDF0DC;color:#0F4A3A;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700">You</span>
+<div><p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">What you see</p><p style="margin:0;font-size:15px;color:#2E6B4A;font-weight:600">Full access. It is your own record.</p></div>
+</div>
 <dl style="margin:0;display:flex;flex-direction:column">
-<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA">
-<dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Cover amount</dt>
-<dd style="margin:0;font-size:18px;line-height:1.5">₹5,00,000 floater</dd>
-</div>
-<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA">
-<dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Policy details</dt>
-<dd style="margin:0;font-size:18px;line-height:1.5">Policy number, TPA, hospital desk contact</dd>
-</div>
-<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:14px 0">
-<dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Medical details</dt>
-<dd style="margin:0;font-size:18px;line-height:1.5;display:flex;align-items:center;gap:6px;color:{{ medColor }};animation:kvFade 180ms ease-out both">
-<sc-if value="{{ isFamily }}" hint-placeholder-val="{{ true }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></sc-if>
-<span>{{ medValue }}</span>
-</dd>
-</div>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA;animation:kvSlideL 420ms cubic-bezier(0.165,0.84,0.44,1) 80ms both"><dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Cover amount</dt><dd style="margin:0;font-size:18px;line-height:1.5">₹5,00,000 floater</dd></div>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA;animation:kvSlideL 420ms cubic-bezier(0.165,0.84,0.44,1) 160ms both"><dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Policy details</dt><dd style="margin:0;font-size:18px;line-height:1.5">Policy number, TPA, hospital desk contact</dd></div>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;padding:14px 0;animation:kvSlideL 420ms cubic-bezier(0.165,0.84,0.44,1) 240ms both"><dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Medical details</dt><dd style="margin:0;font-size:18px;line-height:1.5;display:flex;align-items:center;gap:8px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2E6B4A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3" style="transform-origin:16px 11px;animation:kvUnlock 600ms cubic-bezier(0.165,0.84,0.44,1) 420ms both"></path></svg><span style="animation:kvReveal 700ms cubic-bezier(0.165,0.84,0.44,1) 700ms both">Declared conditions, as on your proposal form</span></dd></div>
 </dl>
+</div>
+</sc-if>
+<sc-if value="{{ isFamily }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:center;gap:12px;animation:kvSlideR 420ms cubic-bezier(0.165,0.84,0.44,1) both">
+<span aria-hidden="true" style="width:40px;height:40px;border-radius:50%;background:#CDEBE5;color:#163F42;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700">Bro</span>
+<div><p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">What your brother sees</p><p style="margin:0;font-size:15px;color:#55696D;font-weight:600">Only what you chose to share.</p></div>
+</div>
+<dl style="margin:0;display:flex;flex-direction:column">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA;animation:kvSlideR 420ms cubic-bezier(0.165,0.84,0.44,1) 80ms both"><dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Cover amount</dt><dd style="margin:0;font-size:18px;line-height:1.5">₹5,00,000 floater</dd></div>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA;animation:kvSlideR 420ms cubic-bezier(0.165,0.84,0.44,1) 160ms both"><dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Policy details</dt><dd style="margin:0;font-size:18px;line-height:1.5">Policy number, TPA, hospital desk contact</dd></div>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 16px;padding:14px 0;animation:kvSlideR 420ms cubic-bezier(0.165,0.84,0.44,1) 240ms both"><dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Medical details</dt><dd style="margin:0;font-size:18px;line-height:1.5;display:flex;align-items:center;gap:10px">
+<span style="position:relative;display:inline-block"><span aria-hidden="true" style="color:#1A3034">Declared conditions</span><span aria-hidden="true" style="position:absolute;left:-4px;right:-4px;top:2px;bottom:2px;border-radius:4px;background:#163F42;transform-origin:left;animation:kvRedact 520ms cubic-bezier(0.165,0.84,0.44,1) 450ms both"></span></span>
+<span style="display:inline-flex;align-items:center;gap:6px;color:#55696D;font-weight:600;animation:kvIn 360ms cubic-bezier(0.165,0.84,0.44,1) 1000ms both"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="animation:kvShake 400ms ease-in-out 1150ms both"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Not shared</span>
+</dd></div>
+</dl>
+</div>
+</sc-if>
 <p style="margin:0;font-size:17px;line-height:1.5;color:#55696D">You can also set emergency access in advance, for a moment you cannot speak for yourself.</p>
-</div>
-</div>
-</section>
-
-<!-- 9. What we will not do -->
-<section aria-labelledby="not-h" style="padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
-<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:40px">
-<h2 id="not-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#163F42">What we will not do</h2>
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:16px">
-<sc-for list="{{ promises }}" as="p" hint-placeholder-count="5">
-<div class="kv-tile" style="display:flex;gap:18px;align-items:flex-start;background:#FFFFFF;border-radius:20px;padding:24px 26px;border:1px solid #CFDCDA">
-<span aria-hidden="true" style="flex:0 0 auto;width:44px;height:44px;border-radius:50%;background:#DDF0DC;display:flex;align-items:center;justify-content:center;color:#2E6B4A"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M5.6 5.6l12.8 12.8"></path></svg></span>
-<div style="display:flex;flex-direction:column;gap:6px"><p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">{{ p.term }}</p><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55">{{ p.text }}</p></div>
-</div>
-</sc-for>
 </div>
 </div>
 </section>
@@ -550,13 +557,32 @@ a{color:#176F69}a:hover{color:#125A55}
 </div>
 </section>
 
+<!-- 11b. What we will not do: manifesto -->
+<section id="promises" aria-labelledby="not-h" style="background:#FFFFFF;padding:clamp(80px,10vw,144px) clamp(20px,5vw,80px)">
+<div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:clamp(32px,4vw,56px)">
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px 48px">
+<h2 id="not-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(40px,5vw,72px);line-height:1;letter-spacing:-0.02em;color:#163F42;max-width:10ch">What we will not do</h2>
+<p style="margin:0;font-size:clamp(18px,1.46vw,21px);line-height:1.5;max-width:36ch;color:#1A3034">Five lines we will not cross. Hold us to them.</p>
+</div>
+<ul style="list-style:none;margin:0;padding:0;border-bottom:1px solid #CFDCDA">
+<sc-for list="{{ promises }}" as="p" hint-placeholder-count="5">
+<li class="kv-refuse" style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 56px;padding:clamp(22px,2.6vw,34px) 0;border-top:1px solid #CFDCDA">
+<p style="flex:1 1 520px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,4.4vw,64px);line-height:1.08;letter-spacing:-0.015em"><span class="kv-strike kv-strike-text" style="color:#55696D;transition:color 240ms ease-out">{{ p.term }}</span><span style="position:absolute;left:-9999px">: we will not do this.</span></p>
+<p style="flex:1 1 300px;margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.55;color:#1A3034;max-width:40ch">{{ p.text }}</p>
+</li>
+</sc-for>
+</ul>
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-style:italic;font-size:clamp(26px,2.8vw,40px);line-height:1.2;color:#0F4A3A;max-width:30ch">That leaves the one job that matters: reading your family's health cover with you, before you need it.</p>
+</div>
+</section>
+
 <!-- 12. Closing -->
 <section id="early-list" aria-labelledby="close-h" style="position:relative;overflow:hidden;background:#163F42;color:#FFFFFF;padding:clamp(80px,10vw,144px) clamp(20px,5vw,80px)">
 <svg aria-hidden="true" viewBox="0 0 800 800" style="position:absolute;right:-180px;top:-120px;width:820px;height:820px;opacity:0.09"><circle cx="400" cy="400" r="290" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><circle cx="400" cy="400" r="240" fill="none" stroke="#C9DDD9" stroke-width="3"></circle><path d="M258 194v412M265 404l274 210" fill="none" stroke="#C9DDD9" stroke-width="34" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="34" stroke-linecap="round"></path></svg>
 <div style="position:relative;max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:48px 72px;align-items:center">
 <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:20px">
 <h2 id="close-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(44px,5.4vw,78px);line-height:1.02;letter-spacing:-0.02em;color:#FFFFFF;max-width:12ch">Know your cover. Before you need it.</h2>
-<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;color:#C9DDD9;max-width:40ch">Knowvia launches soon, for health insurance only. Join the early list and be first in.</p>
+<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;color:#C9DDD9;max-width:40ch">Built for health insurance, and nothing else. Join the early list and be first in.</p>
 </div>
 
 <div style="flex:1 1 440px;background:#FFFFFF;color:#1A3034;border-radius:24px;padding:clamp(24px,2.8vw,40px);box-shadow:0 30px 60px rgba(0,0,0,0.25)">
@@ -779,7 +805,7 @@ class Component extends DCLogic {
       ['Replace your insurer', 'We are not your insurer, TPA or hospital desk. We help you ask them better questions.']
     ].map(function (p) { return { term: p[0], text: p[1] }; });
     var faqData = [
-      ['When can I use it, and what will it cost?', 'Knowvia launches soon, and pricing is not set yet. Join the early list and you will hear about both first.'],
+      ['When can I use it, and what will it cost?', 'Knowvia is not open yet, and pricing is not set. Join the early list and you will hear about both first.'],
       ['Is this only for health insurance?', 'Yes. Knowvia reads health insurance only: employer group cover, personal and family floater policies, parents\' and senior citizen policies, and top-ups. Not motor, not life.'],
       ['Is Knowvia an insurance company?', 'No. Knowvia does not sell or underwrite insurance, and it does not decide claims. It reads the health policies you already have and shows what they say.'],
       ['Will you sell me a policy?', 'Not by default. Many questions end with a clear answer and nothing to buy. If buying something does make sense, we will explain why and what it costs. [LEGAL REVIEW: licensed partner disclosure]'],
@@ -829,6 +855,7 @@ class Component extends DCLogic {
       days: days,
       docs: docs,
       promises: promises,
+      isYou: isYou,
       isFamily: !isYou,
       isYouStr: isYou ? 'true' : 'false',
       isFamilyStr: isYou ? 'false' : 'true',

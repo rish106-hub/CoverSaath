@@ -46,3 +46,9 @@ overrule an insurer. It changes the part you control: knowing your cover, and it
 - Permission to show the Lightspeed and Insurance Samadhan logos, and the exact words "Supported by".
 - Real photography if wanted (automated sourcing was blocked or poor; licensed images should be chosen by the team).
 - Re-check the industry numbers close to launch; newer IRDAI or LocalCircles releases may supersede them.
+
+## Round 2 changes (13 October 2026, version 22)
+
+- "Launching soon" removed everywhere (nav pill, hero helper, closing line, FAQ). Pre-launch honesty is kept with "Knowvia is not open yet."
+- "What we will not do" is no longer a grid of cards. It is a manifesto: five refusals set large in Newsreader, each struck through by a Fern line that draws across as it scrolls into view, with the plain explanation beside it. It moved to just before the closing call to action and ends on a sign-off line: "That leaves the one job that matters: reading your family's health cover with you, before you need it." References: Loop's manifesto device, Dezerv's contrast pairs, Cardless's restraint.
+- Permission panel: each viewer has its own animation. "You" slides in from the left, the lock on medical details springs open and the value is revealed left to right. "Your brother" slides in from the right, a Tide redaction bar sweeps over medical details, and a "Not shared" lock drops in with a small shake. Reduced motion shows the end states.
