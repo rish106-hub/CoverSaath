@@ -25,6 +25,9 @@ a{color:#176F69}a:hover{color:#125A55}
 .kv-btn:active{transform:translateY(1px);box-shadow:none}
 .kv-out{transition:background-color 180ms ease-out}
 .kv-out:hover{background:#E3F0EE !important}
+.kv-light{transition:background-color 180ms ease-out,transform 180ms ease-out,box-shadow 180ms ease-out}
+.kv-light:hover{background:#E3F0EE !important;transform:translateY(-1px);box-shadow:0 10px 24px rgba(0,0,0,0.22)}
+.kv-light-link:hover{color:#C8E6A0 !important}
 .kv-chip-opt{transition:background-color 180ms ease-out,border-color 180ms ease-out}
 .kv-chip-opt:hover{border-color:#176F69 !important}
 .kv-foot-link{position:relative;color:#C9DDD9;text-decoration:none;align-self:flex-start}
@@ -34,8 +37,10 @@ a{color:#176F69}a:hover{color:#125A55}
 .kv-tile:hover{transform:translateY(-4px);box-shadow:0 18px 50px rgba(22,62,54,0.12)}
 .kv-march{background-image:linear-gradient(90deg,#7A5207 50%,transparent 0),linear-gradient(90deg,#7A5207 50%,transparent 0),linear-gradient(0deg,#7A5207 50%,transparent 0),linear-gradient(0deg,#7A5207 50%,transparent 0);background-repeat:repeat-x,repeat-x,repeat-y,repeat-y;background-size:14px 2px,14px 2px,2px 14px,2px 14px;background-position:0 0,0 100%,0 0,100% 0}
 .kv-march:hover{animation:kvMarch 900ms linear infinite}
-.kv-marquee{display:flex;gap:0;width:max-content;animation:kvScroll 48s linear infinite}
-.kv-marquee-wrap:hover .kv-marquee{animation-play-state:paused}
+.kv-marquee{display:flex;gap:0;width:max-content;animation:kvScroll 26s linear infinite;will-change:transform}
+.kv-hscroll{scrollbar-width:none}.kv-hscroll::-webkit-scrollbar{display:none}
+.kv-src{transition:background-color 180ms ease-out,border-color 180ms ease-out}
+.kv-src:hover{background:rgba(255,255,255,0.08);border-color:#C8E6A0 !important}
 .kv-overhang{margin-bottom:-64px}
 .kv-strike{background-image:linear-gradient(#2E6B4A,#2E6B4A);background-repeat:no-repeat;background-position:0 58%;background-size:100% 0.07em;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 .kv-refuse{transition:padding-left 300ms cubic-bezier(0.165,0.84,0.44,1)}
@@ -74,7 +79,7 @@ a{color:#176F69}a:hover{color:#125A55}
 @keyframes kvNavSolid{from{background:rgba(243,247,246,0.6);box-shadow:none}to{background:rgba(255,255,255,0.9);box-shadow:0 1px 0 #CFDCDA,0 12px 30px rgba(22,62,54,0.08)}}
 }
 .kv-mobile{display:none}
-@media (max-width:760px){.kv-desktop{display:none !important}.kv-mobile{display:block}.kv-overhang{margin-bottom:0}.kv-hero-btn{flex:1 1 100% !important;height:56px !important}.kv-hero-art{min-height:600px !important}}
+@media (max-width:760px){.kv-desktop{display:none !important}.kv-mobile{display:block}.kv-overhang{margin-bottom:0}.kv-hero-btn{flex:1 1 100% !important;height:56px !important}.kv-hero-art{min-height:600px !important}.kv-win{top:0 !important;margin-top:12px}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}.kv-marquee{flex-wrap:wrap;width:auto}.kv-dup{display:none !important}}
 </style>
 </helmet>
@@ -220,12 +225,19 @@ a{color:#176F69}a:hover{color:#125A55}
 <p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#C8E6A0">Across India, not just in our research</p>
 <h2 id="industry-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(36px,4vw,60px);line-height:1.04;letter-spacing:-0.02em;color:#FFFFFF;max-width:14ch">This keeps happening to families.</h2>
 </div>
-<p style="margin:0;font-size:clamp(18px,1.46vw,21px);line-height:1.55;color:#DDF0DC;max-width:42ch">National numbers from Parliament, the health ministry and a large consumer survey. Every one is sourced on its card. Hover to pause.</p>
+<div style="display:flex;flex-direction:column;gap:14px;align-items:flex-start">
+<p style="margin:0;font-size:15px;font-weight:600;color:#A8DCCB">Where these numbers come from</p>
+<ul aria-label="Data sources" style="list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:10px">
+<li><a class="kv-src" href="https://www.moneylife.in/article/health-insurance-claims-worth-rs2603765-crore-rejected-by-insurers-in-fy2324-govt/76282.html" style="display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 16px;border-radius:12px;border:1px solid rgba(168,220,203,0.45);color:#FFFFFF;text-decoration:none"><span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:19px">Lok Sabha</span><span style="font-size:13px;color:#A8DCCB">reply, 2025</span></a></li>
+<li><a class="kv-src" href="https://www.pib.gov.in/PressReleasePage.aspx?PRID=2265816&amp;lang=1&amp;reg=3" style="display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 16px;border-radius:12px;border:1px solid rgba(168,220,203,0.45);color:#FFFFFF;text-decoration:none"><span style="font-size:16px;font-weight:700;letter-spacing:0.01em">Ministry of Health and Family Welfare</span><span style="font-size:13px;color:#A8DCCB">NHA 2022-23</span></a></li>
+<li><a class="kv-src" href="https://www.localcircles.com/a/press/page/health-insurance-claim-survey" style="display:inline-flex;align-items:center;gap:10px;height:44px;padding:0 16px;border-radius:12px;border:1px solid rgba(168,220,203,0.45);color:#FFFFFF;text-decoration:none"><span style="font-size:17px;font-weight:700;letter-spacing:-0.01em">LocalCircles</span><span style="font-size:13px;color:#A8DCCB">survey, 2026</span></a></li>
+</ul>
 </div>
-<div class="kv-marquee-wrap" style="position:relative;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent)">
-<div class="kv-marquee" style="align-items:stretch;animation-duration:70s;animation-direction:reverse">
-<div class="" style="display:flex;gap:24px;padding-right:24px">
-<article class="kv-tile" style="flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:rgba(255,255,255,0.07);border:1px solid rgba(168,220,203,0.32);">
+</div>
+<div style="position:relative">
+<div id="stats-track" class="kv-hscroll" tabindex="0" role="region" aria-label="Industry numbers. Scroll sideways for more." style="display:flex;gap:24px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-padding-left:clamp(20px,5vw,80px);padding:4px clamp(20px,5vw,80px) 24px;-webkit-overflow-scrolling:touch">
+
+<article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:rgba(255,255,255,0.07);border:1px solid rgba(168,220,203,0.32);">
 <p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(76px,8vw,128px);line-height:0.9;letter-spacing:-0.03em;color:#C8E6A0;font-variant-numeric:tabular-nums">{{ n.claims }}</p>
 <p style="margin:0;font-size:clamp(18px,1.5vw,21px);line-height:1.45;color:#FFFFFF">of people who claimed on health insurance say it was <strong style="font-weight:700">rejected or only partly paid</strong>, for reasons they found invalid.</p>
 <div role="img" aria-label="Ten people, four highlighted" style="display:flex;gap:8px">
@@ -235,7 +247,7 @@ a{color:#176F69}a:hover{color:#125A55}
 </div>
 <p style="margin:0;font-size:15px;line-height:1.45;color:#A8DCCB">LocalCircles national survey, claims made 2023 to 2025: 15% rejected and 29% partly approved for invalid reasons (18,989 responses). Published 7 March 2026.</p>
 </article>
-<article class="kv-tile" style="flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#DDF0DC;color:#0F4A3A;">
+<article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#DDF0DC;color:#0F4A3A;">
 <p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#0F4A3A;font-variant-numeric:tabular-nums">{{ n.crore }}</p>
 <p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#1A3034">of health insurance claims were rejected or disallowed by insurers in a single year, 2023-24.</p>
 <div role="img" aria-label="Split: ₹15,100 crore disallowed, ₹10,937 crore repudiated" style="display:flex;flex-direction:column;gap:8px">
@@ -244,7 +256,7 @@ a{color:#176F69}a:hover{color:#125A55}
 </div>
 <p style="margin:auto 0 0;font-size:15px;line-height:1.45;color:#2E6B4A">Minister of State for Finance, reply in the Lok Sabha, reported 7 February 2025.</p>
 </article>
-<article class="kv-tile" style="flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#CDEBE5;color:#163F42;">
+<article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#CDEBE5;color:#163F42;">
 <p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#163F42;font-variant-numeric:tabular-nums">{{ n.hours }}</p>
 <p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#1A3034">is the longest wait families reported. 5 in 10 claimants waited 6 to 48 hours for approval and discharge. The rule for discharge is 3 hours.</p>
 <div role="img" aria-label="Bar chart: the 3 hour rule against waits of up to 48 hours" style="display:flex;flex-direction:column;gap:10px">
@@ -253,7 +265,7 @@ a{color:#176F69}a:hover{color:#125A55}
 </div>
 <p style="margin:0;font-size:15px;line-height:1.45;color:#163F42">LocalCircles survey, 18,119 responses, 7 March 2026, citing the IRDAI directive: cashless authorisation within 1 hour, discharge within 3 hours.</p>
 </article>
-<article class="kv-tile" style="flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:rgba(255,255,255,0.07);border:1px solid rgba(168,220,203,0.32);">
+<article class="kv-tile" style="scroll-snap-align:start;flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:rgba(255,255,255,0.07);border:1px solid rgba(168,220,203,0.32);">
 <p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#A8DCCB;font-variant-numeric:tabular-nums">{{ n.oop }}</p>
 <p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#FFFFFF">spent on health in India comes straight out of people's own pockets.</p>
 <div role="img" aria-label="Grid of 100 squares, 43 filled" style="display:grid;grid-template-columns:repeat(20,minmax(0,1fr));gap:4px">
@@ -263,46 +275,13 @@ a{color:#176F69}a:hover{color:#125A55}
 </div>
 <p style="margin:0;font-size:15px;line-height:1.45;color:#A8DCCB">National Health Accounts 2022-23, Ministry of Health and Family Welfare: out-of-pocket spending was 43.4% of total health expenditure.</p>
 </article>
+<div aria-hidden="true" style="flex:0 0 1px"></div>
 </div>
-<div class="kv-dup" style="display:flex;gap:24px;padding-right:24px" aria-hidden="true">
-<article class="kv-tile" style="flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:rgba(255,255,255,0.07);border:1px solid rgba(168,220,203,0.32);">
-<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(76px,8vw,128px);line-height:0.9;letter-spacing:-0.03em;color:#C8E6A0;font-variant-numeric:tabular-nums">{{ n.claims }}</p>
-<p style="margin:0;font-size:clamp(18px,1.5vw,21px);line-height:1.45;color:#FFFFFF">of people who claimed on health insurance say it was <strong style="font-weight:700">rejected or only partly paid</strong>, for reasons they found invalid.</p>
-<div role="img" aria-label="Ten people, four highlighted" style="display:flex;gap:8px">
-<sc-for list="{{ people }}" as="pp" hint-placeholder-count="10">
-<svg width="30" height="40" viewBox="0 0 34 44" aria-hidden="true" style="{{ pp.style }}"><circle cx="17" cy="10" r="8" fill="{{ pp.fill }}"></circle><path d="M3 43c0-9 6-16 14-16s14 7 14 16z" fill="{{ pp.fill }}"></path></svg>
-</sc-for>
-</div>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#A8DCCB">LocalCircles national survey, claims made 2023 to 2025: 15% rejected and 29% partly approved for invalid reasons (18,989 responses). Published 7 March 2026.</p>
-</article>
-<article class="kv-tile" style="flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#DDF0DC;color:#0F4A3A;">
-<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#0F4A3A;font-variant-numeric:tabular-nums">{{ n.crore }}</p>
-<p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#1A3034">of health insurance claims were rejected or disallowed by insurers in a single year, 2023-24.</p>
-<div role="img" aria-label="Split: ₹15,100 crore disallowed, ₹10,937 crore repudiated" style="display:flex;flex-direction:column;gap:8px">
-<div style="display:flex;height:16px;border-radius:5px;overflow:hidden"><span class="kv-grow" style="flex:15100 1 0;background:#0F4A3A"></span><span class="kv-grow" style="flex:10937 1 0;background:#2E6B4A;opacity:0.55"></span></div>
-<div style="display:flex;justify-content:space-between;font-size:14px;color:#2E6B4A;font-weight:600"><span>₹15,100 cr disallowed</span><span>₹10,937 cr repudiated</span></div>
-</div>
-<p style="margin:auto 0 0;font-size:15px;line-height:1.45;color:#2E6B4A">Minister of State for Finance, reply in the Lok Sabha, reported 7 February 2025.</p>
-</article>
-<article class="kv-tile" style="flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:#CDEBE5;color:#163F42;">
-<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#163F42;font-variant-numeric:tabular-nums">{{ n.hours }}</p>
-<p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#1A3034">is the longest wait families reported. 5 in 10 claimants waited 6 to 48 hours for approval and discharge. The rule for discharge is 3 hours.</p>
-<div role="img" aria-label="Bar chart: the 3 hour rule against waits of up to 48 hours" style="display:flex;flex-direction:column;gap:10px">
-<div style="display:flex;align-items:center;gap:12px"><span style="flex:0 0 120px;font-size:15px;font-weight:600">The rule</span><span class="kv-grow" style="display:block;height:14px;width:6.25%;min-width:8px;border-radius:4px;background:#163F42"></span><span style="font-size:15px;font-weight:600">3 h</span></div>
-<div style="display:flex;align-items:center;gap:12px"><span style="flex:0 0 120px;font-size:15px;font-weight:600">What families saw</span><span style="flex:1 1 auto;display:flex;height:14px;border-radius:4px;overflow:hidden"><span class="kv-grow" style="display:block;width:12.5%;background:#7B918E"></span><span class="kv-grow" style="display:block;flex:1 1 auto;background:#1D8A80"></span></span><span style="font-size:15px;font-weight:600">48 h</span></div>
-</div>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#163F42">LocalCircles survey, 18,119 responses, 7 March 2026, citing the IRDAI directive: cashless authorisation within 1 hour, discharge within 3 hours.</p>
-</article>
-<article class="kv-tile" style="flex:0 0 auto;width:min(480px,84vw);box-sizing:border-box;border-radius:24px;padding:clamp(26px,3vw,40px);display:flex;flex-direction:column;gap:16px;background:rgba(255,255,255,0.07);border:1px solid rgba(168,220,203,0.32);">
-<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(60px,6vw,96px);line-height:0.9;letter-spacing:-0.03em;color:#A8DCCB;font-variant-numeric:tabular-nums">{{ n.oop }}</p>
-<p style="margin:0;font-size:clamp(18px,1.4vw,20px);line-height:1.5;color:#FFFFFF">spent on health in India comes straight out of people's own pockets.</p>
-<div role="img" aria-label="Grid of 100 squares, 43 filled" style="display:grid;grid-template-columns:repeat(20,minmax(0,1fr));gap:4px">
-<sc-for list="{{ grid }}" as="g" hint-placeholder-count="100">
-<span style="{{ g.style }}"></span>
-</sc-for>
-</div>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#A8DCCB">National Health Accounts 2022-23, Ministry of Health and Family Welfare: out-of-pocket spending was 43.4% of total health expenditure.</p>
-</article>
+<div style="max-width:1200px;margin:8px auto 0;padding:0 clamp(20px,5vw,80px);display:flex;align-items:center;justify-content:space-between;gap:16px">
+<div aria-hidden="true" style="flex:1 1 auto;max-width:320px;height:3px;border-radius:3px;background:rgba(168,220,203,0.25);overflow:hidden"><span style="{{ statBarStyle }}"></span></div>
+<div style="display:flex;gap:10px">
+<button type="button" onClick="{{ statPrev }}" aria-label="Previous number" style="width:48px;height:48px;border-radius:50%;border:1px solid rgba(168,220,203,0.6);background:transparent;color:#FFFFFF;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></button>
+<button type="button" onClick="{{ statNext }}" aria-label="Next number" style="width:48px;height:48px;border-radius:50%;border:0;background:#C8E6A0;color:#0F4A3A;cursor:pointer;display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button>
 </div>
 </div>
 </div>
@@ -341,14 +320,22 @@ a{color:#176F69}a:hover{color:#125A55}
 <div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid #CFDCDA"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#55696D" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="flex:0 0 auto;margin-top:4px"><path d="M6 6l12 12M18 6L6 18"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D"><span style="font-weight:600">{{ r.moment }}.</span> {{ r.text }}</p></div>
 </sc-for>
 </div>
-<div class="kv-rise" style="flex:1 1 440px;background:#FFFFFF;border:2px solid #163F42;border-radius:24px;padding:clamp(24px,3vw,40px);display:flex;flex-direction:column;gap:6px;box-shadow:0 18px 50px rgba(22,62,54,0.09)">
-<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
-<p style="margin:0;font-size:22px;font-weight:600;color:#163F42">With Knowvia</p>
-<span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:32px;color:#163F42">Any calm day</span>
+<div class="kv-rise kv-win" style="flex:1 1 440px;position:relative;top:-20px;background:#0F4A3A;color:#FFFFFF;border-radius:28px;padding:clamp(28px,3.2vw,44px);display:flex;flex-direction:column;gap:6px;box-shadow:0 0 0 1px rgba(200,230,160,0.35),0 34px 80px rgba(15,74,58,0.34),0 10px 24px rgba(15,74,58,0.18)">
+<p style="position:absolute;top:-17px;left:clamp(28px,3.2vw,44px);margin:0;display:inline-flex;align-items:center;gap:10px;height:34px;padding:0 16px 0 12px;border-radius:999px;background:#C8E6A0;color:#0F4A3A;font-size:15px;font-weight:700;letter-spacing:0.01em;box-shadow:0 8px 20px rgba(15,74,58,0.22)"><span aria-hidden="true" style="position:relative;display:inline-block;width:10px;height:10px;border-radius:50%;background:#0F4A3A"><span style="position:absolute;inset:0;border-radius:50%;background:#0F4A3A;animation:kvPulse 1.8s ease-out infinite"></span></span>The better way</p>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 12px">
+<p style="margin:0;font-size:22px;font-weight:600;color:#FFFFFF">With Knowvia</p>
+<span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:32px;color:#C8E6A0">Any calm day</span>
 </div>
 <sc-for list="{{ newWay }}" as="r" hint-placeholder-count="5">
-<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid #CFDCDA"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#163F42" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;margin-top:4px"><polyline points="5 12.5 10 17 19 7"></polyline></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5"><span style="font-weight:600;color:#163F42">{{ r.moment }}.</span> {{ r.text }}</p></div>
+<div style="display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-top:1px solid rgba(255,255,255,0.16)"><span aria-hidden="true" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;margin-top:1px;border-radius:50%;background:#C8E6A0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0F4A3A" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#E6F2EE"><span style="font-weight:600;color:#FFFFFF">{{ r.moment }}.</span> {{ r.text }}</p></div>
 </sc-for>
+<div style="margin-top:14px;padding-top:24px;border-top:1px solid rgba(200,230,160,0.45);display:flex;flex-direction:column;gap:18px">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:clamp(24px,2vw,28px);line-height:1.2;color:#FFFFFF;max-width:24ch">Walk in already knowing your limits, your gaps and your next step.</p>
+<div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px 24px">
+<a class="kv-light" href="#early-list" style="display:inline-flex;align-items:center;height:52px;padding:0 26px;border-radius:999px;background:#FFFFFF;color:#176F69;font-size:17px;font-weight:600;text-decoration:none;white-space:nowrap">Join the early list</a>
+<a class="kv-light-link" href="#partners" style="font-size:16px;font-weight:600;color:#FFFFFF;text-underline-offset:4px">Run an HR or insurance platform? Partner with us</a>
+</div>
+</div>
 </div>
 </div>
 </div>
@@ -394,10 +381,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <figure style="max-width:1000px;margin:0 auto;padding:0;display:flex;flex-direction:column;gap:24px;position:relative">
 <span aria-hidden="true" style="position:absolute;left:-12px;top:-72px;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:220px;line-height:1;color:#163F42;opacity:0.1">“</span>
 <blockquote style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-style:italic;font-weight:400;font-size:clamp(30px,3.6vw,52px);line-height:1.18;letter-spacing:-0.01em;color:#163F42;max-width:24ch">I can't say ‘an app told me.’ I can say ‘it says here, <span style="font-style:normal;background:linear-gradient(transparent 62%,#F6D38A 62%)">page fourteen</span>.’</blockquote>
-<figcaption style="display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline">
-<span style="font-size:17px;font-weight:600;color:#163F42">M., 29, Bengaluru</span>
-<span style="font-size:15px;line-height:1.45;color:#55696D">Recorded conversation, 5 September 2026. [CONSENT RE-CHECK BEFORE LAUNCH]</span>
-</figcaption>
+<figcaption style="display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline"><span style="font-size: 17px; font-weight: 600; color: rgb(22, 63, 66)">M., 29, Bengaluru</span><span style="font-size: 15px; line-height: 1.45; color: rgb(85, 105, 109)">Recorded conversation, 5 September 2026.&nbsp;</span></figcaption>
 </figure>
 </section>
 
@@ -527,8 +511,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#163F42">For HR platforms, insurance platforms and advisers</p>
 <h2 id="partners-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:18ch;text-wrap:balance">Cut “what does my policy cover?” calls.</h2>
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:52ch">Knowvia can sit where your customers and employees already meet their health cover. They get a clear view of every policy in their household. You keep your own support relationship.</p>
-<a class="kv-out" href="#partners-email" style="margin-top:12px;align-self:flex-start;display:inline-flex;align-items:center;height:52px;padding:0 26px;border-radius:999px;border:2px solid #176F69;color:#176F69;font-size:17px;font-weight:600;text-decoration:none;white-space:nowrap">Talk to us about a pilot</a>
-<p id="partners-email" style="margin:0;font-size:15px;color:#55696D">[PARTNERS EMAIL]</p>
+<a class="kv-out" href="#ask" style="margin-top:12px;align-self:flex-start;display:inline-flex;align-items:center;height:52px;padding:0 26px;border-radius:999px;border:2px solid #176F69;color:#176F69;font-size:17px;font-weight:600;text-decoration:none;white-space:nowrap">Talk to us about a pilot</a>
 </div>
 <ul style="flex:1 1 400px;list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:16px">
 <li style="display:flex;gap:16px;align-items:flex-start;background:#FFFFFF;border-radius:16px;padding:20px"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#163F42" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;margin-top:2px"><rect x="4" y="3" width="16" height="18" rx="1.5"></rect><path d="M9 7h2M13 7h2M9 11h2M13 11h2M10 21v-4h4v4"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6"><span style="font-weight:600;color:#163F42">HR platforms:</span> at joining or a benefits change, with the employee's permission.</p></li>
@@ -541,7 +524,14 @@ a{color:#176F69}a:hover{color:#125A55}
 <!-- 11. Questions -->
 <section id="questions" aria-labelledby="faq-h" style="padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
 <div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:32px 72px">
-<h2 id="faq-h" style="flex:1 1 280px;margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#163F42;max-width:10ch">Questions families ask us</h2>
+<div style="flex:1 1 280px;display:flex;flex-direction:column;gap:28px;align-self:flex-start">
+<h2 id="faq-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(34px,3.6vw,52px);line-height:1.08;letter-spacing:-0.015em;color:#163F42;max-width:10ch">Questions families ask us</h2>
+<div id="ask" style="background:#0F4A3A;color:#FFFFFF;border-radius:20px;padding:24px;display:flex;flex-direction:column;gap:12px;max-width:340px;scroll-margin-top:96px">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:26px;line-height:1.15">Still have a question?</p>
+<p style="margin:0;font-size:17px;line-height:1.5;color:#DDF0DC">Write to us. A person replies, not a bot.</p>
+<a class="kv-light" href="#contact" style="align-self:flex-start;display:inline-flex;align-items:center;height:44px;padding:0 18px;border-radius:999px;background:#FFFFFF;color:#176F69;font-size:16px;font-weight:700;text-decoration:none">[CONTACT EMAIL]</a>
+</div>
+</div>
 <div style="flex:2 1 560px;display:flex;flex-direction:column;gap:12px">
 <sc-for list="{{ faqs }}" as="q" hint-placeholder-count="7">
 <div style="{{ q.boxStyle }}">
@@ -643,7 +633,7 @@ a{color:#176F69}a:hover{color:#125A55}
 </nav>
 <div style="flex:1 1 160px;display:flex;flex-direction:column;gap:12px;font-size:16px">
 <p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#FFFFFF">Contact</p>
-<span>[CONTACT EMAIL]</span><span>[PARTNERS EMAIL]</span>
+<span>[CONTACT EMAIL]</span>
 </div>
 <nav aria-label="Legal" style="flex:1 1 160px;display:flex;flex-direction:column;gap:12px;font-size:16px">
 <p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#FFFFFF">Legal</p>
@@ -695,6 +685,35 @@ class Component extends DCLogic {
       });
     }, { threshold: 0.2 });
     ['industry', 'stories'].forEach(function (id) { var el = document.getElementById(id); if (el) self.io.observe(el); });
+    var track = document.getElementById('stats-track');
+    if (track) {
+      this.track = track;
+      var onScroll = function () {
+        var max = track.scrollWidth - track.clientWidth;
+        self.setState({ statPos: max > 0 ? track.scrollLeft / max : 0 });
+      };
+      var hold = function () { self.paused = true; };
+      var release = function () { self.paused = false; };
+      track.addEventListener('scroll', onScroll, { passive: true });
+      track.addEventListener('pointerenter', hold);
+      track.addEventListener('pointerleave', release);
+      track.addEventListener('focusin', hold);
+      track.addEventListener('focusout', release);
+      track.addEventListener('touchstart', hold, { passive: true });
+      this.auto = setInterval(function () {
+        if (self.paused || document.hidden) return;
+        self.stepStats(1, true);
+      }, 3800);
+    }
+  }
+  stepStats(dir, wrap) {
+    var t = this.track || document.getElementById('stats-track');
+    if (!t) return;
+    var card = t.querySelector('article');
+    var step = card ? card.getBoundingClientRect().width + 24 : 480;
+    var max = t.scrollWidth - t.clientWidth;
+    if (wrap && dir > 0 && t.scrollLeft >= max - 8) { t.scrollTo({ left: 0, behavior: 'smooth' }); return; }
+    t.scrollBy({ left: dir * step, behavior: 'smooth' });
   }
   componentDidUpdate(prev) {
     var reset = {};
@@ -708,6 +727,7 @@ class Component extends DCLogic {
     Object.keys(this.timers).forEach(function (k) { clearTimeout(this.timers[k]); }, this);
     Object.keys(this.raf).forEach(function (k) { cancelAnimationFrame(this.raf[k]); }, this);
     if (this.io) this.io.disconnect();
+    if (this.auto) clearInterval(this.auto);
   }
   formModel(key, propState) {
     var self = this;
@@ -811,6 +831,9 @@ class Component extends DCLogic {
       ['Will you sell me a policy?', 'Not by default. Many questions end with a clear answer and nothing to buy. If buying something does make sense, we will explain why and what it costs. [LEGAL REVIEW: licensed partner disclosure]'],
       ['Can Knowvia tell me if a claim will be approved?', 'No. Only your insurer decides that. We show which clauses apply, what is not confirmed, and which documents to have ready.'],
       ['What should I do in an emergency?', 'Get treatment first. Insurance should never delay care. Call the hospital\'s insurance desk, your insurer or your TPA. Knowvia does not run an emergency line.'],
+      ['Does it work with my employer\'s group health policy?', 'Yes. Add the benefits booklet or schedule your HR shares. Knowvia reads it next to your personal and parents\' policies, person by person.'],
+      ['Do I need all my documents to start?', 'No. Start with one. Knowvia shows what is missing, and exactly which page to ask your insurer, HR or family for.'],
+      ['How is my data kept safe?', 'Your documents are encrypted, and each adult controls who sees what. We do not sell your data. [LEGAL REVIEW: security and data-handling wording]'],
       ['Who can see my family\'s information?', 'Each adult decides for their own record: the cover amount, the policy details and any medical details, separately. Medical details stay private unless that person shares them.']
     ];
     var openIdx = this.state.faqOpen;
@@ -839,7 +862,11 @@ class Component extends DCLogic {
     var inr = function (v) { return Math.round(v).toLocaleString('en-IN'); };
     var n = { claims: Math.round(44 * pi) + '%', crore: '\u20b9' + inr(26037 * pi) + ' cr', hours: Math.round(48 * pi) + ' hours', oop: '\u20b9' + Math.round(43 * pi) + ' of \u20b9100' };
     var st = { a: '\u20b9' + inr(80000 * ps), b: '\u20b9' + inr(200000 * ps), c: Math.round(7 * ps) + ' hours', d: Math.round(17 * ps) + ' days', e: Math.round(7 * ps) + ' of 19' };
+    var pos = this.state.statPos || 0;
     return {
+      statBarStyle: 'display:block;height:100%;border-radius:3px;background:#C8E6A0;width:' + Math.max(18, Math.round(pos * 100)) + '%;transition:width 200ms ease-out',
+      statPrev: function () { self.paused = true; self.stepStats(-1, false); },
+      statNext: function () { self.paused = true; self.stepStats(1, false); },
       n: n,
       st: st,
       hero: this.formModel('hero', this.props.heroFormState),
