@@ -249,6 +249,7 @@ prevalence data, and the page copy must not imply otherwise.
 | E7 | T7: "Everyone gives me the counterfactual. I want the next step." | Quote; the "Next" promise |
 | E8 | T2 (desk employee): families arrive without knowing how much cash to bring | Supporting line |
 | E9 | 7 of 19 collected documents had a schedule field that did not match the family's own account | Supporting number with its denominator shown |
+| E10 | A sister's date of birth was recorded as 2001 instead of 2007 on a family policy schedule (T3) | Example of a wrong detail on a real schedule; anonymised. Added at CP2 |
 
 ## 12. Failure points and controls
 
