@@ -9,7 +9,7 @@ Status: done, 13 October 2026. Copy comes from [04-ia-and-copy-deck.md](04-ia-an
 | # | Section | Desktop (1440) | Mobile (390) | Motion |
 |---|---|---|---|---|
 | 0 | Nav | 72 tall. Logo at the left margin; links centred in the row; button right | 64 tall. Logo and menu button | None |
-| 1 | Hero | Padding 96 top, 128 bottom. Columns 1 to 7: H1 (Display, max 11ch, two lines), 24 gap, lead (max 54ch), 40 gap, compact form, 12 gap, helper. Columns 8 to 12: reading card, top aligned with the H1, overhanging the section's bottom edge by 64 so it bridges into the provenance line | Padding 40 top, 72 bottom. H1 (42px, three lines max), lead, form stacked, then the reading card full width below | M1 on load |
+| 1 | Hero | Padding 96 top, 128 bottom. Columns 1 to 7: H1 (Display, max 17ch, two lines with a forced break after "cover."), 24 gap, lead (max 50ch), 40 gap, compact form, 12 gap, helper. Columns 8 to 12: reading card, top aligned with the H1, overhanging the section's bottom edge by 64 on desktop (0 on mobile) so it bridges into the provenance line | Padding 40 top, 72 bottom. H1 (42px, three lines max), lead, form stacked, then the reading card full width below | M1 on load |
 | 2 | Provenance | 64 top padding (the card's overhang), one centred line in Source type, max 70ch | Left aligned, 40 padding | None |
 | 3 | Contrast | Paper ground, padding 128. H2 and lead in columns 1 to 7; table across 12 columns below (48 gap) | Padding 72. Stacked pairs | None |
 | 4 | How it works | Mist, padding 128. H2 and lead in columns 1 to 6. Route sequence: line at column 1; stops with text in columns 2 to 6 and specimen in columns 8 to 12. Quote after the last stop, columns 3 to 10, 96 gap above | Text only; specimens hidden except the Next stop. Quote full width | None |
@@ -33,7 +33,8 @@ Status: done, 13 October 2026. Copy comes from [04-ia-and-copy-deck.md](04-ia-an
 | O4 Sharing | 390 x 844 | One card per person with three permission rows; emergency access row | Default privacy settings |
 | O5 Add a policy | 390 x 844 | Upload zone, document chips, two uploaded file rows, skip link, security note | One error row (file over 15 MB) |
 | O6 Reading | 390 x 844 | H1, live list of found items, body | Mid-read (three found, one not found) |
-| O7 First matrix | 1440 x 900 and 390 x 844 | Desktop table of three people; mobile stacked cards | Filled, with one Conflicting row |
+| O7 First matrix | 1440 x 900 and 390 x 1300 | Desktop table of four people; mobile stacked cards | Filled, with one Conflicting row |
+| Extra states | 2470 x 1000 board | O1 error, O1b code entry, empty matrix, landing post-signup question, landing mobile menu | Added at CP7 (M11) |
 
 The flow is a clickable prototype in the design file: each primary button links to the next screen.
 

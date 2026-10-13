@@ -156,8 +156,9 @@ A design that breaks any of these fails, however good it looks.
 
 **Visual**
 
-18. One action colour (Harbour) carries every primary action. Signal Gold is limited to the focus ring and at most
-    two highlights on the whole page.
+18. One action colour (Harbour) carries every action: buttons, links and selected controls, and nothing else. Signal
+    Gold is limited to the focus halo, the Next marker and at most two highlights on the whole page. The K brand mark
+    is exempt.
 19. Two type families on a page: Newsreader for display only, Source Sans 3 for everything else. Newsreader is
     never used for forms, prices, conditions or dense content.
 20. All text meets WCAG 2.2 AA (4.5:1 normal, 3:1 large). Colour never carries status alone.

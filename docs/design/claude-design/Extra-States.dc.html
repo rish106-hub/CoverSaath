@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Knowvia extra states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&amp;family=Source+Sans+3:wght@400;600;700&amp;display=swap">
+<style>
+body{margin:0}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}}
+a{color:#176F69}a:hover{color:#125A55}
+:focus-visible{outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B !important}
+</style>
+</helmet>
+<div style="width:2470px;height:1000px;box-sizing:border-box;background:#E6EFEC;font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1A3034;padding:48px 40px;display:flex;gap:80px;align-items:flex-start">
+
+<!-- O1 error -->
+<section aria-label="O1 start, error" style="flex:0 0 390px;display:flex;flex-direction:column;gap:12px">
+<p style="margin:0;font-size:15px;font-weight:600;color:#163F42">O1 Start, error</p>
+<div style="width:390px;height:844px;box-sizing:border-box;background:#F3F7F6;border-radius:24px;display:flex;flex-direction:column;overflow:hidden">
+<div style="height:64px;padding:0 20px;display:flex;align-items:center;justify-content:flex-end"><span style="font-size:15px;font-weight:600;color:#55696D">Step 1 of 5</span></div>
+<div style="flex:1 1 auto;padding:32px 20px 0;display:flex;flex-direction:column;gap:16px">
+<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:32px;line-height:1.15;color:#163F42">Start with your own cover.</h1>
+<p style="margin:0;font-size:17px;line-height:1.6">Use your email or phone. We will send a one-time code, so there is no password to remember.</p>
+<div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+<label for="x1-id" style="font-size:15px;font-weight:600">Email or phone</label>
+<input id="x1-id" type="text" value="98765 4321" aria-invalid="true" aria-describedby="x1-err" style="height:56px;box-sizing:border-box;padding:0 16px;border:2px solid #A74335;border-radius:10px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034">
+<p id="x1-err" role="alert" style="margin:0;font-size:17px;line-height:1.45;font-weight:600;color:#A74335">Enter an email address or a 10-digit mobile number.</p>
+</div>
+</div>
+<div style="padding:20px"><span style="display:flex;align-items:center;justify-content:center;height:56px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600">Send code</span></div>
+</div>
+</section>
+
+<!-- Code entry -->
+<section aria-label="O1b code entry" style="flex:0 0 390px;display:flex;flex-direction:column;gap:12px">
+<p style="margin:0;font-size:15px;font-weight:600;color:#163F42">O1b Enter the code (wrong code shown)</p>
+<div style="width:390px;height:844px;box-sizing:border-box;background:#F3F7F6;border-radius:24px;display:flex;flex-direction:column;overflow:hidden">
+<div style="height:64px;padding:0 20px;display:flex;align-items:center;justify-content:flex-end"><span style="font-size:15px;font-weight:600;color:#55696D">Step 1 of 5</span></div>
+<div style="flex:1 1 auto;padding:32px 20px 0;display:flex;flex-direction:column;gap:16px">
+<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:32px;line-height:1.15;color:#163F42">Enter the 6-digit code.</h1>
+<p style="margin:0;font-size:17px;line-height:1.6">We sent it to you@example.in. It works for 10 minutes. [CONFIRM EXPIRY]</p>
+<div style="margin-top:16px;display:flex;flex-direction:column;gap:8px">
+<label for="x2-code" style="font-size:15px;font-weight:600">Code</label>
+<input id="x2-code" type="text" inputmode="numeric" autocomplete="one-time-code" value="482 913" aria-invalid="true" aria-describedby="x2-err" style="height:56px;box-sizing:border-box;padding:0 16px;border:2px solid #A74335;border-radius:10px;background:#FFFFFF;font:inherit;font-size:22px;letter-spacing:0.12em;color:#1A3034">
+<p id="x2-err" role="alert" style="margin:0;font-size:17px;line-height:1.45;font-weight:600;color:#A74335">That code did not match. Check the latest message and try again.</p>
+<button type="button" style="align-self:flex-start;min-height:44px;padding:0 4px;border:0;background:transparent;font:inherit;font-size:17px;font-weight:600;color:#176F69;text-decoration:underline;text-underline-offset:0.2em;cursor:pointer">Send a new code</button>
+</div>
+</div>
+<div style="padding:20px"><span style="display:flex;align-items:center;justify-content:center;height:56px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600">Continue</span></div>
+</div>
+</section>
+
+<!-- Empty matrix -->
+<section aria-label="O7 empty" style="flex:0 0 390px;display:flex;flex-direction:column;gap:12px">
+<p style="margin:0;font-size:15px;font-weight:600;color:#163F42">O7 First matrix, empty (skipped upload)</p>
+<div style="width:390px;height:844px;box-sizing:border-box;background:#F3F7F6;border-radius:24px;display:flex;flex-direction:column;overflow:hidden">
+<div style="padding:88px 20px 0;display:flex;flex-direction:column;gap:16px">
+<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:32px;line-height:1.15;color:#163F42">Your family's cover</h1>
+<div style="border:2px dashed #7B918E;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:12px;background:#FFFFFF">
+<p style="margin:0;font-size:19px;font-weight:600;color:#163F42">No policies yet. Add one to see your first row.</p>
+<p style="margin:0;font-size:17px;line-height:1.5">Ask for these first: your employer's benefits booklet, and the schedule of any policy your parents hold.</p>
+<a href="O5-Upload.dc.html" style="align-self:flex-start;display:inline-flex;align-items:center;height:52px;padding:0 24px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600;text-decoration:none">Add a policy</a>
+</div>
+<ul style="list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px">
+<li style="min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border:1px solid #CFDCDA;border-radius:10px;background:#FFFFFF;font-size:17px"><span style="font-weight:600;color:#163F42">You</span><span style="color:#55696D">Waiting for a document</span></li>
+<li style="min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border:1px solid #CFDCDA;border-radius:10px;background:#FFFFFF;font-size:17px"><span style="font-weight:600;color:#163F42">Maa</span><span style="color:#55696D">Waiting for a document</span></li>
+<li style="min-height:52px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border:1px solid #CFDCDA;border-radius:10px;background:#FFFFFF;font-size:17px"><span style="font-weight:600;color:#163F42">Papa</span><span style="color:#55696D">Waiting for a document</span></li>
+</ul>
+</div>
+</div>
+</section>
+
+<!-- Hero success with optional question -->
+<section aria-label="Hero success with optional question" style="flex:0 0 390px;display:flex;flex-direction:column;gap:12px">
+<p style="margin:0;font-size:15px;font-weight:600;color:#163F42">Landing hero, success, then the optional question</p>
+<div style="width:390px;height:844px;box-sizing:border-box;background:#F3F7F6;border-radius:24px;padding:40px 20px;display:flex;flex-direction:column;gap:20px;overflow:hidden">
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:42px;line-height:1.08;color:#163F42">Know your cover. Before you need it.</p>
+<div role="status" style="background:#FFFFFF;border-radius:16px;padding:24px;border:1px solid #CFDCDA;display:flex;flex-direction:column;gap:12px">
+<p style="margin:0;font-size:22px;font-weight:600;color:#163F42">You are on the list.</p>
+<p style="margin:0;font-size:17px;line-height:1.6">We will email you@example.in when Knowvia opens. While you wait, find your policy schedule and your employer's benefits booklet.</p>
+<fieldset aria-describedby="x4-purpose" style="margin:8px 0 0;padding:16px 0 0;border:0;border-top:1px solid #CFDCDA;display:flex;flex-direction:column;gap:10px">
+<legend style="padding:0;font-size:15px;font-weight:600">What is coming up for your family? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
+<p id="x4-purpose" style="margin:0;font-size:17px;line-height:1.5;color:#55696D">We use this only to decide what Knowvia reads first for you.</p>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<span style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;background:#E3F0EE;border:2px solid #176F69;color:#163F42;font-size:16px;font-weight:600"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>A renewal</span>
+<span style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;background:#FFFFFF;border:1px solid #7B918E;font-size:16px;font-weight:600">A job change</span>
+<span style="display:inline-flex;align-items:center;min-height:44px;padding:0 14px;border-radius:999px;background:#FFFFFF;border:1px solid #7B918E;font-size:16px;font-weight:600">Parents' cover</span>
+</div>
+<span style="display:flex;align-items:center;justify-content:center;height:52px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600">Save</span>
+<p style="margin:0;font-size:17px;color:#163F42;font-weight:600">Saved.</p>
+</fieldset>
+</div>
+</div>
+</section>
+
+<!-- Mobile menu -->
+<section aria-label="Mobile menu open" style="flex:0 0 390px;display:flex;flex-direction:column;gap:12px">
+<p style="margin:0;font-size:15px;font-weight:600;color:#163F42">Landing, mobile menu open</p>
+<div style="width:390px;height:844px;box-sizing:border-box;background:#F3F7F6;border-radius:24px;padding:0 20px;display:flex;flex-direction:column;overflow:hidden">
+<div style="height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #CFDCDA">
+<span style="display:flex;align-items:center;gap:8px;color:#163F42"><svg width="28" height="28" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" rx="144" fill="#163F42"></rect><path d="M258 194v412M265 404l274 210" fill="none" stroke="#F3F7F6" stroke-width="58" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="58" stroke-linecap="round"></path><path d="M557 150l46 46-46 46-46-46z" fill="#E0A02B"></path></svg><span style="font-size:19px;font-weight:600">Knowvia</span></span>
+<span style="display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF;color:#163F42;font-size:16px;font-weight:600"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>Close</span>
+</div>
+<div style="display:flex;flex-direction:column;font-size:19px;font-weight:600;padding-top:8px">
+<span style="min-height:56px;display:flex;align-items:center;border-bottom:1px solid #CFDCDA">How it works</span>
+<span style="min-height:56px;display:flex;align-items:center;border-bottom:1px solid #CFDCDA">Privacy</span>
+<span style="min-height:56px;display:flex;align-items:center;border-bottom:1px solid #CFDCDA">For partners</span>
+<span style="min-height:56px;display:flex;align-items:center;border-bottom:1px solid #CFDCDA">Questions</span>
+<span style="margin-top:24px;display:flex;align-items:center;justify-content:center;height:56px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px">Join the early list</span>
+</div>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":2470,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

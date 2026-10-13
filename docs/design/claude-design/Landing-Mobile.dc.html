@@ -13,35 +13,37 @@
 <style>
 body{margin:0;background:#F3F7F6}
 a{color:#176F69}a:hover{color:#125A55}
-:focus-visible{outline:3px solid #E0A02B;outline-offset:3px}
+:focus-visible{outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B !important}
+.kv-skip{position:absolute;left:-9999px;top:0}
+.kv-skip:focus{left:16px;top:16px;z-index:20;background:#FFFFFF;color:#163F42;padding:12px 16px;border-radius:10px;font-weight:600}
 .kv-btn{transition:background-color 180ms ease-out,transform 120ms ease-out}
 .kv-btn:hover{background:#125A55 !important}
 .kv-btn:active{transform:translateY(1px)}
 .kv-out{transition:background-color 180ms ease-out}
 .kv-out:hover{background:#E3F0EE !important}
-.kv-out-dark:hover{background:rgba(255,255,255,0.08) !important}
 .kv-nav-link{color:#1A3034;text-decoration:none}
 .kv-nav-link:hover{color:#176F69;text-decoration:underline;text-underline-offset:0.25em}
 .kv-foot-link{color:#C9DDD9;text-decoration:none}
 .kv-foot-link:hover{color:#FFFFFF;text-decoration:underline;text-underline-offset:0.25em}
 .kv-chip-opt{transition:background-color 180ms ease-out,border-color 180ms ease-out}
 .kv-chip-opt:hover{border-color:#176F69 !important}
+.kv-overhang{margin-bottom:-64px}
 @keyframes kvIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes kvFade{from{opacity:0}to{opacity:1}}
 @keyframes kvLine{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 @keyframes kvDrop{from{opacity:0;transform:scale(0.4)}to{opacity:1;transform:scale(1)}}
 @keyframes kvLoad{to{background-position:-200% 0}}
 .kv-mobile{display:none}
-@media (max-width:760px){.kv-desktop{display:none !important}.kv-mobile{display:block}}
-@media (prefers-reduced-motion:reduce){.kv-m{animation:none !important}.kv-btn,.kv-out,.kv-chip-opt{transition:none}}
+@media (max-width:760px){.kv-desktop{display:none !important}.kv-mobile{display:block}.kv-overhang{margin-bottom:0}.kv-hero-btn{flex:1 1 100% !important;height:56px !important}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}}
 </style>
 </helmet>
 <div style="font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1A3034;background:#F3F7F6;-webkit-font-smoothing:antialiased">
 
-<a href="#main" style="position:absolute;left:-9999px;top:0">Skip to main content</a>
+<a class="kv-skip" href="#main">Skip to main content</a>
 
 <!-- 0. Nav -->
-<header style="border-bottom:1px solid #CFDCDA;background:#F3F7F6;padding:0 clamp(20px,5vw,80px)">
+<header style="border-bottom:1px solid #CFDCDA;background:#F3F7F6;padding:0 clamp(20px,5vw,80px);position:relative;z-index:5">
 <nav aria-label="Main" style="max-width:1200px;margin:0 auto;height:72px;display:flex;align-items:center;justify-content:space-between;gap:24px">
 <a href="#top" aria-label="Knowvia home" style="display:flex;align-items:center;gap:10px;text-decoration:none;color:#163F42">
 <svg width="32" height="32" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" rx="144" fill="#163F42"></rect><path d="M258 194v412M265 404l274 210" fill="none" stroke="#F3F7F6" stroke-width="58" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="58" stroke-linecap="round"></path><path d="M557 150l46 46-46 46-46-46z" fill="#E0A02B"></path></svg>
@@ -54,10 +56,22 @@ a{color:#176F69}a:hover{color:#125A55}
 <a class="kv-nav-link" href="#questions">Questions</a>
 </div>
 <a class="kv-btn kv-desktop" href="#early-list" style="display:inline-flex;align-items:center;height:44px;padding:0 22px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:16px;font-weight:600;text-decoration:none;white-space:nowrap">Join the early list</a>
-<button class="kv-mobile" type="button" aria-label="Open menu" style="width:44px;height:44px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF;color:#163F42;padding:0;cursor:pointer">
-<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="display:block;margin:auto"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
-</button>
+<div class="kv-mobile">
+<button type="button" onClick="{{ toggleMenu }}" aria-expanded="{{ menuOpenStr }}" aria-controls="mobile-menu" style="display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF;color:#163F42;font:inherit;font-size:16px;font-weight:600;cursor:pointer">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>Menu</button>
+</div>
 </nav>
+<sc-if value="{{ menuOpen }}" hint-placeholder-val="{{ false }}">
+<div id="mobile-menu" class="kv-mobile" style="padding:8px 0 24px">
+<div style="display:flex;flex-direction:column;font-size:19px;font-weight:600">
+<a class="kv-nav-link" href="#how" style="min-height:52px;display:flex;align-items:center;border-bottom:1px solid #CFDCDA">How it works</a>
+<a class="kv-nav-link" href="#privacy" style="min-height:52px;display:flex;align-items:center;border-bottom:1px solid #CFDCDA">Privacy</a>
+<a class="kv-nav-link" href="#partners" style="min-height:52px;display:flex;align-items:center;border-bottom:1px solid #CFDCDA">For partners</a>
+<a class="kv-nav-link" href="#questions" style="min-height:52px;display:flex;align-items:center;border-bottom:1px solid #CFDCDA">Questions</a>
+<a class="kv-btn" href="#early-list" style="margin-top:20px;display:flex;align-items:center;justify-content:center;height:56px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;text-decoration:none">Join the early list</a>
+</div>
+</div>
+</sc-if>
 </header>
 
 <main id="main">
@@ -66,97 +80,85 @@ a{color:#176F69}a:hover{color:#125A55}
 <section id="top" style="padding:clamp(40px,6.5vw,96px) clamp(20px,5vw,80px) clamp(72px,8vw,112px);position:relative;z-index:2">
 <div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:clamp(48px,5vw,72px);align-items:flex-start">
 
-<div style="flex:1 1 520px;min-width:0;display:flex;flex-direction:column;gap:24px;padding-top:clamp(0px,2vw,24px)">
-<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(42px,4.45vw,64px);line-height:1.05;letter-spacing:-0.015em;color:#163F42;max-width:11ch;text-wrap:balance">Know your cover. Before you need it.</h1>
-<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;max-width:54ch;color:#1A3034">Knowvia reads your family's health insurance with you, one person at a time. See what is known, what is not confirmed, and what to do next.</p>
+<div style="flex:1 1 520px;min-width:0;display:flex;flex-direction:column;gap:24px">
+<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(42px,4.45vw,64px);line-height:1.05;letter-spacing:-0.015em;color:#163F42;max-width:17ch"><span style="display:block">Know your cover.</span> Before you need it.</h1>
+<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;max-width:50ch;color:#1A3034">Knowvia reads your family's policies with you and shows what is known, what is not confirmed, what to do next.</p>
 
 <div id="hero-form" style="margin-top:16px;max-width:560px">
 <sc-if value="{{ hero.showForm }}" hint-placeholder-val="{{ true }}">
 <form onSubmit="{{ hero.submit }}" novalidate="novalidate" style="display:flex;flex-direction:column;gap:8px">
 <label for="hero-email" style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#1A3034">Email</label>
 <div style="display:flex;flex-wrap:wrap;gap:12px">
-<input id="hero-email" name="email" type="email" autocomplete="email" onChange="{{ hero.setEmail }}" aria-invalid="{{ hero.invalid }}" aria-describedby="hero-help" style="{{ hero.inputStyle }}">
-<button class="kv-btn" type="submit" disabled="{{ hero.busy }}" style="flex:0 0 auto;height:52px;padding:0 28px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;letter-spacing:0.005em;white-space:nowrap;cursor:pointer">{{ hero.buttonLabel }}</button>
+<input id="hero-email" name="email" type="email" autocomplete="email" onChange="{{ hero.setEmail }}" aria-invalid="{{ hero.invalid }}" aria-describedby="hero-error hero-help" style="{{ hero.inputStyle }}">
+<button class="kv-btn kv-hero-btn" type="submit" aria-disabled="{{ hero.busyStr }}" style="flex:0 0 auto;height:52px;padding:0 28px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;letter-spacing:0.005em;white-space:nowrap;cursor:pointer">{{ hero.buttonLabel }}</button>
 </div>
 <sc-if value="{{ hero.busy }}" hint-placeholder-val="{{ false }}">
-<div aria-hidden="true" class="kv-m" style="height:3px;border-radius:3px;background:linear-gradient(90deg,#E6EFEC,#176F69,#E6EFEC);background-size:200% 100%;animation:kvLoad 1.2s linear infinite"></div>
+<div aria-hidden="true" style="height:3px;border-radius:3px;background:linear-gradient(90deg,#E6EFEC,#176F69,#E6EFEC);background-size:200% 100%;animation:kvLoad 1.2s linear infinite"></div>
 </sc-if>
-<sc-if value="{{ hero.hasError }}" hint-placeholder-val="{{ false }}">
-<p role="alert" style="margin:0;display:flex;gap:8px;align-items:flex-start;color:#A74335;font-size:16px;line-height:1.45;font-weight:600">
-<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true" style="flex:0 0 auto;margin-top:2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5v5.5"></path><circle cx="12" cy="16.6" r="0.6" fill="currentColor"></circle></svg>
-<span>{{ hero.error }}</span>
-</p>
-</sc-if>
-<p id="hero-help" style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Knowvia is not open yet. We will email you when it is.</p>
+<p id="hero-error" role="alert" style="margin:0;color:#A74335;font-size:17px;line-height:1.45;font-weight:600">{{ hero.error }}</p>
+<p id="hero-help" style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.5;color:#55696D">Knowvia is not open yet. We will email you when it is.</p>
 </form>
 </sc-if>
 <sc-if value="{{ hero.showSuccess }}" hint-placeholder-val="{{ false }}">
-<div role="status" class="kv-m" style="background:#FFFFFF;border-radius:16px;padding:24px 28px;border:1px solid #CFDCDA;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) both;display:flex;flex-direction:column;gap:8px">
+<div role="status" style="background:#FFFFFF;border-radius:16px;padding:24px 28px;border:1px solid #CFDCDA;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) both;display:flex;flex-direction:column;gap:8px">
 <p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">You are on the list.</p>
 <p style="margin:0;font-size:17px;line-height:1.6">We will email {{ hero.emailShown }} when Knowvia opens. While you wait, find your policy schedule and your employer's benefits booklet.</p>
-</div>
-</sc-if>
-<sc-if value="{{ hero.showAlready }}" hint-placeholder-val="{{ false }}">
-<div role="status" style="background:#FFFFFF;border-radius:16px;padding:24px 28px;border:1px solid #CFDCDA">
-<p style="margin:0;font-size:17px;line-height:1.6">This email is already on the list. We will write when Knowvia opens.</p>
 </div>
 </sc-if>
 </div>
 </div>
 
 <!-- Reading card -->
-<div style="flex:0 1 480px;min-width:min(100%,320px);margin-bottom:clamp(-140px,-6vw,-40px)">
+<div class="kv-overhang" style="flex:0 1 480px;min-width:min(100%,320px)">
 <div role="group" aria-label="Example of Knowvia reading a top-up quote" style="background:#FFFFFF;border-radius:24px;padding:clamp(24px,2.3vw,32px);box-shadow:0 18px 50px rgba(22,62,54,0.09);display:flex;flex-direction:column;gap:20px">
 
 <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
 <span style="display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:6px;background:#E6EFEC;color:#163F42;font-size:15px;font-weight:600;letter-spacing:0.01em">Example</span>
-<div style="display:flex;gap:4px" aria-label="People">
-<button type="button" aria-pressed="true" style="height:36px;padding:0 10px;border:0;border-bottom:2px solid #163F42;background:transparent;font:inherit;font-size:15px;font-weight:600;color:#163F42">You</button>
-<button type="button" aria-pressed="false" style="height:36px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;font:inherit;font-size:15px;font-weight:600;color:#55696D">Maa</button>
-<button type="button" aria-pressed="false" style="height:36px;padding:0 10px;border:0;border-bottom:2px solid transparent;background:transparent;font:inherit;font-size:15px;font-weight:600;color:#55696D">Papa</button>
-</div>
+<span style="font-size:15px;color:#55696D">Showing: <span style="font-weight:600;color:#163F42">You</span></span>
 </div>
 
 <div style="display:flex;flex-direction:column;gap:4px">
-<h2 style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">A top-up quote, read before paying</h2>
+<p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">A top-up quote, read before paying</p>
 <p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">2 documents read</p>
 </div>
 
 <div style="position:relative;padding-left:34px;display:flex;flex-direction:column;gap:18px">
-<div aria-hidden="true" class="kv-m" style="position:absolute;left:8px;top:8px;bottom:22px;width:2px;background:#163F42;transform-origin:top;animation:kvLine 1700ms cubic-bezier(0.165,0.84,0.44,1) 200ms both"></div>
+<div aria-hidden="true" style="position:absolute;left:8px;top:8px;bottom:22px;width:2px;background:#163F42;transform-origin:top;animation:kvLine 1700ms cubic-bezier(0.165,0.84,0.44,1) 200ms both"></div>
 
-<div class="kv-m" style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 300ms both">
+<div style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 300ms both">
 <span aria-hidden="true" style="position:absolute;left:-31px;top:7px;width:12px;height:12px;border-radius:50%;background:#FFFFFF;border:2px solid #163F42;box-sizing:border-box"></span>
-<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#176F69;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
-<p style="margin:0;font-size:17px;line-height:1.5">Your base cover is ₹8,00,000</p>
-<p class="kv-m" style="margin:0;font-size:15px;line-height:1.45;color:#55696D;animation:kvFade 300ms ease-out 420ms both">Base policy schedule</p>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
+<p style="margin:0;font-size:18px;line-height:1.5">Your base cover is ₹8,00,000</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D;animation:kvFade 300ms ease-out 420ms both">Base policy schedule</p>
 </div>
 
-<div class="kv-m" style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 520ms both">
+<div style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 520ms both">
 <span aria-hidden="true" style="position:absolute;left:-31px;top:7px;width:12px;height:12px;border-radius:50%;background:#FFFFFF;border:2px solid #163F42;box-sizing:border-box"></span>
-<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#176F69;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
-<p style="margin:0;font-size:17px;line-height:1.5">The top-up pays only after ₹10,00,000</p>
-<p class="kv-m" style="margin:0;font-size:15px;line-height:1.45;color:#55696D;animation:kvFade 300ms ease-out 640ms both">Top-up quote, deductible line</p>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
+<p style="margin:0;font-size:18px;line-height:1.5">The top-up pays only after ₹10,00,000</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D;animation:kvFade 300ms ease-out 640ms both">Top-up quote, deductible line</p>
 </div>
 
-<div class="kv-m" style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 740ms both">
+<div style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 740ms both">
 <span aria-hidden="true" style="position:absolute;left:-31px;top:7px;width:12px;height:12px;border-radius:50%;background:#FFFFFF;border:2px solid #163F42;box-sizing:border-box"></span>
-<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#176F69;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
-<p style="margin:0;font-size:17px;line-height:1.5">A bill between ₹8 and ₹10 lakh is yours to pay</p>
-<p class="kv-m" style="margin:0;font-size:15px;line-height:1.45;color:#55696D;animation:kvFade 300ms ease-out 860ms both">Calculated from both documents</p>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
+<p style="margin:0;font-size:18px;line-height:1.5">A bill between ₹8 and ₹10 lakh is yours to pay</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D;animation:kvFade 300ms ease-out 860ms both">Calculated from both documents</p>
 </div>
 
-<div class="kv-m" style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1050ms both">
+<div style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1050ms both">
 <span aria-hidden="true" style="position:absolute;left:-31px;top:7px;width:12px;height:12px;border-radius:50%;background:#FFFFFF;border:2px dashed #7A5207;box-sizing:border-box"></span>
 <span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#FBF1DD;color:#7A5207;border:1.5px dashed #7A5207;box-sizing:border-box;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-0.7 0.3-1 0.8-1 1.5v0.4"></path><circle cx="12" cy="17" r="0.6" fill="currentColor"></circle></svg>Not confirmed</span>
-<p style="margin:0;font-size:17px;line-height:1.5">Room-rent limit in your base policy</p>
+<div style="border:1.5px dashed #7A5207;border-radius:8px;padding:8px 12px;display:flex;flex-direction:column;gap:2px">
+<p style="margin:0;font-size:18px;line-height:1.5">Room-rent limit in your base policy</p>
 <p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">That page is missing from your copy</p>
 </div>
+</div>
 
-<div class="kv-m" style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1500ms both">
-<span aria-hidden="true" class="kv-m" style="position:absolute;left:-34px;top:5px;width:16px;height:16px;border-radius:50%;background:#E0A02B;box-shadow:0 0 0 4px #FFFFFF;animation:kvDrop 420ms cubic-bezier(0.165,0.84,0.44,1) 1850ms both"></span>
+<div style="position:relative;display:flex;flex-direction:column;gap:6px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1500ms both">
+<span aria-hidden="true" style="position:absolute;left:-34px;top:5px;width:16px;height:16px;border-radius:50%;background:#E0A02B;box-shadow:0 0 0 4px #FFFFFF;animation:kvDrop 400ms cubic-bezier(0.165,0.84,0.44,1) 1800ms both"></span>
 <span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#163F42;color:#FFFFFF;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>Next</span>
-<p style="margin:0;font-size:17px;line-height:1.5;font-weight:600;color:#163F42">Before you pay ₹9,400, ask the seller about the ₹2,00,000 gap.</p>
+<p style="margin:0;font-size:18px;line-height:1.5;font-weight:600;color:#163F42">Before you pay ₹9,400, ask the seller about the ₹2,00,000 gap.</p>
 </div>
 </div>
 </div>
@@ -167,7 +169,7 @@ a{color:#176F69}a:hover{color:#125A55}
 </section>
 
 <!-- 2. Provenance -->
-<section style="padding:clamp(40px,7vw,104px) clamp(20px,5vw,80px) clamp(48px,5vw,72px);border-top:1px solid #CFDCDA">
+<section style="padding:clamp(48px,7vw,104px) clamp(20px,5vw,80px) clamp(48px,5vw,72px);border-top:1px solid #CFDCDA">
 <p style="max-width:1200px;margin:0 auto;font-size:17px;line-height:1.5;color:#55696D">Built from recorded conversations with families and a hospital insurance desk, September 2026.</p>
 </section>
 
@@ -183,37 +185,37 @@ a{color:#176F69}a:hover{color:#125A55}
 <div role="row" class="kv-desktop" style="display:flex;gap:24px;padding:0 0 16px;border-bottom:1px solid #CFDCDA">
 <span role="columnheader" style="flex:0 0 180px;font-size:15px;font-weight:600;color:#55696D">Moment</span>
 <span role="columnheader" style="flex:1 1 300px;font-size:15px;font-weight:600;color:#55696D">Finding out at the hospital desk</span>
-<span role="columnheader" style="flex:1 1 300px;font-size:15px;font-weight:600;color:#176F69;padding-left:20px">Knowing it with Knowvia</span>
+<span role="columnheader" style="flex:1 1 300px;font-size:15px;font-weight:600;color:#163F42;padding-left:20px">Knowing it with Knowvia</span>
 </div>
 
 <div role="row" style="display:flex;flex-wrap:wrap;gap:8px 24px;padding:24px 0;border-bottom:1px solid #CFDCDA">
-<span role="rowheader" style="flex:0 0 180px;font-size:17px;font-weight:600;color:#163F42">Room rent</span>
+<span role="rowheader" style="flex:0 0 180px;font-size:18px;font-weight:600;color:#163F42">Room rent</span>
 <div role="cell" style="flex:1 1 300px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#55696D">At the hospital desk</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#55696D">You learn the room limit when the bill arrives.</p></div>
-<div role="cell" style="flex:1 1 300px;border-left:3px solid #176F69;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#176F69">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">You see the room limit, and its page, before you choose a room.</p></div>
+<div role="cell" style="flex:1 1 300px;border-left:3px solid #163F42;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#163F42">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">You see the room limit, and its page, before you choose a room.</p></div>
 </div>
 
 <div role="row" style="display:flex;flex-wrap:wrap;gap:8px 24px;padding:24px 0;border-bottom:1px solid #CFDCDA">
-<span role="rowheader" style="flex:0 0 180px;font-size:17px;font-weight:600;color:#163F42">Who is covered</span>
-<div role="cell" style="flex:1 1 300px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#55696D">At the hospital desk</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#55696D">You are not sure your sister is still on the family policy.</p></div>
-<div role="cell" style="flex:1 1 300px;border-left:3px solid #176F69;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#176F69">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">Every person has a row: known, not confirmed, or missing.</p></div>
+<span role="rowheader" style="flex:0 0 180px;font-size:18px;font-weight:600;color:#163F42">Who is covered</span>
+<div role="cell" style="flex:1 1 300px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#55696D">At the hospital desk</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#55696D">You are not sure who is still on the family policy.</p></div>
+<div role="cell" style="flex:1 1 300px;border-left:3px solid #163F42;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#163F42">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">Every person has a row: known, not confirmed, or missing.</p></div>
 </div>
 
 <div role="row" style="display:flex;flex-wrap:wrap;gap:8px 24px;padding:24px 0;border-bottom:1px solid #CFDCDA">
-<span role="rowheader" style="flex:0 0 180px;font-size:17px;font-weight:600;color:#163F42">Cash</span>
+<span role="rowheader" style="flex:0 0 180px;font-size:18px;font-weight:600;color:#163F42">Cash</span>
 <div role="cell" style="flex:1 1 300px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#55696D">At the hospital desk</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#55696D">You look for an ATM while the admission waits.</p></div>
-<div role="cell" style="flex:1 1 300px;border-left:3px solid #176F69;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#176F69">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">You know how much cash to keep ready, and why.</p></div>
+<div role="cell" style="flex:1 1 300px;border-left:3px solid #163F42;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#163F42">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">You know how much cash to keep ready, and why.</p></div>
 </div>
 
 <div role="row" style="display:flex;flex-wrap:wrap;gap:8px 24px;padding:24px 0;border-bottom:1px solid #CFDCDA">
-<span role="rowheader" style="flex:0 0 180px;font-size:17px;font-weight:600;color:#163F42">Leaving a job</span>
-<div role="cell" style="flex:1 1 300px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#55696D">At the hospital desk</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#55696D">Your cover ends quietly. Nobody tells you.</p></div>
-<div role="cell" style="flex:1 1 300px;border-left:3px solid #176F69;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#176F69">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">The deadline to keep your cover is already on your page.</p></div>
+<span role="rowheader" style="flex:0 0 180px;font-size:18px;font-weight:600;color:#163F42">Leaving a job</span>
+<div role="cell" style="flex:1 1 300px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#55696D">At the hospital desk</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#55696D">You get an end date. Nobody tells you how to keep your cover.</p></div>
+<div role="cell" style="flex:1 1 300px;border-left:3px solid #163F42;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#163F42">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">The deadline to keep your cover is already on your page.</p></div>
 </div>
 
 <div role="row" style="display:flex;flex-wrap:wrap;gap:8px 24px;padding:24px 0">
-<span role="rowheader" style="flex:0 0 180px;font-size:17px;font-weight:600;color:#163F42">Buying more</span>
+<span role="rowheader" style="flex:0 0 180px;font-size:18px;font-weight:600;color:#163F42">Buying more</span>
 <div role="cell" style="flex:1 1 300px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#55696D">At the hospital desk</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#55696D">A relative says the top-up is cheap.</p></div>
-<div role="cell" style="flex:1 1 300px;border-left:3px solid #176F69;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#176F69">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">You see what the top-up adds, and <strong style="font-weight:700">what it does not</strong>.</p></div>
+<div role="cell" style="flex:1 1 300px;border-left:3px solid #163F42;padding-left:17px"><span class="kv-mobile" style="font-size:15px;font-weight:600;color:#163F42">With Knowvia</span><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">You see what the top-up adds, and <strong style="font-weight:700">what it does not</strong>.</p></div>
 </div>
 </div>
 </div>
@@ -223,8 +225,8 @@ a{color:#176F69}a:hover{color:#125A55}
 <section id="how" aria-labelledby="how-h" style="padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
 <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:56px">
 <div style="display:flex;flex-direction:column;gap:16px;max-width:680px">
-<h2 id="how-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:18ch;text-wrap:balance">Three answers for every person you cover.</h2>
-<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;max-width:54ch">Add the policies you already have: your employer's, your own, your parents'. Knowvia reads them person by person.</p>
+<h2 id="how-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:18ch;text-wrap:balance">See three answers for every person.</h2>
+<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;max-width:54ch">When Knowvia opens, add the policies you already have: your employer's, your own, your parents'. Knowvia reads them person by person.</p>
 </div>
 
 <ol style="list-style:none;margin:0;padding:0 0 0 40px;position:relative;display:flex;flex-direction:column;gap:56px">
@@ -233,13 +235,13 @@ a{color:#176F69}a:hover{color:#125A55}
 <li style="position:relative;display:flex;flex-wrap:wrap;gap:24px 48px;align-items:flex-start">
 <span aria-hidden="true" style="position:absolute;left:-35px;top:6px;width:14px;height:14px;border-radius:50%;background:#F3F7F6;border:2px solid #163F42;box-sizing:border-box"></span>
 <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:10px">
-<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#176F69;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
 <h3 style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">What your documents prove</h3>
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:46ch">Sum insured, members, room limits, waiting periods. Each one shows the page it comes from.</p>
 </div>
 <div class="kv-desktop" style="flex:0 1 440px;background:#FFFFFF;border:1px solid #CFDCDA;border-radius:16px;padding:20px 24px;display:flex;flex-direction:column;gap:6px">
-<p style="margin:0;font-size:17px;line-height:1.5">Maa is enrolled as a dependant</p>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Employer member list, page 4</p>
+<p style="margin:0;font-size:18px;line-height:1.5">Maa is enrolled as a dependant</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Example. Employer member list, page 4</p>
 </div>
 </li>
 
@@ -251,8 +253,8 @@ a{color:#176F69}a:hover{color:#125A55}
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:46ch">If a page is missing or two documents disagree, we mark it. <strong style="font-weight:700">We never guess.</strong> Then we tell you who can answer.</p>
 </div>
 <div class="kv-desktop" style="flex:0 1 440px;background:#FFFFFF;border:1px solid #CFDCDA;border-radius:16px;padding:20px 24px;display:flex;flex-direction:column;gap:6px">
-<p style="margin:0;font-size:17px;line-height:1.5">Two documents disagree on your sister's date of birth</p>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Schedule says 2001. You told us 2007.</p>
+<p style="margin:0;font-size:18px;line-height:1.5">Your schedule and your answer disagree on a date of birth</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Example. Your schedule says 1996. You told us 1999.</p>
 </div>
 </li>
 
@@ -264,8 +266,8 @@ a{color:#176F69}a:hover{color:#125A55}
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:46ch">Who does it, and by when. Not a lecture about what you should have done.</p>
 </div>
 <div style="flex:0 1 440px;background:#FFFFFF;border:1px solid #CFDCDA;border-radius:16px;padding:20px 24px;display:flex;flex-direction:column;gap:6px">
-<p style="margin:0;font-size:17px;line-height:1.5;font-weight:600;color:#163F42">Ask the insurer to correct the date of birth</p>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">You, before the renewal</p>
+<p style="margin:0;font-size:18px;line-height:1.5;font-weight:600;color:#163F42">Ask the insurer to correct the date of birth</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Example. You, before the renewal</p>
 </div>
 </li>
 </ol>
@@ -274,7 +276,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <blockquote style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-style:italic;font-weight:400;font-size:clamp(24px,2.1vw,30px);line-height:1.3;color:#163F42;max-width:30ch;text-indent:-0.42em">“I can't say ‘an app told me.’ I can say ‘it says here, page fourteen.’”</blockquote>
 <figcaption style="display:flex;flex-direction:column;gap:4px">
 <span style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#1A3034">M., 29, Bengaluru</span>
-<span style="font-size:15px;line-height:1.45;color:#55696D">Recorded conversation, 5 September 2026</span>
+<span style="font-size:15px;line-height:1.45;color:#55696D">Recorded conversation, 5 September 2026. [CONSENT RE-CHECK BEFORE LAUNCH]</span>
 </figcaption>
 </figure>
 </div>
@@ -284,7 +286,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <section aria-labelledby="stories-h" style="background:#FFFFFF;padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
 <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:48px">
 <div style="display:flex;flex-direction:column;gap:16px;max-width:720px">
-<h2 id="stories-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:18ch;text-wrap:balance">Small details, found too late.</h2>
+<h2 id="stories-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:18ch;text-wrap:balance">Four details hid in plain sight.</h2>
 <p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;max-width:54ch">Four things families told us. Each one was in a document they already had.</p>
 </div>
 
@@ -296,24 +298,24 @@ a{color:#176F69}a:hover{color:#125A55}
 </div>
 <p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(40px,3.9vw,56px);line-height:1;letter-spacing:-0.01em;color:#163F42;font-variant-numeric:lining-nums">₹80,000</p>
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:40ch">A ₹1,200 room choice, made with no information, cost one family ₹80,000.</p>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">A., 26, Gurugram. Recorded conversation, September 2026.</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">A., 26, Gurugram. Recorded conversation, September 2026. [CONSENT RE-CHECK]</p>
 </article>
 
 <div style="flex:5 1 360px;display:flex;flex-direction:column;gap:24px">
 <article style="background:#F3F7F6;border-radius:16px;padding:clamp(24px,2.3vw,32px);display:flex;flex-direction:column;gap:12px">
 <p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(40px,3.9vw,56px);line-height:1;letter-spacing:-0.01em;color:#163F42">₹2,00,000</p>
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">A gap neither policy would pay. She found it before paying ₹9,400 for the top-up.</p>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">M., 29, Bengaluru. Recorded conversation, September 2026.</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">M., 29, Bengaluru. Recorded conversation, September 2026. [CONSENT RE-CHECK]</p>
 </article>
 <article style="background:#F3F7F6;border-radius:16px;padding:clamp(24px,2.3vw,32px);display:flex;flex-direction:column;gap:12px">
 <p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(40px,3.9vw,56px);line-height:1;letter-spacing:-0.01em;color:#163F42">7 hours</p>
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">From 2 a.m. to 9 a.m., spent finding a brother's employer cover at the hospital.</p>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">S., 31, Kolkata. Recorded conversation, September 2026.</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">S., 31, Kolkata. Recorded conversation, September 2026. [CONSENT RE-CHECK]</p>
 </article>
 <article style="background:#F3F7F6;border-radius:16px;padding:clamp(24px,2.3vw,32px);display:flex;flex-direction:column;gap:12px">
 <p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(40px,3.9vw,56px);line-height:1;letter-spacing:-0.01em;color:#163F42">17 days</p>
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">The window to keep cover after leaving a job. No one sent a reminder. It closed.</p>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">N., 33, Pune. Recorded conversation, September 2026.</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">N., 33, Pune. Recorded conversation, September 2026. [CONSENT RE-CHECK]</p>
 </article>
 </div>
 </div>
@@ -322,7 +324,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <p style="margin:0;flex:0 0 auto;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:32px;line-height:1.2;color:#163F42">7 of 19</p>
 <div style="flex:1 1 480px;display:flex;flex-direction:column;gap:4px">
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6">policy documents families shared had a detail that did not match what the family believed. One schedule had a date of birth six years wrong.</p>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Documents shared during the same conversations.</p>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Documents families shared with us during this research.</p>
 </div>
 </div>
 </div>
@@ -333,36 +335,37 @@ a{color:#176F69}a:hover{color:#125A55}
 <div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:48px 72px;align-items:center">
 <div style="flex:1 1 420px;display:flex;flex-direction:column;gap:20px">
 <h2 id="privacy-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#FFFFFF;max-width:16ch;text-wrap:balance">Each person decides what family sees.</h2>
-<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;color:#C9DDD9;max-width:44ch">Share the cover amount with your son. Keep the medical reason to yourself. Change it whenever you like.</p>
+<p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5;color:#C9DDD9;max-width:44ch">Share the cover amount with your family. Keep medical details to yourself. Change it whenever you like.</p>
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;color:#FFFFFF;max-width:44ch">Every adult controls their own record. <strong style="font-weight:700">Medical details are never shared by default.</strong></p>
 </div>
 
 <div style="flex:1 1 440px;background:#FFFFFF;color:#1A3034;border-radius:16px;padding:clamp(24px,2.3vw,32px);display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+<span style="display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:6px;background:#E6EFEC;color:#163F42;font-size:15px;font-weight:600;letter-spacing:0.01em">Example</span>
+</div>
 <div role="group" aria-label="Seen by" style="display:flex;padding:4px;background:#E6EFEC;border-radius:12px;gap:4px">
-<button type="button" onClick="{{ viewYou }}" aria-pressed="{{ isYou }}" style="{{ segYouStyle }}">You</button>
-<button type="button" onClick="{{ viewSon }}" aria-pressed="{{ isSon }}" style="{{ segSonStyle }}">Your son</button>
+<button type="button" onClick="{{ viewYou }}" aria-pressed="{{ isYouStr }}" style="{{ segYouStyle }}">You</button>
+<button type="button" onClick="{{ viewFamily }}" aria-pressed="{{ isFamilyStr }}" style="{{ segFamilyStyle }}">Your brother</button>
 </div>
 <p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">{{ panelTitle }}</p>
 <dl style="margin:0;display:flex;flex-direction:column">
 <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA">
 <dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Cover amount</dt>
-<dd style="margin:0;font-size:17px;line-height:1.5">₹5,00,000 floater</dd>
+<dd style="margin:0;font-size:18px;line-height:1.5">₹5,00,000 floater</dd>
 </div>
 <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:14px 0;border-bottom:1px solid #CFDCDA">
 <dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Policy details</dt>
-<dd style="margin:0;font-size:17px;line-height:1.5">Policy number, TPA, hospital desk</dd>
+<dd style="margin:0;font-size:18px;line-height:1.5">Policy number, TPA, hospital desk contact</dd>
 </div>
 <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;padding:14px 0">
 <dt style="font-size:15px;font-weight:600;letter-spacing:0.01em;color:#55696D">Medical details</dt>
-<sc-if value="{{ isYou }}" hint-placeholder-val="{{ false }}">
-<dd class="kv-m" style="margin:0;font-size:17px;line-height:1.5;animation:kvFade 180ms ease-out both">Declared condition and its reason</dd>
-</sc-if>
-<sc-if value="{{ isSon }}" hint-placeholder-val="{{ true }}">
-<dd class="kv-m" style="margin:0;font-size:17px;line-height:1.5;color:#55696D;display:flex;align-items:center;gap:6px;animation:kvFade 180ms ease-out both"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Not shared"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Not shared</dd>
-</sc-if>
+<dd style="margin:0;font-size:18px;line-height:1.5;display:flex;align-items:center;gap:6px;color:{{ medColor }};animation:kvFade 180ms ease-out both">
+<sc-if value="{{ isFamily }}" hint-placeholder-val="{{ true }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></sc-if>
+<span>{{ medValue }}</span>
+</dd>
 </div>
 </dl>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">You can also set emergency access in advance, for a moment you cannot speak for yourself.</p>
+<p style="margin:0;font-size:17px;line-height:1.5;color:#55696D">You can also set emergency access in advance, for a moment you cannot speak for yourself.</p>
 </div>
 </div>
 </section>
@@ -385,11 +388,11 @@ a{color:#176F69}a:hover{color:#125A55}
 <section id="partners" aria-labelledby="partners-h" style="background:#E6EFEC;padding:clamp(72px,7vw,96px) clamp(20px,5vw,80px)">
 <div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:40px 72px;align-items:flex-start">
 <div style="flex:1 1 460px;display:flex;flex-direction:column;gap:16px">
-<p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#176F69">For HR platforms, insurance platforms and advisers</p>
-<h2 id="partners-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:18ch;text-wrap:balance">Fewer “what does my policy cover?” calls.</h2>
+<p style="margin:0;font-size:15px;font-weight:600;letter-spacing:0.01em;color:#163F42">For HR platforms, insurance platforms and advisers</p>
+<h2 id="partners-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:18ch;text-wrap:balance">Cut “what does my policy cover?” calls.</h2>
 <p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:52ch">Knowvia can sit where your customers and employees already meet their cover. They get a clear view of every policy in their household. You keep your own support relationship.</p>
-<a class="kv-out" href="mailto:partners@example.com" style="margin-top:12px;align-self:flex-start;display:inline-flex;align-items:center;height:52px;padding:0 26px;border-radius:999px;border:2px solid #176F69;color:#176F69;font-size:17px;font-weight:600;text-decoration:none;white-space:nowrap">Talk to us about a pilot</a>
-<p style="margin:0;font-size:15px;color:#55696D">[PARTNERS EMAIL]</p>
+<a class="kv-out" href="#partners-email" style="margin-top:12px;align-self:flex-start;display:inline-flex;align-items:center;height:52px;padding:0 26px;border-radius:999px;border:2px solid #176F69;color:#176F69;font-size:17px;font-weight:600;text-decoration:none;white-space:nowrap">Talk to us about a pilot</a>
+<p id="partners-email" style="margin:0;font-size:15px;color:#55696D">[PARTNERS EMAIL]</p>
 </div>
 <ul style="flex:1 1 400px;list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:24px">
 <li style="display:flex;gap:16px;align-items:flex-start"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#163F42" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;margin-top:2px"><rect x="4" y="3" width="16" height="18" rx="1.5"></rect><path d="M9 7h2M13 7h2M9 11h2M13 11h2M10 21v-4h4v4"></path></svg><p style="margin:0;font-size:clamp(17px,1.35vw,19px);line-height:1.6"><span style="font-weight:600;color:#163F42">HR platforms:</span> at joining or a benefits change, with the employee's permission.</p></li>
@@ -406,10 +409,12 @@ a{color:#176F69}a:hover{color:#125A55}
 <div style="flex:2 1 560px;display:flex;flex-direction:column;border-top:1px solid #CFDCDA">
 <sc-for list="{{ faqs }}" as="q" hint-placeholder-count="7">
 <div style="border-bottom:1px solid #CFDCDA">
-<h3 style="margin:0"><button type="button" onClick="{{ q.toggle }}" aria-expanded="{{ q.open }}" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 0;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>{{ q.question }}</span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="{{ q.caretStyle }}"><polyline points="6 9 12 15 18 9"></polyline></svg></button></h3>
+<h3 style="margin:0"><button type="button" onClick="{{ q.toggle }}" aria-expanded="{{ q.openStr }}" aria-controls="{{ q.panelId }}" style="width:100%;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px;padding:18px 0;border:0;background:transparent;text-align:left;font:inherit;font-size:clamp(19px,1.5vw,22px);font-weight:600;line-height:1.3;color:#163F42;cursor:pointer"><span>{{ q.question }}</span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="{{ q.caretStyle }}"><polyline points="6 9 12 15 18 9"></polyline></svg></button></h3>
+<div id="{{ q.panelId }}">
 <sc-if value="{{ q.open }}" hint-placeholder-val="{{ false }}">
-<p class="kv-m" style="margin:0 0 24px;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:62ch;animation:kvIn 240ms cubic-bezier(0.165,0.84,0.44,1) both">{{ q.answer }}</p>
+<p style="margin:0 0 24px;font-size:clamp(17px,1.35vw,19px);line-height:1.6;max-width:62ch;animation:kvIn 240ms cubic-bezier(0.165,0.84,0.44,1) both">{{ q.answer }}</p>
 </sc-if>
+</div>
 </div>
 </sc-for>
 </div>
@@ -420,7 +425,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <section id="early-list" aria-labelledby="close-h" style="background:#FFFFFF;padding:clamp(72px,9vw,128px) clamp(20px,5vw,80px)">
 <div style="max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:40px">
 <div style="display:flex;flex-direction:column;gap:16px;text-align:center;align-items:center">
-<h2 id="close-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:16ch;text-wrap:balance">Your policy, read before you need it.</h2>
+<h2 id="close-h" style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:clamp(32px,3.1vw,44px);line-height:1.12;letter-spacing:-0.01em;color:#163F42;max-width:16ch;text-wrap:balance">Read your policy before you need it.</h2>
 <p style="margin:0;font-size:clamp(19px,1.46vw,21px);line-height:1.5">Join the early list. We will email you when Knowvia opens.</p>
 </div>
 
@@ -429,39 +434,35 @@ a{color:#176F69}a:hover{color:#125A55}
 <form onSubmit="{{ close.submit }}" novalidate="novalidate" style="display:flex;flex-direction:column;gap:24px">
 <div style="display:flex;flex-direction:column;gap:8px">
 <label for="close-email" style="font-size:15px;font-weight:600;letter-spacing:0.01em">Email</label>
-<input id="close-email" name="email" type="email" autocomplete="email" onChange="{{ close.setEmail }}" aria-invalid="{{ close.invalid }}" style="{{ close.inputStyle }}">
-<sc-if value="{{ close.hasError }}" hint-placeholder-val="{{ false }}">
-<p role="alert" style="margin:0;color:#A74335;font-size:16px;line-height:1.45;font-weight:600">{{ close.error }}</p>
-</sc-if>
+<input id="close-email" name="email" type="email" autocomplete="email" onChange="{{ close.setEmail }}" aria-invalid="{{ close.invalid }}" aria-describedby="close-error close-consent" style="{{ close.inputStyle }}">
+<p id="close-error" role="alert" style="margin:0;color:#A74335;font-size:17px;line-height:1.45;font-weight:600">{{ close.error }}</p>
 </div>
-<fieldset style="margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:12px">
-<legend style="padding:0;margin-bottom:12px;font-size:15px;font-weight:600;letter-spacing:0.01em">What is coming up for your family? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
+<fieldset aria-describedby="events-purpose" style="margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:12px">
+<legend style="padding:0;margin-bottom:6px;font-size:15px;font-weight:600;letter-spacing:0.01em">What is coming up for your family? <span style="font-weight:400;color:#55696D">(optional)</span></legend>
+<p id="events-purpose" style="margin:0 0 6px;font-size:17px;line-height:1.5;color:#55696D">We use this only to decide what Knowvia reads first for you. [LEGAL REVIEW: retention and whether to ask this before launch]</p>
 <div style="display:flex;flex-wrap:wrap;gap:10px">
 <sc-for list="{{ events }}" as="ev" hint-placeholder-count="5">
-<button class="kv-chip-opt" type="button" onClick="{{ ev.toggle }}" aria-pressed="{{ ev.on }}" style="{{ ev.style }}">{{ ev.label }}</button>
+<button class="kv-chip-opt" type="button" onClick="{{ ev.toggle }}" aria-pressed="{{ ev.on }}" style="{{ ev.style }}"><sc-if value="{{ ev.isOn }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg></sc-if><span>{{ ev.label }}</span></button>
 </sc-for>
 </div>
 </fieldset>
 <div style="display:flex;flex-direction:column;gap:10px">
-<button class="kv-btn" type="submit" disabled="{{ close.busy }}" style="width:100%;height:56px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;letter-spacing:0.005em;cursor:pointer">{{ close.buttonLabel }}</button>
+<button class="kv-btn" type="submit" aria-disabled="{{ close.busyStr }}" style="width:100%;height:56px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;letter-spacing:0.005em;cursor:pointer">{{ close.buttonLabel }}</button>
 <sc-if value="{{ close.busy }}" hint-placeholder-val="{{ false }}">
-<div aria-hidden="true" class="kv-m" style="height:3px;border-radius:3px;background:linear-gradient(90deg,#E6EFEC,#176F69,#E6EFEC);background-size:200% 100%;animation:kvLoad 1.2s linear infinite"></div>
+<div aria-hidden="true" style="height:3px;border-radius:3px;background:linear-gradient(90deg,#E6EFEC,#176F69,#E6EFEC);background-size:200% 100%;animation:kvLoad 1.2s linear infinite"></div>
 </sc-if>
 </div>
 <div style="display:flex;flex-direction:column;gap:6px;text-align:center">
-<p style="margin:0;font-size:17px;line-height:1.5;font-weight:600;color:#163F42">Not an insurer. Not selling your data. One email when we open.</p>
-<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">We use your email only to tell you when Knowvia opens. Read the <a href="#privacy-notice">privacy notice</a>.</p>
+<p style="margin:0;font-size:18px;line-height:1.5;font-weight:600;color:#163F42">Not an insurer. Not selling your data. One email when we open.</p>
+<p id="close-consent" style="margin:0;font-size:17px;line-height:1.5;color:#55696D">We use your email only to tell you when Knowvia opens. Read the <a href="#privacy-notice">privacy notice</a>.</p>
 </div>
 </form>
 </sc-if>
 <sc-if value="{{ close.showSuccess }}" hint-placeholder-val="{{ false }}">
-<div role="status" class="kv-m" style="display:flex;flex-direction:column;gap:8px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) both">
+<div role="status" style="display:flex;flex-direction:column;gap:8px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) both">
 <p style="margin:0;font-size:22px;font-weight:600;line-height:1.3;color:#163F42">You are on the list.</p>
 <p style="margin:0;font-size:17px;line-height:1.6">We will email {{ close.emailShown }} when Knowvia opens. While you wait, find your policy schedule and your employer's benefits booklet.</p>
 </div>
-</sc-if>
-<sc-if value="{{ close.showAlready }}" hint-placeholder-val="{{ false }}">
-<p role="status" style="margin:0;font-size:17px;line-height:1.6">This email is already on the list. We will write when Knowvia opens.</p>
 </sc-if>
 </div>
 </div>
@@ -477,7 +478,7 @@ a{color:#176F69}a:hover{color:#125A55}
 <svg width="32" height="32" viewBox="0 0 800 800" aria-hidden="true"><rect width="800" height="800" rx="144" fill="#163F42"></rect><path d="M258 194v412M265 404l274 210" fill="none" stroke="#F3F7F6" stroke-width="58" stroke-linecap="round"></path><path d="M265 404l274-210" fill="none" stroke="#E0A02B" stroke-width="58" stroke-linecap="round"></path><path d="M557 150l46 46-46 46-46-46z" fill="#E0A02B"></path></svg>
 <span style="font-size:22px;font-weight:600">Knowvia</span>
 </div>
-<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:22px;line-height:1.3;color:#FFFFFF">Know your cover. Before you need it.</p>
+<p style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:24px;line-height:1.3;color:#FFFFFF">Know your cover. Before you need it.</p>
 </div>
 <nav aria-label="Knowvia" style="flex:1 1 160px;display:flex;flex-direction:column;gap:10px;font-size:16px">
 <p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#FFFFFF">Knowvia</p>
@@ -494,18 +495,30 @@ a{color:#176F69}a:hover{color:#125A55}
 </div>
 <div style="border-top:1px solid rgba(255,255,255,0.16);padding-top:24px;display:flex;flex-direction:column;gap:12px;font-size:15px;line-height:1.5;max-width:880px">
 <p style="margin:0">Knowvia is not an insurer, broker or TPA, and does not decide claims. [LEGAL REVIEW: registration and partner disclosure]</p>
-<p style="margin:0">Where our numbers come from: recorded conversations with seven family members and one hospital insurance-desk executive, 5 to 8 September 2026, in Kolkata, Bengaluru, Pune, Mumbai and Delhi NCR. Names are withheld and shared with consent. Figures are what people told us and what their documents showed. They are examples, not averages.</p>
+<p style="margin:0">Where our numbers come from: recorded conversations with seven family members and one hospital insurance-desk executive, 5 to 8 September 2026. They took place in Kolkata, Bengaluru, Pune, Mumbai and Delhi NCR. Names are withheld. [CONSENT RE-CHECK BEFORE LAUNCH] Figures are what people told us and what their documents showed. They are examples, not averages.</p>
 <p style="margin:0">© 2026 Knowvia</p>
 </div>
 </div>
 </footer>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"heroFormState":{"editor":"enum","options":["default","empty","invalid","submitting","success","already","network","server"],"default":"default","section":"Form states"},"closingFormState":{"editor":"enum","options":["default","empty","invalid","submitting","success","already","network","server"],"default":"default","section":"Form states"},"privacyViewer":{"editor":"enum","options":["son","you"],"default":"son","section":"Permission panel"},"$preview":{"width":390,"height":13600}}'>
+<script type="text/x-dc" data-dc-script data-props='{"heroFormState":{"editor":"enum","options":["default","empty","invalid","submitting","success","network","server"],"default":"default","section":"Form states"},"closingFormState":{"editor":"enum","options":["default","empty","invalid","submitting","success","network","server"],"default":"default","section":"Form states"},"privacyViewer":{"editor":"enum","options":["family","you"],"default":"family","section":"Permission panel"},"mobileMenuOpen":{"editor":"boolean","default":false,"section":"Mobile"},"$preview":{"width":390,"height":13600}}'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);
     this.state = { faqOpen: 0, events: {} };
+    this.timers = {};
+  }
+  componentDidUpdate(prev) {
+    var reset = {};
+    if (prev.heroFormState !== this.props.heroFormState) reset.heroState = null;
+    if (prev.closingFormState !== this.props.closingFormState) reset.closeState = null;
+    if (prev.privacyViewer !== this.props.privacyViewer) reset.viewer = null;
+    if (prev.mobileMenuOpen !== this.props.mobileMenuOpen) reset.menu = null;
+    if (Object.keys(reset).length) this.setState(reset);
+  }
+  componentWillUnmount() {
+    Object.keys(this.timers).forEach(function (k) { clearTimeout(this.timers[k]); }, this);
   }
   formModel(key, propState) {
     var self = this;
@@ -517,76 +530,91 @@ class Component extends DCLogic {
       network: 'We could not add you. Check your connection and try again.',
       server: 'Something went wrong on our side, and your email was not saved. Try again in a minute.'
     };
-    var hasError = !!errors[st];
     var invalid = st === 'empty' || st === 'invalid';
+    var busy = st === 'submitting';
     var base = 'flex:1 1 260px;min-width:0;height:52px;box-sizing:border-box;padding:0 16px;border-radius:10px;background:#FFFFFF;font:inherit;font-size:17px;color:#1A3034;';
     return {
-      showForm: st !== 'success' && st !== 'already',
+      showForm: st !== 'success',
       showSuccess: st === 'success',
-      showAlready: st === 'already',
-      busy: st === 'submitting',
-      hasError: hasError,
+      busy: busy,
+      busyStr: busy ? 'true' : 'false',
       invalid: invalid ? 'true' : 'false',
       error: errors[st] || '',
-      buttonLabel: st === 'submitting' ? 'Joining' : (st === 'network' || st === 'server' ? 'Try again' : 'Join the early list'),
+      buttonLabel: busy ? 'Joining' : (st === 'network' || st === 'server' ? 'Try again' : 'Join the early list'),
       emailShown: email || 'your address',
       inputStyle: base + (invalid ? 'border:2px solid #A74335;' : 'border:1px solid #7B918E;'),
-      setEmail: function (e) { var s = {}; s[key + 'Email'] = e.target.value; self.setState(s); },
+      setEmail: function (e) {
+        var s = {};
+        s[key + 'Email'] = e.target.value;
+        var cur = self.state[key + 'State'] || propState;
+        if (cur === 'empty' || cur === 'invalid') s[key + 'State'] = 'default';
+        self.setState(s);
+      },
       submit: function (e) {
         if (e && e.preventDefault) e.preventDefault();
+        if (busy) return;
         var v = (self.state[key + 'Email'] || '').trim();
         var s = {};
         if (!v) { s[key + 'State'] = 'empty'; self.setState(s); return; }
         if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) { s[key + 'State'] = 'invalid'; self.setState(s); return; }
         s[key + 'State'] = 'submitting'; self.setState(s);
-        setTimeout(function () { var d = {}; d[key + 'State'] = 'success'; self.setState(d); }, 1100);
+        clearTimeout(self.timers[key]);
+        self.timers[key] = setTimeout(function () { var d = {}; d[key + 'State'] = 'success'; self.setState(d); }, 1100);
       }
     };
   }
   renderVals() {
     var self = this;
-    var viewer = this.state.viewer || this.props.privacyViewer || 'son';
-    var seg = 'flex:1 1 0;height:44px;border:0;border-radius:9px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;transition:background-color 180ms ease-out;';
-    var on = seg + 'background:#FFFFFF;color:#163F42;box-shadow:0 1px 3px rgba(22,62,54,0.16);';
+    var viewer = this.state.viewer || this.props.privacyViewer || 'family';
+    var menuOpen = this.state.menu != null ? this.state.menu : !!this.props.mobileMenuOpen;
+    var seg = 'flex:1 1 0;min-height:44px;border:0;border-radius:9px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;';
+    var on = seg + 'background:#FFFFFF;color:#163F42;box-shadow:inset 0 0 0 2px #163F42;';
     var off = seg + 'background:transparent;color:#55696D;';
     var faqData = [
+      ['When can I use it, and what will it cost?', 'Knowvia is not open yet, and pricing is not set. Join the early list and you will hear about both first.'],
       ['Is Knowvia an insurance company?', 'No. Knowvia does not sell or underwrite insurance, and it does not decide claims. It reads the policies you already have and shows what they say.'],
       ['Will you sell me a policy?', 'Not by default. Many questions end with a clear answer and nothing to buy. If buying something does make sense, we will explain why and what it costs. [LEGAL REVIEW: licensed partner disclosure]'],
       ['Can Knowvia tell me if a claim will be approved?', 'No. Only your insurer decides that. We show which clauses apply, what is not confirmed, and which documents to have ready.'],
-      ['What should I do in an emergency?', 'Get treatment first. Insurance should never delay care. Call the hospital’s insurance desk, your insurer or your TPA. Knowvia does not run an emergency line.'],
-      ['Who can see my family’s information?', 'Each adult decides for their own record: the cover amount, the policy details and any medical details, separately. Medical details stay private unless that person shares them.'],
-      ['What documents do I need?', 'Whatever you have: the policy schedule, the full wording, your employer’s benefits booklet, a renewal notice or a quote. If a page is missing, we tell you exactly which one to ask for.'],
-      ['When can I use it, and what will it cost?', 'Knowvia is not open yet, and pricing is not set. Join the early list and you will hear about both first.']
+      ['What should I do in an emergency?', 'Get treatment first. Insurance should never delay care. Call the hospital\'s insurance desk, your insurer or your TPA. Knowvia does not run an emergency line.'],
+      ['Who can see my family\'s information?', 'Each adult decides for their own record: the cover amount, the policy details and any medical details, separately. Medical details stay private unless that person shares them.'],
+      ['What documents do I need?', 'Whatever you have: the policy schedule, the full wording, your employer\'s benefits booklet, a renewal notice or a quote. If a page is missing, we tell you exactly which one to ask for.']
     ];
     var openIdx = this.state.faqOpen;
     var faqs = faqData.map(function (f, i) {
       var open = openIdx === i;
       return {
-        question: f[0], answer: f[1], open: open,
+        question: f[0], answer: f[1], open: open, openStr: open ? 'true' : 'false', panelId: 'faq-answer-' + i,
         caretStyle: 'flex:0 0 auto;transition:transform 240ms cubic-bezier(0.165,0.84,0.44,1);transform:rotate(' + (open ? 180 : 0) + 'deg)',
         toggle: function () { self.setState({ faqOpen: open ? -1 : i }); }
       };
     });
-    var evLabels = ['A renewal', 'Planned treatment', 'A job change', 'Parents’ cover', 'Nothing yet, just getting organised'];
-    var chipBase = 'min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;';
+    var evLabels = ['A renewal', 'Planned treatment', 'A job change', 'Parents\' cover', 'Nothing yet, just getting organised'];
+    var chipBase = 'display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;font:inherit;font-size:16px;font-weight:600;cursor:pointer;';
     var events = evLabels.map(function (label, i) {
       var isOn = !!self.state.events[i];
       return {
-        label: label, on: isOn ? 'true' : 'false',
-        style: chipBase + (isOn ? 'background:#E3F0EE;border:1.5px solid #176F69;color:#176F69;' : 'background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;'),
+        label: label, isOn: isOn, on: isOn ? 'true' : 'false',
+        style: chipBase + (isOn ? 'background:#E3F0EE;border:2px solid #176F69;color:#163F42;' : 'background:#FFFFFF;border:1px solid #7B918E;color:#1A3034;'),
         toggle: function () { var ev = Object.assign({}, self.state.events); ev[i] = !ev[i]; self.setState({ events: ev }); }
       };
     });
+    var isYou = viewer === 'you';
     return {
       hero: this.formModel('hero', this.props.heroFormState),
       close: this.formModel('close', this.props.closingFormState),
-      isYou: viewer === 'you',
-      isSon: viewer === 'son',
-      segYouStyle: viewer === 'you' ? on : off,
-      segSonStyle: viewer === 'son' ? on : off,
-      panelTitle: viewer === 'you' ? 'What you see' : 'What your son sees',
+      menuOpen: menuOpen,
+      menuOpenStr: menuOpen ? 'true' : 'false',
+      toggleMenu: function () { self.setState({ menu: !menuOpen }); },
+      isFamily: !isYou,
+      isYouStr: isYou ? 'true' : 'false',
+      isFamilyStr: isYou ? 'false' : 'true',
+      segYouStyle: isYou ? on : off,
+      segFamilyStyle: isYou ? off : on,
+      panelTitle: isYou ? 'What you see' : 'What your brother sees',
+      medValue: isYou ? 'Declared conditions, as on your proposal form' : 'Not shared',
+      medColor: isYou ? '#1A3034' : '#55696D',
       viewYou: function () { self.setState({ viewer: 'you' }); },
-      viewSon: function () { self.setState({ viewer: 'son' }); },
+      viewFamily: function () { self.setState({ viewer: 'family' }); },
       faqs: faqs,
       events: events
     };

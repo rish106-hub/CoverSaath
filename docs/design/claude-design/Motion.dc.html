@@ -11,18 +11,18 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&amp;family=Source+Sans+3:wght@400;600;700&amp;display=swap">
 <style>
 body{margin:0}
-:focus-visible{outline:3px solid #E0A02B;outline-offset:3px}
+:focus-visible{outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B !important}
 @keyframes kvIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 @keyframes kvLine{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 @keyframes kvDrop{from{opacity:0;transform:scale(0.4)}to{opacity:1;transform:scale(1)}}
-@media (prefers-reduced-motion:reduce){.kv-m{animation:none !important}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}}
 </style>
 </helmet>
 <div style="width:1440px;min-height:1200px;box-sizing:border-box;background:#FFFFFF;font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1A3034;padding:80px 120px;display:flex;flex-direction:column;gap:48px">
 <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:24px">
 <div style="display:flex;flex-direction:column;gap:12px">
 <h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:56px;line-height:1.05;letter-spacing:-0.015em;color:#163F42">Motion</h1>
-<p style="margin:0;font-size:19px;line-height:1.6;max-width:70ch">One orchestrated moment: the reading sequence in the hero. It plays once, in 2.2 seconds, with one easing curve: cubic-bezier(0.165, 0.84, 0.44, 1). Under reduced motion, or without JavaScript, the final state shows immediately.</p>
+<p style="margin:0;font-size:19px;line-height:1.6;max-width:70ch">One orchestrated moment: the reading sequence in the hero. It plays once, in 2.2 seconds, with one easing curve: cubic-bezier(0.165, 0.84, 0.44, 1). Under reduced motion the final state shows immediately; the static design is the final state.</p>
 </div>
 <button type="button" onClick="{{ replay }}" style="flex:0 0 auto;height:52px;padding:0 28px;border:0;border-radius:999px;background:#176F69;color:#FFFFFF;font:inherit;font-size:17px;font-weight:600;cursor:pointer">Replay the sequence</button>
 </div>
@@ -32,11 +32,11 @@ body{margin:0}
 <sc-if value="{{ playing }}" hint-placeholder-val="{{ true }}">
 <div style="position:relative;padding-left:34px;display:flex;flex-direction:column;gap:18px">
 <div aria-hidden="true" class="kv-m" style="position:absolute;left:8px;top:8px;bottom:22px;width:2px;background:#163F42;transform-origin:top;animation:kvLine 1700ms cubic-bezier(0.165,0.84,0.44,1) 200ms both"></div>
-<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 300ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#176F69;font-size:15px;font-weight:600">Known</span><span style="font-size:17px">Your base cover is ₹8,00,000</span></div>
-<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 520ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#176F69;font-size:15px;font-weight:600">Known</span><span style="font-size:17px">The top-up pays only after ₹10,00,000</span></div>
-<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 740ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#176F69;font-size:15px;font-weight:600">Known</span><span style="font-size:17px">A bill between ₹8 and ₹10 lakh is yours to pay</span></div>
+<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 300ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600">Known</span><span style="font-size:17px">Your base cover is ₹8,00,000</span></div>
+<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 520ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600">Known</span><span style="font-size:17px">The top-up pays only after ₹10,00,000</span></div>
+<div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 740ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600">Known</span><span style="font-size:17px">A bill between ₹8 and ₹10 lakh is yours to pay</span></div>
 <div class="kv-m" style="display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1050ms both"><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#FBF1DD;color:#7A5207;border:1.5px dashed #7A5207;box-sizing:border-box;font-size:15px;font-weight:600">Not confirmed</span><span style="font-size:17px">Room-rent limit in your base policy</span></div>
-<div class="kv-m" style="position:relative;display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1500ms both"><span aria-hidden="true" class="kv-m" style="position:absolute;left:-34px;top:4px;width:16px;height:16px;border-radius:50%;background:#E0A02B;box-shadow:0 0 0 4px #F3F7F6;animation:kvDrop 420ms cubic-bezier(0.165,0.84,0.44,1) 1850ms both"></span><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#163F42;color:#FFFFFF;font-size:15px;font-weight:600">Next</span><span style="font-size:17px;font-weight:600;color:#163F42">Before you pay ₹9,400, ask the seller about the ₹2,00,000 gap.</span></div>
+<div class="kv-m" style="position:relative;display:flex;flex-direction:column;gap:4px;animation:kvIn 420ms cubic-bezier(0.165,0.84,0.44,1) 1500ms both"><span aria-hidden="true" class="kv-m" style="position:absolute;left:-34px;top:4px;width:16px;height:16px;border-radius:50%;background:#E0A02B;box-shadow:0 0 0 4px #F3F7F6;animation:kvDrop 400ms cubic-bezier(0.165,0.84,0.44,1) 1800ms both"></span><span style="align-self:flex-start;height:26px;display:inline-flex;align-items:center;padding:0 10px;border-radius:6px;background:#163F42;color:#FFFFFF;font-size:15px;font-weight:600">Next</span><span style="font-size:17px;font-weight:600;color:#163F42">Before you pay ₹9,400, ask the seller about the ₹2,00,000 gap.</span></div>
 </div>
 </sc-if>
 </div>
@@ -87,7 +87,7 @@ class Component extends DCLogic {
       ['Sources fade in', 420, 740, '#7B918E'],
       ['Not confirmed appears', 1050, 420, '#7A5207'],
       ['Next step settles', 1500, 420, '#163F42'],
-      ['Gold marker lands', 1850, 350, '#E0A02B']
+      ['Gold marker lands', 1800, 400, '#E0A02B']
     ];
     var tracks = rows.map(function (r) {
       var left = (r[1] / total) * 100;

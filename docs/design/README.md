@@ -9,7 +9,7 @@ canvas, private until shared from its Share menu). It has three pages:
 | Page | Artboards |
 |---|---|
 | Landing page | Desktop 1440 (interactive: form states, FAQ, permission toggle, hero sequence), mobile 390 |
-| Onboarding (future state) | O1 Start, O2 What is coming up, O3 People, O4 Sharing, O5 Add a policy, O6 Reading, O7 First matrix (mobile and desktop). Clickable in Play from O1 |
+| Onboarding (future state) | O1 Start, O2 What is coming up, O3 People, O4 Sharing, O5 Add a policy, O6 Reading, O7 First matrix (mobile and desktop), plus an Extra states board. Clickable in Play from O1 |
 | Design system | Foundations (colour with contrast, type, space, shape), Components and states, Motion (with a replay) |
 
 The artboard source is kept in [claude-design/](claude-design/) so the design survives outside the canvas.
@@ -25,11 +25,11 @@ The artboard source is kept in [claude-design/](claude-design/) so the design su
 | CP4 | [04-ia-and-copy-deck.md](04-ia-and-copy-deck.md) | Every string, its reason and its evidence | Done |
 | CP5 | [05-design-system-spec.md](05-design-system-spec.md), [tokens.json](tokens.json) | Component anatomy and states | Done |
 | CP6 | [06-page-specs.md](06-page-specs.md), [07-claude-design-brief.md](07-claude-design-brief.md) | Section specs, placeholders, the brief for iterating in Claude Design | Done |
-| CP7 | [08-review.md](08-review.md) | Independent review and fixes | In progress |
+| CP7 | [08-review.md](08-review.md) | Independent review (7 High, 16 Medium, 18 Low) and their resolution | Done; 3 items wait on owner, researcher or legal |
 
 ## Before anything goes public
 
-- Re-confirm consent for every quote and story (E2 to E6).
-- Legal review of the privacy notice, terms, disclaimer and licensed-partner wording (all marked [LEGAL REVIEW]).
+- Re-confirm consent for every quote and story (E2 to E6), and sign off the generic permission example (08-review H5).
+- Legal review of the privacy notice, terms, disclaimer, licensed-partner wording and the optional "What is coming up" field (all marked [LEGAL REVIEW]).
 - Name clearance for Knowvia.
 - Replace placeholders P1 to P6 (06-page-specs.md §3).

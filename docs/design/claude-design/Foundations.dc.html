@@ -11,6 +11,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&amp;family=Source+Sans+3:wght@400;600;700&amp;display=swap">
 <style>
 body{margin:0}
+:focus-visible{outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B !important}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}}
 </style>
 </helmet>
 <div style="width:1440px;min-height:2300px;box-sizing:border-box;background:#FFFFFF;font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1A3034;padding:80px 120px;display:flex;flex-direction:column;gap:72px">
@@ -74,8 +76,8 @@ body{margin:0}
 <div style="display:flex;flex-direction:column;gap:8px;align-items:center"><div style="width:150px;height:52px;background:#176F69;border-radius:999px"></div><span style="font-size:15px;color:#55696D">Pill</span></div>
 </div>
 <div style="display:flex;gap:24px;align-items:center;margin-top:12px">
-<span style="display:inline-flex;align-items:center;height:52px;padding:0 28px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600;outline:3px solid #E0A02B;outline-offset:3px;box-shadow:0 0 0 1px #163F42">Focus ring</span>
-<span style="font-size:15px;line-height:1.45;color:#55696D;max-width:36ch">3px Signal Gold outline, 3px offset, 1px Tide inner edge so it shows on light and dark grounds.</span>
+<span style="display:inline-flex;align-items:center;height:52px;padding:0 28px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600;outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B">Focus ring</span>
+<span style="font-size:15px;line-height:1.45;color:#55696D;max-width:36ch">2px Tide outline, 2px offset, then a 5px Signal Gold halo. Tide carries the 3:1 on light grounds; gold carries it on Tide.</span>
 </div>
 <p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">One shadow per screen: 0 18 50 rgba(22,62,54,0.09). Everything else is flat with a Fog divider or no border. Hit targets at least 44px.</p>
 </div>
@@ -84,7 +86,7 @@ body{margin:0}
 <section style="display:flex;flex-direction:column;gap:20px">
 <h2 style="margin:0;font-size:22px;font-weight:600;color:#163F42">Signature: Known, Not confirmed, Next</h2>
 <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-<span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#176F69;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
+<span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#E3F0EE;color:#163F42;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg>Known</span>
 <span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#FBF1DD;color:#7A5207;border:1.5px dashed #7A5207;box-sizing:border-box;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.3c-0.7 0.3-1 0.8-1 1.5v0.4"></path><circle cx="12" cy="17" r="0.6" fill="currentColor"></circle></svg>Not confirmed</span>
 <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:50%;background:#E0A02B"></span><span style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;background:#163F42;color:#FFFFFF;font-size:15px;font-weight:600;letter-spacing:0.01em"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>Next</span></span>
 </div>
@@ -100,8 +102,8 @@ class Component extends DCLogic {
       ['Tide Deep', '#0B383B', 'Footer', 'Paper on it 12.78', '#FFFFFF'],
       ['Harbour', '#176F69', 'The only action colour', 'White on it 5.98', '#FFFFFF'],
       ['Harbour Hover', '#125A55', 'Hover and press', 'White on it 8.02', '#FFFFFF'],
-      ['Harbour Tint', '#E3F0EE', 'Known chip', 'Harbour on it 5.11', '#176F69'],
-      ['Gold', '#E0A02B', 'Focus, Next marker', 'Never text on light (2.27)', '#163F42'],
+      ['Harbour Tint', '#E3F0EE', 'Known chip, selected control', 'Tide on it 9.85', '#163F42'],
+      ['Gold', '#E0A02B', 'Focus halo, Next marker', 'Never text on light (2.27)', '#163F42'],
       ['Gold Tint', '#FBF1DD', 'Not confirmed chip', 'Gold Ink on it 6.17', '#7A5207'],
       ['Gold Ink', '#7A5207', 'Not confirmed text', 'On Paper 6.91', '#FFFFFF'],
       ['Mist', '#F3F7F6', 'Page ground', 'Ink on it 12.82', '#1A3034'],
@@ -110,7 +112,7 @@ class Component extends DCLogic {
       ['Ink', '#1A3034', 'Body text', 'On Paper 13.85', '#FFFFFF'],
       ['Slate', '#55696D', 'Secondary text, sources', 'Paper 5.79, Mist 5.36', '#FFFFFF'],
       ['Fog', '#CFDCDA', 'Decorative dividers only', '1.41: never a control edge', '#1A3034'],
-      ['Rule', '#7B918E', 'Input and control borders', '3.34 on Paper (3:1 rule)', '#FFFFFF'],
+      ['Rule', '#7B918E', 'Input and control borders (non-text)', '3.34 on Paper (3:1 rule)', '#1A3034'],
       ['Tide Soft', '#C9DDD9', 'Secondary text on Tide', 'On Tide 8.13', '#163F42'],
       ['Brick', '#A74335', 'Errors only', 'On Paper 6.00', '#FFFFFF']
     ];

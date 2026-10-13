@@ -37,7 +37,7 @@ changed:
 | A stat strip of three big numbers under the hero | The "big number, small label" default; and Knowvia has no stats | Replaced by one sentence of provenance and the story section, where numbers carry sources |
 | Three equal how-it-works cards | Banned by the taste skill; template tell | A single sequence along the route line, read top to bottom on the reading card's own vocabulary |
 | Uppercase KNOWN, UNKNOWN, NEXT labels | All-caps label tell, and the brand spec's own banner idea | Sentence case labels with an icon and a shape cue: Known, Not confirmed, Next |
-| Section eyebrows above every H2 | Template chrome | Two eyebrows on the whole page (hero, partner block) |
+| Section eyebrows above every H2 | Template chrome | One eyebrow on the whole page (the partner block) |
 | Cream ground with serif and clay accent | AI-default palette | Knowvia's cool Mist and Deep Tide with teal and gold, from the brand spec |
 | Fade-up on every section | Generic scroll reveal | No scroll reveals at all. Content is there when you arrive |
 
@@ -52,7 +52,7 @@ formula.
 | `tide-deep` | `#0B383B` | Footer ground (from the wordmark) | Paper on it 12.78 |
 | `harbour` | `#176F69` | **The only action colour**: primary buttons, links, selected controls | White on it 5.98; on Paper 5.98; on Mist 5.53 |
 | `harbour-hover` *(added)* | `#125A55` | Button hover and press | White on it 8.02 |
-| `harbour-tint` *(added)* | `#E3F0EE` | Known chip ground | Harbour text on it 5.11; Tide text 9.85 |
+| `harbour-tint` *(added)* | `#E3F0EE` | Known chip ground (Tide text and icon), selected-control ground | Tide on it 9.85 |
 | `gold` | `#E0A02B` | Focus ring, the Next marker, at most two highlights | Never text on light (2.27 on Paper). On Tide 5.06 |
 | `gold-tint` *(added)* | `#FBF1DD` | Not confirmed chip ground | `gold-ink` on it 6.17 |
 | `gold-ink` *(added)* | `#7A5207` | Not confirmed chip text and icon | On Paper 6.91 |
@@ -69,8 +69,10 @@ formula.
 **Proportions** (60-30-10, adjusted): Mist and Paper about 75%, Deep Tide about 18% (one band plus the footer), Harbour
 under 5% (actions only), gold under 2%.
 
-**Rules.** Harbour never sits on Deep Tide (1.93:1); there is no primary button on a dark band. On dark, the only
-control is the partner block's outline button (Paper border and text). Status is never colour alone: Known has a check
+**Rules.** Harbour never sits on Deep Tide (1.93:1); there is no primary button on a dark band. On the dark band the
+only control is the permission panel's segmented switch, inside a Paper card. The partner block's outline button sits
+on Mist Deep. Harbour marks actions only: buttons, links and selected controls. Known chips, the comparison rule and
+the eyebrow use Tide (CP7 M1). Status is never colour alone: Known has a check
 icon and a solid chip, Not confirmed a question icon and a dashed border, Next an arrow and the gold marker.
 
 **Dark theme** (tokens only, assumption A4): ground `#0E2224`, surface `#132C2E`, ink `#E8F1EF` (14.34), muted
@@ -111,7 +113,8 @@ is never used for forms, prices, conditions or anything under 24px except the it
   pill 999. A different radius per level of hierarchy, not one radius on everything (frontend-design calibration).
 - **Elevation.** One shadow, used once per screen: `0 18px 50px rgba(22,62,54,.09)` (from the product) on the reading
   card and the form card. Everything else is flat with a 1px Fog divider or no border.
-- **Focus.** 3px Signal Gold outline, 3px offset, plus a 1px Tide inner edge, so it shows on light and dark grounds.
+- **Focus.** A 2px Tide outline at 2px offset plus a 5px Signal Gold halo (`box-shadow`). Tide carries the 3:1 on
+  light grounds (10.66 on Mist, 11.51 on Paper); gold carries it on Tide (5.06). Built this way at CP7 (H1).
 - **Hit targets.** At least 44px. Primary button height 52px desktop and 56px mobile.
 
 ## 6. Motion
@@ -126,13 +129,14 @@ is never used for forms, prices, conditions or anything under 24px except the it
 
 **Motion inventory.** The page has six motions and no others.
 
-1. **M1 Reading sequence** (on load, once, the one orchestrated moment). 0ms: the card is present, rows empty. 200 to
-   900ms: two Known lines settle in, 180ms apart, each followed 120ms later by its page chip. 1000ms: the Not confirmed
-   line appears with its dashed border drawing around it. 1400 to 2000ms: the route line extends down the card and the
-   gold marker lands on Next. 2200ms: still. No loop. Reduced motion, or no JavaScript: the final state, immediately.
+1. **M1 Reading sequence** (on load, once, the one orchestrated moment). 200 to 1900ms: the route line draws down the
+   card. 300, 520 and 740ms: three Known lines settle in (420ms each); each source line fades in 120ms later. 1050ms:
+   the Not confirmed line settles in, inside its dashed box. 1500ms: the Next line settles in. 1800 to 2200ms: the gold
+   marker lands on Next. 2200ms: still. No loop. Under reduced motion every animation is off and the final state shows
+   immediately; the static design is the final state.
 2. **M2 Button.** Hover darkens to `harbour-hover` (180ms); press moves 1px (120ms).
-3. **M3 FAQ.** The chevron rotates 180 degrees; the panel opens by `grid-template-rows` 0fr to 1fr (240ms).
-4. **M4 Permission demo.** Choosing a viewer (You, your son, an emergency helper) changes which fields are visible.
+3. **M3 FAQ.** The chevron rotates 180 degrees and the answer settles in (240ms); closing is instant.
+4. **M4 Permission demo.** Choosing a viewer (You, your brother) changes which fields are visible.
    Hidden values become a lock and the words "Not shared" (180ms cross-fade). The motion is user-triggered and shows what
    changed.
 5. **M5 Form.** Submitting shows "Joining" with the product's loading line under the button. Success replaces the form
@@ -179,3 +183,15 @@ onboarding step frame, progress steps, upload zone, person row, permission row, 
 | Product "Unknown" versus a customer-facing word | "Not confirmed" (vocabulary map, CP2 §5) |
 | Taste skill's single-theme lock versus Deep Tide bands | One band plus the footer (requirements §3) |
 | CP1 Loop easing curve borrowed | A standard ease-out-quart curve, not proprietary |
+| Gold focus ring alone failed 3:1 on light grounds (CP7 H1) | Two-tone ring: Tide outline plus gold halo |
+| Harbour on Known chips, comparison rules and the eyebrow (CP7 M1) | Moved to Tide; Harbour is for actions only |
+
+### Logged overrides (taste-skill pre-flight and copy rules, CP7 M14 and M15)
+
+| Rule | Override | Reason |
+|---|---|---|
+| Every headline has an active verb (NN12) | "What we will not do" and "Questions families ask us" stay as labels | They are navigational labels, set without a full stop; a verb would make them slogans |
+| Hero stack: no tiny text under the CTA | The helper line "Knowvia is not open yet. We will email you when it is." stays, at body size | Non-negotiable 2 (pre-launch truth) outranks the taste rule |
+| Icons from Phosphor, not hand-drawn | Inline stroke SVG in the canvas | The Claude Design format requires inline SVG; the build uses Phosphor Regular at the same sizes |
+| No two sections share a layout family | Sections 7 and 9 both use a heading-left, content-right split | They are not adjacent, the page uses seven layout families, and the taste skill's floor (four) is met |
+| Gold only for focus and two highlights (NN18) | The K mark's gold arm and diamond appear in the nav and footer | The brand mark is exempt; it is not a highlight |

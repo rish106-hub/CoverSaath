@@ -47,7 +47,7 @@ states so Claude Design (and later code) builds it the same way every time.
 
 | Variant | Ground | Text and icon | Border | Icon |
 |---|---|---|---|---|
-| Known | Harbour Tint | Harbour | none | check |
+| Known | Harbour Tint | Tide (9.85:1) | none | check |
 | Not confirmed | Gold Tint | Gold Ink | 1.5px dashed Gold Ink | question |
 | Next | Tide | Paper | none; 10px gold marker dot to the left | arrow-right |
 
@@ -64,11 +64,11 @@ cue: each variant has its own icon and border.
 - **Size:** 480 wide at desktop (5 of 12 columns), full width on mobile. Paper ground, radius 24, padding 32, the one
   shadow on the screen.
 - **Anatomy, top to bottom:**
-  1. A row with the "Example" label (Label type on a Mist Deep chip) and the person tabs (You, Maa, Papa; 36px tall;
-     the selected one has a Tide 2px underline).
+  1. A row with the "Example" label (Label type on a Mist Deep chip) and a context line, "Showing: You". No tabs:
+     nothing in the card looks clickable unless it works (CP7 M4).
   2. Title (H3) and meta ("2 documents read", Source type).
   3. A route line: a 2px Tide vertical line on the left at x=16, running through all rows.
-  4. Three Known rows, each with chip, statement (Body 17 on desktop inside the card) and source line.
+  4. Three Known rows, each with chip, statement (18px on every width, the coverage-text floor) and source line.
   5. One Not confirmed row with a dashed border box around the statement.
   6. A Next row: the gold marker dot (12px) sits on the route line, and the statement is set in Body 600.
   7. A caption under the card: Source type, Slate.
@@ -76,8 +76,8 @@ cue: each variant has its own icon and border.
 
 ### Comparison table
 
-- Two equal columns on Paper with a row header column on desktop (3 columns: 200px label, 1fr, 1fr). The left column is
-  in Slate; the right in Ink with a 3px Harbour line on its left edge for the whole column (column-level, not per card).
+- Two equal columns on Paper with a row header column on desktop (3 columns: 180px label, 1fr, 1fr). The left column is
+  in Slate; the right in Ink with a 3px Tide line on its left edge for the whole column (column-level, not per card).
 - Rows are separated by space (24) and one Fog divider between rows, not top and bottom borders on every row.
 - Mobile: each row becomes a stacked pair: label, "At the hospital desk" text, then "With Knowvia" text, each prefixed
   by its column label in Label type.
@@ -101,8 +101,8 @@ cue: each variant has its own icon and border.
 
 ### Permission panel (dark band)
 
-- A Paper card on Tide (radius 16, padding 32). A segmented control at the top (You, Your son): 44px tall, Mist Deep track,
-  the selected segment Paper with a Tide label. Three rows (Cover amount, Policy details, Medical details): Label type for
+- A Paper card on Tide (radius 16, padding 32) with an "Example" chip. A segmented control (You, Your brother): 44px tall,
+  Mist Deep track, the selected segment Paper with a Tide label and a 2px Tide ring, so selection is not colour alone. Three rows (Cover amount, Policy details, Medical details): Label type for
   the class and Body for the value; hidden values show a lock icon and "Not shared" in Slate.
 - **Motion:** M4, a 180ms cross-fade of values only.
 
@@ -122,7 +122,8 @@ cue: each variant has its own icon and border.
 - **Hero (compact):** label above the field; the field and button side by side on desktop (field 320 wide, 52 tall,
   radius 10, 1px Rule border, Paper ground) and stacked on mobile (both full width). Helper text under it in Source type.
 - **Closing (full):** a Paper card (radius 16, padding 40, the one shadow), with the field, the optional chip group
-  (multi-select chips, 44px tall, Rule border; selected chips get a Harbour Tint ground and a Harbour border and check),
+  (multi-select chips, 44px tall, Rule border; selected chips get a Harbour Tint ground, a 2px Harbour border and a check
+  icon), a purpose line under the legend,
   the button, the negation line and the consent line.
 - **States:** default, focus (gold ring), error (Brick 2px border plus an error icon and the message under the field;
   `aria-invalid` and `aria-describedby`), submitting, success card, already on the list, network error, server error.
@@ -135,8 +136,10 @@ cue: each variant has its own icon and border.
 
 ### Onboarding components
 
-- **Step frame:** a 390 phone screen; top bar with a back button (44px) and "Step N of 5" in Label type; content padded
-  20; primary button pinned to the bottom with 20 padding and a Mist ground behind it.
+- **Step frame:** a 390 phone screen; top bar with a back button (44px) and "Step N of 5" in Label type; H1 Newsreader 32;
+  content padded 20; primary button pinned to the bottom with 20 padding and a Mist ground behind it.
+- **Switch:** a 52 by 32 track inside a 60 by 44 button (hit target). Off: Mist Deep track, Slate border and knob. On:
+  Harbour track, white knob.
 - **Option list:** full-width selectable rows (56px), Rule border, radius 10; selected rows get a Harbour border and a check.
 - **Person row:** name, relationship and age on one line; an edit icon button (44px).
 - **Permission row:** class name, current setting as a select (Shared with family, Only them, Choose people).

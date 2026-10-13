@@ -19,6 +19,7 @@
     "O6-Reading.dc.html": { "x": 2350, "y": 0, "w": 390, "h": 844, "title": "O6 Reading", "page": "onboarding", "is_interactive": true },
     "O7-Matrix-Mobile.dc.html": { "x": 2820, "y": 0, "w": 390, "h": 1300, "title": "O7 First matrix, mobile", "page": "onboarding" },
     "O7-Matrix-Desktop.dc.html": { "x": 0, "y": 964, "w": 1440, "h": 900, "title": "O7 First matrix, desktop", "page": "onboarding" },
+    "Extra-States.dc.html": { "x": 0, "y": 1984, "w": 2470, "h": 1000, "title": "Extra states: errors, code entry, empty matrix, post-signup question, mobile menu", "page": "onboarding" },
     "Foundations.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 2300, "title": "Foundations: colour, type, space", "page": "system" },
     "Components.dc.html": { "x": 1520, "y": 0, "w": 1440, "h": 2600, "title": "Components and states", "page": "system" },
     "Motion.dc.html": { "x": 0, "y": 2420, "w": 1440, "h": 1200, "title": "Motion: hero reading sequence", "page": "system" }
@@ -34,6 +35,7 @@
     "O6-Reading.dc.html",
     "O7-Matrix-Mobile.dc.html",
     "O7-Matrix-Desktop.dc.html",
+    "Extra-States.dc.html",
     "Foundations.dc.html",
     "Components.dc.html",
     "Motion.dc.html"
@@ -42,7 +44,7 @@
     "landingTitle": { "x": 0, "y": -300, "text": "Landing page", "kind": "title1", "maxW": 1910, "page": "landing" },
     "onboardingTitle": { "x": 0, "y": -300, "text": "Onboarding (future state, after launch)", "kind": "title1", "maxW": 3210, "page": "onboarding" },
     "systemTitle": { "x": 0, "y": -300, "text": "Design system", "kind": "title1", "maxW": 2960, "page": "system" },
-    "landingNote": { "x": 2000, "y": 0, "w": 360, "text": "Copy, sources and rationale: docs/design/04-ia-and-copy-deck.md. Every number has an evidence ID. Quotes and story figures need a consent re-check before launch. Legal text slots are marked [LEGAL REVIEW]. Use the Tweaks panel to see each form state.", "size": "m", "fill": "teal", "page": "landing" },
+    "landingNote": { "x": 2000, "y": 0, "w": 360, "text": "Copy, sources and rationale: docs/design/04-ia-and-copy-deck.md. Every number has an evidence ID. Quotes and story figures need a consent re-check before launch. Legal text slots are marked [LEGAL REVIEW]. Use the Tweaks panel to see each form state, the permission viewer and the mobile menu.", "size": "m", "fill": "teal", "page": "landing" },
     "onboardingNote": { "x": 1520, "y": 964, "w": 360, "text": "Onboarding is the designed future flow. The live landing page only collects early-list emails until Knowvia opens. Example values are illustrative. Press Play on O1 to click through.", "size": "m", "fill": "orange", "page": "onboarding" }
   },
   "designSystems": []
