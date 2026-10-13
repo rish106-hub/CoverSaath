@@ -35,4 +35,6 @@ Figma export: docs/design/figma-plugin/ (and knowvia-figma-plugin.zip) is a deve
 state, token, text style and effect style on one Figma page. The Figma MCP Starter-plan call limit was reached mid-build, so the
 boards are built by the user running the plugin in Figma desktop; File > Save local copy then gives the .fig.
 
+**Round 6.** Section alignment fixed on one content edge, source plates restyled without white boxes, favicon added, research claim updated to 50+ conversations across Tier 1, 2 and 3 cities, and bracketed review notes moved off the page into docs/design/09-landing-v2.md. Changes are in docs/design/claude-design/ only; the canvas, HTML pack and Figma plugin are not yet resynced.
+
 **Next action.** The user reviews the canvas and comments on it; then implementation planning in the landing-page repo.
