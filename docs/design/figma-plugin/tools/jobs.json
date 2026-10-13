@@ -1,0 +1,265 @@
+[
+ {
+  "id": "main",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "title": "Landing page, desktop 1440"
+ },
+ {
+  "id": "mobile",
+  "file": "Landing-Mobile.dc.html",
+  "w": 390,
+  "vh": 844,
+  "title": "Landing page, mobile 390"
+ },
+ {
+  "id": "hero-empty",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#top",
+  "props": {
+   "heroFormState": "empty"
+  },
+  "title": "Hero form state: empty submit"
+ },
+ {
+  "id": "hero-invalid",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#top",
+  "props": {
+   "heroFormState": "invalid"
+  },
+  "title": "Hero form state: invalid email"
+ },
+ {
+  "id": "hero-submitting",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#top",
+  "props": {
+   "heroFormState": "submitting"
+  },
+  "title": "Hero form state: submitting"
+ },
+ {
+  "id": "hero-success",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#top",
+  "props": {
+   "heroFormState": "success"
+  },
+  "title": "Hero form state: success"
+ },
+ {
+  "id": "hero-network",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#top",
+  "props": {
+   "heroFormState": "network"
+  },
+  "title": "Hero form state: network error"
+ },
+ {
+  "id": "hero-server",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#top",
+  "props": {
+   "heroFormState": "server"
+  },
+  "title": "Hero form state: server error"
+ },
+ {
+  "id": "close-empty",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#early-list",
+  "props": {
+   "closingFormState": "empty"
+  },
+  "title": "Closing form state: empty submit"
+ },
+ {
+  "id": "close-invalid",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#early-list",
+  "props": {
+   "closingFormState": "invalid"
+  },
+  "title": "Closing form state: invalid email"
+ },
+ {
+  "id": "close-submitting",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#early-list",
+  "props": {
+   "closingFormState": "submitting"
+  },
+  "title": "Closing form state: submitting"
+ },
+ {
+  "id": "close-success",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#early-list",
+  "props": {
+   "closingFormState": "success"
+  },
+  "title": "Closing form state: success"
+ },
+ {
+  "id": "close-network",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#early-list",
+  "props": {
+   "closingFormState": "network"
+  },
+  "title": "Closing form state: network error"
+ },
+ {
+  "id": "close-server",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#early-list",
+  "props": {
+   "closingFormState": "server"
+  },
+  "title": "Closing form state: server error"
+ },
+ {
+  "id": "privacy-you",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#privacy",
+  "props": {
+   "privacyViewer": "you"
+  },
+  "title": "Permission viewer: You"
+ },
+ {
+  "id": "privacy-family",
+  "file": "Main.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "selector": "#privacy",
+  "props": {
+   "privacyViewer": "family"
+  },
+  "title": "Permission viewer: Your brother"
+ },
+ {
+  "id": "mobile-menu",
+  "file": "Landing-Mobile.dc.html",
+  "w": 390,
+  "vh": 844,
+  "selector": "header.kv-nav",
+  "props": {
+   "mobileMenuOpen": true
+  },
+  "title": "Mobile menu open"
+ },
+ {
+  "id": "o1-start",
+  "file": "O1-Start.dc.html",
+  "w": 390,
+  "vh": 844,
+  "title": "O1 Start"
+ },
+ {
+  "id": "o2-event",
+  "file": "O2-Event.dc.html",
+  "w": 390,
+  "vh": 844,
+  "title": "O2 What is coming up"
+ },
+ {
+  "id": "o3-people",
+  "file": "O3-People.dc.html",
+  "w": 390,
+  "vh": 844,
+  "title": "O3 People"
+ },
+ {
+  "id": "o4-sharing",
+  "file": "O4-Sharing.dc.html",
+  "w": 390,
+  "vh": 844,
+  "title": "O4 Sharing"
+ },
+ {
+  "id": "o5-upload",
+  "file": "O5-Upload.dc.html",
+  "w": 390,
+  "vh": 844,
+  "title": "O5 Add a policy"
+ },
+ {
+  "id": "o6-reading",
+  "file": "O6-Reading.dc.html",
+  "w": 390,
+  "vh": 844,
+  "title": "O6 Reading"
+ },
+ {
+  "id": "o7-matrix-mobile",
+  "file": "O7-Matrix-Mobile.dc.html",
+  "w": 390,
+  "vh": 1300,
+  "title": "O7 First matrix, mobile"
+ },
+ {
+  "id": "o7-matrix-desktop",
+  "file": "O7-Matrix-Desktop.dc.html",
+  "w": 1440,
+  "vh": 900,
+  "title": "O7 First matrix, desktop"
+ },
+ {
+  "id": "extra-states",
+  "file": "Extra-States.dc.html",
+  "w": 2470,
+  "vh": 1000,
+  "title": "Extra states"
+ },
+ {
+  "id": "foundations",
+  "file": "Foundations.dc.html",
+  "w": 1440,
+  "vh": 2300,
+  "title": "Foundations: colour, type, space"
+ },
+ {
+  "id": "components",
+  "file": "Components.dc.html",
+  "w": 1440,
+  "vh": 2600,
+  "title": "Components and states"
+ },
+ {
+  "id": "motion",
+  "file": "Motion.dc.html",
+  "w": 1440,
+  "vh": 1200,
+  "title": "Motion: hero reading sequence"
+ }
+]
