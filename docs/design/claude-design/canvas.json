@@ -1,0 +1,49 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-13T12:00:00Z" },
+  "title": "Knowvia landing and onboarding",
+  "launch": { "view": "canvas", "page": "landing" },
+  "pages": [
+    { "id": "landing", "name": "Landing page" },
+    { "id": "onboarding", "name": "Onboarding" },
+    { "id": "system", "name": "Design system" }
+  ],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 9600, "title": "Landing page, desktop 1440", "page": "landing", "expand": "fill", "is_interactive": true },
+    "Landing-Mobile.dc.html": { "x": 1520, "y": 0, "w": 390, "h": 13600, "title": "Landing page, mobile 390", "page": "landing", "is_interactive": true },
+    "O1-Start.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "O1 Start", "page": "onboarding", "is_interactive": true },
+    "O2-Event.dc.html": { "x": 470, "y": 0, "w": 390, "h": 844, "title": "O2 What is coming up", "page": "onboarding", "is_interactive": true },
+    "O3-People.dc.html": { "x": 940, "y": 0, "w": 390, "h": 844, "title": "O3 People", "page": "onboarding", "is_interactive": true },
+    "O4-Sharing.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 844, "title": "O4 Sharing", "page": "onboarding", "is_interactive": true },
+    "O5-Upload.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 844, "title": "O5 Add a policy", "page": "onboarding", "is_interactive": true },
+    "O6-Reading.dc.html": { "x": 2350, "y": 0, "w": 390, "h": 844, "title": "O6 Reading", "page": "onboarding", "is_interactive": true },
+    "O7-Matrix-Mobile.dc.html": { "x": 2820, "y": 0, "w": 390, "h": 1300, "title": "O7 First matrix, mobile", "page": "onboarding" },
+    "O7-Matrix-Desktop.dc.html": { "x": 0, "y": 964, "w": 1440, "h": 900, "title": "O7 First matrix, desktop", "page": "onboarding" },
+    "Foundations.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 2300, "title": "Foundations: colour, type, space", "page": "system" },
+    "Components.dc.html": { "x": 1520, "y": 0, "w": 1440, "h": 2600, "title": "Components and states", "page": "system" },
+    "Motion.dc.html": { "x": 0, "y": 2420, "w": 1440, "h": 1200, "title": "Motion: hero reading sequence", "page": "system" }
+  },
+  "order": [
+    "Main.dc.html",
+    "Landing-Mobile.dc.html",
+    "O1-Start.dc.html",
+    "O2-Event.dc.html",
+    "O3-People.dc.html",
+    "O4-Sharing.dc.html",
+    "O5-Upload.dc.html",
+    "O6-Reading.dc.html",
+    "O7-Matrix-Mobile.dc.html",
+    "O7-Matrix-Desktop.dc.html",
+    "Foundations.dc.html",
+    "Components.dc.html",
+    "Motion.dc.html"
+  ],
+  "notes": {
+    "landingTitle": { "x": 0, "y": -300, "text": "Landing page", "kind": "title1", "maxW": 1910, "page": "landing" },
+    "onboardingTitle": { "x": 0, "y": -300, "text": "Onboarding (future state, after launch)", "kind": "title1", "maxW": 3210, "page": "onboarding" },
+    "systemTitle": { "x": 0, "y": -300, "text": "Design system", "kind": "title1", "maxW": 2960, "page": "system" },
+    "landingNote": { "x": 2000, "y": 0, "w": 360, "text": "Copy, sources and rationale: docs/design/04-ia-and-copy-deck.md. Every number has an evidence ID. Quotes and story figures need a consent re-check before launch. Legal text slots are marked [LEGAL REVIEW]. Use the Tweaks panel to see each form state.", "size": "m", "fill": "teal", "page": "landing" },
+    "onboardingNote": { "x": 1520, "y": 964, "w": 360, "text": "Onboarding is the designed future flow. The live landing page only collects early-list emails until Knowvia opens. Example values are illustrative. Press Play on O1 to click through.", "size": "m", "fill": "orange", "page": "onboarding" }
+  },
+  "designSystems": []
+}

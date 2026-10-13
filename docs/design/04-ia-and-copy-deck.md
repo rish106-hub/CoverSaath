@@ -255,7 +255,9 @@ Shown as a phone flow (390) with a desktop frame for the first matrix. Progress:
 | O1 Start | H1 | Start with your own cover. |
 | | Body | Use your email or phone. We will send a one-time code, so there is no password to remember. |
 | | Field | Email or phone |
+| | Helper | If you use a phone number, enter the 10 digits without the country code. |
 | | Button | Send code |
+| | Legal line | By continuing you agree to the terms and privacy notice. [LEGAL REVIEW] |
 | | Errors | "Enter an email address or a 10-digit mobile number." / "That code did not match. Check the latest message and try again." |
 | O2 What is coming up | H1 | What is coming up? |
 | | Body | This tells us what to read first. |
@@ -284,6 +286,7 @@ Shown as a phone flow (390) with a desktop frame for the first matrix. Progress:
 | O6 Reading | H1 | Reading your documents |
 | | Live list | Found: policy schedule, 4 pages / Found: 3 members / Found: sum insured ₹5,00,000 / Not found: room-rent clause |
 | | Body | You can leave this page. We will email you when it is ready. |
+| | Button (when reading ends) | See what we found |
 | O7 First matrix | H1 | Your family's cover |
 | | Meta | Read from 3 documents, 13 October 2026 |
 | | Column heads | Person / Policies / Known / Not confirmed / Next |
@@ -293,6 +296,7 @@ Shown as a phone flow (390) with a desktop frame for the first matrix. Progress:
 | | Empty state | No policies yet. Add one to see your first row. Button "Add a policy" |
 | | Waiting state | Waiting for a document. "Ask Papa for his renewal notice." |
 | | Row action | Why? (opens the source page and the reasoning) |
+| | Footnote | Every Known fact links to its page. Nothing here confirms a claim; only your insurer decides that. |
 
 *Names are roles ("Maa", "Sister"), never invented full names (taste skill 9.D). The example values are illustrative
 and labelled "Example" in the design file. E10 appears only as a generic example.*
