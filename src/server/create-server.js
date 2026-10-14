@@ -79,6 +79,9 @@ export function createApiServer({
     ...(analysisLiveModelDriver?.loadModel ? { loadModel: analysisLiveModelDriver.loadModel } : {}),
     ...(analysisLiveModelDriver?.createAgent ? { createAgent: analysisLiveModelDriver.createAgent } : {}),
     preDispatchValidator: modelDispatchValidator,
+    // The household's own identifiers are reloaded server-side for every model
+    // request and redacted by the privacy gate; a loader failure stops dispatch.
+    knownIdentifierLoader: caseId => createCoverageAnalysisPort(getBackend()).loadKnownIdentifiers(caseId),
   });
   const ownsDatabase = !injectedDatabase;
   let database = injectedDatabase ?? null;

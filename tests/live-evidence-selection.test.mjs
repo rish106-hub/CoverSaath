@@ -44,7 +44,7 @@ const page = (index, overrides = {}) => ({
   ...overrides,
 });
 
-const runtimeOf = input => ({ run: { id: 'run-synthetic', workflow_version: '5' }, input, upstream: {} });
+const runtimeOf = input => ({ run: { id: 'run-synthetic', case_id: 'case-synthetic', workflow_version: '5' }, input, upstream: {} });
 const TASKS = { profile: 'profile_extraction', group: 'group_cover_extraction', personal: 'personal_cover_extraction' };
 
 function assertWithinGateAndSchema(input) {
@@ -90,9 +90,14 @@ test('source pack: pages are selected per requested parameter, not by position',
   const quiet = page(0, { extracted_text: 'This page is a cover letter and mentions no requested clause at all.' });
   const input = createCoverageAnalysisSourceInput(caseRecord, [quiet, ...Array.from({ length: 12 }, (_unused, index) => page(index + 1))]);
   const sentIds = input.sourcePages.map(item => item.sourceId);
-  assert.ok(sentIds.includes('page-0'), 'a short page that fits is still sent');
+  // K2: a page that mentions no requested parameter has no allowlisted lines, so
+  // nothing of it is sent (no head-of-page fallback) and it is reported instead.
+  assert.ok(!sentIds.includes('page-0'), 'a page with no parameter match is never sent');
   assert.ok(input.sourcePages.every(item => item.parameterKeys.length > 0));
-  assert.deepEqual(input.sourcePages.find(item => item.sourceId === 'page-0').parameterKeys, ['a.document_set']);
+  assert.deepEqual(input.sourceSelection.notSent.filter(item => item.reasonCode === 'NO_PARAMETER_MATCH'),
+    [{ documentId: opaqueDocumentId('document-0'), page: 1, reasonCode: 'NO_PARAMETER_MATCH' }]);
+  assert.ok(!JSON.stringify(input).includes('cover letter'), 'the unmatched page text is not persisted at all');
+  assert.equal(input.sourcePages.length + input.sourceSelection.notSent.length, 13, 'every page is sent or reported');
 });
 
 test('parameter states follow the state machine: received only where a sanitised page was sent', () => {
@@ -168,7 +173,7 @@ test('live resolver uses the registry version pinned by the run and fails closed
   const registry = createGeminiCoverageRegistryFactory({
     env: liveEnv,
     ...stubModelDriver({ modelRequests }),
-    preDispatchValidator: async () => true,
+    knownIdentifierLoader: () => [], preDispatchValidator: async () => true,
     resolveParameterPolicy: (key, version) => { resolutions.push(version); return resolveCanonicalParameterPolicy(key, version); },
   })();
   await registry.profile(runtimeOf(input));

@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 
+const ERASURE_MARKER = 'consent_revoked';
+const RUN_SCAN_BATCH_SIZE = 100;
+const MAX_ERASURE_RUNS = 5_000;
+
 export class ConsentRepository {
   constructor(database, { clock = () => new Date(), audit, coverageParameters = null } = {}) {
     this.database = database;
@@ -155,22 +159,37 @@ export class ConsentRepository {
         WHERE document_upload_id IN (
           SELECT id FROM document_uploads WHERE consent_grant_id = ?
         )`).run(at, at, grantId);
+      // Documents this grant covers: uploaded under it, or named by one of its scopes.
+      const documents = this.database.prepare(`SELECT id FROM document_uploads WHERE consent_grant_id = ?
+        UNION
+        SELECT resource_id FROM consent_scopes
+        WHERE consent_grant_id = ? AND resource_type = 'document' AND resource_id IS NOT NULL
+          AND resource_id IN (SELECT id FROM document_uploads)
+        ORDER BY 1`).all(grantId, grantId);
       // Observation values derived from the revoked documents are erased and the
       // erasure is audited (counts only) before the lifecycle change below, which
       // would otherwise redact them silently through the database safety net.
       if (this.coverageParameters) {
-        const documents = this.database.prepare(`SELECT id FROM document_uploads WHERE consent_grant_id = ?
-          UNION
-          SELECT resource_id FROM consent_scopes
-          WHERE consent_grant_id = ? AND resource_type = 'document' AND resource_id IS NOT NULL
-            AND resource_id IN (SELECT id FROM document_uploads)
-          ORDER BY 1`).all(grantId, grantId);
         for (const { id: documentId } of documents) {
           this.coverageParameters.redactObservationsForDocument({
             documentId, reasonCode: 'consent_revoked', actorType: 'adult_user', actorId: revokedByAdultId, at,
           });
         }
       }
+      // Run data derived from the revoked documents (excerpts stored in run input,
+      // task outputs) and from runs authorised by this grant is erased in the same
+      // transaction. Counts only are audited.
+      this.eraseDerivedRunData({
+        householdId: grant.household_id,
+        documentIds: documents.map(document => document.id),
+        consentGrantId: grantId,
+        reason: ERASURE_MARKER,
+        resourceType: 'consent_grant',
+        resourceId: grantId,
+        actorType: 'adult_user',
+        actorId: revokedByAdultId,
+        at,
+      });
       this.database.prepare(`UPDATE source_pages SET extracted_text = NULL, extraction_status = 'failed',
           confidence_basis_points = NULL, page_sha256 = ?, text_sha256 = NULL,
           provider_page_ref = NULL, provenance_json = NULL, source_version = 'revoked:' || id
@@ -197,5 +216,101 @@ export class ConsentRepository {
       throw error;
     }
     return this.get(grantId);
+  }
+
+  /**
+   * Erases run data derived from documents whose processing consent is gone. Must run inside
+   * the caller's transaction. A run is affected when its persisted authorisation or sent pages
+   * reference one of `documentIds` (household-scoped scan in bounded batches), when its id is in
+   * `runIds`, or when it was authorised by `consentGrantId`. For each affected run:
+   *   - source page entries of the affected documents (all pages for a targeted run) in the run
+   *     input lose their text and keep only ids, version, page and `redacted: 'consent_revoked'`;
+   *   - every task output is nulled (all tasks are downstream of model extraction of those pages)
+   *     and pending, running and completed tasks become revoked;
+   *   - queued, running, completed and blocked runs become revoked; graph snapshots are superseded.
+   * One audit event records counts only. Idempotent. Returns the counts.
+   */
+  eraseDerivedRunData({
+    householdId = null, documentIds = [], runIds = [], consentGrantId = null, reason = ERASURE_MARKER,
+    resourceType, resourceId, caseId = null, actorType = 'system', actorId = 'local-backend',
+    at = this.clock().toISOString(),
+  }) {
+    const documents = new Set(documentIds);
+    const targeted = new Set(runIds);
+    const candidates = new Map();
+    const remember = row => { if (row && !candidates.has(row.id)) candidates.set(row.id, row); };
+    const byId = this.database.prepare('SELECT id, input_json FROM workflow_runs WHERE id = ?');
+    for (const runId of runIds) remember(byId.get(runId));
+    if (consentGrantId) {
+      for (const row of this.database.prepare('SELECT id, input_json FROM workflow_runs WHERE consent_grant_id = ? ORDER BY id LIMIT ?')
+        .all(consentGrantId, MAX_ERASURE_RUNS)) {
+        targeted.add(row.id);
+        remember(row);
+      }
+    }
+    if (documents.size > 0 && householdId) {
+      const scan = this.database.prepare(`SELECT run.id, run.input_json FROM workflow_runs run
+        JOIN service_cases service_case ON service_case.id = run.case_id
+        WHERE service_case.household_id = ? AND run.id > ? ORDER BY run.id LIMIT ?`);
+      let cursor = '';
+      for (;;) {
+        const batch = scan.all(householdId, cursor, RUN_SCAN_BATCH_SIZE);
+        if (batch.length === 0) break;
+        cursor = batch.at(-1).id;
+        batch.forEach(remember);
+        if (candidates.size > MAX_ERASURE_RUNS) throw new Error('Too many runs to erase in one transaction.');
+      }
+    }
+
+    let runs = 0;
+    let tasks = 0;
+    let pages = 0;
+    const setInput = this.database.prepare('UPDATE workflow_runs SET input_json = ? WHERE id = ?');
+    const nullOutputs = this.database.prepare(`UPDATE workflow_tasks
+      SET status = CASE WHEN status IN ('pending', 'running', 'completed') THEN 'revoked' ELSE status END,
+          finished_at = CASE WHEN status IN ('pending', 'running', 'completed') THEN ? ELSE finished_at END,
+          terminal_reason = CASE WHEN status IN ('pending', 'running', 'completed') THEN 'CONSENT_REVOKED' ELSE terminal_reason END,
+          output_json = NULL, output_digest = NULL, lease_owner = NULL, lease_expires_at = NULL
+      WHERE workflow_run_id = ?
+        AND (status IN ('pending', 'running', 'completed') OR output_json IS NOT NULL OR output_digest IS NOT NULL)`);
+    const revokeRun = this.database.prepare(`UPDATE workflow_runs
+      SET status = 'revoked', finished_at = ?, terminal_reason = 'CONSENT_REVOKED'
+      WHERE id = ? AND status IN ('queued', 'running', 'completed', 'blocked')`);
+    const supersede = this.database.prepare(`UPDATE coverage_graph_snapshots SET status = 'superseded'
+      WHERE generated_by_run_id = ? AND status <> 'superseded'`);
+    for (const row of candidates.values()) {
+      let input = null;
+      try { input = row.input_json === null ? null : JSON.parse(row.input_json); } catch { input = null; }
+      const wholeRun = targeted.has(row.id);
+      const referencesDocument = [
+        ...(Array.isArray(input?.authorizedSources) ? input.authorizedSources : []),
+        ...(Array.isArray(input?.sourcePages) ? input.sourcePages : []),
+      ].some(entry => documents.has(entry?.documentId));
+      if (!wholeRun && !referencesDocument) continue;
+      runs += 1;
+      if (Array.isArray(input?.sourcePages)) {
+        let changed = 0;
+        const sourcePages = input.sourcePages.map(page => {
+          if (!page || typeof page !== 'object' || (!wholeRun && !documents.has(page.documentId))) return page;
+          if (page.redacted === ERASURE_MARKER && Object.keys(page).every(key => ['sourceId', 'version', 'page', 'documentId', 'redacted'].includes(key))) return page;
+          changed += 1;
+          return { sourceId: page.sourceId, version: page.version, page: page.page, documentId: page.documentId, redacted: ERASURE_MARKER };
+        });
+        if (changed > 0) {
+          setInput.run(JSON.stringify({ ...input, sourcePages }), row.id);
+          pages += changed;
+        }
+      }
+      tasks += Number(nullOutputs.run(at, row.id).changes);
+      revokeRun.run(at, row.id);
+      supersede.run(row.id);
+    }
+    if (runs > 0) {
+      this.audit?.append({
+        householdId, caseId, actorType, actorId, action: 'analysis.derived_data_erased', resourceType, resourceId,
+        payload: { reason, runs, tasks, pages, documents: documents.size },
+      });
+    }
+    return Object.freeze({ runs, tasks, pages });
   }
 }

@@ -155,6 +155,11 @@ const context = (runtime, purpose, requestedFields) => ({
 function pageSources(runtime) {
   const pages = runtime.input.sourcePages;
   if (!Array.isArray(pages) || pages.length === 0) fail('SOURCE_PAGES_REQUIRED', 'The run does not carry any sanitised source pages.');
+  // A page erased after consent revocation carries a marker instead of text; a
+  // run holding one can never be dispatched.
+  if (pages.some(page => typeof page?.text !== 'string' || page.redacted !== undefined)) {
+    fail('SOURCE_PAGES_REDACTED', 'The run carries source pages that are no longer available.');
+  }
   return pages.map(page => ({
     id: page.sourceId,
     version: page.version ?? 'unknown',
@@ -355,14 +360,38 @@ function assertExactSourceCitations(output, safeRequest) {
   }
 }
 
-function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization, privacyLimits } = {}) {
+// The household's own identifiers are reloaded from the server for every model
+// request (never read from, or stored in, the run input) and handed to the
+// privacy gate for known-value redaction. The loader is mandatory for live
+// dispatch (checked when the registry is created); any failure to produce a
+// well-formed list stops the request before the gate and before any dispatch.
+async function loadKnownIdentifiers(runtime, knownIdentifierLoader) {
+  const caseId = runtime?.run?.case_id ?? runtime?.run?.caseId;
+  let identifiers;
+  try {
+    if (typeof caseId !== 'string' || caseId === '') throw new TypeError('missing case');
+    identifiers = await knownIdentifierLoader(caseId);
+  } catch {
+    fail('KNOWN_IDENTIFIERS_UNAVAILABLE', 'Household identifiers could not be loaded for known-value redaction.');
+  }
+  if (!Array.isArray(identifiers)) fail('KNOWN_IDENTIFIERS_UNAVAILABLE', 'Household identifiers could not be loaded for known-value redaction.');
+  return identifiers;
+}
+
+function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization, privacyLimits, knownIdentifierLoader } = {}) {
   const requestCache = new WeakMap();
   const resolver = resolveParameterPolicy ?? resolveCanonicalParameterPolicy;
   const requestBuilders = Object.fromEntries(Object.entries(LIVE_REQUEST_BUILDERS).map(([runtimeKey, build]) => [runtimeKey, async runtime => {
     const task = RUNTIME_TASK_NAMES[runtimeKey];
     // Parameters resolve against the registry version this run pinned at creation.
     const registryVersion = pinnedRegistryVersion(runtime);
-    const safe = sanitizeEvidenceForModel(build(runtime), { task, resolveParameterPolicy: key => resolver(key, registryVersion), limits: privacyLimits });
+    const knownIdentifiers = await loadKnownIdentifiers(runtime, knownIdentifierLoader);
+    const safe = sanitizeEvidenceForModel(build(runtime), {
+      task,
+      resolveParameterPolicy: key => resolver(key, registryVersion),
+      limits: privacyLimits,
+      knownIdentifiers,
+    });
     preDispatchAuthorization.register(task, safe.input, runtime, safe.audit);
     const current = requestCache.get(runtime) ?? new Map();
     current.set(runtimeKey, safe.input);
@@ -378,12 +407,14 @@ function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization,
   return { requestBuilders: Object.freeze(requestBuilders), resultAdapters: Object.freeze(resultAdapters) };
 }
 
-export function createGeminiCoverageRegistryFactory({ env = process.env, loadModel, createAgent, resolveParameterPolicy, preDispatchValidator, privacyLimits } = {}) {
+export function createGeminiCoverageRegistryFactory({ env = process.env, loadModel, createAgent, resolveParameterPolicy, preDispatchValidator, privacyLimits, knownIdentifierLoader } = {}) {
   let project;
   return () => {
     const config = readConfig(env);
     project ||= createBudgetScope(config.projectBudgetUsd);
     const preDispatchAuthorization = createPreDispatchAuthorization(preDispatchValidator);
+    // Live dispatch without known-value redaction is never allowed.
+    if (typeof knownIdentifierLoader !== 'function') fail('LIVE_AI_CONFIG_INVALID', 'A household identifier loader is required for live model dispatch.');
     const modelRunner = createAiSdkRunner({
       loadModel: loadModel ?? (async () => createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)),
       provider: 'google', model: config.model, modelVersion: config.modelVersion,
@@ -404,7 +435,7 @@ export function createGeminiCoverageRegistryFactory({ env = process.env, loadMod
       mode: 'live', liveRunner: runner, budget: createRunBudget(config.runBudgetUsd, project),
       limits: { maxInputBytes: config.maxInputBytes, maxOutputTokens: config.maxOutputTokens, timeoutMs: config.timeoutMs, maxRetries: 0, maxReservationUsd: config.reservationUsd, maxConcurrentCalls: config.maxConcurrentCalls },
     });
-    const adapters = privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization, privacyLimits });
+    const adapters = privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization, privacyLimits, knownIdentifierLoader });
     const executors = createAiTaskExecutors({ gateway, requestBuilders: adapters.requestBuilders, resultAdapters: adapters.resultAdapters, reservationUsd: config.reservationUsd });
     return createAiEnhancedTaskRegistry({ baseRegistry: createFixtureTaskRegistry(), aiExecutors: executors, enabledTaskKeys: RUNTIME_AI_TASK_KEYS });
   };
