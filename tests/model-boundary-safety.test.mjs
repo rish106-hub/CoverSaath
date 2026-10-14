@@ -148,7 +148,7 @@ test('unsupported certainty and approval language is rejected wherever it appear
     summary: 'Reviewed.',
   }, certaintyInput()), { code: 'unsupported_claim' });
   assert.throws(() => validateTaskOutput('question_drafting', {
-    questions: [{ id: 'q-1', text: 'Can you confirm the claim is approved?', authorityOwner: 'insurer', citations: ['source_bbbbbbbbbbbbbbbbbbbbbbbb'] }],
+    questions: [{ id: 'q-1', text: 'The claim is approved, right?', authorityOwner: 'insurer', citations: ['source_bbbbbbbbbbbbbbbbbbbbbbbb'] }],
     unresolvedSourceIds: ['source_bbbbbbbbbbbbbbbbbbbbbbbb'],
   }, certaintyInput()), { code: 'unsupported_claim' });
 });
