@@ -1,0 +1,44 @@
+tests/pre-dispatch-consent.test.mjs
+  s_7e555e8bb498c4::t_e7c0033d7636f7 78,100-106
+src/modules/coverage-analysis/task-registry.js
+  s_7e555e8bb498c4::t_cd8bd3fefc1199 5,92
+src/modules/coverage-analysis/source-input.js
+  s_7e555e8bb498c4::t_12433555a6ff97 12-14,230
+src/backend/repositories/consent-repository.js
+  s_7e555e8bb498c4::t_b2b615a5ebe923 6,10,158-173
+src/modules/coverage-analysis/persistent-service.js
+  s_7e555e8bb498c4::t_5b80328ded113a 4,20,30-50,132-142,223-233,235-243
+src/backend/services/coverage-analysis-port.js
+  s_7e555e8bb498c4::t_56ee010d85cf52 84-89,217-305,371-372,393
+  s_7e555e8bb498c4::t_5d7cadb45466b9 25-39,104-105,194-199
+src/backend/repositories/ocr-repository.js
+  s_7e555e8bb498c4::t_8dcea835036577 97-100,106-117
+src/backend/services/backend-services.js
+  s_7e555e8bb498c4::t_b2b615a5ebe923 9-12
+tests/coverage-analysis-runtime.test.mjs
+  s_7e555e8bb498c4::t_e7c0033d7636f7 138-139
+tests/round3-runtime-integration.test.mjs
+  s_7e555e8bb498c4::t_78ebfc1f19aaec 130
+  s_7e555e8bb498c4::t_7d7e20663097b6 33,76
+  s_7e555e8bb498c4::t_f48f61f8144972 1-32,34-75,77-129,131-460
+src/modules/ai-analysis/live-coverage-runtime.js
+  s_7e555e8bb498c4::t_32539d9d4d2b22 397-398
+  s_7e555e8bb498c4::t_cd8bd3fefc1199 6,167-185,204
+  s_7e555e8bb498c4::t_1ed2fc97299807 205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d7edc7e68de5b136b860a4312722cc6dcf846db2",
+  "prompts": {},
+  "sessions": {
+    "s_7e555e8bb498c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1d350c9-3df6-410f-aade-0061ded7c855",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
