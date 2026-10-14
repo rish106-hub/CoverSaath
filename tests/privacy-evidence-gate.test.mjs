@@ -6,6 +6,7 @@ import {
   sanitizeEvidenceForModel,
   sanitizeEvidenceTextForStorage,
 } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+import { RESTRICTED_PROBES, TOKENIZED_PROBES } from './support/privacy-probes.mjs';
 
 const policy = (overrides = {}) => ({
   dataClass: 'CONFIDENTIAL',
@@ -189,4 +190,87 @@ test('live runtime dispatches only sanitized evidence and runs the injected auth
   });
   await assert.rejects(deniedFactory().profile(liveRuntime()), { code: 'MODEL_DISPATCH_AUTHORIZATION_FAILED' });
   assert.equal(modelCalls, 0);
+});
+
+const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+test('every direct-identifier class is tokenized out of model input and audit metadata', () => {
+  const text = `${Object.values(TOKENIZED_PROBES).map(([phrase]) => phrase).join('; ')}; Room rent limit is 5000.`;
+  const result = sanitizeEvidenceForModel(rawInput({ sources: [{ ...rawInput().sources[0], text }] }), { task: 'group_cover_extraction', resolveParameterPolicy: () => policy() });
+  const modelBody = JSON.stringify(result.input);
+  const auditBody = JSON.stringify(result.audit);
+  for (const [label, [, raw, reason]] of Object.entries(TOKENIZED_PROBES)) {
+    assert.doesNotMatch(modelBody, new RegExp(escapeRegExp(raw)), `${label} must not reach the model`);
+    assert.doesNotMatch(auditBody, new RegExp(escapeRegExp(raw)), `${label} must not reach the audit`);
+    assert.ok(result.audit.redactionReasonCodes.includes(reason), `${label} must record ${reason}`);
+  }
+  assert.match(modelBody, /Room rent limit is 5000/);
+  assert.equal(result.audit.sources[0].dataClass, 'CONFIDENTIAL');
+});
+
+test('each direct-identifier probe is tokenized on its own, in storage and in structured upstream values', () => {
+  for (const [label, [phrase, raw]] of Object.entries(TOKENIZED_PROBES)) {
+    const stored = sanitizeEvidenceTextForStorage(`${phrase}. Room rent limit is 5000.`);
+    assert.ok(!stored.text.includes(raw), `${label} must be removed before storage`);
+    assert.ok(stored.reasonCodes.length > 0, label);
+    // Re-sanitising stored text is idempotent: tokens are never re-tokenized.
+    assert.equal(sanitizeEvidenceTextForStorage(stored.text).text, stored.text, `${label} must be idempotent`);
+  }
+  const structured = sanitizeEvidenceForModel(rawInput({
+    upstream: [{ patientName: 'Ravi Synthetic', diagnosis: 'synthetic asthma', passportNumber: 'K1234567', ifscCode: 'SBIN0001234', mobile: '9876543210', note: 'Name: Meera Testcase', factId: 'UNCLASSIFIED:case-raw-123' }],
+  }), { resolveParameterPolicy: () => policy() });
+  const upstreamBody = JSON.stringify(structured.input.upstream);
+  for (const raw of ['Ravi Synthetic', 'synthetic asthma', 'K1234567', 'SBIN0001234', '9876543210', 'Meera Testcase', 'case-raw-123']) {
+    assert.ok(!upstreamBody.includes(raw), `${raw} must not reach the model from structured upstream`);
+  }
+});
+
+test('policy wording that resembles identity labels stays usable for analysis', () => {
+  const wording = 'Plan name: Gold Synthetic. Sum insured: 500000. In-patient: covered after admission. Pre-existing disease waiting period: 36 months. Critical illness rider is optional. Room rent limit is 5000.';
+  const stored = sanitizeEvidenceTextForStorage(wording);
+  assert.equal(stored.text, wording);
+  assert.deepEqual(stored.reasonCodes, []);
+});
+
+test('restricted credentials, secrets and payment cards are rejected without echoing the value', () => {
+  for (const [label, probe] of Object.entries(RESTRICTED_PROBES)) {
+    for (const run of [
+      () => sanitizeEvidenceTextForStorage(`Synthetic schedule. ${probe}. Room rent limit is 5000.`),
+      () => sanitizeEvidenceForModel(rawInput({ sources: [{ ...rawInput().sources[0], text: `Synthetic schedule. ${probe}.` }] }), { resolveParameterPolicy: () => policy() }),
+      () => sanitizeEvidenceForModel(rawInput({ upstream: [{ note: probe }] }), { resolveParameterPolicy: () => policy() }),
+    ]) {
+      assert.throws(run, error => {
+        assert.equal(error.code, 'RESTRICTED_EVIDENCE', label);
+        assert.equal(error.message, 'Restricted evidence cannot be sent to a model.');
+        assert.ok(!JSON.stringify({ message: error.message, stack: error.stack }).includes(probe), `${label} must not be echoed`);
+        return true;
+      });
+    }
+  }
+  // A Luhn-invalid 16-digit number is not treated as a card; it is tokenized instead.
+  const notCard = sanitizeEvidenceTextForStorage('Reference 1234 5678 9012 3456 noted.');
+  assert.ok(!notCard.text.includes('1234 5678 9012 3456'));
+});
+
+test('restricted evidence reaching the live runtime makes zero provider calls and leaks nothing', async () => {
+  for (const [label, probe] of Object.entries(RESTRICTED_PROBES)) {
+    let providerCalls = 0;
+    let validatorCalls = 0;
+    const factory = createGeminiCoverageRegistryFactory({
+      env: liveEnv,
+      resolveParameterPolicy: () => policy(),
+      preDispatchValidator: async () => { validatorCalls += 1; return true; },
+      loadModel: async () => ({ mocked: true }),
+      createAgent: () => ({ generate: async () => { providerCalls += 1; return {}; } }),
+    });
+    const runtime = liveRuntime();
+    runtime.input.profilePacket.data = { roomRentLimit: `5000 ${probe}` };
+    await assert.rejects(factory().profile(runtime), error => {
+      assert.equal(error.code, 'RESTRICTED_EVIDENCE', label);
+      assert.ok(!String(error.message).includes(probe));
+      return true;
+    });
+    assert.equal(providerCalls, 0, label);
+    assert.equal(validatorCalls, 0, label);
+  }
 });

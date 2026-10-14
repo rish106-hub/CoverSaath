@@ -12,7 +12,7 @@ import { prepareJsonResponse, readBody, sendJson } from './http/request.js';
 import { assertLocalRequest } from './http/security.js';
 import { createRateLimiter } from '../shared/http/index.js';
 import { openDatabase } from '../backend/database/index.js';
-import { createBackendServices } from '../backend/services/index.js';
+import { createBackendServices, createCoverageAnalysisPort } from '../backend/services/index.js';
 import {
   createEmailProvider,
   createGnaniVoiceProvider,
@@ -48,6 +48,7 @@ export function createApiServer({
   databasePath,
   backendServices,
   analysisLiveRegistryFactory,
+  analysisLiveModelDriver,
 } = {}) {
   const config = readServerConfig(env);
   const cases = new Map();
@@ -69,7 +70,17 @@ export function createApiServer({
   const locks = new Set();
   const expiry = config.sessionTtlMs;
   const rateLimiter = createRateLimiter({ limit: config.rateLimitPerMinute });
-  const liveRegistryFactory = analysisLiveRegistryFactory ?? createGeminiCoverageRegistryFactory({ env });
+  // The default live path always re-checks current document consent from the
+  // database immediately before every provider call. Only the model driver
+  // (loadModel/createAgent) may be injected; the validator and parameter
+  // policy cannot be replaced through this option.
+  const modelDispatchValidator = request => createCoverageAnalysisPort(getBackend()).authorizeModelDispatch(request);
+  const liveRegistryFactory = analysisLiveRegistryFactory ?? createGeminiCoverageRegistryFactory({
+    env,
+    ...(analysisLiveModelDriver?.loadModel ? { loadModel: analysisLiveModelDriver.loadModel } : {}),
+    ...(analysisLiveModelDriver?.createAgent ? { createAgent: analysisLiveModelDriver.createAgent } : {}),
+    preDispatchValidator: modelDispatchValidator,
+  });
   const ownsDatabase = !injectedDatabase;
   let database = injectedDatabase ?? null;
   let services = backendServices ?? null;

@@ -51,7 +51,9 @@ export class ConsentRepository {
         (!action || scope.action === action) &&
         (!dataCategory || scope.data_category === dataCategory) &&
         (!resourceId || scope.resource_id === null || scope.resource_id === resourceId) &&
-        (!recipient || scope.recipient === null || scope.recipient === recipient));
+        // When a recipient is requested it must be named exactly. A NULL
+        // recipient scope never authorises disclosure to a specific recipient.
+        (!recipient || scope.recipient === recipient));
       if (!matches) { const error = new Error('Consent does not cover this resource and action.'); error.code = 'CONSENT_SCOPE_REQUIRED'; throw error; }
     }
     return grant;
