@@ -3,12 +3,14 @@ import { createHash } from 'node:crypto';
 import { createAiSdkRunner } from './ai-sdk-runner.js';
 import { createAiEnhancedTaskRegistry, createAiTaskExecutors } from './runtime-adapter.js';
 import { createModelGateway } from './model-gateway.js';
-import { sanitizeEvidenceForModel } from './privacy-evidence-gate.js';
+import { GEMINI_MODEL_RECIPIENT, sanitizeEvidenceForModel } from './privacy-evidence-gate.js';
 import { RUNTIME_AI_TASK_KEYS } from './responsibility-matrix.js';
 import { createFixtureTaskRegistry } from '../coverage-analysis/task-registry.js';
 import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterDefinition } from '../coverage-analysis/policy-parameter-registry.js';
 
-const KNOWN_STATUSES = new Set(['known', 'document-backed', 'document_backed', 'institution-confirmed', 'institution_confirmed']);
+export { GEMINI_MODEL_RECIPIENT };
+
+const KNOWN_STATUSES =new Set(['known', 'document-backed', 'document_backed', 'institution-confirmed', 'institution_confirmed']);
 const RUNTIME_TASK_NAMES = Object.freeze({
   profile: 'profile_extraction',
   group: 'group_cover_extraction',
@@ -229,8 +231,8 @@ function evidenceRequestKey(task, input) {
 }
 
 function createPreDispatchAuthorization(preDispatchValidator) {
-  if (preDispatchValidator === undefined) return null;
-  if (typeof preDispatchValidator !== 'function') fail('LIVE_AI_CONFIG_INVALID', 'preDispatchValidator must be a function.');
+  // Live dispatch without a current-consent re-check is never allowed.
+  if (typeof preDispatchValidator !== 'function') fail('LIVE_AI_CONFIG_INVALID', 'A pre-dispatch consent validator is required for live model dispatch.');
   const pending = new Map();
   return Object.freeze({
     register(task, input, runtime, audit) {
@@ -242,6 +244,8 @@ function createPreDispatchAuthorization(preDispatchValidator) {
         caseId: runtime.run.case_id ?? runtime.run.caseId ?? runtime.run.id,
         subjectId: runtime.input.profilePacket.subjectId,
         authorizedSourceIds: [...new Set(runtime.input.authorizedSourceIds ?? [])],
+        authorizedSources: (runtime.input.authorizedSources ?? []).map(source => ({ sourceId: source?.sourceId, documentId: source?.documentId })),
+        modelRecipient: GEMINI_MODEL_RECIPIENT,
         sourceDigests: audit.sources.map(source => ({ sourceId: source.sourceId, digest: source.digest })),
       });
       if (pending.size > 1_000) pending.delete(pending.keys().next().value);
@@ -264,13 +268,31 @@ function createPreDispatchAuthorization(preDispatchValidator) {
   });
 }
 
+// Defence in depth after schema validation: every source id a model cites must
+// exactly equal an opaque id from the sanitized request for this task. No
+// trimming, case folding or prefix matching, so look-alike ids, ids of denied
+// documents and ids from another case never resolve to a source.
+function assertExactSourceCitations(output, safeRequest) {
+  const allowed = new Set(safeRequest.sources.map(source => source.id));
+  const cited = [
+    ...(output?.facts ?? []).flatMap(item => item?.citations ?? []),
+    ...(output?.statements ?? []).flatMap(item => item?.citations ?? []),
+    ...(output?.unknowns ?? []).flatMap(item => item?.citations ?? []),
+    ...(output?.questions ?? []).flatMap(item => item?.citations ?? []),
+    ...(output?.unresolvedSourceIds ?? []),
+  ];
+  if (cited.some(id => typeof id !== 'string' || !allowed.has(id))) {
+    fail('SOURCE_ALIAS_REJECTED', 'A model citation does not match an authorized source.');
+  }
+}
+
 function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization, privacyLimits } = {}) {
   const requestCache = new WeakMap();
   const resolver = resolveParameterPolicy ?? resolveCanonicalParameterPolicy;
   const requestBuilders = Object.fromEntries(Object.entries(LIVE_REQUEST_BUILDERS).map(([runtimeKey, build]) => [runtimeKey, async runtime => {
     const task = RUNTIME_TASK_NAMES[runtimeKey];
     const safe = sanitizeEvidenceForModel(build(runtime), { task, resolveParameterPolicy: resolver, limits: privacyLimits });
-    preDispatchAuthorization?.register(task, safe.input, runtime, safe.audit);
+    preDispatchAuthorization.register(task, safe.input, runtime, safe.audit);
     const current = requestCache.get(runtime) ?? new Map();
     current.set(runtimeKey, safe.input);
     requestCache.set(runtime, current);
@@ -279,6 +301,7 @@ function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization,
   const resultAdapters = Object.fromEntries(Object.entries(LIVE_RESULT_ADAPTERS).map(([runtimeKey, adapt]) => [runtimeKey, (output, modelMetadata, runtime) => {
     const safeRequest = requestCache.get(runtime)?.get(runtimeKey);
     if (!safeRequest) fail('PRIVACY_GATE_MALFORMED', 'Sanitized evidence is missing from the live model boundary.');
+    assertExactSourceCitations(output, safeRequest);
     return adapt(output, modelMetadata, runtime, safeRequest);
   }]));
   return { requestBuilders: Object.freeze(requestBuilders), resultAdapters: Object.freeze(resultAdapters) };
@@ -295,12 +318,11 @@ export function createGeminiCoverageRegistryFactory({ env = process.env, loadMod
       provider: 'google', model: config.model, modelVersion: config.modelVersion,
       inputUsdPerMillion: config.inputRate, outputUsdPerMillion: config.outputRate, createAgent,
     });
-    const runner = preDispatchAuthorization
-      ? async request => {
-        await preDispatchAuthorization.validate(request);
-        return modelRunner(request);
-      }
-      : modelRunner;
+    // Every provider call is preceded by a fresh current-consent check.
+    const runner = async request => {
+      await preDispatchAuthorization.validate(request);
+      return modelRunner(request);
+    };
     const gateway = createModelGateway({
       mode: 'live', liveRunner: runner, budget: createRunBudget(config.runBudgetUsd, project),
       limits: { maxInputBytes: config.maxInputBytes, maxOutputTokens: config.maxOutputTokens, timeoutMs: config.timeoutMs, maxRetries: 0, maxReservationUsd: config.reservationUsd, maxConcurrentCalls: config.maxConcurrentCalls },
