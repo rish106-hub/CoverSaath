@@ -3,6 +3,7 @@ import { analyzeGroupHealthCover } from '../../agents/group-health-agent.js';
 import { analyzePersonalHealthCover } from '../../agents/personal-health-agent.js';
 import { classifyCase } from '../../agents/decision-agent.js';
 import { sanitizeEvidenceForModel } from '../ai-analysis/privacy-evidence-gate.js';
+import { MODEL_EXTRACTED_UNVERIFIED } from './agent-contracts.js';
 import { buildHouseholdAction, decomposePolicySection, POLICY_DECOMPOSITION } from './policy-decomposition.js';
 
 const clone = value => structuredClone(value);
@@ -15,7 +16,8 @@ function profileFacts(profile) {
     field,
     value: clone(fact.value),
     status: fact.status,
-    sources: [{ id: fact.source.id, page: fact.source.location, version: fact.source.version }],
+    sources: (fact.sources ?? [fact.source]).filter(Boolean)
+      .map(source => ({ id: source.id, page: source.location ?? source.page, version: source.version })),
   }));
 }
 
@@ -42,7 +44,7 @@ function personalFacts(analysis) {
     field: assertion.field,
     value: clone(assertion.value),
     status: assertion.status,
-    sources: [{ ...assertion.source }],
+    sources: (assertion.sources ?? [assertion.source]).filter(Boolean).map(source => ({ ...source })),
   })));
 }
 
@@ -56,6 +58,11 @@ function assembleCoverageGraph({ input, upstream }) {
   const profileUnknowns = Object.entries(profile.profile).filter(([, fact]) => fact.status === 'unknown').map(([field]) => `Profile field ${field} is unknown.`);
   const groupUnknowns = group.flatMap(analysis => analysis.unresolved.map(id => `${analysis.policyId}: ${id}.`));
   const personalUnknowns = personal.dimensions.suitability.evidenceGaps.map(gap => gap.reason);
+  // A model-extracted value is a candidate, not an established fact: it stays an
+  // explicit unknown until deterministic code or a human reviewer resolves it.
+  const unverifiedUnknowns = [...new Set(facts
+    .filter(fact => fact.status === MODEL_EXTRACTED_UNVERIFIED)
+    .map(fact => `${fact.field ?? fact.fact} is model-extracted and awaits review.`))];
   const continuity = input.continuity ?? {};
   const operator = continuity.operator?.status === 'verified' && continuity.operator?.source
     ? clone(continuity.operator)
@@ -64,7 +71,7 @@ function assembleCoverageGraph({ input, upstream }) {
   return {
     kind: 'source_linked_household_coverage_graph',
     facts,
-    unknowns: [...new Set([...profileUnknowns, ...groupUnknowns, ...personalUnknowns])],
+    unknowns: [...new Set([...profileUnknowns, ...groupUnknowns, ...personalUnknowns, ...unverifiedUnknowns])],
     operator,
     institutionalStatus: confirmedProcedure ? 'confirmed_for_case' : 'unresolved',
     boundaries: [
@@ -120,6 +127,15 @@ function reviewEvidence({ input, upstream }) {
       .flatMap(key => upstream[key]?.facts ?? []),
   ];
   const findings = [];
+  // Sources the intake excluded or could not send are reported, never silently dropped.
+  for (const blocker of Array.isArray(input.sourceBlockers) ? input.sourceBlockers : []) {
+    findings.push({ code: blocker.code, reasonCode: blocker.reasonCode, documentId: blocker.documentId });
+  }
+  for (const fact of upstream.coverage.facts) {
+    // Criteria 6 and 11: model output is unverified evidence. It blocks release
+    // as review-required until deterministic code or a human resolves it.
+    if (fact.status === MODEL_EXTRACTED_UNVERIFIED) findings.push({ code: 'HUMAN_REVIEW_REQUIRED', reasonCode: MODEL_EXTRACTED_UNVERIFIED, factId: fact.id });
+  }
   for (const fact of facts) {
     const unresolved = ['unknown', 'unresolved', 'conflicting'].includes(fact.status)
       || ['Unknown', 'Conflicting'].includes(fact.evidenceState);
@@ -166,7 +182,7 @@ function synthesize({ upstream }) {
 }
 
 function draftQuestions({ upstream }) {
-  const unknownFacts = upstream.coverage.facts.filter(fact => ['unknown', 'unresolved', 'conflicting'].includes(fact.status));
+  const unknownFacts = upstream.coverage.facts.filter(fact => ['unknown', 'unresolved', 'conflicting', MODEL_EXTRACTED_UNVERIFIED].includes(fact.status));
   const factQuestions = unknownFacts.flatMap(fact => {
     const citations = [...new Set((fact.sources ?? []).map(source => source.id).filter(Boolean))];
     if (citations.length === 0) return [];

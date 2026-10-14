@@ -1,5 +1,9 @@
 const supportedDecisionTrigger = trigger => ['emergency', 'planned_care', 'renewal'].includes(trigger) ? trigger : 'renewal';
 
+// Fixture evidence is synthetic and deterministic. Its 'document-backed' /
+// 'document_backed' statuses are the explicit positive markers that map to the
+// Proven evidence state; the runtime no longer defaults unrecognised wording to
+// Proven. Model output never uses these markers (it is 'model_extracted_unverified').
 export function createCoverageAnalysisFixtureInput(caseRecord, { variant = 'standard' } = {}) {
   if (!['standard', 'blocked_source'].includes(variant)) throw new Error('Unsupported fixture variant.');
   const profileSource = `fixture:${caseRecord.id}:profile`;
