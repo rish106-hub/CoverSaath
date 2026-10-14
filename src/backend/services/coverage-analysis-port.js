@@ -442,7 +442,7 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
     stopForRevocation(runId, { reason = 'consent_not_active', reasonCode = null } = {}) {
       const run = services.workflows.getRun(runId);
       if (!run) return null;
-      const at = new Date().toISOString();
+      const at = clock().toISOString();
       database.exec('BEGIN IMMEDIATE');
       try {
         if (reason === 'source_consent_not_current') {

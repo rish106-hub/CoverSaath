@@ -100,7 +100,11 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
             reservation: structuredClone(reservation),
           }), { task, input }, mode);
         } catch (error) {
-          await budget.settle(reservation, null, { failed: true });
+          // A call that never reached the provider (no concurrency slot, or the
+          // runner refused it before dispatch) releases its reservation; any
+          // other failure keeps it reserved, since the provider may have charged.
+          const dispatched = acquired && error?.modelDispatched !== false;
+          await budget.settle(reservation, dispatched ? null : 0, { failed: dispatched });
           throw error;
         } finally {
           if (acquired) release();
