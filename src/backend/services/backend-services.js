@@ -6,12 +6,14 @@ export function createBackendServices(database, options = {}) {
   const audit = new AuditRepository(database, options);
   const shared = { ...options, audit };
   const households = new HouseholdRepository(database, shared);
-  const consents = new ConsentRepository(database, shared);
+  const coverageParameters = new CoverageParameterRepository(database, shared);
+  // Consent revocation appends an explicit redaction audit event through the
+  // parameter repository, inside the revocation transaction.
+  const consents = new ConsentRepository(database, { ...shared, coverageParameters });
   const cases = new CaseRepository(database, shared);
   const workflows = new WorkflowRepository(database, shared);
   const auth = new AuthRepository(database, shared);
   const ocr = new OcrRepository(database, shared);
-  const coverageParameters = new CoverageParameterRepository(database, shared);
   const access = new TenantAccessService(database, { auth, households, consents, env: options.env ?? {} });
 
   return {
