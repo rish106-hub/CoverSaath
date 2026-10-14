@@ -78,7 +78,10 @@ function errorResponse(error) {
   };
   const code = error.code || 'BACKEND_REQUEST_FAILED';
   const status = error.statusCode || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
-  return { status, body: { error: { code, message: error.message } } };
+  // Only coded errors are deliberate, client-safe messages. An uncoded error is internal
+  // (a constraint, a TypeError, a driver error): its text never leaves the server.
+  const message = error.code ? error.message : 'The request could not be completed.';
+  return { status, body: { error: { code, message } } };
 }
 
 function job(database, runId) {
@@ -299,7 +302,8 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     const runMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/analysis-runs$/);
     if (req.method === 'POST' && runMatch) {
       services.access.requireCase(principal, runMatch[1], { write: true });
-      return createAnalysisRun({ req, database, services, caseId: runMatch[1], body: await readBody(req), config, liveRegistryFactory });
+      // Awaited inside the try so asynchronous service errors map through errorResponse.
+      return await createAnalysisRun({ req, database, services, caseId: runMatch[1], body: await readBody(req), config, liveRegistryFactory });
     }
     const auditMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/audit-events$/);
     if (req.method === 'GET' && auditMatch) {

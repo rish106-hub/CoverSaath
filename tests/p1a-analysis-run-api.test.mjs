@@ -133,12 +133,10 @@ test('P1-A API: live route responses match the response schemas', async t => {
   const unknownJob = await call('/api/v1/jobs/run-does-not-exist', { token });
   assert.deepEqual([unknownJob.status, validateApiErrorBody(unknownJob.data).code], [404, 'JOB_NOT_FOUND']);
 
-  // Finding F-API-1 (ADR 0001): an error raised asynchronously by the analysis service
-  // (here IDEMPOTENCY_CONFLICT) escapes the route mapper. It reaches the client as HTTP 400
-  // with an uncoded message instead of the registered 409 { error: { code } }. This pins
-  // today's behaviour; when the route awaits the service, update this to 409 / coded.
+  // Finding F-API-1 (fixed): an error raised asynchronously by the analysis service maps
+  // through the route mapper to its registered status and a coded body.
   const conflict = await call(path, { method: 'POST', token, idempotencyKey: 'p1a-api-run-0001', body: { ...body, fixtureVariant: 'blocked_source' } });
   const conflictError = validateApiErrorBody(conflict.data);
-  assert.deepEqual([conflict.status, conflictError.shape], [400, 'legacy_message']);
-  assert.equal(ANALYSIS_ERROR_CODES.IDEMPOTENCY_CONFLICT.httpStatus, 409);
+  assert.deepEqual([conflict.status, conflictError.shape, conflictError.code], [409, 'coded', 'IDEMPOTENCY_CONFLICT']);
+  assert.equal(ANALYSIS_ERROR_CODES.IDEMPOTENCY_CONFLICT.httpStatus, conflict.status);
 });

@@ -146,7 +146,8 @@ test('T1: a dependent subject is recorded as its household member; a missing mem
   const runsBefore = count(app.database, 'SELECT count(*) AS count FROM workflow_runs');
   const refused = await scenario.startLiveRun('t1-no-member');
   assert.equal(refused.status, 409, refused.raw);
-  assert.match(refused.data.error, /no household member to attach coverage parameters/);
+  assert.equal(refused.data.error.code, 'PARAMETER_SUBJECT_UNRESOLVED');
+  assert.match(refused.data.error.message, /no household member to attach coverage parameters/);
   assert.equal(count(app.database, 'SELECT count(*) AS count FROM workflow_runs'), runsBefore);
 });
 

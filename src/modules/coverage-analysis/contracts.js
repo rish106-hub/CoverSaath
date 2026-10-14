@@ -22,7 +22,8 @@ export const WORKFLOW_VERSION_MISMATCH = 'WORKFLOW_VERSION_MISMATCH';
  */
 export function assertExecutableWorkflowVersion(run) {
   const version = run?.workflowVersion ?? run?.workflow_version;
-  if (version !== undefined && version !== COVERAGE_ANALYSIS_WORKFLOW.version) {
+  // A run with no version is not executable either: persisted runs always carry one.
+  if (version !== COVERAGE_ANALYSIS_WORKFLOW.version) {
     throw Object.assign(
       new TypeError(`Run is pinned to workflow version ${String(version)}; this runtime executes ${COVERAGE_ANALYSIS_WORKFLOW.name} version ${COVERAGE_ANALYSIS_WORKFLOW.version} only.`),
       { code: WORKFLOW_VERSION_MISMATCH },
