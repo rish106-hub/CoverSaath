@@ -38,8 +38,12 @@ export class ConsentRepository {
   }
 
   requireActive(grantId, { subjectAdultId, purpose, resourceType, resourceId = null, action, dataCategory, recipient = null, at = this.clock().toISOString() } = {}) {
+    // Expiry uses the same julianday comparison as source selection: timestamps
+    // in different ISO forms compare by instant, and an unparseable expiry or
+    // check time (julianday NULL) counts as expired (fail closed).
     const grant = this.database.prepare(`SELECT * FROM consent_grants
-      WHERE id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`)
+      WHERE id = ? AND revoked_at IS NULL
+        AND (expires_at IS NULL OR julianday(expires_at) > julianday(?))`)
       .get(grantId, at);
     if (!grant || (subjectAdultId && grant.subject_adult_id !== subjectAdultId) || (purpose && grant.purpose !== purpose)) {
       const error = new Error('Active subject-scoped consent is required.'); error.code = 'CONSENT_REQUIRED'; throw error;

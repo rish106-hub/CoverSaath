@@ -109,8 +109,8 @@ test('source selection excludes NULL-recipient and wrong-recipient documents, so
   const modelRequests = [];
   const app = await startLiveServer(t, { modelRequests });
   const scenario = await setupLiveCase(app);
-  const nullRecipient = scenario.addDocument({ suffix: 'null-recipient', text: `Denied page for ${PROBE_EMAIL} room rent limit 9000`, scopeRecipient: null });
-  const wrongRecipient = scenario.addDocument({ suffix: 'wrong-recipient', text: `Other model page ${PROBE_EMAIL} room rent limit 9100`, scopeRecipient: 'openai-gpt' });
+  const nullRecipient = scenario.addDocument({ suffix: 'null-recipient', text: `Denied page for ${PROBE_EMAIL} room rent limit ROOMLIMIT-NULLRECIP`, scopeRecipient: null });
+  const wrongRecipient = scenario.addDocument({ suffix: 'wrong-recipient', text: `Other model page ${PROBE_EMAIL} room rent limit ROOMLIMIT-WRONGRECIP`, scopeRecipient: 'openai-gpt' });
 
   const response = await scenario.startLiveRun('mixed-consent');
   assert.equal(response.status, 202);
@@ -119,7 +119,7 @@ test('source selection excludes NULL-recipient and wrong-recipient documents, so
   assert.deepEqual(input.authorizedSourceIds, [scenario.pageId]);
   assert.deepEqual(input.authorizedSources, [{ sourceId: scenario.pageId, documentId: scenario.documentId }]);
   const providerBody = JSON.stringify(modelRequests);
-  for (const forbidden of [PROBE_EMAIL, '9000', '9100', nullRecipient.pageId, wrongRecipient.pageId, nullRecipient.documentId, wrongRecipient.documentId]) {
+  for (const forbidden of [PROBE_EMAIL, 'ROOMLIMIT-NULLRECIP', 'ROOMLIMIT-WRONGRECIP', nullRecipient.pageId, wrongRecipient.pageId, nullRecipient.documentId, wrongRecipient.documentId]) {
     assert.ok(!providerBody.includes(forbidden), 'a denied document must not reach the provider');
   }
   assert.equal(auditActions(app.database, 'analysis.model_dispatch_authorized').length, modelRequests.length);
