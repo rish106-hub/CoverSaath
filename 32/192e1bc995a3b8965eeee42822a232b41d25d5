@@ -1,0 +1,60 @@
+tests/model-boundary-safety.test.mjs
+  s_7e555e8bb498c4::t_bb15fa1b70dc12 98,100-101
+  s_7e555e8bb498c4::t_03dc085978ab46 52-54
+  s_7e555e8bb498c4::t_371660a558e8ae 200,203-206,208
+src/modules/coverage-analysis/agent-contracts.js
+  s_7e555e8bb498c4::t_eaa55b7be56b77 11,249-251
+  s_7e555e8bb498c4::t_f9f3c66b4dfa62 7-10,163-180,186-187,209-210
+src/modules/ai-analysis/live-coverage-runtime.js
+  s_7e555e8bb498c4::t_c9d10ff05efcc9 373-379
+  s_7e555e8bb498c4::t_7bb0f955460ab8 202-214
+  s_7e555e8bb498c4::t_51bc6f47d388a7 220-225
+  s_7e555e8bb498c4::t_607b03876e0f7c 9-10,14,116-121,124,128-141,151-166,172,177-178,182
+  s_7e555e8bb498c4::t_280752f57801f9 239,242
+  s_7e555e8bb498c4::t_a6352577aad70e 251-252
+  s_7e555e8bb498c4::t_c22a7baec590a5 343-345
+src/modules/coverage-analysis/policy-decomposition.js
+  s_7e555e8bb498c4::t_eaa55b7be56b77 93-97,99,108-109
+tests/model-evidence-state.test.mjs
+  s_7e555e8bb498c4::t_e7d2d3743b56a3 1-159
+src/modules/coverage-analysis/source-input.js
+  s_7e555e8bb498c4::t_3189489683cfd8 5,12,14-55,57-77,80-101,103-151,163-201,204-230,233-237,239-241,243-244,249,255-271,274,276-277,281,288
+  s_7e555e8bb498c4::t_24588840402b00 152-162,203,272-273
+tests/live-evidence-selection.test.mjs
+  s_7e555e8bb498c4::t_751816ff8e783f 1-119,121-131,133-140,142-197,199-201,203-281,283-301,303-314,316-318
+  s_7e555e8bb498c4::t_d78e6fc1275b20 120,132,141,198,202,282,302,315
+src/modules/coverage-analysis/task-registry.js
+  s_7e555e8bb498c4::t_de054387838ccf 6,19-20,47,61-65,74,130-138,185
+tests/live-coverage-runtime.test.mjs
+  s_7e555e8bb498c4::t_3a5f1863da650d 126-128,132,134,140
+  s_7e555e8bb498c4::t_4af858239177a0 110,114,118-122
+  s_7e555e8bb498c4::t_5673d78a5aa3b3 223-224,226-233,236
+  s_7e555e8bb498c4::t_56c58b606e64c9 205
+src/modules/coverage-analysis/persistent-service.js
+  s_7e555e8bb498c4::t_24588840402b00 183
+tests/coverage-analysis-runtime.test.mjs
+  s_7e555e8bb498c4::t_ec655c0fca3b60 323-359
+tests/support/live-analysis-scenario.mjs
+  s_7e555e8bb498c4::t_fb243f07c8202f 89,97-98,109,111-126,150-151,169
+src/modules/coverage-analysis/fixture-input.js
+  s_7e555e8bb498c4::t_46ed094a853301 3-6
+tests/privacy-evidence-gate.test.mjs
+  s_7e555e8bb498c4::t_a6ab5a6b39ebf1 268
+  s_7e555e8bb498c4::t_0bf5bae8b89a09 144,146,149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "32192e1bc995a3b8965eeee42822a232b41d25d5",
+  "prompts": {},
+  "sessions": {
+    "s_7e555e8bb498c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1d350c9-3df6-410f-aade-0061ded7c855",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
