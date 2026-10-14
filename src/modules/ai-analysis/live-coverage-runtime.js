@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { createAiSdkRunner } from './ai-sdk-runner.js';
 import { createAiEnhancedTaskRegistry, createAiTaskExecutors } from './runtime-adapter.js';
 import { createModelGateway } from './model-gateway.js';
-import { GEMINI_MODEL_RECIPIENT, sanitizeEvidenceForModel } from './privacy-evidence-gate.js';
+import { GEMINI_MODEL_RECIPIENT, opaqueSourceId, sanitizeEvidenceForModel } from './privacy-evidence-gate.js';
 import { RUNTIME_AI_TASK_KEYS } from './responsibility-matrix.js';
 import { createFixtureTaskRegistry } from '../coverage-analysis/task-registry.js';
 import { MODEL_EXTRACTED_UNVERIFIED } from '../coverage-analysis/agent-contracts.js';
@@ -164,6 +164,25 @@ function pageSources(runtime) {
   }));
 }
 
+// Upstream facts cite the opaque ids the model saw. The privacy gate opaques every
+// source id it receives, so feeding those ids back would hash them a second time
+// and break the mapping to authorised sources. Each upstream citation is therefore
+// translated back to the raw authorised id it came from; the gate then applies the
+// one and only opaque derivation. An id that is not the opaque id of an authorised
+// source is left untouched (it will be re-hashed and stay unauthorised).
+function rawSourceIdResolver(runtime) {
+  const rawIds = Array.isArray(runtime.input.authorizedSourceIds) ? runtime.input.authorizedSourceIds : [];
+  const rawByOpaque = new Map();
+  for (const rawId of rawIds) {
+    try {
+      rawByOpaque.set(opaqueSourceId(rawId), rawId);
+    } catch {
+      // A malformed authorised id never maps; it stays unauthorised.
+    }
+  }
+  return id => rawByOpaque.get(id) ?? id;
+}
+
 export const LIVE_REQUEST_BUILDERS = Object.freeze({
   profile(runtime) {
     const packet = runtime.input.profilePacket;
@@ -182,7 +201,8 @@ export const LIVE_REQUEST_BUILDERS = Object.freeze({
     return { context: context(runtime, 'Extract cited personal cover wording.', evidence.map(item => item.field)), sources: pageSources(runtime), upstream: [] };
   },
   questions(runtime) {
-    const sources = groupBySource(runtime.upstream.coverage.facts.flatMap(fact => (fact.sources ?? []).map(source => ({ ...source, status: fact.status, fact: fact.field ?? fact.fact, value: fact.value }))));
+    const toRaw = rawSourceIdResolver(runtime);
+    const sources = groupBySource(runtime.upstream.coverage.facts.flatMap(fact => (fact.sources ?? []).map(source => ({ ...source, id: toRaw(source.id), status: fact.status, fact: fact.field ?? fact.fact, value: fact.value }))));
     return { context: context(runtime, 'Draft questions for the institution with authority.', []), sources, upstream: [runtime.upstream.decision] };
   },
   primary(runtime) {
@@ -374,9 +394,8 @@ export function createGeminiCoverageRegistryFactory({ env = process.env, loadMod
     // A revocation that lands while that call is in flight cannot be prevented
     // (the request has already left the process). The late result is not
     // committed: the persistent worker re-checks the run's coverage consent grant
-    // after the call returns and before completing any task, and stops the run if
-    // it was revoked. That commit-time check covers the run-level grant only, not
-    // per-document document_processing grants (see handoff).
+    // and every authorised source document's current eligibility after the call
+    // returns and before completing any task, and stops the run if either changed.
     const runner = async request => {
       await preDispatchAuthorization.validate(request);
       return modelRunner(request);

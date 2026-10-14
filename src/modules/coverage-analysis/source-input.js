@@ -9,6 +9,9 @@ const supportedDecisionTrigger = trigger => ['emergency', 'planned_care', 'renew
 
 const normalized = value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const opaque = value => createHash('sha256').update(String(value)).digest('hex').slice(0, 24);
+// The run-level placeholder policy that parameter records and the evidence
+// descriptors of a run reference until evidence is classified to a real policy.
+export const unclassifiedPolicyId = caseId => `UNCLASSIFIED:${opaque(caseId)}`;
 const byteLength = value => Buffer.byteLength(value, 'utf8');
 
 // Request packing limits. These mirror the privacy evidence gate defaults and
@@ -224,7 +227,7 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryV
     resolutionState: 'unknown',
   }));
 
-  const policyId = `UNCLASSIFIED:${opaque(caseRecord.id)}`;
+  const policyId = unclassifiedPolicyId(caseRecord.id);
   // One descriptor per requested parameter. Page text lives once, in sourcePages.
   const evidence = requestedFields.map(parameterKey => ({
     id: `ocr:${parameterKey}`,

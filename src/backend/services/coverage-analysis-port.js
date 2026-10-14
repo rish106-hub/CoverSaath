@@ -22,6 +22,21 @@ const ANALYSIS_SUBJECT_SQL = `CASE
         AND subject_member.household_id = service_case.household_id)
   END`;
 
+// The household member the analysis is about, which is what parameter records
+// reference (their subject_id is a household_members FK, not an adult user id):
+// the case's subject member when it belongs to the case household, else, only
+// when no subject member is set, the opener's own member row. A subject member
+// that is set but foreign or missing yields NULL (fail closed).
+const ANALYSIS_MEMBER_SQL = `CASE
+    WHEN service_case.subject_member_id IS NULL THEN (SELECT opener_member.id FROM household_members opener_member
+      WHERE opener_member.household_id = service_case.household_id
+        AND opener_member.adult_user_id = service_case.opened_by_adult_id
+      ORDER BY opener_member.created_at, opener_member.id LIMIT 1)
+    ELSE (SELECT subject_member.id FROM household_members subject_member
+      WHERE subject_member.id = service_case.subject_member_id
+        AND subject_member.household_id = service_case.household_id)
+  END`;
+
 // One eligibility predicate shared by source selection and the pre-dispatch
 // re-check, so the two can never drift apart. A page is eligible only while its
 // document is active, clean, encrypted, successfully OCR'd, and covered by a
@@ -66,6 +81,12 @@ function eligibleSourcePagesSql(pageIdCount = 0) {
     ORDER BY document.uploaded_at, document.id, page.page_number`;
 }
 
+// Placeholder policy that parameter records reference until a run's evidence is
+// classified to a real policy. Created on demand as an unverified, unknown-kind
+// policy; any other policy id must already exist (fail closed).
+const UNCLASSIFIED_POLICY_ID = /^UNCLASSIFIED:[a-f0-9]{24}$/;
+const PARAMETER_UPDATED_BY = 'coverage-analysis-run-creation';
+
 const deny = reasonCode => Object.freeze({ allowed: false, reasonCode });
 
 function boundedId(value) {
@@ -80,7 +101,8 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
     throw new TypeError('A named model recipient is required for model-bound source selection.');
   }
   const loadCaseRecord = caseId => database.prepare(`SELECT service_case.id, service_case.household_id,
-      service_case.opened_by_adult_id, (${ANALYSIS_SUBJECT_SQL}) AS analysis_subject_adult_id
+      service_case.opened_by_adult_id, (${ANALYSIS_SUBJECT_SQL}) AS analysis_subject_adult_id,
+      (${ANALYSIS_MEMBER_SQL}) AS analysis_subject_member_id
     FROM service_cases service_case WHERE service_case.id = ?`).get(caseId) ?? null;
   // Coverage-reconstruction consent must be granted by the analysis subject.
   // A missing subject never reaches requireActive, which would skip the subject
@@ -169,7 +191,12 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
     getCase(caseId) {
       const record = services.cases.get(caseId);
       if (!record) return null;
-      return { ...record, analysis_subject_adult_id: loadCaseRecord(caseId)?.analysis_subject_adult_id ?? null };
+      const subject = loadCaseRecord(caseId);
+      return {
+        ...record,
+        analysis_subject_adult_id: subject?.analysis_subject_adult_id ?? null,
+        analysis_subject_member_id: subject?.analysis_subject_member_id ?? null,
+      };
     },
     // The subject is re-derived from the database, never taken from the caller.
     requireCoverageConsent({ caseRecord, consentGrantId }) {
@@ -187,6 +214,95 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
         .run(scope, key, requestDigest, responseStatus, JSON.stringify(response), expiresAt, new Date().toISOString());
     },
     createRunWithTasks(input) { return services.workflows.createRunWithTasks(input); },
+    // Creates a run, its tasks, its registry pin and one explicit parameter
+    // record per registry key in ONE transaction, so a run never exists without
+    // pinned parameter records. Any failure (unknown registry version, scope
+    // mismatch, audit failure) rolls the whole creation back. `parameters`:
+    // { registryVersion, householdId, caseId, subjectId, policyId,
+    //   requestedKeys, receivedKeys } where subjectId is a household member id.
+    createRunWithParameters({ tasks = [], parameters, ...runInput }) {
+      const repository = services.coverageParameters;
+      if (typeof repository?.initializeRunParameters !== 'function' || typeof repository?.setAcquisitionStateForRun !== 'function'
+        || typeof services.workflows.createRun !== 'function' || typeof services.workflows.insertTask !== 'function') {
+        throw Object.assign(new Error('Coverage parameter persistence is not configured.'), { code: 'PARAMETER_RECORDS_NOT_CONFIGURED', statusCode: 503 });
+      }
+      if (!parameters || typeof parameters !== 'object') throw new TypeError('Parameter record scope is required to create a run.');
+      const requestedKeys = parameters.requestedKeys ?? [];
+      const receivedKeys = parameters.receivedKeys ?? [];
+      if (!Array.isArray(requestedKeys) || !Array.isArray(receivedKeys)
+        || receivedKeys.some(key => !requestedKeys.includes(key))) {
+        throw new TypeError('Received parameters must also be requested parameters.');
+      }
+      database.exec('BEGIN IMMEDIATE');
+      try {
+        const run = services.workflows.createRun(runInput);
+        const tasksByKey = new Map();
+        for (const definition of tasks) {
+          const dependencyTaskIds = (definition.dependsOn ?? []).map(key => {
+            const task = tasksByKey.get(key);
+            if (!task) throw new Error(`Workflow dependency is not defined before use: ${key}`);
+            return task.id;
+          });
+          tasksByKey.set(definition.key, services.workflows.insertTask({
+            ...definition, runId: run.id, dependencyTaskIds, at: clock().toISOString(),
+          }));
+        }
+        const { householdId, caseId, subjectId, policyId, registryVersion } = parameters;
+        if (typeof policyId === 'string' && UNCLASSIFIED_POLICY_ID.test(policyId)) {
+          const at = clock().toISOString();
+          database.prepare(`INSERT OR IGNORE INTO policies
+            (id, household_id, policy_kind, verification_state, created_at, updated_at)
+            VALUES (?, ?, 'unknown', 'unverified', ?, ?)`).run(policyId, householdId, at, at);
+        }
+        const initialized = repository.initializeRunParameters({
+          workflowRunId: run.id, registryVersion, householdId, caseId, subjectId, policyId, updatedBy: PARAMETER_UPDATED_BY,
+        });
+        if (requestedKeys.length > 0) {
+          repository.setAcquisitionStateForRun({ workflowRunId: run.id, parameterKeys: requestedKeys, state: 'requested', updatedBy: PARAMETER_UPDATED_BY });
+        }
+        if (receivedKeys.length > 0) {
+          repository.setAcquisitionStateForRun({ workflowRunId: run.id, parameterKeys: receivedKeys, state: 'received', updatedBy: PARAMETER_UPDATED_BY });
+        }
+        // Counts and registry version only; no values, keys or text.
+        services.audit.append({
+          householdId,
+          caseId,
+          action: 'analysis.parameters_initialized',
+          resourceType: 'workflow_run',
+          resourceId: run.id,
+          payload: { registryVersion, parameterCount: initialized.total, requested: requestedKeys.length, received: receivedKeys.length },
+        });
+        database.exec('COMMIT');
+        return { ...services.workflows.getRun(run.id), tasks: [...tasksByKey.values()] };
+      } catch (error) {
+        database.exec('ROLLBACK');
+        throw error;
+      }
+    },
+    // Commit-time re-check for a live run: every source the server selected for
+    // the run must still be eligible under current consent. Uses the same
+    // evaluation as the pre-dispatch validator (one eligibility rule) but is not
+    // a dispatch, so it is not audited as one. Any denial or error denies.
+    verifyRunSourcesCurrent(runId) {
+      let decision;
+      try {
+        const run = database.prepare('SELECT id, case_id, input_json FROM workflow_runs WHERE id = ?').get(runId);
+        const persisted = run ? parse(run.input_json) : null;
+        const caseRecord = run ? loadCaseRecord(run.case_id) : null;
+        decision = evaluateModelDispatch({
+          task: 'commit_recheck',
+          runId,
+          caseId: run?.case_id,
+          subjectId: caseRecord?.analysis_subject_adult_id,
+          modelRecipient,
+          authorizedSourceIds: persisted?.authorizedSourceIds,
+          authorizedSources: persisted?.authorizedSources,
+        }).decision;
+      } catch {
+        decision = deny('COMMIT_RECHECK_ERROR');
+      }
+      return decision;
+    },
     // Source selection for live (model-bound) analysis. Only documents whose
     // derive scope names the configured model recipient are admitted.
     getCoverageSourcePages(caseId) {
@@ -252,7 +368,8 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
         WHERE id = ? AND revoked_at IS NULL
           AND (expires_at IS NULL OR julianday(expires_at) > julianday(?))`).get(grantId, at));
     },
-    stopForRevocation(runId) {
+    // `reason` is the id-free audit reason; the terminal reason stays CONSENT_REVOKED.
+    stopForRevocation(runId, { reason = 'consent_not_active', reasonCode = null } = {}) {
       const run = services.workflows.getRun(runId);
       if (!run) return null;
       const at = new Date().toISOString();
@@ -273,7 +390,7 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
         action: 'analysis.revoked',
         resourceType: 'workflow_run',
         resourceId: runId,
-        payload: { reason: 'consent_not_active' },
+        payload: { reason, ...(reasonCode ? { reasonCode } : {}) },
       });
       return getJob(runId);
     },
