@@ -3,6 +3,7 @@ import { COVERAGE_ANALYSIS_WORKFLOW } from './workflow-definition.js';
 import { createCoverageAnalysisFixtureInput } from './fixture-input.js';
 import { createCoverageAnalysisSourceInput, unclassifiedPolicyId } from './source-input.js';
 import { POLICY_PARAMETER_REGISTRY_VERSION } from './policy-parameter-registry.js';
+import { MODEL_OBSERVATION_TASK_KEYS } from './model-observations.js';
 import { createFixtureTaskRegistry } from './task-registry.js';
 import {
   createTaskOutputEnvelope,
@@ -19,7 +20,7 @@ function portContract(port) {
     'getCase', 'requireCoverageConsent', 'findIdempotency', 'recordIdempotency',
     'createRunWithParameters', 'verifyRunSourcesCurrent', 'getCoverageSourcePages', 'loadKnownIdentifiers', 'getJob', 'getTask', 'claimNext', 'dependencyOutputs',
     'completeTask', 'failTask', 'recoverExpiredLeases', 'isConsentActive',
-    'stopForRevocation', 'persistTaskArtifact',
+    'stopForRevocation', 'persistTaskArtifact', 'recordModelObservations',
   ];
   if (!port || methods.some(method => typeof port[method] !== 'function')) {
     throw new TypeError(`Persistent coverage-analysis port must implement: ${methods.join(', ')}.`);
@@ -141,6 +142,19 @@ export function createPersistentCoverageAnalysisService({
         }
       }
       for (const outcome of outcomes) {
+        // Live extraction results become unverified parameter observations before the task
+        // completes; if that fails, the task fails instead of completing without its evidence.
+        if (!outcome.error && (job.execution_mode ?? job.executionMode) === 'live' && MODEL_OBSERVATION_TASK_KEYS.includes(outcome.taskInput.key)) {
+          try {
+            await port.recordModelObservations({ runId, taskKey: outcome.taskInput.key, payload: outcome.output.payload, taskId: outcome.task.id, workerId });
+          } catch (error) {
+            // The lease moved to another worker: this result is stale and that worker owns the task.
+            if (error?.code === 'TASK_LEASE_LOST') continue;
+            outcome.error = Object.assign(new Error('Model-extracted values could not be recorded as parameter evidence.'), {
+              code: error?.code === 'PARAMETER_RECORDS_NOT_CONFIGURED' ? error.code : 'PARAMETER_OBSERVATION_FAILED',
+            });
+          }
+        }
         if (outcome.error) {
           await port.failTask(outcome.task.id, {
             workerId,

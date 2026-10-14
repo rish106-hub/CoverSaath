@@ -65,7 +65,15 @@ export function seedParameterWorld(database, at = parameterAt) {
      input_json, created_at)
     VALUES ('run-parameters', 'case-parameters', 'coverage-reconstruction', 'v2', 'fixture',
       'queued', ?, '{}', ?)`).run('d'.repeat(64), at);
+  // A review in progress, so human_review observations can be recorded by its reviewer.
+  database.prepare(`INSERT INTO human_reviews
+    (id, case_id, workflow_run_id, reviewer_adult_id, review_kind, status, started_at, created_at)
+    VALUES ('review-parameters', 'case-parameters', 'run-parameters', 'adult-parameters',
+      'ambiguity', 'in_progress', ?, ?)`).run(at, at);
 }
+
+// The adult assigned to the seeded review; human_review observations must name them.
+export const parameterReviewerId = 'adult-parameters';
 
 export function parameterScope(overrides = {}) {
   return {

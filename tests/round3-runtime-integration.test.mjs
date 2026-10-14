@@ -48,7 +48,26 @@ test('T1: a live run pins the registry and creates one record per key with acqui
   for (const entry of input.parameterStates) assert.equal(states[entry.parameterKey], entry.acquisitionState, entry.parameterKey);
   const seen = new Set(Object.values(states));
   assert.ok(seen.has('received'), 'at least one key was sent to the model');
-  assert.equal(count(app.database, "SELECT count(*) AS count FROM coverage_parameter_resolutions resolution JOIN coverage_parameter_records parameter ON parameter.id = resolution.parameter_record_id WHERE parameter.workflow_run_id = ? AND resolution.resolution_state <> 'unknown'", runId), 0);
+  // Model-extracted values become unverified evidence only: every resolved key was received,
+  // is extracted_unverified or conflicting under model authority, and rests on a
+  // document_extraction observation of a sent page. Nothing reaches proven or calculated.
+  const resolved = app.database.prepare(`SELECT parameter.parameter_key, resolution.resolution_state, resolution.transition_authority,
+      observation.extraction_method, observation.review_status, observation.source_id
+    FROM coverage_parameter_resolutions resolution
+    JOIN coverage_parameter_records parameter ON parameter.id = resolution.parameter_record_id
+    LEFT JOIN coverage_parameter_observations observation ON observation.id = resolution.resolved_observation_id
+    WHERE parameter.workflow_run_id = ? AND resolution.resolution_state <> 'unknown'`).all(runId);
+  assert.ok(resolved.length >= 1, 'the stub model reports known facts');
+  for (const row of resolved) {
+    assert.ok(['extracted_unverified', 'conflicting'].includes(row.resolution_state), row.parameter_key);
+    assert.equal(row.transition_authority, 'model');
+    assert.equal(states[row.parameter_key], 'received');
+    if (row.resolution_state === 'extracted_unverified') {
+      assert.equal(row.extraction_method, 'document_extraction');
+      assert.equal(row.review_status, 'not_reviewed');
+      assert.ok(input.authorizedSourceIds.includes(row.source_id));
+    }
+  }
 
   // Scope: the analysis subject member and the run-level unclassified placeholder policy.
   const scope = app.database.prepare(`SELECT DISTINCT household_id, case_id, subject_id, policy_id
@@ -428,6 +447,12 @@ test('T5: revoking a document grant redacts its observations with an explicit co
   observe('d.room_rent_limit', 'observation-t5-a');
   observe('a.document_set', 'observation-t5-b');
   const before = auditActions(app.database, 'coverage_parameter.observations_redacted').length;
+  // The live run itself also recorded model-extracted observations from the same page.
+  const pending = app.database.prepare(`SELECT count(*) AS observations, count(DISTINCT parameter_record_id) AS parameters
+    FROM coverage_parameter_observations WHERE document_id = ? AND redacted_at IS NULL`).get(scenario.documentId);
+  const resolvedBefore = count(app.database, `SELECT count(*) AS count FROM coverage_parameter_resolutions
+    WHERE resolution_state <> 'unknown' AND resolved_observation_id IN (SELECT id FROM coverage_parameter_observations WHERE document_id = ?)`, scenario.documentId);
+  assert.ok(pending.observations > 2);
 
   services.consents.revoke({ grantId: scenario.documentConsentId, revokedByAdultId: scenario.ownerId, reason: 'synthetic' });
 
@@ -435,11 +460,12 @@ test('T5: revoking a document grant redacts its observations with an explicit co
   assert.equal(events.length, before + 1);
   const event = events.at(-1);
   assert.equal(event.resourceId, scenario.documentId);
-  assert.deepEqual(event.payload, { reasonCode: 'consent_revoked', redactedObservations: 2, affectedParameters: 2, resetResolutions: 0 });
+  assert.deepEqual(event.payload, { reasonCode: 'consent_revoked', redactedObservations: pending.observations, affectedParameters: pending.parameters, resetResolutions: resolvedBefore });
+  assert.equal(count(app.database, 'SELECT count(*) AS count FROM coverage_parameter_observations WHERE document_id = ? AND value_json IS NOT NULL', scenario.documentId), 0);
   assert.ok(!JSON.stringify(event).includes(valueProbe));
   // The explicit path ran inside the revocation: the reason is consent_revoked, not the trigger's document_erasure.
   const rows = app.database.prepare('SELECT value_json, redacted_at, redaction_reason_code FROM coverage_parameter_observations ORDER BY id').all();
-  assert.equal(rows.length, 2);
+  assert.equal(rows.length, pending.observations);
   assert.ok(rows.every(row => row.value_json === null && row.redacted_at && row.redaction_reason_code === 'consent_revoked'));
   const actor = app.database.prepare('SELECT actor_type, actor_id FROM audit_events WHERE id = ?').get(event.id);
   assert.deepEqual({ ...actor }, { actor_type: 'adult_user', actor_id: scenario.ownerId });
