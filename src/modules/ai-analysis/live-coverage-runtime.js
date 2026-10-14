@@ -6,11 +6,12 @@ import { createModelGateway } from './model-gateway.js';
 import { GEMINI_MODEL_RECIPIENT, sanitizeEvidenceForModel } from './privacy-evidence-gate.js';
 import { RUNTIME_AI_TASK_KEYS } from './responsibility-matrix.js';
 import { createFixtureTaskRegistry } from '../coverage-analysis/task-registry.js';
-import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterDefinition } from '../coverage-analysis/policy-parameter-registry.js';
+import { MODEL_EXTRACTED_UNVERIFIED } from '../coverage-analysis/agent-contracts.js';
+import { getPolicyParameterDefinition, getPolicyParameterRegistry } from '../coverage-analysis/policy-parameter-registry.js';
 
 export { GEMINI_MODEL_RECIPIENT };
 
-const KNOWN_STATUSES =new Set(['known', 'document-backed', 'document_backed', 'institution-confirmed', 'institution_confirmed']);
+const KNOWN_STATUSES = new Set(['known', 'document-backed', 'document_backed', 'institution-confirmed', 'institution_confirmed']);
 const RUNTIME_TASK_NAMES = Object.freeze({
   profile: 'profile_extraction',
   group: 'group_cover_extraction',
@@ -112,19 +113,32 @@ function groupBySource(items) {
   return [...grouped.values()].map(({ entries, ...source }) => ({ ...source, text: JSON.stringify(entries).slice(0, 4000) }));
 }
 
-// Default parameter policy: the pinned canonical registry is the only authority.
-// Unknown or legacy-alias keys resolve to null so the privacy gate fails closed
-// (PARAMETER_NOT_CLASSIFIED). RESTRICTED / modelExtraction-denied parameters are
-// returned as-is so the gate rejects them.
-export function resolveCanonicalParameterPolicy(key) {
-  if (typeof key !== 'string') return null;
+// Default parameter policy: the registry version pinned by the run is the only
+// authority. Unknown versions, unknown or legacy-alias keys resolve to null so the
+// privacy gate fails closed (PARAMETER_NOT_CLASSIFIED). RESTRICTED /
+// modelExtraction-denied parameters are returned as-is so the gate rejects them.
+export function resolveCanonicalParameterPolicy(key, registryVersion) {
+  if (typeof key !== 'string' || typeof registryVersion !== 'string') return null;
   let parameter;
   try {
-    parameter = getPolicyParameterDefinition(POLICY_PARAMETER_REGISTRY_VERSION, key);
+    parameter = getPolicyParameterDefinition(registryVersion, key);
   } catch {
     return null;
   }
-  return { modelExtraction: parameter.modelExtraction, dataClass: parameter.dataClass, registryVersion: POLICY_PARAMETER_REGISTRY_VERSION };
+  return { modelExtraction: parameter.modelExtraction, dataClass: parameter.dataClass, registryVersion };
+}
+
+// The registry version is pinned in the run input at creation time. A run whose
+// pin is missing or unknown cannot be dispatched to a model.
+function pinnedRegistryVersion(runtime) {
+  const version = runtime?.input?.parameterRegistryVersion;
+  try {
+    if (typeof version !== 'string') throw new TypeError('missing');
+    getPolicyParameterRegistry(version);
+  } catch {
+    fail('PARAMETER_REGISTRY_VERSION_UNKNOWN', 'The run does not pin a known parameter registry version.');
+  }
+  return version;
 }
 
 const context = (runtime, purpose, requestedFields) => ({
@@ -134,22 +148,38 @@ const context = (runtime, purpose, requestedFields) => ({
   requestedFields: [...new Set(requestedFields)].slice(0, 40),
 });
 
+// One model source per sent OCR page, each with its own id, version and page
+// number, so a citation always resolves to the page (and document) it came from.
+// Page text is stored once on the run (sourcePages); evidence descriptors only
+// name parameters, so text is never repeated per parameter.
+function pageSources(runtime) {
+  const pages = runtime.input.sourcePages;
+  if (!Array.isArray(pages) || pages.length === 0) fail('SOURCE_PAGES_REQUIRED', 'The run does not carry any sanitised source pages.');
+  return pages.map(page => ({
+    id: page.sourceId,
+    version: page.version ?? 'unknown',
+    page: Number.isInteger(page.page) ? page.page : null,
+    text: page.text,
+    status: 'known',
+  }));
+}
+
 export const LIVE_REQUEST_BUILDERS = Object.freeze({
   profile(runtime) {
     const packet = runtime.input.profilePacket;
     return {
       context: context(runtime, 'Extract only requested household profile fields.', packet.requestedFields),
-      sources: [{ id: packet.source.id, version: packet.source.version ?? 'unknown', page: null, text: JSON.stringify(packet.data).slice(0, 4000), status: 'known' }],
+      sources: pageSources(runtime),
       upstream: [],
     };
   },
   group(runtime) {
-    const evidence = runtime.input.groupPolicies.flatMap(policy => policy.evidence.map(item => ({ ...item, policyId: policy.policyId })));
-    return { context: context(runtime, 'Extract cited group cover wording.', evidence.map(item => item.fact)), sources: groupBySource(evidence), upstream: [] };
+    const evidence = runtime.input.groupPolicies.flatMap(policy => policy.evidence);
+    return { context: context(runtime, 'Extract cited group cover wording.', evidence.map(item => item.fact)), sources: pageSources(runtime), upstream: [] };
   },
   personal(runtime) {
     const evidence = runtime.input.personalPacket.evidence;
-    return { context: context(runtime, 'Extract cited personal cover wording.', evidence.map(item => item.field)), sources: groupBySource(evidence), upstream: [] };
+    return { context: context(runtime, 'Extract cited personal cover wording.', evidence.map(item => item.field)), sources: pageSources(runtime), upstream: [] };
   },
   questions(runtime) {
     const sources = groupBySource(runtime.upstream.coverage.facts.flatMap(fact => (fact.sources ?? []).map(source => ({ ...source, status: fact.status, fact: fact.field ?? fact.fact, value: fact.value }))));
@@ -169,12 +199,30 @@ export const LIVE_REQUEST_BUILDERS = Object.freeze({
 
 const metadata = value => ({ modelMetadata: structuredClone(value) });
 
+// Criteria 6 and 11: whatever the model reports as 'known' is only a candidate.
+// It is carried as model_extracted_unverified (evidence state Unknown) and is never
+// mapped to document-backed / Proven. Model-reported conflicts stay conflicting.
+function modelFactStatus(modelStatus, unresolvedStatus) {
+  if (modelStatus === 'known') return MODEL_EXTRACTED_UNVERIFIED;
+  return modelStatus === 'conflict' ? 'conflicting' : unresolvedStatus;
+}
+
+// Every cited source, resolved to the sanitized request entry it came from.
+function citedSources(citations, sourceById) {
+  return citations.map(id => ({ id, page: sourceById.get(id)?.page ?? null, version: sourceById.get(id)?.version }));
+}
+
 export const LIVE_RESULT_ADAPTERS = Object.freeze({
   profile(output, modelMetadata, runtime, safeRequest) {
     const sourceById = new Map((safeRequest ?? LIVE_REQUEST_BUILDERS.profile(runtime)).sources.map(source => [source.id, source]));
     return {
       subjectId: runtime.input.profilePacket.subjectId,
-      profile: Object.fromEntries(output.facts.map(fact => [fact.field, { value: fact.value ?? 'UNKNOWN', status: fact.status === 'known' ? 'known' : fact.status === 'conflict' ? 'conflicting' : 'unknown', verificationStatus: 'model_extracted_unverified', source: sourceById.get(fact.citations[0]) }])),
+      // A model-extracted value is never 'known' or document-backed: it stays
+      // unverified until deterministic code or a human reviewer resolves it.
+      profile: Object.fromEntries(output.facts.map(fact => {
+        const sources = citedSources(fact.citations, sourceById);
+        return [fact.field, { value: fact.value ?? 'UNKNOWN', status: modelFactStatus(fact.status, 'unknown'), verificationStatus: MODEL_EXTRACTED_UNVERIFIED, source: sources[0], sources }];
+      })),
       affordability: null,
       provenance: { profileSource: runtime.input.profilePacket.source },
       consent: structuredClone(runtime.input.profilePacket.consent),
@@ -188,10 +236,10 @@ export const LIVE_RESULT_ADAPTERS = Object.freeze({
     const sources = new Map(request.sources.map(source => [source.id, source]));
     const policyId = runtime.input.groupPolicies[0].policyId;
     const nodes = output.facts.map(fact => ({
-      id: `model-group:${fact.id}`, type: 'coverage_fact', fact: fact.field, value: fact.value, status: fact.status === 'known' ? 'document-backed' : fact.status === 'conflict' ? 'conflicting' : 'unresolved',
+      id: `model-group:${fact.id}`, type: 'coverage_fact', fact: fact.field, value: fact.value, status: modelFactStatus(fact.status, 'unresolved'), verificationStatus: MODEL_EXTRACTED_UNVERIFIED,
       citations: fact.citations.map(id => ({ sourceId: id, page: sources.get(id)?.page, version: sources.get(id)?.version })),
     }));
-    return [{ agent: 'group-health-cover-agent', policyId, syntheticOnly: true, buckets: [], coverageGraph: { nodes, edges: [] }, unresolved: nodes.filter(node => node.status !== 'document-backed').map(node => node.id), issues: [], boundaries: ['Model extraction is unverified and cannot establish claim approval.'], ...metadata(modelMetadata) }];
+    return [{ agent: 'group-health-cover-agent', policyId, syntheticOnly: true, buckets: [], coverageGraph: { nodes, edges: [] }, unresolved: nodes.filter(node => node.status !== MODEL_EXTRACTED_UNVERIFIED).map(node => node.id), issues: [], boundaries: ['Model extraction is unverified and cannot establish claim approval.'], ...metadata(modelMetadata) }];
   },
   personal(output, modelMetadata, runtime, safeRequest) {
     const request = safeRequest ?? LIVE_REQUEST_BUILDERS.personal(runtime);
@@ -200,7 +248,8 @@ export const LIVE_RESULT_ADAPTERS = Object.freeze({
     for (const fact of output.facts) {
       const original = runtime.input.personalPacket.evidence.find(item => item.field === fact.field);
       const dimension = original?.dimension ?? 'suitability';
-      sections[dimension].push({ id: fact.id, policyId: original?.policyId ?? 'unknown', field: fact.field, value: fact.value, status: fact.status === 'known' ? 'document_backed' : fact.status === 'conflict' ? 'conflicting' : 'unresolved', source: { id: fact.citations[0], page: sources.get(fact.citations[0])?.page, version: sources.get(fact.citations[0])?.version } });
+      const cited = citedSources(fact.citations, sources);
+      sections[dimension].push({ id: fact.id, policyId: original?.policyId ?? 'unknown', field: fact.field, value: fact.value, status: modelFactStatus(fact.status, 'unresolved'), verificationStatus: MODEL_EXTRACTED_UNVERIFIED, source: cited[0], sources: cited });
     }
     return {
       agent: 'personal-health-cover-agent', version: 'personal-health-agent-v1', scope: 'model-assisted synthetic evidence extraction',
@@ -291,7 +340,9 @@ function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization,
   const resolver = resolveParameterPolicy ?? resolveCanonicalParameterPolicy;
   const requestBuilders = Object.fromEntries(Object.entries(LIVE_REQUEST_BUILDERS).map(([runtimeKey, build]) => [runtimeKey, async runtime => {
     const task = RUNTIME_TASK_NAMES[runtimeKey];
-    const safe = sanitizeEvidenceForModel(build(runtime), { task, resolveParameterPolicy: resolver, limits: privacyLimits });
+    // Parameters resolve against the registry version this run pinned at creation.
+    const registryVersion = pinnedRegistryVersion(runtime);
+    const safe = sanitizeEvidenceForModel(build(runtime), { task, resolveParameterPolicy: key => resolver(key, registryVersion), limits: privacyLimits });
     preDispatchAuthorization.register(task, safe.input, runtime, safe.audit);
     const current = requestCache.get(runtime) ?? new Map();
     current.set(runtimeKey, safe.input);
@@ -319,6 +370,13 @@ export function createGeminiCoverageRegistryFactory({ env = process.env, loadMod
       inputUsdPerMillion: config.inputRate, outputUsdPerMillion: config.outputRate, createAgent,
     });
     // Every provider call is preceded by a fresh current-consent check.
+    // Known limit: the check happens once, immediately before the provider call.
+    // A revocation that lands while that call is in flight cannot be prevented
+    // (the request has already left the process). The late result is not
+    // committed: the persistent worker re-checks the run's coverage consent grant
+    // after the call returns and before completing any task, and stops the run if
+    // it was revoked. That commit-time check covers the run-level grant only, not
+    // per-document document_processing grants (see handoff).
     const runner = async request => {
       await preDispatchAuthorization.validate(request);
       return modelRunner(request);

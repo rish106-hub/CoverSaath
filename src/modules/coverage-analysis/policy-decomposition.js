@@ -90,8 +90,13 @@ function sourceReference(source = null) {
   };
 }
 
+// Explicit positive markers only. Deterministic code sets these on evidence it
+// admitted from a source document; everything unrecognised (including the
+// 'model_extracted_unverified' marker for model output) fails closed to Unknown.
+const PROVEN_STATUS = /^(?:document[-_ ]?backed|proven|human[-_ ]?reviewed|verified)$/;
+
 function evidenceState(status) {
-  const value = String(status ?? '').toLowerCase();
+  const value = String(status ?? '').trim().toLowerCase();
   if (/withheld|not.permitted/.test(value)) {
     throw new TypeError('Permission-restricted facts must not enter coverage decomposition. Access state is enforced before analysis.');
   }
@@ -100,7 +105,8 @@ function evidenceState(status) {
   if (/institution|dynamic|dated/.test(value)) return 'Dynamic';
   if (/reported|user.stated|proxy|manual/.test(value)) return 'Reported';
   if (/calculated|derived/.test(value)) return 'Calculated';
-  return 'Proven';
+  if (PROVEN_STATUS.test(value)) return 'Proven';
+  return 'Unknown';
 }
 
 function normalizedField(value) {

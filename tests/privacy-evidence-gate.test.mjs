@@ -141,12 +141,13 @@ const liveEnv = {
 const liveRuntime = () => ({
   run: { id: 'run-sensitive-1', caseId: 'case-sensitive-1', workflowVersion: '4' },
   input: {
+    parameterRegistryVersion: 'policy-parameters/v1',
     authorizedSourceIds: ['page-sensitive-1'],
+    sourcePages: [{ sourceId: 'page-sensitive-1', version: 'v1', page: 1, text: 'Room rent limit is 5000. Insured name: Asha Example; write to asha@example.test.' }],
     profilePacket: {
       subjectId: 'adult-sensitive-1',
-      source: { id: 'page-sensitive-1', version: 'v1' },
+      source: { id: 'page-sensitive-1', version: 'v1', page: 1 },
       requestedFields: ['d.room_rent_limit'],
-      data: { roomRentLimit: '5000', memberName: 'Asha Example', contactEmail: 'asha@example.test' },
       consent: { status: 'granted' },
     },
   },
@@ -264,7 +265,7 @@ test('restricted evidence reaching the live runtime makes zero provider calls an
       createAgent: () => ({ generate: async () => { providerCalls += 1; return {}; } }),
     });
     const runtime = liveRuntime();
-    runtime.input.profilePacket.data = { roomRentLimit: `5000 ${probe}` };
+    runtime.input.sourcePages[0].text = `Room rent limit is 5000 ${probe}`;
     await assert.rejects(factory().profile(runtime), error => {
       assert.equal(error.code, 'RESTRICTED_EVIDENCE', label);
       assert.ok(!String(error.message).includes(probe));

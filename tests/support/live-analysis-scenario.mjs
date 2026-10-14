@@ -86,7 +86,7 @@ export async function startLiveServer(t, driverOptions = {}) {
   };
 }
 
-function insertDocument(database, { suffix, householdId, caseId, adultId, consentGrantId, pageText, at }) {
+function insertDocument(database, { suffix, householdId, caseId, adultId, consentGrantId, pageText, at, pageNumber = 1, sourceVersion = '1' }) {
   const documentId = `document-${suffix}`;
   database.prepare(`INSERT INTO document_uploads
     (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
@@ -94,8 +94,8 @@ function insertDocument(database, { suffix, householdId, caseId, adultId, consen
      encryption_status, lifecycle_state, uploaded_at, logical_document_id, source_version)
     VALUES (?, ?, ?, ?, ?, 'policy_schedule', 'synthetic.pdf',
       ?, ?, 'application/pdf', 128, 'clean', 'encrypted_local',
-      'active', ?, ?, '1')`)
-    .run(documentId, householdId, caseId, adultId, consentGrantId, `protected/${documentId}`, suffix.padEnd(64, 'a').slice(0, 64), at, `logical-${suffix}`);
+      'active', ?, ?, ?)`)
+    .run(documentId, householdId, caseId, adultId, consentGrantId, `protected/${documentId}`, suffix.padEnd(64, 'a').slice(0, 64), at, `logical-${suffix}`, sourceVersion);
   database.prepare(`INSERT INTO ocr_jobs
     (id, document_upload_id, provider, provider_job_ref, status, attempt_count, requested_at,
      completed_at, contract_version, authorization_json, result_json, result_digest, updated_at)
@@ -106,10 +106,24 @@ function insertDocument(database, { suffix, householdId, caseId, adultId, consen
     (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
      extracted_text, extraction_status, confidence_basis_points, created_at,
      output_contract_version, text_sha256, provider_page_ref, provenance_json)
-    VALUES (?, ?, ?, 1, '1', ?, ?, 'extracted', 9000, ?,
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'extracted', 9000, ?,
       'knowvia.ocr.v1', ?, ?, '{}')`)
-    .run(`page-${suffix}`, documentId, `ocr-${suffix}`, 'c'.repeat(64), pageText, at, 'd'.repeat(64), `fixture-page-${suffix}`);
-  return { documentId, pageId: `page-${suffix}` };
+    .run(`page-${suffix}`, documentId, `ocr-${suffix}`, pageNumber, sourceVersion, 'c'.repeat(64), pageText, at, 'd'.repeat(64), `fixture-page-${suffix}`);
+  return { documentId, pageId: `page-${suffix}`, pageNumber, sourceVersion };
+}
+
+// Adds a further OCR page to a document created by insertDocument.
+function insertPage(database, { documentId, pageNumber, sourceVersion = '1', text, at }) {
+  const suffix = documentId.replace(/^document-/, '');
+  const pageId = `page-${suffix}-p${pageNumber}`;
+  database.prepare(`INSERT INTO source_pages
+    (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
+     extracted_text, extraction_status, confidence_basis_points, created_at,
+     output_contract_version, text_sha256, provider_page_ref, provenance_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'extracted', 9000, ?,
+      'knowvia.ocr.v1', ?, ?, '{}')`)
+    .run(pageId, documentId, `ocr-${suffix}`, pageNumber, sourceVersion, 'c'.repeat(64), text, at, 'd'.repeat(64), `fixture-page-${suffix}-p${pageNumber}`);
+  return { documentId, pageId, pageNumber, sourceVersion };
 }
 
 // Creates a household, a processing case, the case-level coverage consent and
@@ -133,8 +147,8 @@ export async function setupLiveCase(app, { pageText = DEFAULT_PAGE_TEXT, recipie
     body: { householdId, subjectAdultId: ownerId, purpose: 'document_processing', scopes: [{ resourceType: 'document', action: 'collect', dataCategory: 'insurance_document' }] },
   });
   const at = new Date().toISOString();
-  const addDocument = ({ suffix: documentSuffix, text = DEFAULT_PAGE_TEXT, scopeRecipient = 'google-gemini', grantId = documentConsent.data.id } = {}) => {
-    const document = insertDocument(database, { suffix: documentSuffix, householdId, caseId: created.data.id, adultId: ownerId, consentGrantId: grantId, pageText: text, at });
+  const addDocument = ({ suffix: documentSuffix, text = DEFAULT_PAGE_TEXT, scopeRecipient = 'google-gemini', grantId = documentConsent.data.id, pageNumber, sourceVersion } = {}) => {
+    const document = insertDocument(database, { suffix: documentSuffix, householdId, caseId: created.data.id, adultId: ownerId, consentGrantId: grantId, pageText: text, at, pageNumber, sourceVersion });
     const scopeId = `scope-${documentSuffix}`;
     database.prepare(`INSERT INTO consent_scopes
       (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
@@ -152,6 +166,7 @@ export async function setupLiveCase(app, { pageText = DEFAULT_PAGE_TEXT, recipie
     documentConsentId: documentConsent.data.id,
     ...document,
     addDocument,
+    addPage: (document, { pageNumber, text, sourceVersion }) => insertPage(database, { documentId: document.documentId, pageNumber, sourceVersion: sourceVersion ?? document.sourceVersion, text, at }),
     startLiveRun(idempotencyKey = `live-${suffix}`) {
       return app.call(`/api/v1/cases/${created.data.id}/analysis-runs`, { method: 'POST', token, idempotencyKey, body: { consentGrantId: coverageConsent.data.id, executionMode: 'live', modelPermission: true } });
     },
