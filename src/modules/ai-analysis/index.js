@@ -5,3 +5,8 @@ export { createMemoryBudget, createModelGateway } from './model-gateway.js';
 export { createAiSdkRunner } from './ai-sdk-runner.js';
 export { createAiEnhancedTaskRegistry, createAiTaskExecutors, RUNTIME_TO_AI_TASK } from './runtime-adapter.js';
 export { LIVE_REQUEST_BUILDERS, LIVE_RESULT_ADAPTERS, createGeminiCoverageRegistryFactory } from './live-coverage-runtime.js';
+export {
+  PRIVACY_EVIDENCE_GATE_VERSION,
+  sanitizeEvidenceForModel,
+  sanitizeEvidenceTextForStorage,
+} from './privacy-evidence-gate.js';

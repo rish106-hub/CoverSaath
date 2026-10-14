@@ -6,3 +6,4 @@ export { WorkflowRepository } from './workflow-repository.js';
 export { EvidenceRepository } from './evidence-repository.js';
 export { AuthRepository } from './auth-repository.js';
 export { OcrRepository } from './ocr-repository.js';
+export { CoverageParameterRepository } from './coverage-parameter-repository.js';

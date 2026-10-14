@@ -1,11 +1,27 @@
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createHash } from 'node:crypto';
 import { createAiSdkRunner } from './ai-sdk-runner.js';
 import { createAiEnhancedTaskRegistry, createAiTaskExecutors } from './runtime-adapter.js';
 import { createModelGateway } from './model-gateway.js';
+import { sanitizeEvidenceForModel } from './privacy-evidence-gate.js';
 import { RUNTIME_AI_TASK_KEYS } from './responsibility-matrix.js';
 import { createFixtureTaskRegistry } from '../coverage-analysis/task-registry.js';
 
 const KNOWN_STATUSES = new Set(['known', 'document-backed', 'document_backed', 'institution-confirmed', 'institution_confirmed']);
+const RUNTIME_TASK_NAMES = Object.freeze({
+  profile: 'profile_extraction',
+  group: 'group_cover_extraction',
+  personal: 'personal_cover_extraction',
+  questions: 'question_drafting',
+  primary: 'evidence_synthesis',
+});
+const LEGACY_RUNTIME_PARAMETER_KEYS = new Set([
+  'displayName',
+  'subject_identity',
+  'room_rent_limit',
+  'copay',
+  'unclassified_policy_text',
+]);
 
 function fail(code, message) {
   throw Object.assign(new Error(message), { code, statusCode: 503 });
@@ -89,11 +105,20 @@ function groupBySource(items) {
     const source = item.source ?? { id: item.id ?? item.sourceId, version: item.version, page: item.page };
     if (!source?.id) continue;
     const current = grouped.get(source.id) ?? { id: source.id, version: source.version ?? 'unknown', page: Number.isInteger(source.page) ? source.page : null, entries: [], status: 'known' };
-    current.entries.push(item);
+    current.entries.push({
+      field: item.field ?? item.fact,
+      value: item.value,
+      status: item.status ?? item.evidenceStatus,
+    });
     if (sourceStatus(item.status ?? item.evidenceStatus) !== 'known') current.status = sourceStatus(item.status ?? item.evidenceStatus);
     grouped.set(source.id, current);
   }
   return [...grouped.values()].map(({ entries, ...source }) => ({ ...source, text: JSON.stringify(entries).slice(0, 4000) }));
+}
+
+function resolveLegacyRuntimePolicy(key) {
+  if (!LEGACY_RUNTIME_PARAMETER_KEYS.has(key)) return null;
+  return { modelExtraction: true, dataClass: 'CONFIDENTIAL', registryVersion: 'legacy-runtime-compatibility-v1' };
 }
 
 const context = (runtime, purpose, requestedFields) => ({
@@ -139,8 +164,8 @@ export const LIVE_REQUEST_BUILDERS = Object.freeze({
 const metadata = value => ({ modelMetadata: structuredClone(value) });
 
 export const LIVE_RESULT_ADAPTERS = Object.freeze({
-  profile(output, modelMetadata, runtime) {
-    const sourceById = new Map(LIVE_REQUEST_BUILDERS.profile(runtime).sources.map(source => [source.id, source]));
+  profile(output, modelMetadata, runtime, safeRequest) {
+    const sourceById = new Map((safeRequest ?? LIVE_REQUEST_BUILDERS.profile(runtime)).sources.map(source => [source.id, source]));
     return {
       subjectId: runtime.input.profilePacket.subjectId,
       profile: Object.fromEntries(output.facts.map(fact => [fact.field, { value: fact.value ?? 'UNKNOWN', status: fact.status === 'known' ? 'known' : fact.status === 'conflict' ? 'conflicting' : 'unknown', verificationStatus: 'model_extracted_unverified', source: sourceById.get(fact.citations[0]) }])),
@@ -152,8 +177,8 @@ export const LIVE_RESULT_ADAPTERS = Object.freeze({
       ...metadata(modelMetadata),
     };
   },
-  group(output, modelMetadata, runtime) {
-    const request = LIVE_REQUEST_BUILDERS.group(runtime);
+  group(output, modelMetadata, runtime, safeRequest) {
+    const request = safeRequest ?? LIVE_REQUEST_BUILDERS.group(runtime);
     const sources = new Map(request.sources.map(source => [source.id, source]));
     const policyId = runtime.input.groupPolicies[0].policyId;
     const nodes = output.facts.map(fact => ({
@@ -162,8 +187,8 @@ export const LIVE_RESULT_ADAPTERS = Object.freeze({
     }));
     return [{ agent: 'group-health-cover-agent', policyId, syntheticOnly: true, buckets: [], coverageGraph: { nodes, edges: [] }, unresolved: nodes.filter(node => node.status !== 'document-backed').map(node => node.id), issues: [], boundaries: ['Model extraction is unverified and cannot establish claim approval.'], ...metadata(modelMetadata) }];
   },
-  personal(output, modelMetadata, runtime) {
-    const request = LIVE_REQUEST_BUILDERS.personal(runtime);
+  personal(output, modelMetadata, runtime, safeRequest) {
+    const request = safeRequest ?? LIVE_REQUEST_BUILDERS.personal(runtime);
     const sources = new Map(request.sources.map(source => [source.id, source]));
     const sections = { protection: [], constraints: [], economics: [], suitability: [] };
     for (const fact of output.facts) {
@@ -195,21 +220,89 @@ export const LIVE_RESULT_ADAPTERS = Object.freeze({
   },
 });
 
-export function createGeminiCoverageRegistryFactory({ env = process.env, loadModel, createAgent } = {}) {
+function evidenceRequestKey(task, input) {
+  return createHash('sha256').update(`${task}\n${JSON.stringify(input)}`, 'utf8').digest('hex');
+}
+
+function createPreDispatchAuthorization(preDispatchValidator) {
+  if (preDispatchValidator === undefined) return null;
+  if (typeof preDispatchValidator !== 'function') fail('LIVE_AI_CONFIG_INVALID', 'preDispatchValidator must be a function.');
+  const pending = new Map();
+  return Object.freeze({
+    register(task, input, runtime, audit) {
+      const key = evidenceRequestKey(task, input);
+      pending.delete(key);
+      pending.set(key, {
+        task,
+        runId: runtime.run.id,
+        caseId: runtime.run.case_id ?? runtime.run.caseId ?? runtime.run.id,
+        subjectId: runtime.input.profilePacket.subjectId,
+        authorizedSourceIds: [...new Set(runtime.input.authorizedSourceIds ?? [])],
+        sourceDigests: audit.sources.map(source => ({ sourceId: source.sourceId, digest: source.digest })),
+      });
+      if (pending.size > 1_000) pending.delete(pending.keys().next().value);
+    },
+    async validate(request) {
+      const key = evidenceRequestKey(request.task, request.input);
+      const authorization = pending.get(key);
+      pending.delete(key);
+      if (!authorization) fail('MODEL_DISPATCH_AUTHORIZATION_FAILED', 'Current evidence authorization could not be verified before model dispatch.');
+      let decision;
+      try {
+        decision = await preDispatchValidator(structuredClone(authorization));
+      } catch {
+        fail('MODEL_DISPATCH_AUTHORIZATION_FAILED', 'Current evidence authorization could not be verified before model dispatch.');
+      }
+      if (!(decision === true || decision?.allowed === true)) {
+        fail('MODEL_DISPATCH_AUTHORIZATION_FAILED', 'Current evidence authorization could not be verified before model dispatch.');
+      }
+    },
+  });
+}
+
+function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization, privacyLimits } = {}) {
+  const requestCache = new WeakMap();
+  const resolver = resolveParameterPolicy ?? resolveLegacyRuntimePolicy;
+  const requestBuilders = Object.fromEntries(Object.entries(LIVE_REQUEST_BUILDERS).map(([runtimeKey, build]) => [runtimeKey, async runtime => {
+    const task = RUNTIME_TASK_NAMES[runtimeKey];
+    const safe = sanitizeEvidenceForModel(build(runtime), { task, resolveParameterPolicy: resolver, limits: privacyLimits });
+    preDispatchAuthorization?.register(task, safe.input, runtime, safe.audit);
+    const current = requestCache.get(runtime) ?? new Map();
+    current.set(runtimeKey, safe.input);
+    requestCache.set(runtime, current);
+    return safe.input;
+  }]));
+  const resultAdapters = Object.fromEntries(Object.entries(LIVE_RESULT_ADAPTERS).map(([runtimeKey, adapt]) => [runtimeKey, (output, modelMetadata, runtime) => {
+    const safeRequest = requestCache.get(runtime)?.get(runtimeKey);
+    if (!safeRequest) fail('PRIVACY_GATE_MALFORMED', 'Sanitized evidence is missing from the live model boundary.');
+    return adapt(output, modelMetadata, runtime, safeRequest);
+  }]));
+  return { requestBuilders: Object.freeze(requestBuilders), resultAdapters: Object.freeze(resultAdapters) };
+}
+
+export function createGeminiCoverageRegistryFactory({ env = process.env, loadModel, createAgent, resolveParameterPolicy, preDispatchValidator, privacyLimits } = {}) {
   let project;
   return () => {
     const config = readConfig(env);
     project ||= createBudgetScope(config.projectBudgetUsd);
-    const runner = createAiSdkRunner({
+    const preDispatchAuthorization = createPreDispatchAuthorization(preDispatchValidator);
+    const modelRunner = createAiSdkRunner({
       loadModel: loadModel ?? (async () => createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)),
       provider: 'google', model: config.model, modelVersion: config.modelVersion,
       inputUsdPerMillion: config.inputRate, outputUsdPerMillion: config.outputRate, createAgent,
     });
+    const runner = preDispatchAuthorization
+      ? async request => {
+        await preDispatchAuthorization.validate(request);
+        return modelRunner(request);
+      }
+      : modelRunner;
     const gateway = createModelGateway({
       mode: 'live', liveRunner: runner, budget: createRunBudget(config.runBudgetUsd, project),
       limits: { maxInputBytes: config.maxInputBytes, maxOutputTokens: config.maxOutputTokens, timeoutMs: config.timeoutMs, maxRetries: 0, maxReservationUsd: config.reservationUsd, maxConcurrentCalls: config.maxConcurrentCalls },
     });
-    const executors = createAiTaskExecutors({ gateway, requestBuilders: LIVE_REQUEST_BUILDERS, resultAdapters: LIVE_RESULT_ADAPTERS, reservationUsd: config.reservationUsd });
+    const adapters = privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization, privacyLimits });
+    const executors = createAiTaskExecutors({ gateway, requestBuilders: adapters.requestBuilders, resultAdapters: adapters.resultAdapters, reservationUsd: config.reservationUsd });
     return createAiEnhancedTaskRegistry({ baseRegistry: createFixtureTaskRegistry(), aiExecutors: executors, enabledTaskKeys: RUNTIME_AI_TASK_KEYS });
   };
 }

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { COVERAGE_ANALYSIS_WORKFLOW } from './workflow-definition.js';
 import { createCoverageAnalysisFixtureInput } from './fixture-input.js';
 import { createCoverageAnalysisSourceInput } from './source-input.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION } from './policy-parameter-registry.js';
 import { createFixtureTaskRegistry } from './task-registry.js';
 import {
   createTaskOutputEnvelope,
@@ -160,6 +161,7 @@ export function createPersistentCoverageAnalysisService({
         executionMode,
         modelPermission: executionMode === 'live',
         workflowVersion: COVERAGE_ANALYSIS_WORKFLOW.version,
+        parameterRegistryVersion: POLICY_PARAMETER_REGISTRY_VERSION,
         fixtureVariant,
       };
       const requestDigest = digest(request);
@@ -182,6 +184,7 @@ export function createPersistentCoverageAnalysisService({
         : createCoverageAnalysisFixtureInput(caseRecord, { variant: fixtureVariant });
       const input = {
         ...sourceInput,
+        parameterRegistryVersion: POLICY_PARAMETER_REGISTRY_VERSION,
         modelPermission: executionMode === 'live',
       };
       const runId = `coverage-run-${randomUUID()}`;
