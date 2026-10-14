@@ -180,6 +180,7 @@ export function createPersistentCoverageAnalysisService({
         ? createCoverageAnalysisSourceInput(
           { ...caseRecord, consent_grant_id: consentGrantId },
           await port.getCoverageSourcePages(caseId),
+          { registryVersion: POLICY_PARAMETER_REGISTRY_VERSION },
         )
         : createCoverageAnalysisFixtureInput(caseRecord, { variant: fixtureVariant });
       const input = {
