@@ -66,7 +66,7 @@ function idempotencyKey(req) {
   return key;
 }
 
-function errorResponse(error) {
+export function errorResponse(error) {
   const statusByCode = {
     CONSENT_REQUIRED: 403,
     CONSENT_SCOPE_REQUIRED: 403,
@@ -76,11 +76,13 @@ function errorResponse(error) {
     IDEMPOTENCY_CONFLICT: 409,
     CASE_NOT_READY_FOR_ANALYSIS: 409,
   };
-  const code = error.code || 'BACKEND_REQUEST_FAILED';
+  // Only application codes (UPPER_SNAKE, not Node/driver ERR_* codes) carry deliberate,
+  // client-safe messages. Uncoded errors and runtime or driver errors (ERR_SQLITE_ERROR,
+  // ERR_INVALID_ARG_TYPE, ...) are internal: their text, SQL and values never leave the server.
+  const deliberate = typeof error.code === 'string' && /^[A-Z][A-Z0-9_]{2,79}$/.test(error.code) && !error.code.startsWith('ERR_');
+  const code = deliberate ? error.code : 'BACKEND_REQUEST_FAILED';
   const status = error.statusCode || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
-  // Only coded errors are deliberate, client-safe messages. An uncoded error is internal
-  // (a constraint, a TypeError, a driver error): its text never leaves the server.
-  const message = error.code ? error.message : 'The request could not be completed.';
+  const message = deliberate ? error.message : 'The request could not be completed.';
   return { status, body: { error: { code, message } } };
 }
 
