@@ -2,6 +2,7 @@ import { normalizeProfileIntake } from '../../agents/profile-agent.js';
 import { analyzeGroupHealthCover } from '../../agents/group-health-agent.js';
 import { analyzePersonalHealthCover } from '../../agents/personal-health-agent.js';
 import { classifyCase } from '../../agents/decision-agent.js';
+import { sanitizeEvidenceForModel } from '../ai-analysis/privacy-evidence-gate.js';
 import { buildHouseholdAction, decomposePolicySection, POLICY_DECOMPOSITION } from './policy-decomposition.js';
 
 const clone = value => structuredClone(value);
@@ -74,8 +75,44 @@ function assembleCoverageGraph({ input, upstream }) {
   };
 }
 
+// The privacy gate replaces raw source ids with opaque ids before model dispatch,
+// so live citations come back as `source_<digest>`. Deterministic review maps them
+// back through the run's persisted authorised raw source ids using the gate's own
+// derivation, never through anything the model returned. An id that is neither an
+// authorised raw id nor the exact opaque id of one stays unauthorised (fail closed).
+function opaqueSourceIdFor(rawId) {
+  try {
+    const { input } = sanitizeEvidenceForModel({
+      context: { caseId: 'review', subjectId: 'review', purpose: 'Derive opaque source id.', requestedFields: [] },
+      sources: [{ id: rawId, version: 'review', page: null, text: 'review', status: 'known' }],
+      upstream: [],
+    }, { task: 'source_id_mapping' });
+    return input.sources[0].id;
+  } catch {
+    return null;
+  }
+}
+
+function authorizedCitationIds(input) {
+  const rawIds = Array.isArray(input.authorizedSourceIds) ? input.authorizedSourceIds.filter(id => typeof id === 'string' && id !== '') : [];
+  const pairedIds = Array.isArray(input.authorizedSources)
+    ? new Set(input.authorizedSources.map(source => source?.sourceId))
+    : null;
+  const allowed = new Set(rawIds);
+  // Opaque ids only exist for live runs, which persist authorizedSources (source-input.js).
+  // Where present it must agree with authorizedSourceIds for the mapping to apply.
+  if (pairedIds) {
+    for (const rawId of rawIds) {
+      if (!pairedIds.has(rawId)) continue;
+      const opaque = opaqueSourceIdFor(rawId);
+      if (opaque) allowed.add(opaque);
+    }
+  }
+  return allowed;
+}
+
 function reviewEvidence({ input, upstream }) {
-  const allowed = new Set(input.authorizedSourceIds ?? []);
+  const allowed = authorizedCitationIds(input);
   const facts = [
     ...upstream.coverage.facts,
     ...Object.keys(POLICY_DECOMPOSITION)
@@ -98,7 +135,8 @@ function reviewEvidence({ input, upstream }) {
 function reviewPrivacy({ input, upstream }) {
   const findings = [];
   if (input.consent !== true) findings.push({ code: 'CONSENT_REQUIRED' });
-  if (upstream.coverage.facts.some(fact => fact.sources.some(source => !input.authorizedSourceIds.includes(source.id)))) {
+  const allowed = authorizedCitationIds(input);
+  if (upstream.coverage.facts.some(fact => fact.sources.some(source => !allowed.has(source.id)))) {
     findings.push({ code: 'UNSCOPED_SOURCE' });
   }
   return verdict(findings.length ? 'blocked' : 'passed', findings);
