@@ -148,6 +148,7 @@ test('persistent coverage worker scopes every claim to its requested run and wor
     recoverExpiredLeases: async () => null,
     isConsentActive: async () => true,
     stopForRevocation: async () => null,
+    recordModelObservations: async () => null,
     persistTaskArtifact: async () => null,
   };
   const service = createPersistentCoverageAnalysisService({ port, workerId: 'coverage-worker' });

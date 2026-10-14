@@ -29,8 +29,14 @@ const reviewStatuses = new Set(PARAMETER_REVIEW_STATUSES);
 // Reasons an observation's value may be erased. Extending the list needs no migration.
 export const OBSERVATION_REDACTION_REASONS = Object.freeze([
   'consent_revoked', 'document_erasure', 'retention_expired', 'data_subject_request',
+  'source_consent_not_current',
 ]);
 const redactionReasons = new Set(OBSERVATION_REDACTION_REASONS);
+// Resolution states a model observation may (re)establish, and the authorities that may have
+// set them; a state set by a human reviewer or an official source is never replaced.
+const MODEL_REPLACEABLE_STATES = new Set(['unknown', 'extracted_unverified', 'conflicting']);
+const MODEL_REPLACEABLE_AUTHORITIES = new Set(['model', 'deterministic']);
+const USABLE_REVIEW_STATUSES = new Set(['not_reviewed', 'accepted']);
 
 const defaultObservationLimit = 100;
 const maximumObservationLimit = 500;
@@ -441,6 +447,22 @@ export class CoverageParameterRepository {
         throw new Error('Model extraction is not permitted for this parameter.');
       }
     }
+    // Migration 006 enforces both rules in the database; these checks give a stable error first.
+    const document = this.database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(documentId);
+    if (document?.lifecycle_state !== 'active') {
+      throw Object.assign(new Error('Parameter observations require an active document.'), { code: 'OBSERVATION_DOCUMENT_NOT_ACTIVE' });
+    }
+    if (extractionMethod === 'human_review') {
+      const review = this.database.prepare(`SELECT 1 FROM coverage_parameter_records parameter
+        JOIN human_reviews review ON review.case_id = parameter.case_id
+        WHERE parameter.id = ?
+          AND (review.workflow_run_id IS NULL OR review.workflow_run_id = parameter.workflow_run_id)
+          AND review.status IN ('in_progress', 'completed') AND review.reviewer_adult_id = ?
+        LIMIT 1`).get(parameterRecordId, recordedBy);
+      if (!review) {
+        throw Object.assign(new Error('Human review observations must be recorded by the assigned reviewer.'), { code: 'OBSERVATION_REVIEWER_REQUIRED' });
+      }
+    }
     const createdAt = this.clock().toISOString();
     this.database.prepare(`INSERT INTO coverage_parameter_observations
       (id, parameter_record_id, source_id, document_id, version, page,
@@ -588,6 +610,139 @@ export class CoverageParameterRepository {
         affectedParameters: pending.parameters,
         resetResolutions,
       });
+    });
+  }
+
+  /**
+   * Records model-extracted values for one run as unverified evidence, in one transaction.
+   * Each entry is one value cited from one sent source page. Observations are appended as
+   * `document_extraction` / `not_reviewed`; then every touched parameter is resolved from all
+   * of its usable observations: one distinct value gives `extracted_unverified` (model
+   * authority), more than one gives `conflicting`. A parameter whose resolution is held by
+   * other authority (reported, proven, calculated, dynamic, not_permitted), or whose registry
+   * entry forbids model extraction, is left untouched and counted as skipped. Returns counts.
+   *
+   * `lease` ({ taskId, workerId }) binds the write to the task that produced the values: inside
+   * the transaction the task must still be running under that worker and the run must still be
+   * queued or running, otherwise TASK_LEASE_LOST is thrown and nothing is written. One
+   * counts-only audit event (with `taskKey`) is appended in the same transaction.
+   */
+  recordModelExtraction({ workflowRunId, entries, recordedBy, lease = null, taskKey = null, at = this.clock().toISOString() }) {
+    requireBounded(workflowRunId, 'workflowRunId');
+    requireBounded(recordedBy, 'recordedBy');
+    requireTimestamp(at, 'at');
+    if (taskKey !== null) requireBounded(taskKey, 'taskKey', { max: 40, pattern: /^[a-zA-Z]+$/ });
+    if (!Array.isArray(entries) || entries.length > maximumObservationLimit) {
+      throw new TypeError(`entries must be an array of at most ${maximumObservationLimit} items.`);
+    }
+    if (lease !== null) {
+      requireBounded(lease?.taskId, 'lease.taskId');
+      requireBounded(lease?.workerId, 'lease.workerId', { max: 200, pattern: null });
+    }
+    return this.#atomic(() => {
+      const scope = this.database.prepare(`SELECT run.status, run.case_id, service_case.household_id FROM workflow_runs run
+        JOIN service_cases service_case ON service_case.id = run.case_id WHERE run.id = ?`).get(workflowRunId);
+      if (lease !== null) {
+        const task = this.database.prepare('SELECT status, lease_owner, workflow_run_id FROM workflow_tasks WHERE id = ?').get(lease.taskId);
+        if (!scope || !['queued', 'running'].includes(scope.status) || task?.workflow_run_id !== workflowRunId
+          || task.status !== 'running' || task.lease_owner !== lease.workerId) {
+          throw Object.assign(new Error('The task lease is no longer held; model values were not recorded.'), { code: 'TASK_LEASE_LOST' });
+        }
+      }
+      const records = new Map(this.listForRun(workflowRunId, { limit: maximumRunLimit }).map(record => [record.parameterKey, record]));
+      const touched = new Map();
+      const skipped = new Set();
+      let observations = 0;
+      for (const entry of entries) {
+        const record = records.get(entry?.parameterKey);
+        if (!record) { skipped.add(String(entry?.parameterKey)); continue; }
+        const definition = getPolicyParameterDefinition(record.registryVersion, record.parameterKey);
+        if (!definition.modelExtraction.allowed || !MODEL_REPLACEABLE_STATES.has(record.resolutionState)
+          || !MODEL_REPLACEABLE_AUTHORITIES.has(record.authority)) {
+          skipped.add(record.parameterKey);
+          continue;
+        }
+        const observation = this.appendObservation({
+          parameterRecordId: record.id,
+          sourceId: entry.sourceId,
+          documentId: entry.documentId,
+          version: entry.version,
+          page: entry.page,
+          extractionMethod: 'document_extraction',
+          reviewStatus: 'not_reviewed',
+          value: entry.value,
+          sourceDigest: entry.sourceDigest,
+          observedAt: at,
+          recordedBy,
+        });
+        observations += 1;
+        touched.set(record.id, observation.id);
+      }
+      let conflicting = 0;
+      for (const [parameterRecordId, latestObservationId] of touched) {
+        const usable = this.listObservations(parameterRecordId, { limit: maximumObservationLimit })
+          .filter(observation => !observation.redactedAt && USABLE_REVIEW_STATUSES.has(observation.reviewStatus));
+        const values = new Set(usable.map(observation => JSON.stringify(canonical(observation.value))));
+        if (values.size > 1) {
+          conflicting += 1;
+          this.setResolution({ parameterRecordId, state: 'conflicting', authority: 'model', reasonCode: 'model_observations_conflict', updatedBy: recordedBy, at });
+        } else {
+          this.setResolution({ parameterRecordId, state: 'extracted_unverified', observationId: latestObservationId, reasonCode: 'model_extracted_unverified', updatedBy: recordedBy, at });
+        }
+      }
+      const counts = Object.freeze({ observations, parameters: touched.size, conflicting, skipped: skipped.size });
+      if (observations > 0 && scope) {
+        this.audit.append({
+          householdId: scope.household_id,
+          caseId: scope.case_id,
+          action: 'coverage_parameter.model_observations_recorded',
+          resourceType: 'workflow_run',
+          resourceId: workflowRunId,
+          payload: { ...(taskKey ? { taskKey } : {}), ...counts },
+        });
+      }
+      return counts;
+    });
+  }
+
+  /**
+   * Redacts every not-yet-redacted observation recorded for one run (all documents). Used
+   * when a run's derived data is erased because its coverage consent or a source's consent
+   * is gone. Resolutions built on them fall back to `unknown` through the database trigger.
+   * Must run inside the caller's transaction or opens its own. Counts-only audit event.
+   */
+  redactObservationsForRun({
+    workflowRunId, reasonCode, actorType = 'system', actorId = 'coverage-parameter-repository',
+    at = this.clock().toISOString(),
+  }) {
+    requireBounded(workflowRunId, 'workflowRunId');
+    requireEnum(reasonCode, 'reasonCode', redactionReasons);
+    requireTimestamp(at, 'at');
+    requireBounded(actorId, 'actorId');
+    return this.#atomic(() => {
+      const scope = this.database.prepare(`SELECT run.case_id, service_case.household_id FROM workflow_runs run
+        JOIN service_cases service_case ON service_case.id = run.case_id WHERE run.id = ?`).get(workflowRunId);
+      if (!scope) return Object.freeze({ workflowRunId, redactedObservations: 0, affectedParameters: 0 });
+      const pending = this.database.prepare(`SELECT count(*) AS observations, count(DISTINCT observation.parameter_record_id) AS parameters
+        FROM coverage_parameter_observations observation
+        JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id
+        WHERE parameter.workflow_run_id = ? AND observation.redacted_at IS NULL`).get(workflowRunId);
+      if (pending.observations === 0) return Object.freeze({ workflowRunId, redactedObservations: 0, affectedParameters: 0 });
+      this.database.prepare(`UPDATE coverage_parameter_observations
+        SET value_json = NULL, redacted_at = ?, redaction_reason_code = ?
+        WHERE redacted_at IS NULL AND parameter_record_id IN (
+          SELECT id FROM coverage_parameter_records WHERE workflow_run_id = ?)`).run(at, reasonCode, workflowRunId);
+      this.audit.append({
+        householdId: scope.household_id,
+        caseId: scope.case_id,
+        actorType,
+        actorId,
+        action: 'coverage_parameter.run_observations_redacted',
+        resourceType: 'workflow_run',
+        resourceId: workflowRunId,
+        payload: { reasonCode, redactedObservations: pending.observations, affectedParameters: pending.parameters },
+      });
+      return Object.freeze({ workflowRunId, redactedObservations: pending.observations, affectedParameters: pending.parameters });
     });
   }
 }

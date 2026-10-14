@@ -101,6 +101,7 @@ const criticalTriggers = Object.freeze([
   'coverage_parameter_registry_pins_immutable', 'coverage_parameter_registry_versions_immutable',
   'coverage_parameter_registry_versions_no_delete', 'coverage_parameter_observation_rules_immutable',
   'coverage_parameter_observation_rules_no_delete',
+  'coverage_parameter_observations_active_document_insert', 'coverage_parameter_observations_human_review_insert',
 ]);
 
 const criticalIndexes = Object.freeze([
