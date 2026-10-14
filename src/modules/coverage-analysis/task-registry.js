@@ -2,7 +2,7 @@ import { normalizeProfileIntake } from '../../agents/profile-agent.js';
 import { analyzeGroupHealthCover } from '../../agents/group-health-agent.js';
 import { analyzePersonalHealthCover } from '../../agents/personal-health-agent.js';
 import { classifyCase } from '../../agents/decision-agent.js';
-import { sanitizeEvidenceForModel } from '../ai-analysis/privacy-evidence-gate.js';
+import { opaqueSourceId } from '../ai-analysis/privacy-evidence-gate.js';
 import { MODEL_EXTRACTED_UNVERIFIED } from './agent-contracts.js';
 import { buildHouseholdAction, decomposePolicySection, POLICY_DECOMPOSITION } from './policy-decomposition.js';
 
@@ -89,12 +89,7 @@ function assembleCoverageGraph({ input, upstream }) {
 // authorised raw id nor the exact opaque id of one stays unauthorised (fail closed).
 function opaqueSourceIdFor(rawId) {
   try {
-    const { input } = sanitizeEvidenceForModel({
-      context: { caseId: 'review', subjectId: 'review', purpose: 'Derive opaque source id.', requestedFields: [] },
-      sources: [{ id: rawId, version: 'review', page: null, text: 'review', status: 'known' }],
-      upstream: [],
-    }, { task: 'source_id_mapping' });
-    return input.sources[0].id;
+    return opaqueSourceId(rawId);
   } catch {
     return null;
   }

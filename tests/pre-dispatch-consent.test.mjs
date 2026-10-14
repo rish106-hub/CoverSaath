@@ -75,7 +75,7 @@ for (const [label, revoke] of [
   });
 }
 
-test('revocation between two model tasks of one run denies every later dispatch over HTTP', async t => {
+test('revocation of a document grant while a model call is in flight discards the result and stops the run over HTTP', async t => {
   const modelRequests = [];
   let revokeOnFirstCall = () => {};
   const app = await startLiveServer(t, { modelRequests, onGenerate: (_request, count) => { if (count === 1) revokeOnFirstCall(); } });
@@ -91,16 +91,19 @@ test('revocation between two model tasks of one run denies every later dispatch 
   const authorized = auditActions(app.database, 'analysis.model_dispatch_authorized');
   const denied = auditActions(app.database, 'analysis.model_dispatch_denied');
   assert.ok(authorized.length >= 1);
-  assert.ok(denied.length >= 1, 'a later model task must be denied');
   assert.ok(authorized.every(event => event.id < revokedAt.id), 'no dispatch may be authorized after revocation');
   assert.ok(denied.every(event => event.id > revokedAt.id));
   assert.ok(denied.every(event => event.payload.reasonCode === 'SOURCE_CONSENT_NOT_CURRENT'));
   // Every provider call was preceded by its own allowed check, made before revocation.
   assert.equal(modelRequests.length, authorized.length);
   assert.ok(modelRequests.length < MODEL_TASK_KEYS.length);
-  const failed = runRows(app.database, response.data.id).tasks.filter(task => task.status === 'failed');
-  assert.ok(failed.length >= 1);
-  assert.ok(failed.every(task => task.last_error_code === 'MODEL_DISPATCH_AUTHORIZATION_FAILED'));
+  // The in-flight results were discarded and the run stopped on the revocation path.
+  const run = app.database.prepare('SELECT status, terminal_reason FROM workflow_runs WHERE id = ?').get(response.data.id);
+  assert.deepEqual({ ...run }, { status: 'revoked', terminal_reason: 'CONSENT_REVOKED' });
+  assert.ok(auditActions(app.database, 'analysis.task_completed').every(event => event.id < revokedAt.id), 'nothing may be committed after revocation');
+  const stopped = auditActions(app.database, 'analysis.revoked');
+  assert.equal(stopped.length, 1);
+  assert.deepEqual(stopped[0].payload, { reason: 'source_consent_not_current', reasonCode: 'SOURCE_CONSENT_NOT_CURRENT' });
   assert.ok(!response.raw.includes(PROBE_EMAIL));
   assertNoProbeLeak(app.database, response.data.id, [modelRequests]);
 });

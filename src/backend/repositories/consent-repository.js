@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 const id = prefix => `${prefix}-${randomUUID()}`;
 
 export class ConsentRepository {
-  constructor(database, { clock = () => new Date(), audit } = {}) {
+  constructor(database, { clock = () => new Date(), audit, coverageParameters = null } = {}) {
     this.database = database;
     this.clock = clock;
     this.audit = audit;
+    this.coverageParameters = coverageParameters;
   }
 
   grant({ id: grantId = id('consent'), householdId, subjectAdultId, grantedToActor = 'knowvia-local', purpose, noticeVersion = 'v1', evidenceMethod = 'typed', expiresAt = null, scopes = [] }) {
@@ -154,6 +155,22 @@ export class ConsentRepository {
         WHERE document_upload_id IN (
           SELECT id FROM document_uploads WHERE consent_grant_id = ?
         )`).run(at, at, grantId);
+      // Observation values derived from the revoked documents are erased and the
+      // erasure is audited (counts only) before the lifecycle change below, which
+      // would otherwise redact them silently through the database safety net.
+      if (this.coverageParameters) {
+        const documents = this.database.prepare(`SELECT id FROM document_uploads WHERE consent_grant_id = ?
+          UNION
+          SELECT resource_id FROM consent_scopes
+          WHERE consent_grant_id = ? AND resource_type = 'document' AND resource_id IS NOT NULL
+            AND resource_id IN (SELECT id FROM document_uploads)
+          ORDER BY 1`).all(grantId, grantId);
+        for (const { id: documentId } of documents) {
+          this.coverageParameters.redactObservationsForDocument({
+            documentId, reasonCode: 'consent_revoked', actorType: 'adult_user', actorId: revokedByAdultId, at,
+          });
+        }
+      }
       this.database.prepare(`UPDATE source_pages SET extracted_text = NULL, extraction_status = 'failed',
           confidence_basis_points = NULL, page_sha256 = ?, text_sha256 = NULL,
           provider_page_ref = NULL, provenance_json = NULL, source_version = 'revoked:' || id
