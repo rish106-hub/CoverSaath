@@ -13,7 +13,7 @@ const task = (key, kind, dependsOn) => Object.freeze({
 
 export const COVERAGE_ANALYSIS_WORKFLOW = Object.freeze({
   name: 'coverage-analysis',
-  version: '4',
+  version: '5',
   tasks: Object.freeze([
     task('profile', 'profile_intake', []),
     task('group', 'group_cover_analysis', []),
