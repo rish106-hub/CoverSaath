@@ -34,10 +34,16 @@ function validateCitations(citations, sourceIds, label) {
   }
 }
 
-// Unsupported-certainty language. A model may never state or imply approval,
-// guaranteed coverage or guaranteed payment; only the institution with
-// authority can. The check runs over the whole serialised output (facts,
-// values, summaries, statements and questions) and fails closed.
+// Unsupported-certainty language. A model may never itself state or imply
+// approval, guaranteed coverage or guaranteed payment; only the institution with
+// authority can. The check applies to model-authored assertions (summaries,
+// statements, unknowns, ids and unquoted values). Interrogative question
+// sentences, and policy wording the model quotes verbatim from a supplied
+// source, are not model assertions and are exempt. Text is normalised first
+// (NFKC, format characters removed, Cyrillic/Greek look-alikes folded, Latin
+// diacritics stripped) so obfuscated spellings cannot bypass the patterns.
+// Optional negation within three words before a match ("shall not be liable to pay").
+const NOT_NEGATED = String.raw`(?<!\b(?:not|never|no|cannot|can't|won't|isn't|aren't)\s+(?:\w+\s+){0,2})`;
 const UNSUPPORTED_CERTAINTY_PATTERNS = Object.freeze([
   /\bguaranteed\s+(?:coverage|cashless|payout|payment|reimbursement)\b/i,
   /\b(?:claim|cashless)\s+(?:is\s+)?approved\b/i,
@@ -52,27 +58,151 @@ const UNSUPPORTED_CERTAINTY_PATTERNS = Object.freeze([
   /\bcovered\s+for\s+sure\b/i,
   /\b(?:certainly|surely|assuredly|absolutely)\s+(?:be\s+)?(?:covered|eligible|payable|approved|paid|reimbursed)\b/i,
   /\binsurer\s+(?:will|must|shall)\s+(?:pay|approve|cover|reimburse|settle)\b/i,
-  /\bno\s+(?:chance|risk)\s+of\s+(?:claim\s+)?(?:rejection|denial)\b/i,
-  // Hindi (Devanagari) and Hinglish equivalents.
-  /गारंटी|पक्का|पक्की|मंजूर|स्वीकृत|अप्रूव/u,
+  // "no / zero / nil risk of rejection".
+  /\b(?:no|zero|nil|without\s+any|not\s+any)\s+(?:chance|risk|possibility|probability|scope)\s+of\s+(?:claim\s+|any\s+)?(?:rejection|denial|repudiation|being\s+(?:rejected|denied))\b/i,
+  // "Your claim is assured", "assured payout"; "sum assured" is not matched.
+  new RegExp(`${NOT_NEGATED}\\b(?:is|are|was|were|be|been|being|stands?|remains?)\\s+(?:fully\\s+|completely\\s+)?assured\\b`, 'i'),
+  /\bassured(?:ly)?\s+(?:coverage|cover|payout|payment|approval|settlement|reimbursement|cashless)\b/i,
+  // "insurer is obligated to pay", "the company is bound to settle".
+  new RegExp(`${NOT_NEGATED}\\b(?:obligated|obliged|duty[- ]bound)\\s+to\\s+(?:pay|approve|cover|reimburse|settle|accept|honou?r)\\b`, 'i'),
+  new RegExp(`${NOT_NEGATED}\\b(?:insurer|insurance\\s+company|company|tpa|we|they)\\s+(?:is|are|will\\s+be|shall\\s+be|would\\s+be|remains?)\\s+(?:legally\\s+)?(?:bound|liable|required|committed)\\s+to\\s+(?:pay|approve|cover|reimburse|settle|accept|honou?r)\\b`, 'i'),
+  // "certain to be covered", "sure to be paid".
+  new RegExp(`${NOT_NEGATED}\\b(?:certain|sure|bound|assured)\\s+to\\s+(?:be\\s+)?(?:covered|approved|paid|reimbursed|settled|accepted|sanctioned|cleared|passed)\\b`, 'i'),
+  // "The claim stands approved", "deemed sanctioned".
+  new RegExp(`${NOT_NEGATED}\\b(?:stands?|deemed|considered)\\s+(?:as\\s+)?(?:approved|sanctioned|accepted|cleared|settled)\\b`, 'i'),
+  // Hindi (Devanagari) and Hinglish equivalents. "स्वीकृत अस्पताल" (approved
+  // hospital list) is permitted wording and removed before matching.
+  /गारंटी|पक्का|पक्की|मंजूर|मंज़ूर|स्वीकृत|अप्रूव/u,
   /\bpakk(?:a|i|aa)\b/i,
   /\bclaim\s+(?:pass|approve|manjoor|manzoor|sanction)\s+ho\s+(?:jayega|jaayega|jaega|jayegi|gaya|gayi)\b/i,
   /\b(?:guarantee|guaranteed)\s+(?:hai|he|h)\b/i,
   /\b(?:100\s*%|poora|pura|poori|puri)\s+(?:cover|covered|paisa)\s+(?:milega|hoga|ho\s+jayega)\b/i,
 ]);
-// Policy feature names that legitimately contain "guaranteed" (for example the
-// registry parameter "Guaranteed / loyalty bonus" or lifelong "guaranteed
-// renewal"), plus explicit negations ("not guaranteed", "no guarantee"). These
-// are removed before matching; every other use of guarantee language fails.
-const PERMITTED_GUARANTEE_WORDING = [
+// Policy feature names that legitimately contain certainty words (the registry
+// parameter "Guaranteed / loyalty bonus", lifelong renewability, life-cover
+// "Guaranteed Surrender Value", the "approved hospital list"), plus explicit
+// negations ("not guaranteed", "no guarantee"). These are removed before
+// matching; every other use of certainty language fails.
+const PERMITTED_CERTAINTY_WORDING = [
   /\bguaranteed\s*(?:\/\s*loyalty\s+|cumulative\s+|loyalty\s+|no[- ]claims?\s+)?(?:bonus|renewal|renewability|lifelong\s+renewal)\b/gi,
+  /\bguaranteed\s+(?:surrender\s+value|additions?|(?:lifelong|life-?long|lifetime)\s+renewab\w*)\b/gi,
+  /\b(?:renewal|renewability)\s+(?:is\s+)?guaranteed(?:\s+(?:for\s+life|lifelong|for\s+lifetime))?\b/gi,
+  /\b(?:lifelong|life-?long|lifetime)\s+(?:renewal|renewability)\s+(?:is\s+)?guaranteed\b/gi,
   /\b(?:not|never|no|without|cannot\s+be|can't\s+be|isn't|is\s+not|are\s+not|aren't)\s+(?:a\s+|any\s+)?guarantee(?:d|s)?\b/gi,
+  /(?:स्वीकृत|मंजूर|मंज़ूर|अप्रूव्ड|अप्रूव)\s+(?:अस्पताल|अस्पतालों|नेटवर्क|सूची|प्रदाता)/gu,
 ];
 
-function rejectUnsupportedClaims(value) {
-  let body = JSON.stringify(value);
-  for (const pattern of PERMITTED_GUARANTEE_WORDING) body = body.replace(pattern, ' ');
-  if (UNSUPPORTED_CERTAINTY_PATTERNS.some(pattern => pattern.test(body))) fail('unsupported_claim', 'Output contains unsupported insurance certainty.');
+// Look-alike letters from Cyrillic and Greek that render as Latin letters.
+const CONFUSABLE_LETTERS = new Map(Object.entries({
+  а: 'a', е: 'e', о: 'o', р: 'p', с: 'c', у: 'y', х: 'x', і: 'i', ј: 'j', ѕ: 's', һ: 'h', ԁ: 'd', ӏ: 'l', ԛ: 'q', ԝ: 'w',
+  А: 'A', В: 'B', Е: 'E', К: 'K', М: 'M', Н: 'H', О: 'O', Р: 'P', С: 'C', Т: 'T', У: 'Y', Х: 'X', І: 'I', Ј: 'J', Ѕ: 'S',
+  α: 'a', ε: 'e', ι: 'i', κ: 'k', ν: 'v', ο: 'o', ρ: 'p', τ: 't', υ: 'u', χ: 'x',
+  Α: 'A', Β: 'B', Ε: 'E', Ζ: 'Z', Η: 'H', Ι: 'I', Κ: 'K', Μ: 'M', Ν: 'N', Ο: 'O', Ρ: 'P', Τ: 'T', Υ: 'Y', Χ: 'X',
+  ɑ: 'a', ɡ: 'g', ı: 'i',
+}));
+const CONFUSABLE_PATTERN = new RegExp(`[${[...CONFUSABLE_LETTERS.keys()].join('')}]`, 'gu');
+
+function normalizeCertaintyText(value) {
+  return String(value)
+    .normalize('NFKC')
+    .replace(/\p{Cf}/gu, '')
+    .replace(CONFUSABLE_PATTERN, letter => CONFUSABLE_LETTERS.get(letter))
+    .normalize('NFD')
+    .replace(/(?<=[A-Za-z])\p{M}+/gu, '')
+    .normalize('NFC')
+    .replace(/\s+/gu, ' ');
+}
+
+// Comparable form for verbatim-quote checks. Source text may be JSON-encoded.
+function comparableText(value) {
+  return normalizeCertaintyText(String(value).replace(/\\[nrt]/g, ' ').replace(/\\(["\\/])/g, '$1'))
+    .replace(/[“”„«»]/gu, '"')
+    .replace(/[‘’]/gu, "'")
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const MIN_QUOTE_LENGTH = 12;
+function quotedFrom(text, sourceTexts) {
+  const quote = comparableText(text).replace(/^["'\s]+/, '').replace(/(?:\.{3}|…|["'\s.,;:!])+$/u, '');
+  return quote.length >= MIN_QUOTE_LENGTH && sourceTexts.some(source => source.includes(quote));
+}
+
+function hasUnsupportedCertainty(text) {
+  let body = normalizeCertaintyText(text);
+  for (const pattern of PERMITTED_CERTAINTY_WORDING) body = body.replace(pattern, ' ');
+  return UNSUPPORTED_CERTAINTY_PATTERNS.some(pattern => pattern.test(body));
+}
+
+// Spans in quotation marks that reproduce supplied source wording are removed
+// from a model-authored assertion before it is checked.
+const QUOTED_SPAN = /"([^"]{1,800})"|“([^”]{1,800})”|‘([^’]{1,800})’|'([^']{1,800})'/gu;
+function assertionHasUnsupportedCertainty(text, sourceTexts) {
+  const withoutQuotes = normalizeCertaintyText(text).replace(QUOTED_SPAN, (match, ...groups) => {
+    const quoted = groups.slice(0, 4).find(group => group !== undefined);
+    return quotedFrom(quoted, sourceTexts) ? ' ' : match;
+  });
+  return hasUnsupportedCertainty(withoutQuotes);
+}
+
+const INTERROGATIVE_START = /^(?:is|are|was|were|will|would|can|could|does|do|did|has|have|had|should|shall|may|might|must|what|which|when|where|why|how|who|whom|whose|please|kindly|kya|kab|kaise|kitna|kitni|kaun|kyun|क्या|कब|कैसे|कितना|कितनी|कितने|कौन|किस|किसे|क्यों|कहाँ|कहां)(?![\p{L}\p{M}\p{N}])/iu;
+const CONDITIONAL_QUESTION = /^(?:if|for|under|in|at|on|during|after|before|given|assuming|as|to|with|since)\b[^?]*,\s*(?:is|are|was|were|will|would|can|could|does|do|did|has|have|should|shall|may|what|which|when|where|why|how|who)\b/iu;
+const TAG_QUESTION = /,\s*(?:isn't|aren't|wasn't|won't|isn't\s+it|right|correct|no|yes|ok|okay|na|hai\s+na|true)\s*\?$/iu;
+
+// A question sentence ends with '?', opens with an interrogative (or a
+// conditional clause followed by one) and is not a tag question ("..., right?").
+function isQuestionSentence(sentence) {
+  const trimmed = sentence.trim();
+  return trimmed.endsWith('?') && !TAG_QUESTION.test(trimmed)
+    && (INTERROGATIVE_START.test(trimmed) || CONDITIONAL_QUESTION.test(trimmed));
+}
+
+function questionHasUnsupportedCertainty(text, sourceTexts) {
+  return normalizeCertaintyText(text).split(/(?<=[.!?।])\s+/u)
+    .some(sentence => !isQuestionSentence(sentence) && assertionHasUnsupportedCertainty(sentence, sourceTexts));
+}
+
+function rejectUnsupportedClaims(task, output, input) {
+  const sourceTexts = input.sources.map(source => comparableText(source.text));
+  const sourceTextById = new Map(input.sources.map((source, index) => [source.id, sourceTexts[index]]));
+  const requestedFields = new Set(input.context.requestedFields);
+  const findings = [];
+  const check = (text, kind, citations = []) => {
+    if (typeof text !== 'string') return;
+    if (kind === 'value') {
+      // A value the model reproduces verbatim from one of its cited sources is
+      // extracted evidence (unverified), not a model assertion.
+      const cited = citations.map(id => sourceTextById.get(id)).filter(Boolean);
+      if (quotedFrom(text, cited)) return;
+    }
+    const unsupported = kind === 'question'
+      ? questionHasUnsupportedCertainty(text, sourceTexts)
+      : assertionHasUnsupportedCertainty(text, sourceTexts);
+    if (unsupported) findings.push(kind);
+  };
+  if (task.endsWith('_extraction')) {
+    check(output.summary, 'assertion');
+    for (const fact of output.facts) {
+      check(fact.id, 'assertion');
+      if (!requestedFields.has(fact.field)) check(fact.field, 'assertion');
+      check(fact.value, 'value', fact.citations);
+    }
+  } else if (task === 'evidence_synthesis') {
+    check(output.summary, 'assertion');
+    for (const item of [...output.statements, ...output.unknowns]) {
+      check(item.id, 'assertion');
+      check(item.text, 'assertion');
+    }
+  } else if (task === 'question_drafting') {
+    for (const question of output.questions) {
+      check(question.id, 'assertion');
+      check(question.text, 'question');
+    }
+  } else {
+    check(JSON.stringify(output), 'assertion');
+  }
+  if (findings.length > 0) fail('unsupported_claim', 'Output contains unsupported insurance certainty.');
 }
 
 export function validateTaskInput(task, input) {
@@ -164,7 +294,7 @@ export function validateTaskOutput(task, output, input) {
   if (task.endsWith('_extraction')) validateFacts(output, sourceIds, input.context.requestedFields);
   else if (task === 'evidence_synthesis') validateSynthesis(output, sourceIds, unknownSourceIds);
   else if (task === 'question_drafting') validateQuestions(output, sourceIds, unknownSourceIds);
-  rejectUnsupportedClaims(output);
+  rejectUnsupportedClaims(task, output, input);
   return structuredClone(output);
 }
 
