@@ -14,6 +14,22 @@ export { createPersistentCoverageAnalysisService } from './persistent-service.js
 export { createCoverageAnalysisSourceInput } from './source-input.js';
 export { POLICY_DECOMPOSITION, buildHouseholdAction, decomposePolicySection } from './policy-decomposition.js';
 export {
+  POLICY_PARAMETER_REGISTRY,
+  POLICY_PARAMETER_REGISTRY_VERSION,
+  getPolicyParameterDefinition,
+  getPolicyParameterRegistry,
+  validatePolicyParameterRegistry,
+} from './policy-parameter-registry.js';
+export {
+  PARAMETER_ACQUISITION_STATES,
+  PARAMETER_RESOLUTION_STATES,
+  assertAcquisitionTransition,
+  assertResolutionTransition,
+  createParameterRecord,
+  transitionParameterRecord,
+  validateParameterRecord,
+} from './parameter-records.js';
+export {
   AGENT_CONTRACT_VERSION,
   EVIDENCE_STATES,
   createTaskOutputEnvelope,

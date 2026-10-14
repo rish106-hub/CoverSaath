@@ -66,7 +66,9 @@ const expectedTables = Object.freeze([
   'coverage_graph_edges', 'workflow_runs', 'workflow_tasks', 'workflow_task_dependencies',
   'workflow_events', 'reviewer_findings', 'release_gates', 'human_reviews', 'human_approvals',
   'integration_outbox', 'integration_webhook_events', 'idempotency_keys', 'retention_records',
-  'audit_events', 'api_sessions',
+  'audit_events', 'api_sessions', 'coverage_parameter_registry_pins',
+  'coverage_parameter_records', 'coverage_parameter_acquisitions',
+  'coverage_parameter_observations', 'coverage_parameter_resolutions',
 ]);
 
 const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -87,6 +89,10 @@ const criticalTriggers = Object.freeze([
   'consent_scopes_profile_viewer_insert', 'consent_scopes_profile_viewer_update',
   'ocr_jobs_document_ready_insert', 'source_pages_ocr_document_match_insert',
   'source_pages_ocr_document_match_update',
+  'coverage_parameter_records_scope_insert', 'coverage_parameter_records_identity_immutable',
+  'coverage_parameter_observations_source_insert', 'coverage_parameter_observations_no_update',
+  'coverage_parameter_observations_no_delete', 'coverage_parameter_resolutions_observation_insert',
+  'coverage_parameter_resolutions_observation_update',
 ]);
 
 const criticalIndexes = Object.freeze([
@@ -98,6 +104,8 @@ const criticalIndexes = Object.freeze([
   'audit_events_household_chain_idx',
   'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'consent_scopes_field_viewer_idx',
   'ocr_jobs_lifecycle_idx',
+  'coverage_parameter_records_run_idx', 'coverage_parameter_records_case_idx',
+  'coverage_parameter_observations_parameter_idx', 'coverage_parameter_observations_document_idx',
 ]);
 
 const requiredColumns = Object.freeze({
@@ -107,6 +115,8 @@ const requiredColumns = Object.freeze({
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],
   ocr_jobs: ['contract_version', 'authorization_json', 'result_json', 'result_digest', 'updated_at'],
   source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json'],
+  coverage_parameter_records: ['registry_version', 'parameter_key', 'subject_id', 'policy_id', 'applicable'],
+  coverage_parameter_resolutions: ['resolution_state', 'transition_authority'],
 });
 
 export function validateSchema(database) {

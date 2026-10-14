@@ -41,12 +41,16 @@ export function createCoverageAnalysisPort({ database, services }) {
     },
     createRunWithTasks(input) { return services.workflows.createRunWithTasks(input); },
     getCoverageSourcePages(caseId) {
+      const at = new Date().toISOString();
       return database.prepare(`SELECT page.id, page.document_upload_id, page.page_number,
           page.source_version, page.extracted_text, document.document_kind
         FROM source_pages page
         JOIN document_uploads document ON document.id = page.document_upload_id
         JOIN ocr_jobs job ON job.id = page.ocr_job_id
-        WHERE document.case_id = ?
+        JOIN service_cases service_case ON service_case.id = document.case_id
+        LEFT JOIN household_members subject ON subject.id = service_case.subject_member_id
+        WHERE service_case.id = ?
+          AND document.household_id = service_case.household_id
           AND document.lifecycle_state = 'active'
           AND document.malware_status = 'clean'
           AND document.encryption_status = 'encrypted_local'
@@ -54,7 +58,21 @@ export function createCoverageAnalysisPort({ database, services }) {
           AND page.output_contract_version = 'knowvia.ocr.v1'
           AND page.extraction_status IN ('extracted', 'manual_verified')
           AND page.extracted_text IS NOT NULL
-        ORDER BY document.uploaded_at, document.id, page.page_number`).all(caseId);
+          AND EXISTS (
+            SELECT 1
+            FROM consent_grants consent
+            JOIN consent_scopes scope ON scope.consent_grant_id = consent.id
+            WHERE consent.household_id = service_case.household_id
+              AND consent.subject_adult_id = COALESCE(subject.adult_user_id, service_case.opened_by_adult_id)
+              AND consent.purpose = 'document_processing'
+              AND consent.revoked_at IS NULL
+              AND (consent.expires_at IS NULL OR julianday(consent.expires_at) > julianday(?))
+              AND scope.resource_type = 'document'
+              AND scope.resource_id = document.id
+              AND scope.action = 'derive'
+              AND scope.data_category = 'insurance_document'
+          )
+        ORDER BY document.uploaded_at, document.id, page.page_number`).all(caseId, at);
     },
     getJob,
     getTask: taskId => services.workflows.getTask(taskId),

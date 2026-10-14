@@ -120,6 +120,10 @@ test('persistent HTTP workflow executes only model-eligible roles with explicit 
       'Synthetic schedule: room rent limit is 5000.', 'extracted', 9000, ?,
       'knowvia.ocr.v1', ?, 'fixture-page-1', '{}')`)
     .run('c'.repeat(64), at, 'd'.repeat(64));
+  database.prepare(`INSERT INTO consent_scopes
+    (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
+    VALUES ('scope-live-analysis', ?, 'document', 'document-live', 'derive',
+      'insurance_document', 'google-gemini', ?)`).run(documentConsent.data.id, at);
 
   const denied = await app.call(`/api/v1/cases/${created.data.id}/analysis-runs`, { method: 'POST', token, idempotencyKey: 'live-no-permission', body: { consentGrantId: consent.data.id, executionMode: 'live', modelPermission: false } });
   assert.equal(denied.status, 403);
