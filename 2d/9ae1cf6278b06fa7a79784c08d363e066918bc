@@ -1,0 +1,21 @@
+src/server/routes/v1-backend-routes.js
+  s_36e9dbcd177789::t_73cbbcb0969614 69,79-83,85
+tests/p1-error-redaction.test.mjs
+  s_36e9dbcd177789::t_73cbbcb0969614 1-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2d9ae1cf6278b06fa7a79784c08d363e066918bc",
+  "prompts": {},
+  "sessions": {
+    "s_36e9dbcd177789": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "926d1f4c-f44b-401e-a2c7-0fa5da7e5673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
