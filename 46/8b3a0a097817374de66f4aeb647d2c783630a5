@@ -1,0 +1,19 @@
+.gitignore
+  s_7e555e8bb498c4::t_98903ba3c34bea 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "468b3a0a097817374de66f4aeb647d2c783630a5",
+  "prompts": {},
+  "sessions": {
+    "s_7e555e8bb498c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1d350c9-3df6-410f-aade-0061ded7c855",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
