@@ -34,15 +34,45 @@ function validateCitations(citations, sourceIds, label) {
   }
 }
 
+// Unsupported-certainty language. A model may never state or imply approval,
+// guaranteed coverage or guaranteed payment; only the institution with
+// authority can. The check runs over the whole serialised output (facts,
+// values, summaries, statements and questions) and fails closed.
+const UNSUPPORTED_CERTAINTY_PATTERNS = Object.freeze([
+  /\bguaranteed\s+(?:coverage|cashless|payout|payment|reimbursement)\b/i,
+  /\b(?:claim|cashless)\s+(?:is\s+)?approved\b/i,
+  /\binsurer\s+(?:will|must)\s+pay\b/i,
+  /\bdefinitely\s+(?:covered|eligible|payable)\b/i,
+  // Bare guarantee language ("guaranteed", "we guarantee").
+  /\bguarantee(?:d|s)?\b/i,
+  /\bwill\s+(?:definitely\s+|surely\s+|certainly\s+|always\s+)?be\s+(?:approved|sanctioned|covered|paid|reimbursed|settled|cashless)\b/i,
+  /\b(?:claims?|cashless|pre-?auth(?:ori[sz]ation)?|reimbursement)\s+(?:request\s+)?(?:is\s+|are\s+|has\s+been\s+|have\s+been\s+|was\s+|were\s+)?(?:approved|sanctioned)\b/i,
+  /\b(?:100|hundred)\s*(?:%|percent|per\s+cent)\s*(?:covered|coverage|cover|payable|paid|reimburs\w*|approved|cashless|claim\s+approval)\b/i,
+  /\b(?:fully|completely|totally|entirely)\s+covered\s+for\s+sure\b/i,
+  /\bcovered\s+for\s+sure\b/i,
+  /\b(?:certainly|surely|assuredly|absolutely)\s+(?:be\s+)?(?:covered|eligible|payable|approved|paid|reimbursed)\b/i,
+  /\binsurer\s+(?:will|must|shall)\s+(?:pay|approve|cover|reimburse|settle)\b/i,
+  /\bno\s+(?:chance|risk)\s+of\s+(?:claim\s+)?(?:rejection|denial)\b/i,
+  // Hindi (Devanagari) and Hinglish equivalents.
+  /गारंटी|पक्का|पक्की|मंजूर|स्वीकृत|अप्रूव/u,
+  /\bpakk(?:a|i|aa)\b/i,
+  /\bclaim\s+(?:pass|approve|manjoor|manzoor|sanction)\s+ho\s+(?:jayega|jaayega|jaega|jayegi|gaya|gayi)\b/i,
+  /\b(?:guarantee|guaranteed)\s+(?:hai|he|h)\b/i,
+  /\b(?:100\s*%|poora|pura|poori|puri)\s+(?:cover|covered|paisa)\s+(?:milega|hoga|ho\s+jayega)\b/i,
+]);
+// Policy feature names that legitimately contain "guaranteed" (for example the
+// registry parameter "Guaranteed / loyalty bonus" or lifelong "guaranteed
+// renewal"), plus explicit negations ("not guaranteed", "no guarantee"). These
+// are removed before matching; every other use of guarantee language fails.
+const PERMITTED_GUARANTEE_WORDING = [
+  /\bguaranteed\s*(?:\/\s*loyalty\s+|cumulative\s+|loyalty\s+|no[- ]claims?\s+)?(?:bonus|renewal|renewability|lifelong\s+renewal)\b/gi,
+  /\b(?:not|never|no|without|cannot\s+be|can't\s+be|isn't|is\s+not|are\s+not|aren't)\s+(?:a\s+|any\s+)?guarantee(?:d|s)?\b/gi,
+];
+
 function rejectUnsupportedClaims(value) {
-  const body = JSON.stringify(value);
-  const patterns = [
-    /\bguaranteed\s+(?:coverage|cashless|payout|payment|reimbursement)\b/i,
-    /\b(?:claim|cashless)\s+(?:is\s+)?approved\b/i,
-    /\binsurer\s+(?:will|must)\s+pay\b/i,
-    /\bdefinitely\s+(?:covered|eligible|payable)\b/i,
-  ];
-  if (patterns.some(pattern => pattern.test(body))) fail('unsupported_claim', 'Output contains unsupported insurance certainty.');
+  let body = JSON.stringify(value);
+  for (const pattern of PERMITTED_GUARANTEE_WORDING) body = body.replace(pattern, ' ');
+  if (UNSUPPORTED_CERTAINTY_PATTERNS.some(pattern => pattern.test(body))) fail('unsupported_claim', 'Output contains unsupported insurance certainty.');
 }
 
 export function validateTaskInput(task, input) {
