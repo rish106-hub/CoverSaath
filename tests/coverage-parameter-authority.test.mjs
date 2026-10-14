@@ -15,7 +15,7 @@ import {
   createParameterRecord,
 } from '../src/modules/coverage-analysis/parameter-records.js';
 import { getPolicyParameterRegistry } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { observationInput, parameterAt as at, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
+import { observationInput, parameterAt as at, parameterReviewerId, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 
 const v1 = 'policy-parameters/v1';
 
@@ -34,7 +34,8 @@ function parameter(repository, key = 'd.room_rent_limit', id = `parameter-${key.
 
 function observe(repository, parameterRecordId, extractionMethod, reviewStatus = 'not_reviewed', overrides = {}) {
   return repository.appendObservation({
-    parameterRecordId, ...observationInput({ extractionMethod, reviewStatus, ...overrides }),
+    parameterRecordId,
+    ...observationInput({ extractionMethod, reviewStatus, ...(extractionMethod === 'human_review' ? { recordedBy: parameterReviewerId } : {}), ...overrides }),
   });
 }
 
@@ -159,8 +160,8 @@ test('D1: exhaustive method x review x state x authority matrix agrees between m
       database.prepare(`INSERT INTO coverage_parameter_observations
         (id, parameter_record_id, source_id, document_id, version, page, extraction_method,
          review_status, value_json, source_digest, observed_at, recorded_by, created_at)
-        VALUES (?, ?, 'page-parameters', 'document-parameters', 'version-1', '2', ?, ?, '1', ?, ?, 'matrix', ?)`)
-        .run(id, record.id, extractionMethod, reviewStatus, 'e'.repeat(64), at, at);
+        VALUES (?, ?, 'page-parameters', 'document-parameters', 'version-1', '2', ?, ?, '1', ?, ?, ?, ?)`)
+        .run(id, record.id, extractionMethod, reviewStatus, 'e'.repeat(64), at, parameterReviewerId, at);
       observations.push({ id, extractionMethod, reviewStatus, redactedAt: null });
     }
   }

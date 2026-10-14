@@ -1019,9 +1019,24 @@ function sanitizeStructured(value, state, key = '', depth = 0) {
   if (depth > state.limits.maxStructuredDepth) fail('PRIVACY_GATE_MALFORMED', 'Structured evidence is too deeply nested.');
   state.items += 1;
   if (state.items > state.limits.maxStructuredItems) fail('PRIVACY_GATE_MALFORMED', 'Structured evidence has too many items.');
-  if (value === null || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) return value;
+  if (value === null || typeof value === 'boolean') return value;
+  const identifierKey = /(?:^|_)(?:id|ids)$/i.test(key) || /Id(?:s)?$/.test(key);
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    // Identifiers can arrive as JSON numbers ("phone": 9876543210). Under an
+    // identifier or sensitive key the number is minimised like its text form;
+    // elsewhere an integer is scanned as text and replaced only when a rule
+    // minimises (or rejects) it, so amounts and counts stay numbers.
+    if (!identifierKey && !STRUCTURED_SENSITIVE_KEYS.has(key.toLowerCase())) {
+      if (!Number.isInteger(value)) return value;
+      const redacted = redactText(String(value), state.placeholders);
+      if (redacted.text === String(value)) return value;
+      redacted.reasons.forEach(reason => state.reasons.add(reason));
+      return redacted.text;
+    }
+    value = String(value);
+  }
   if (typeof value === 'string') {
-    if (/(?:^|_)(?:id|ids)$/i.test(key) || /Id(?:s)?$/.test(key)) {
+    if (identifierKey) {
       state.reasons.add('DIRECT_IDENTIFIER_STRUCTURED_ID');
       return placeholder(state.placeholders, 'ID', value);
     }

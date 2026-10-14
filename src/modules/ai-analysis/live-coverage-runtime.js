@@ -427,8 +427,14 @@ export function createGeminiCoverageRegistryFactory({ env = process.env, loadMod
     // committed: the persistent worker re-checks the run's coverage consent grant
     // and every authorised source document's current eligibility after the call
     // returns and before completing any task, and stops the run if either changed.
+    // A refused authorization is marked as never dispatched so the gateway
+    // releases the call's budget reservation instead of treating it as spent.
     const runner = async request => {
-      await preDispatchAuthorization.validate(request);
+      try {
+        await preDispatchAuthorization.validate(request);
+      } catch (error) {
+        throw Object.assign(error, { modelDispatched: false });
+      }
       return modelRunner(request);
     };
     const gateway = createModelGateway({
