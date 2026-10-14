@@ -9,11 +9,18 @@ Phase 0 of the production plan of action: close the unfinished evidence-completi
 ```text
 TASK CLASS = S2
 CERT = READY (code gate green)
-PHASE 0 GATE = PENDING third independent review
+PHASE 0 GATE = REVIEW 3 PASS (no P0/P1; P2 fixed); pending owner approval
 PRODUCTION READINESS = FAIL (Phases 1–6 not started)
 ```
 
-## Verification evidence (branch tip d042e88)
+## Verification evidence (review 3 fixes on top of 04db540)
+
+- `npm run check`: architecture passed (105 source files); `npm test` 330 tests, 330 pass, 0 fail; build passed.
+- `npm run eval:safety`: no failures. `git diff --check`: clean.
+- `tests/review3-fixes.test.mjs`: 4 of 5 tests fail against the unfixed source and pass with the fixes (the fifth guards against over-redaction).
+
+Earlier evidence (branch tip d042e88):
+
 
 - `npm run check:architecture`: passed, 105 source files.
 - `npm test`: 325 tests, 325 pass, 0 fail, 0 skipped, 0 todo, 0 cancelled. Stable across repeated runs.
@@ -49,7 +56,7 @@ Claude models per the POA: Opus 5.5 high (central, privacy, reviews), Sonnet 5.5
 
 - Review 1: FAIL with 4 P1 (identifier leaks, hash tokens, card false positives, model output marked Proven) and 9 P2. All addressed in rounds 2–3.
 - Review 2: FAIL with 2 P1 (whitespace digit runs; member tables and head-of-page excerpts) and 1 P2 (document revocation left derived data). Addressed in round 4.
-- Review 3: in progress at the time of writing.
+- Review 3: PASS, no P0/P1. Fixed: R3-1 (P2) a call refused by the pre-dispatch consent check, or one that never got a concurrency slot, kept its budget reservation forever, so repeated consent denials drained the process-lifetime project budget and blocked all live analysis until restart; such calls now release the reservation (`model-gateway.js`, `live-coverage-runtime.js`). R3-2 (P2 privacy) structured upstream numbers skipped the gate, so a phone or Aadhaar sent as a JSON number reached the model raw; numbers under identifier or sensitive keys are minimised, other integers are scanned as text, and a card number is rejected (`privacy-evidence-gate.js`). R3-4 (P3) `stopForRevocation` now uses the injected clock. Accepted: R3-3 (P3) source input falls back to the case opener when the analysis subject is NULL; this is covered by an existing test and is fail-closed, because coverage consent and the dispatch validator both deny the mismatch.
 
 ## Accepted risks and known limitations
 
@@ -67,6 +74,6 @@ Claude models per the POA: Opus 5.5 high (central, privacy, reviews), Sonnet 5.5
 
 ## Next action
 
-1. Finish the third independent review. If any P0/P1 or unresolved privacy, security, migration or permission P2 remains, send it back to the owning agent.
+1. Commit the review 3 fixes on `claude/p0-integration`.
 2. Owner approval of the PR from `claude/p0-integration` to `main`.
 3. Before Phase 1: resolve the open decisions in the intake (history purge, broken evidence links, second maintainer, Azure and residency owner, legal/privacy approver).
