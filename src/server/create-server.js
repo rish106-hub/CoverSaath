@@ -47,7 +47,6 @@ export function createApiServer({
   database: injectedDatabase,
   databasePath,
   backendServices,
-  analysisLiveRegistryFactory,
   analysisLiveModelDriver,
 } = {}) {
   const config = readServerConfig(env);
@@ -70,12 +69,12 @@ export function createApiServer({
   const locks = new Set();
   const expiry = config.sessionTtlMs;
   const rateLimiter = createRateLimiter({ limit: config.rateLimitPerMinute });
-  // The default live path always re-checks current document consent from the
-  // database immediately before every provider call. Only the model driver
-  // (loadModel/createAgent) may be injected; the validator and parameter
-  // policy cannot be replaced through this option.
+  // The live path always re-checks current document consent from the database
+  // immediately before every provider call and always runs the privacy gate.
+  // Only the model driver (loadModel/createAgent) may be injected; there is no
+  // option to replace the registry, the validator or the parameter policy.
   const modelDispatchValidator = request => createCoverageAnalysisPort(getBackend()).authorizeModelDispatch(request);
-  const liveRegistryFactory = analysisLiveRegistryFactory ?? createGeminiCoverageRegistryFactory({
+  const liveRegistryFactory = createGeminiCoverageRegistryFactory({
     env,
     ...(analysisLiveModelDriver?.loadModel ? { loadModel: analysisLiveModelDriver.loadModel } : {}),
     ...(analysisLiveModelDriver?.createAgent ? { createAgent: analysisLiveModelDriver.createAgent } : {}),
