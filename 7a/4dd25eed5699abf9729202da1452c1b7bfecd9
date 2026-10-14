@@ -1,0 +1,38 @@
+src/backend/database/migrations/005_evidence_completion_parameters.sql
+  s_7e555e8bb498c4::t_6f5371c4621a2c 3-26,30,69,86,92-103,120-123,133-157,217-219,222-239,271-388
+src/modules/coverage-analysis/parameter-records.js
+  s_7e555e8bb498c4::t_86520d9138f006 57-76
+  s_7e555e8bb498c4::t_1a93261b60df26 205,207-218
+  s_7e555e8bb498c4::t_97372c779f1396 28-35
+  s_7e555e8bb498c4::t_e4b09dd09140e5 95-141
+tests/coverage-parameter-authority.test.mjs
+  s_7e555e8bb498c4::t_9fd5ee52d9f91c 134
+  s_7e555e8bb498c4::t_62304817309974 80,127,400,411,418
+  s_7e555e8bb498c4::t_3d9f80f836821c 1-79,81-126,128-133,135-399,401-410,412-417,419-445
+src/backend/database/database.js
+  s_7e555e8bb498c4::t_cdaad67560d036 128-129
+  s_7e555e8bb498c4::t_b56ae622688a69 97-103
+  s_7e555e8bb498c4::t_35b4c9f753f48f 69-72
+src/backend/repositories/coverage-parameter-repository.js
+  s_7e555e8bb498c4::t_71895db47da5db 2-18,24-31,33-38,62-69,81-90,132-133,137-146,148,152-169,172-187,190,192-196,210-233,243,245,267-270,274-331,334,337,339-342,345-349,356-380,384-386,389-390,392,417-424,434-438,442,444,446,449-460,462-463,471-572
+tests/support/parameter-fixtures.mjs
+  s_7e555e8bb498c4::t_cb866c5821948f 1-93
+tests/evidence-completion-persistence.test.mjs
+  s_7e555e8bb498c4::t_e15565074279cb 5,7-11,15,19-20,31-32,41,46,50,52-54,57-58,61,66-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7a4dd25eed5699abf9729202da1452c1b7bfecd9",
+  "prompts": {},
+  "sessions": {
+    "s_7e555e8bb498c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1d350c9-3df6-410f-aade-0061ded7c855",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
