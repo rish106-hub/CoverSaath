@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
+
+  # No Dockerfile exists in this repository today (checked at P1-D). Enable the
+  # block below if a Dockerfile is added, and set `directory` to its folder.
+  # - package-ecosystem: docker
+  #   directory: /
+  #   schedule:
+  #     interval: weekly
+  #   groups:
+  #     docker-minor-patch:
+  #       update-types: [minor, patch]
