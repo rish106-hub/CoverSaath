@@ -93,6 +93,17 @@ function boundedId(value) {
   return typeof value === 'string' && value.length > 0 && value.length <= 200 ? value : null;
 }
 
+// Known-identifier limits mirror the privacy gate contract: at most 200 entries,
+// each value 1-200 characters. A household that would exceed the bound fails
+// closed rather than being truncated (a dropped identifier would go unredacted).
+const MAX_KNOWN_IDENTIFIERS = 200;
+const MAX_KNOWN_IDENTIFIER_CHARS = 200;
+const KNOWN_IDENTIFIER_SQL_LIMIT = MAX_KNOWN_IDENTIFIERS + 1;
+
+function knownIdentifiersUnavailable(message) {
+  return Object.assign(new Error(message), { code: 'KNOWN_IDENTIFIERS_UNAVAILABLE', statusCode: 503 });
+}
+
 export function createCoverageAnalysisPort({ database, services, modelRecipient = GEMINI_MODEL_RECIPIENT, clock = () => new Date() }) {
   if (!database || !services?.cases || !services?.consents || !services?.workflows || !services?.audit) {
     throw new TypeError('Database, case, consent, workflow and audit services are required.');
@@ -179,6 +190,21 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
     }
     return { decision: Object.freeze({ allowed: true, reasonCode: null }), caseRecord };
   }
+  // Documents of a run whose persisted sources are no longer eligible under
+  // current consent. Used to scope derived-data erasure; an empty result means
+  // the cause could not be attributed to documents and the whole run is erased.
+  function staleDocumentsOfRun(run, at) {
+    const persisted = (() => { try { return parse(run.input_json); } catch { return null; } })();
+    const pairs = Array.isArray(persisted?.authorizedSources) ? persisted.authorizedSources : [];
+    const sourceIds = pairs.map(pair => pair?.sourceId).filter(id => boundedId(id));
+    if (sourceIds.length === 0 || sourceIds.length > MAX_DISPATCH_SOURCES) return [];
+    const eligible = new Map(database.prepare(eligibleSourcePagesSql(sourceIds.length))
+      .all(run.case_id, ...sourceIds, at, modelRecipient)
+      .map(row => [row.id, row.document_upload_id]));
+    return [...new Set(pairs
+      .filter(pair => boundedId(pair?.sourceId) && boundedId(pair?.documentId) && eligible.get(pair.sourceId) !== pair.documentId)
+      .map(pair => pair.documentId))];
+  }
   const getJob = runId => {
     const run = services.workflows.getRun(runId);
     if (!run) return null;
@@ -197,6 +223,50 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
         analysis_subject_adult_id: subject?.analysis_subject_adult_id ?? null,
         analysis_subject_member_id: subject?.analysis_subject_member_id ?? null,
       };
+    },
+    // The household's own identifiers for a case, for the privacy gate's
+    // known-value redaction: member names and dates of birth, and the names,
+    // emails and phone numbers of the household's adults. Household-scoped,
+    // parameterised and bounded. Never persisted by callers. Fails closed:
+    // an unknown case, a read error or an over-limit household throws, so no
+    // model request can be built without the redaction list.
+    loadKnownIdentifiers(caseId) {
+      try {
+        const id = boundedId(caseId);
+        const record = id ? loadCaseRecord(id) : null;
+        if (!record?.household_id) throw knownIdentifiersUnavailable('The case household could not be resolved.');
+        const members = database.prepare(`SELECT display_name, date_of_birth FROM household_members
+          WHERE household_id = ? ORDER BY created_at, id LIMIT ?`).all(record.household_id, KNOWN_IDENTIFIER_SQL_LIMIT);
+        const adults = database.prepare(`SELECT adult.display_name, adult.contact_email, adult.contact_phone FROM adult_users adult
+          WHERE adult.id IN (
+            SELECT adult_user_id FROM household_members WHERE household_id = ? AND adult_user_id IS NOT NULL
+            UNION
+            SELECT adult_user_id FROM household_roles WHERE household_id = ?)
+          ORDER BY adult.created_at, adult.id LIMIT ?`).all(record.household_id, record.household_id, KNOWN_IDENTIFIER_SQL_LIMIT);
+        if (members.length > MAX_KNOWN_IDENTIFIERS || adults.length > MAX_KNOWN_IDENTIFIERS) {
+          throw knownIdentifiersUnavailable('The household has more identifiers than the privacy gate accepts.');
+        }
+        const seen = new Set();
+        const identifiers = [];
+        const add = (kind, value) => {
+          if (typeof value !== 'string') return;
+          // Control and format characters would make the gate reject the whole list.
+          const trimmed = value.replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim().slice(0, MAX_KNOWN_IDENTIFIER_CHARS).trim();
+          if (trimmed === '') return;
+          const key = `${kind}\u0000${trimmed.normalize('NFKC').toLowerCase()}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          identifiers.push({ kind, value: trimmed });
+        };
+        for (const member of members) { add('NAME', member.display_name); add('DOB', member.date_of_birth); }
+        for (const adult of adults) { add('NAME', adult.display_name); add('EMAIL', adult.contact_email); add('PHONE', adult.contact_phone); }
+        if (identifiers.length > MAX_KNOWN_IDENTIFIERS) {
+          throw knownIdentifiersUnavailable('The household has more identifiers than the privacy gate accepts.');
+        }
+        return identifiers;
+      } catch (error) {
+        throw error?.code === 'KNOWN_IDENTIFIERS_UNAVAILABLE' ? error : knownIdentifiersUnavailable('Household identifiers could not be loaded.');
+      }
     },
     // The subject is re-derived from the database, never taken from the caller.
     requireCoverageConsent({ caseRecord, consentGrantId }) {
@@ -375,6 +445,27 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
       const at = new Date().toISOString();
       database.exec('BEGIN IMMEDIATE');
       try {
+        if (reason === 'source_consent_not_current') {
+          // A source this run was built from is no longer covered by current
+          // consent: its excerpts in run input and everything derived from it are
+          // erased in the same transaction as the stop. Fails closed (rolls the
+          // stop back) if erasure cannot run.
+          if (typeof services.consents?.eraseDerivedRunData !== 'function') {
+            throw Object.assign(new Error('Derived run data erasure is not configured.'), { code: 'ERASURE_NOT_CONFIGURED', statusCode: 503 });
+          }
+          const stale = staleDocumentsOfRun(run, at);
+          services.consents.eraseDerivedRunData({
+            householdId: services.cases.get(run.case_id)?.household_id ?? null,
+            documentIds: stale,
+            // Unattributable cause: erase the whole run rather than guess.
+            runIds: stale.length === 0 ? [runId] : [],
+            caseId: run.case_id,
+            reason: 'source_consent_not_current',
+            resourceType: 'workflow_run',
+            resourceId: runId,
+            at,
+          });
+        }
         database.prepare(`UPDATE workflow_tasks SET status = 'revoked', finished_at = ?, terminal_reason = 'CONSENT_REVOKED',
           lease_owner = NULL, lease_expires_at = NULL WHERE workflow_run_id = ? AND status IN ('pending', 'running')`).run(at, runId);
         database.prepare(`UPDATE workflow_runs SET status = 'revoked', finished_at = ?, terminal_reason = 'CONSENT_REVOKED'

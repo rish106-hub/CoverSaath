@@ -214,7 +214,7 @@ for (const [label, revoke] of [
       method: 'POST', token: scenario.token,
       body: { householdId: scenario.householdId, subjectAdultId: scenario.ownerId, purpose: 'document_processing', scopes: [{ resourceType: 'document', action: 'collect', dataCategory: 'insurance_document' }] },
     });
-    const other = scenario.addDocument({ suffix: 'second', text: 'Synthetic second page: co-payment is 10 percent.', grantId: second.data.id });
+    const other = scenario.addDocument({ suffix: 'second', text: 'Synthetic second page: room rent limit is 3000 and co-payment is 10 percent.', grantId: second.data.id });
     revokeNow = () => revoke(app.database, second.data.id);
 
     const run = await scenario.startLiveRun(`t2-${label}`);

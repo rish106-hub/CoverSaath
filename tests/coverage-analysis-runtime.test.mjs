@@ -138,6 +138,7 @@ test('persistent coverage worker scopes every claim to its requested run and wor
     createRunWithParameters: async () => null,
     verifyRunSourcesCurrent: async () => ({ allowed: true }),
     getCoverageSourcePages: async () => [],
+    loadKnownIdentifiers: async () => [],
     getJob: async runId => runId === job.id ? job : null,
     getTask: async () => null,
     claimNext: async claim => { claims.push(claim); return null; },
