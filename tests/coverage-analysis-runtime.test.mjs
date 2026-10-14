@@ -62,7 +62,7 @@ async function setup(options = {}) {
 
 test('canonical workflow names every executable task with explicit versioned contracts and dependencies', () => {
   assert.equal(COVERAGE_ANALYSIS_WORKFLOW.tasks.length, 22);
-  assert.equal(COVERAGE_ANALYSIS_WORKFLOW.version, '5');
+  assert.equal(COVERAGE_ANALYSIS_WORKFLOW.version, '6');
   assert.deepEqual(COVERAGE_ANALYSIS_WORKFLOW.tasks.find(task => task.key === 'coverage').dependsOn, ['profile', 'group', 'personal']);
   assert.deepEqual(COVERAGE_ANALYSIS_WORKFLOW.tasks.find(task => task.key === 'primary').dependsOn, ['decision', 'householdAction', 'evidence', 'privacy', 'safety', 'questions']);
   assert.ok(COVERAGE_ANALYSIS_WORKFLOW.tasks.every(task => task.inputSchema.endsWith('/input/v1') && task.outputSchema.endsWith('/output/v1')));

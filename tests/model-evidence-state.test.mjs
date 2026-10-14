@@ -79,7 +79,7 @@ const personalPayload = assertionStatus => ({
     suitability: { assertions: [] },
   },
 });
-const run = { id: 'run-1', caseId: 'case-1', workflowName: 'w', workflowVersion: '5', input: {} };
+const run = { id: 'run-1', caseId: 'case-1', workflowName: 'w', workflowVersion: '6', input: {} };
 const modelMetadata = { mode: 'live', calls: 1, totalTokens: 15, costUsd: 0.001, provider: 'google', model: 'm' };
 
 test('evidence state fails closed: Proven only on explicit positive markers set by deterministic code', () => {
