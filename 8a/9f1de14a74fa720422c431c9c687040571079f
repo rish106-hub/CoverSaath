@@ -1,0 +1,23 @@
+src/modules/coverage-analysis/task-registry.js
+  s_7e555e8bb498c4::t_dc4dba86bc8b80 5,78-113,115,138-139
+tests/coverage-analysis-runtime.test.mjs
+  s_7e555e8bb498c4::t_7c80d5532fb75e 13,260-322
+tests/live-coverage-runtime.test.mjs
+  s_7e555e8bb498c4::t_efd22cf47e5788 6-7,185-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8a9f1de14a74fa720422c431c9c687040571079f",
+  "prompts": {},
+  "sessions": {
+    "s_7e555e8bb498c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1d350c9-3df6-410f-aade-0061ded7c855",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
