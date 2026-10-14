@@ -1,0 +1,21 @@
+docs/exec-plans/active/p0-baseline-intake.md
+  s_7e555e8bb498c4::t_32e142946ccc07 1-67
+docs/iterations/LATEST.md
+  s_7e555e8bb498c4::t_d869a05c394129 5,7,9-14,16,18-23,25,27-38,40,42,44,46,50-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "04db540c755c188417a67b6e86e9a8e5811691a7",
+  "prompts": {},
+  "sessions": {
+    "s_7e555e8bb498c4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1d350c9-3df6-410f-aade-0061ded7c855",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
