@@ -66,9 +66,10 @@ const expectedTables = Object.freeze([
   'coverage_graph_edges', 'workflow_runs', 'workflow_tasks', 'workflow_task_dependencies',
   'workflow_events', 'reviewer_findings', 'release_gates', 'human_reviews', 'human_approvals',
   'integration_outbox', 'integration_webhook_events', 'idempotency_keys', 'retention_records',
-  'audit_events', 'api_sessions', 'coverage_parameter_registry_pins',
-  'coverage_parameter_records', 'coverage_parameter_acquisitions',
-  'coverage_parameter_observations', 'coverage_parameter_resolutions',
+  'audit_events', 'api_sessions', 'coverage_parameter_registry_versions',
+  'coverage_parameter_registry_pins', 'coverage_parameter_records',
+  'coverage_parameter_acquisitions', 'coverage_parameter_observations',
+  'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
 ]);
 
 const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -93,6 +94,13 @@ const criticalTriggers = Object.freeze([
   'coverage_parameter_observations_source_insert', 'coverage_parameter_observations_no_update',
   'coverage_parameter_observations_no_delete', 'coverage_parameter_resolutions_observation_insert',
   'coverage_parameter_resolutions_observation_update',
+  'coverage_parameter_resolutions_authority_insert', 'coverage_parameter_resolutions_authority_update',
+  'coverage_parameter_resolutions_model_no_downgrade', 'coverage_parameter_resolutions_not_permitted_exit',
+  'coverage_parameter_observations_redaction_resets_resolution',
+  'coverage_parameter_observations_redact_on_document_erasure',
+  'coverage_parameter_registry_pins_immutable', 'coverage_parameter_registry_versions_immutable',
+  'coverage_parameter_registry_versions_no_delete', 'coverage_parameter_observation_rules_immutable',
+  'coverage_parameter_observation_rules_no_delete',
 ]);
 
 const criticalIndexes = Object.freeze([
@@ -117,6 +125,8 @@ const requiredColumns = Object.freeze({
   source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json'],
   coverage_parameter_records: ['registry_version', 'parameter_key', 'subject_id', 'policy_id', 'applicable'],
   coverage_parameter_resolutions: ['resolution_state', 'transition_authority'],
+  coverage_parameter_observations: ['redacted_at', 'redaction_reason_code'],
+  coverage_parameter_observation_rules: ['extraction_method', 'resolution_state', 'transition_authority', 'requires_accepted'],
 });
 
 export function validateSchema(database) {
