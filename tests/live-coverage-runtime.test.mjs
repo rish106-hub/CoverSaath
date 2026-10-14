@@ -10,7 +10,7 @@ function liveRegistryFactory({ modelRequests = [], loadedModels = [], ...factory
   return createGeminiCoverageRegistryFactory({
     env: liveEnv,
     ...stubModelDriver({ modelRequests, loadedModels }),
-    preDispatchValidator: async () => true,
+    knownIdentifierLoader: () => [], preDispatchValidator: async () => true,
     ...factoryOptions,
   });
 }
@@ -100,7 +100,7 @@ test('Gemini live registry fails closed when provider configuration is incomplet
 test('a live registry cannot be created without a pre-dispatch consent validator', () => {
   const modelRequests = [];
   for (const preDispatchValidator of [undefined, null, true, 'allow', {}]) {
-    const factory = createGeminiCoverageRegistryFactory({ env: liveEnv, ...stubModelDriver({ modelRequests }), preDispatchValidator });
+    const factory = createGeminiCoverageRegistryFactory({ env: liveEnv, ...stubModelDriver({ modelRequests }), knownIdentifierLoader: () => [], preDispatchValidator });
     assert.throws(() => factory(), { code: 'LIVE_AI_CONFIG_INVALID' });
   }
   assert.equal(modelRequests.length, 0);
@@ -127,7 +127,7 @@ const PINNED = 'policy-parameters/v1';
 
 function profileRuntime(requestedFields, inputOverrides = {}) {
   return {
-    run: { id: 'run-synthetic', workflow_version: '5' },
+    run: { id: 'run-synthetic', case_id: 'case-synthetic', workflow_version: '5' },
     input: {
       parameterRegistryVersion: PINNED,
       authorizedSourceIds: ['page-synthetic'],

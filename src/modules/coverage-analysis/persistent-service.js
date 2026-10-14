@@ -17,7 +17,7 @@ const digest = value => createHash('sha256').update(stable(value)).digest('hex')
 function portContract(port) {
   const methods = [
     'getCase', 'requireCoverageConsent', 'findIdempotency', 'recordIdempotency',
-    'createRunWithParameters', 'verifyRunSourcesCurrent', 'getCoverageSourcePages', 'getJob', 'getTask', 'claimNext', 'dependencyOutputs',
+    'createRunWithParameters', 'verifyRunSourcesCurrent', 'getCoverageSourcePages', 'loadKnownIdentifiers', 'getJob', 'getTask', 'claimNext', 'dependencyOutputs',
     'completeTask', 'failTask', 'recoverExpiredLeases', 'isConsentActive',
     'stopForRevocation', 'persistTaskArtifact',
   ];
@@ -208,11 +208,14 @@ export function createPersistentCoverageAnalysisService({
         return { created: false, job: await port.getJob(runId) };
       }
 
+      // The household's own identifiers are loaded for this call only, used to
+      // minimise stored excerpts, and never persisted. If they cannot be loaded no
+      // run is created and nothing is stored (fail closed).
       const sourceInput = executionMode === 'live'
         ? createCoverageAnalysisSourceInput(
           { ...caseRecord, consent_grant_id: consentGrantId },
           await port.getCoverageSourcePages(caseId),
-          { registryVersion: POLICY_PARAMETER_REGISTRY_VERSION },
+          { registryVersion: POLICY_PARAMETER_REGISTRY_VERSION, knownIdentifiers: await port.loadKnownIdentifiers(caseId) },
         )
         : createCoverageAnalysisFixtureInput(caseRecord, { variant: fixtureVariant });
       const input = {

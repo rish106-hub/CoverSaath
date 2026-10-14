@@ -154,10 +154,29 @@ export class CoverageParameterRepository {
 
   // Runs `work` atomically. Joins an open transaction through a savepoint so the
   // multi-step methods compose with callers that already hold a transaction.
+  //
+  // Whether a transaction is already open is read from DatabaseSync.isTransaction where the
+  // runtime provides it. Some supported runtimes (engines >= 22.12.0) may not have that
+  // property, and a manual BEGIN held by a caller cannot be seen by in-process depth tracking, so
+  // there the outer transaction is probed by attempting it: SQLite refuses BEGIN inside an open
+  // transaction with a "within a transaction" error, which selects the savepoint path. Any other
+  // BEGIN failure (for example a busy database) is rethrown unchanged.
   #atomic(work) {
-    const nested = this.database.isTransaction === true;
     const savepoint = `coverage_parameter_${randomUUID().replaceAll('-', '')}`;
-    this.database.exec(nested ? `SAVEPOINT ${savepoint}` : 'BEGIN IMMEDIATE');
+    let nested;
+    if (typeof this.database.isTransaction === 'boolean') {
+      nested = this.database.isTransaction;
+      if (!nested) this.database.exec('BEGIN IMMEDIATE');
+    } else {
+      try {
+        this.database.exec('BEGIN IMMEDIATE');
+        nested = false;
+      } catch (error) {
+        if (!/within a transaction/i.test(String(error?.message))) throw error;
+        nested = true;
+      }
+    }
+    if (nested) this.database.exec(`SAVEPOINT ${savepoint}`);
     try {
       const result = work();
       this.database.exec(nested ? `RELEASE ${savepoint}` : 'COMMIT');

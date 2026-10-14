@@ -18,7 +18,7 @@ function liveService(app, modelRequests) {
   const registry = createGeminiCoverageRegistryFactory({
     env: liveEnv,
     ...stubModelDriver({ modelRequests }),
-    preDispatchValidator: request => {
+    knownIdentifierLoader: caseId => port.loadKnownIdentifiers(caseId), preDispatchValidator: request => {
       validatorCalls.push(request);
       return port.authorizeModelDispatch(request);
     },
@@ -57,8 +57,16 @@ for (const [label, revoke] of [
     const settled = await service.runUntilSettled(job.id);
 
     assert.equal(modelRequests.length, 0, 'revoked evidence must never be dispatched');
-    assert.ok(validatorCalls.length >= 1, 'the validator must have been consulted');
     assert.equal(auditActions(app.database, 'analysis.model_dispatch_authorized').length, 0);
+    if (label.startsWith('consent revocation through the repository')) {
+      // N3: the repository revocation itself already revoked the run and erased
+      // its derived data, so the worker finds a terminal run and never dispatches.
+      assert.equal(settled.status, 'revoked');
+      assert.equal(validatorCalls.length, 0);
+      assertNoProbeLeak(app.database, job.id);
+      return;
+    }
+    assert.ok(validatorCalls.length >= 1, 'the validator must have been consulted');
     const denied = auditActions(app.database, 'analysis.model_dispatch_denied');
     assert.equal(denied.length, validatorCalls.length);
     assert.ok(denied.every(event => event.payload.reasonCode === 'SOURCE_CONSENT_NOT_CURRENT'));
@@ -93,7 +101,9 @@ test('revocation of a document grant while a model call is in flight discards th
   assert.ok(authorized.length >= 1);
   assert.ok(authorized.every(event => event.id < revokedAt.id), 'no dispatch may be authorized after revocation');
   assert.ok(denied.every(event => event.id > revokedAt.id));
-  assert.ok(denied.every(event => event.payload.reasonCode === 'SOURCE_CONSENT_NOT_CURRENT'));
+  // The repository revocation already revoked and erased the run, so later
+  // checks see a run that is no longer dispatchable.
+  assert.ok(denied.every(event => ['SOURCE_CONSENT_NOT_CURRENT', 'RUN_NOT_DISPATCHABLE'].includes(event.payload.reasonCode)));
   // Every provider call was preceded by its own allowed check, made before revocation.
   assert.equal(modelRequests.length, authorized.length);
   assert.ok(modelRequests.length < MODEL_TASK_KEYS.length);
@@ -103,7 +113,8 @@ test('revocation of a document grant while a model call is in flight discards th
   assert.ok(auditActions(app.database, 'analysis.task_completed').every(event => event.id < revokedAt.id), 'nothing may be committed after revocation');
   const stopped = auditActions(app.database, 'analysis.revoked');
   assert.equal(stopped.length, 1);
-  assert.deepEqual(stopped[0].payload, { reason: 'source_consent_not_current', reasonCode: 'SOURCE_CONSENT_NOT_CURRENT' });
+  assert.equal(stopped[0].payload.reason, 'source_consent_not_current');
+  assert.ok(['SOURCE_CONSENT_NOT_CURRENT', 'RUN_NOT_DISPATCHABLE'].includes(stopped[0].payload.reasonCode));
   assert.ok(!response.raw.includes(PROBE_EMAIL));
   assertNoProbeLeak(app.database, response.data.id, [modelRequests]);
 });
@@ -147,7 +158,7 @@ async function dispatchFixture(t) {
   const scenario = await setupLiveCase(app, { pageText: PAGE_TEXT });
   const services = createBackendServices(app.database);
   const port = createCoverageAnalysisPort({ database: app.database, services });
-  const service = createPersistentCoverageAnalysisService({ port, liveRegistry: createGeminiCoverageRegistryFactory({ env: liveEnv, ...stubModelDriver(), preDispatchValidator: () => false })() });
+  const service = createPersistentCoverageAnalysisService({ port, liveRegistry: createGeminiCoverageRegistryFactory({ env: liveEnv, ...stubModelDriver(), knownIdentifierLoader: () => [], preDispatchValidator: () => false })() });
   const { job } = await service.createAnalysisRun({ caseId: scenario.caseId, consentGrantId: scenario.coverageConsentId, executionMode: 'live', modelPermission: true, idempotencyKey: 'dispatch-fixture' });
   const baseRequest = () => ({
     task: 'profile_extraction',

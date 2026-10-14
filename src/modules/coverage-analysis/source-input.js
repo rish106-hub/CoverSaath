@@ -25,10 +25,8 @@ export const SOURCE_REQUEST_LIMITS = Object.freeze({
   maxRequestedFields: 40,
 });
 const PAGE_STORAGE_BYTES = 16_000;
-const NO_KEY_EXCERPT_BYTES = 1_200;
 const ENVELOPE_SLACK_BYTES = 256;
 const MAX_KEYS_PER_PAGE = 30;
-const FALLBACK_PARAMETER_KEY = 'a.document_set';
 
 export const SOURCE_BLOCKER_CODES = Object.freeze({
   excluded: 'SOURCE_EXCLUDED',
@@ -38,6 +36,9 @@ export const SOURCE_BLOCKER_REASONS = Object.freeze({
   restricted: 'RESTRICTED_EVIDENCE',
   unusable: 'SOURCE_TEXT_UNUSABLE',
   budget: 'REQUEST_BUDGET_EXCEEDED',
+  // The page mentions no requested parameter, so none of it is allowlisted for
+  // the model request. Reported in sourceSelection.notSent; never sent.
+  noParameterMatch: 'NO_PARAMETER_MATCH',
 });
 // Per-page sanitisation failures that exclude only that page. Any other failure
 // is unexpected and still fails the run closed.
@@ -80,29 +81,55 @@ function truncateSafely(value, maxBytes) {
   return value.slice(0, end).replace(/<[A-Z_]*(?::[a-f0-9]*)?$/, '').trimEnd();
 }
 
-// One page -> one bounded excerpt. Lines that mention a requested parameter (and
-// the line that follows, where table values often wrap) are kept in page order.
-// A page that mentions nothing is represented by a short head excerpt.
+// Allowlist excerpt planner. A page contributes only the lines that mention a
+// requested parameter. A page that mentions none contributes nothing (the caller
+// reports it as NO_PARAMETER_MATCH); there is no head-of-page fallback.
+//
+// The line after a matched line (table values often wrap onto it) is NOT
+// included by default: it is included only when it looks like a policy term
+// value (a digit, amount, percentage or duration) and cannot be a person row
+// (no capitalised multi-word sequence, relationship word, name next to a date,
+// or identifier placeholder).
+const PLACEHOLDER_TOKEN = /<[A-Z]+(?:_[A-Z]+)*_[1-9][0-9]{0,5}>|<[A-Z_]+:[a-f0-9]{16}>/g;
+const RELATIONSHIP_WORD = /\b(?:self|spouse|son|daughter|father|mother|child|children|wife|husband)\b/i;
+const MONTHS = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*';
+const DATE_LIKE = new RegExp(`\\b\\d{1,2}[/.\\-]\\d{1,2}[/.\\-]\\d{2,4}\\b|\\b\\d{4}[/.\\-]\\d{1,2}[/.\\-]\\d{1,2}\\b|\\b\\d{1,2}(?:st|nd|rd|th)?\\s+${MONTHS}\\.?,?\\s+\\d{2,4}\\b|\\b${MONTHS}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{2,4}\\b`, 'i');
+const CAPITALISED_SEQUENCE = /\b\p{Lu}\p{Ll}+(?:\s+\p{Lu}\p{Ll}+)+|\b\p{Lu}{2,}(?:\s+\p{Lu}{2,})+\b/u;
+const NAME_LIKE_WORD = /^\p{Lu}\p{Ll}+$/u;
+const TERM_VALUE = /\d|%|\b(?:percent|per cent|lakhs?|crores?|rupees?|days?|weeks?|months?|years?)\b/i;
+
+function looksLikePersonRow(unit) {
+  if (RELATIONSHIP_WORD.test(unit)) return true;
+  // A date together with any capitalised word: possibly a name next to a date.
+  if (DATE_LIKE.test(unit)) {
+    const words = unit.split(/[\s|,;:]+/).filter(Boolean);
+    if (words.some(word => NAME_LIKE_WORD.test(word))) return true;
+  }
+  return false;
+}
+
+function mayFollowMatchedLine(unit) {
+  if (unit.search(PLACEHOLDER_TOKEN) !== -1) return false;
+  if (looksLikePersonRow(unit) || CAPITALISED_SEQUENCE.test(unit)) return false;
+  return TERM_VALUE.test(unit);
+}
+
+// Returns the excerpt, or null when no unit of the page mentions a parameter.
 function selectExcerpt(text, matchers) {
   const units = text.split(/\n+|(?<=[.;])\s+/).map(unit => unit.trim()).filter(Boolean);
-  const scored = units.map(unit => matchedKeys(unit, matchers).length > 0);
+  const matched = units.map(unit => matchedKeys(unit, matchers).length > 0);
+  if (!matched.some(Boolean)) return null;
   const chosen = [];
   let used = 0;
-  let previousMatched = false;
   units.forEach((unit, index) => {
-    const wanted = scored[index] || previousMatched;
-    previousMatched = scored[index];
+    const wanted = matched[index] || (index > 0 && matched[index - 1] && mayFollowMatchedLine(unit));
     if (!wanted) return;
     const size = byteLength(unit) + 1;
     if (used + size > SOURCE_REQUEST_LIMITS.maxSourceBytes) return;
     chosen.push(unit);
     used += size;
   });
-  if (chosen.length === 0) {
-    const firstMatch = units.find((_unit, index) => scored[index]);
-    if (firstMatch) return truncateSafely(firstMatch, SOURCE_REQUEST_LIMITS.maxSourceBytes);
-    return truncateSafely(units.join('\n'), NO_KEY_EXCERPT_BYTES);
-  }
+  if (chosen.length === 0) return truncateSafely(units.find((_unit, index) => matched[index]), SOURCE_REQUEST_LIMITS.maxSourceBytes);
   return chosen.join('\n');
 }
 
@@ -165,23 +192,36 @@ function blockersFor(entries, code) {
   return [...grouped.values()];
 }
 
-export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryVersion = POLICY_PARAMETER_REGISTRY_VERSION } = {}) {
+// `knownIdentifiers` are the household's own names, dates of birth, phones and
+// emails, loaded server-side by the caller for this call only. They are handed to
+// the gate so they are minimised to placeholders before anything is stored; they
+// are never copied into the returned input.
+export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryVersion = POLICY_PARAMETER_REGISTRY_VERSION, knownIdentifiers } = {}) {
   if (!Array.isArray(pages) || pages.length === 0) throw sourcePackRequired();
   // Unknown registry versions throw here: the run never pins a registry it cannot resolve.
   const registry = getPolicyParameterRegistry(registryVersion);
   const matchers = parameterMatchers(registry);
+  const gateOptions = knownIdentifiers === undefined ? {} : { knownIdentifiers };
 
   const excluded = [];
+  const unmatched = [];
   const admissible = [];
   pages.forEach((page, order) => {
     const documentId = opaque(page.document_upload_id);
     try {
-      const stored = sanitizeEvidenceTextForStorage(page.extracted_text, { maxBytes: PAGE_STORAGE_BYTES });
+      const stored = sanitizeEvidenceTextForStorage(page.extracted_text, { maxBytes: PAGE_STORAGE_BYTES, ...gateOptions });
       const pageKeys = matchedKeys(stored.text, matchers).slice(0, MAX_KEYS_PER_PAGE);
+      const selected = selectExcerpt(stored.text, matchers);
       // The excerpt is re-sanitised: dropping lines must not make the remainder restricted.
-      const excerpt = sanitizeEvidenceTextForStorage(selectExcerpt(stored.text, matchers), { maxBytes: SOURCE_REQUEST_LIMITS.maxSourceBytes });
-      const excerptKeys = matchedKeys(excerpt.text, matchers).slice(0, MAX_KEYS_PER_PAGE);
-      const keys = excerptKeys.length > 0 ? excerptKeys : [FALLBACK_PARAMETER_KEY];
+      const excerpt = selected === null ? null : sanitizeEvidenceTextForStorage(selected, { maxBytes: SOURCE_REQUEST_LIMITS.maxSourceBytes, ...gateOptions });
+      const excerptKeys = excerpt === null ? [] : matchedKeys(excerpt.text, matchers).slice(0, MAX_KEYS_PER_PAGE);
+      if (excerptKeys.length === 0) {
+        // Nothing on this page is allowlisted for the model. It is not sent and is
+        // reported (never silently dropped); keys seen only in the full page text
+        // still count as requested-but-not-received.
+        unmatched.push({ documentId, page: page.page_number, pageKeys });
+        return;
+      }
       const candidate = {
         order,
         id: page.id,
@@ -190,10 +230,9 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryV
         document: page.document_upload_id,
         documentId,
         text: excerpt.text,
-        textDigest: stored.digest,
         redactionReasonCodes: [...new Set([...stored.reasonCodes, ...excerpt.reasonCodes])].sort(),
-        keys,
-        fullTextKeys: pageKeys.length > 0 ? pageKeys : [FALLBACK_PARAMETER_KEY],
+        keys: excerptKeys,
+        fullTextKeys: pageKeys.length > 0 ? pageKeys : excerptKeys,
       };
       candidate.cost = requestEntryBytes(candidate);
       admissible.push(candidate);
@@ -203,7 +242,15 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryV
       excluded.push({ documentId, reasonCode });
     }
   });
-  if (admissible.length === 0) throw Object.assign(sourcePackRequired(), { sourceBlockers: blockersFor(excluded, SOURCE_BLOCKER_CODES.excluded) });
+  const noMatchNotSent = unmatched.map(item => ({ documentId: item.documentId, page: item.page, reasonCode: SOURCE_BLOCKER_REASONS.noParameterMatch }));
+  if (admissible.length === 0) {
+    throw Object.assign(sourcePackRequired(), {
+      sourceBlockers: [
+        ...blockersFor(excluded, SOURCE_BLOCKER_CODES.excluded),
+        ...blockersFor(noMatchNotSent, SOURCE_BLOCKER_CODES.notSent),
+      ],
+    });
+  }
 
   const sentSet = planSentPages(admissible, registry);
   const sources = admissible.filter(candidate => sentSet.has(candidate));
@@ -214,7 +261,7 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryV
     .filter(key => sentKeys.has(key))
     .slice(0, SOURCE_REQUEST_LIMITS.maxRequestedFields);
   const requested = new Set(requestedFields);
-  const candidateKeys = new Set(admissible.flatMap(candidate => candidate.fullTextKeys));
+  const candidateKeys = new Set([...admissible.flatMap(candidate => candidate.fullTextKeys), ...unmatched.flatMap(item => item.pageKeys)]);
   const subjectId = caseRecord.analysis_subject_adult_id ?? caseRecord.opened_by_adult_id;
 
   // Acquisition states follow the parameter state machine: not_requested ->
@@ -262,14 +309,17 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryV
       page: source.page,
       documentId: source.document,
       text: source.text,
-      textDigest: source.textDigest,
       redactionReasonCodes: source.redactionReasonCodes,
       parameterKeys: source.keys,
     })),
     sourceSelection: {
       sent: sources.length,
       excluded: excluded.length,
-      notSent: notSent.map(source => ({ documentId: source.documentId, page: source.page, reasonCode: SOURCE_BLOCKER_REASONS.budget })),
+      // Every page that is not part of the model request, with its reason.
+      notSent: [
+        ...notSent.map(source => ({ documentId: source.documentId, page: source.page, reasonCode: SOURCE_BLOCKER_REASONS.budget })),
+        ...noMatchNotSent,
+      ],
     },
     sourceBlockers: [
       ...blockersFor(excluded, SOURCE_BLOCKER_CODES.excluded),
