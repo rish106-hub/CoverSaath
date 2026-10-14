@@ -107,29 +107,37 @@ test('a live registry cannot be created without a pre-dispatch consent validator
 });
 
 test('default parameter resolver is the canonical registry and fails closed for unknown, legacy and denied keys', () => {
-  const allowed = resolveCanonicalParameterPolicy('d.room_rent_limit');
+  const allowed = resolveCanonicalParameterPolicy('d.room_rent_limit', PINNED);
   assert.equal(allowed.registryVersion, 'policy-parameters/v1');
   assert.equal(allowed.modelExtraction.allowed, true);
   assert.notEqual(allowed.dataClass, 'RESTRICTED');
-  const restricted = resolveCanonicalParameterPolicy('a.contract_and_member_identifiers');
+  const restricted = resolveCanonicalParameterPolicy('a.contract_and_member_identifiers', PINNED);
   assert.equal(restricted.dataClass, 'RESTRICTED');
   assert.equal(restricted.modelExtraction.allowed, false);
   for (const key of ['room_rent_limit', 'subject_identity', 'displayName', 'copay', 'unclassified_policy_text', 'd.not_a_parameter', '', undefined, null, {}]) {
-    assert.equal(resolveCanonicalParameterPolicy(key), null, `${String(key)} must not resolve`);
+    assert.equal(resolveCanonicalParameterPolicy(key, PINNED), null, `${String(key)} must not resolve`);
+  }
+  // A pinned version the registry does not know resolves nothing, even for a valid key.
+  for (const version of ['policy-parameters/v0', 'policy-parameters/v2', '', undefined, null]) {
+    assert.equal(resolveCanonicalParameterPolicy('d.room_rent_limit', version), null, `${String(version)} must not resolve`);
   }
 });
 
-function profileRuntime(requestedFields) {
+const PINNED = 'policy-parameters/v1';
+
+function profileRuntime(requestedFields, inputOverrides = {}) {
   return {
     run: { id: 'run-synthetic', workflow_version: '5' },
     input: {
+      parameterRegistryVersion: PINNED,
       authorizedSourceIds: ['page-synthetic'],
+      sourcePages: [{ sourceId: 'page-synthetic', version: '1', page: 1, text: 'Synthetic schedule: room rent limit is 5000.' }],
       profilePacket: {
         subjectId: 'subject-synthetic',
         source: { id: 'page-synthetic', version: '1', page: 1 },
         requestedFields,
-        data: Object.fromEntries(requestedFields.map(field => [field, 'Synthetic schedule: room rent limit is 5000.'])),
       },
+      ...inputOverrides,
     },
     upstream: {},
   };
@@ -194,7 +202,7 @@ function reviewOutputs(database, runId) {
     .map(row => [row.task_kind, JSON.parse(row.output_json ?? "null")?.payload ?? null]));
 }
 
-test('live happy path: opaque model citations map back to authorised pages, so review passes and the gate releases', async t => {
+test('live happy path: opaque model citations map back to authorised pages; model-derived facts keep the release in review-required', async t => {
   const modelRequests = [];
   const app = await startLiveServer(t, { modelRequests });
   const scenario = await setupLiveCase(app);
@@ -212,17 +220,20 @@ test('live happy path: opaque model citations map back to authorised pages, so r
   assert.ok(modelRequests.some(request => request.prompt.includes(opaque)));
 
   const outputs = reviewOutputs(app.database, run.data.id);
-  assert.deepEqual(outputs.evidence_review.findings, []);
-  assert.deepEqual(outputs.privacy_review.findings, []);
-  assert.equal(outputs.evidence_review.status, 'passed');
+  // Citation mapping works: no source is unauthorised. The only evidence finding is
+  // the review requirement for model-extracted (unverified) facts.
   assert.equal(outputs.privacy_review.status, 'passed');
-  const allFindings = JSON.stringify(outputs);
-  assert.doesNotMatch(allFindings, /SOURCE_NOT_AUTHORIZED|UNSCOPED_SOURCE/);
-  // Release status: deterministic gate releases the analysis; no external action is authorised.
-  assert.equal(outputs.bounded_synthesis.status, 'ready');
-  assert.equal(outputs.deterministic_release_gate.status, 'released');
+  assert.deepEqual(outputs.privacy_review.findings, []);
+  assert.doesNotMatch(JSON.stringify(outputs), /SOURCE_NOT_AUTHORIZED|UNSCOPED_SOURCE/);
+  assert.equal(outputs.evidence_review.status, 'blocked');
+  assert.ok(outputs.evidence_review.findings.length > 0);
+  assert.ok(outputs.evidence_review.findings.every(finding => finding.code === 'HUMAN_REVIEW_REQUIRED' && finding.reasonCode === 'model_extracted_unverified'));
+  // Release status: model-derived facts are unreviewed, so the gate does not release.
+  assert.equal(outputs.bounded_synthesis.status, 'blocked');
+  assert.equal(outputs.deterministic_release_gate.status, 'blocked');
   assert.equal(outputs.deterministic_release_gate.externalActionsAuthorized, false);
   assert.equal(outputs.bounded_synthesis.householdAction.recommendation.externalActionsAuthorized, false);
+  assert.equal(app.database.prepare('SELECT status, terminal_reason FROM workflow_runs WHERE id = ?').get(run.data.id).terminal_reason, 'RELEASE_BLOCKED');
 });
 
 test('live run never releases when a model cites an opaque id of a page outside the run', async t => {

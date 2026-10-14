@@ -4,6 +4,11 @@ import { inputSchemaId, outputSchemaId } from './contract-ids.js';
 
 export const AGENT_CONTRACT_VERSION = 'knowvia-agent-contract-v1';
 export const EVIDENCE_STATES = Object.freeze(['Proven', 'Calculated', 'Reported', 'Dynamic', 'Unknown', 'Conflicting']);
+// Status carried by every fact a model extracted. It maps to the 'Unknown'
+// evidence state (a candidate value with provenance, not an established fact)
+// and stays that way until deterministic code or a human reviewer resolves it.
+export const MODEL_EXTRACTED_UNVERIFIED = 'model_extracted_unverified';
+const MODEL_PRODUCIBLE_EVIDENCE_STATES = Object.freeze(['Unknown', 'Conflicting']);
 
 const clone = value => structuredClone(value);
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -155,14 +160,31 @@ function collectSourceRefs(value, refs = new Map(), parentKey = '') {
   return refs;
 }
 
-function evidenceStateFor(key, payload) {
-  if (['decision', 'documentIdentity', 'continuity', 'enrolment', 'financialRules', 'benefits', 'exclusions', 'hospitalAccess', 'claimsProcess', 'renewalChange', 'serviceResearch', 'householdAction', 'evidence', 'privacy', 'safety', 'questions', 'primary', 'release'].includes(key)) return 'Calculated';
+const DETERMINISTIC_TASK_KEYS = new Set(['decision', 'documentIdentity', 'continuity', 'enrolment', 'financialRules', 'benefits', 'exclusions', 'hospitalAccess', 'claimsProcess', 'renewalChange', 'serviceResearch', 'householdAction', 'evidence', 'privacy', 'safety', 'questions', 'primary', 'release']);
+// Explicit positive markers only. Anything else, including unrecognised wording
+// and model-supplied text, never reaches 'Proven'.
+const PROVEN_MARKER = /document[-_ ]?backed|human[-_ ]?reviewed|\bproven\b|\bverified\b/;
+
+function hasConflictingFact(value) {
+  if (Array.isArray(value)) return value.some(hasConflictingFact);
+  if (!isObject(value)) return false;
+  if (typeof value.status === 'string' && /conflict/i.test(value.status)) return true;
+  return Object.values(value).some(hasConflictingFact);
+}
+
+// Fail closed: the default is 'Unknown', and a payload produced by a model can
+// never be Proven, Calculated or Dynamic. Model output is at most 'Unknown'
+// (unverified candidate) or 'Conflicting'.
+function evidenceStateFor(key, payload, { modelProduced = false } = {}) {
+  if (modelProduced) return hasConflictingFact(payload) ? 'Conflicting' : 'Unknown';
+  if (DETERMINISTIC_TASK_KEYS.has(key)) return 'Calculated';
   const body = JSON.stringify(payload).toLowerCase();
   if (/conflict/.test(body)) return 'Conflicting';
   if (/unknown|unresolved|unverified/.test(body)) return 'Unknown';
   if (/user.stated|proxy.reported|reported/.test(body)) return 'Reported';
   if (/institution.confirmed|dynamic/.test(body)) return 'Dynamic';
-  return 'Proven';
+  if (PROVEN_MARKER.test(body)) return 'Proven';
+  return 'Unknown';
 }
 
 export function validateTaskInvocation(key, { input, upstream }) {
@@ -182,10 +204,10 @@ export function createTaskOutputEnvelope({ key, payload, run }) {
   const definition = taskDefinition(key);
   if (!definition) fail(`Unknown workflow task: ${key}.`);
   payloadValidators[key](payload);
-  const evidenceState = evidenceStateFor(key, payload);
-  if (!EVIDENCE_STATES.includes(evidenceState)) fail(`Invalid evidence state for ${key}.`);
   const modelMetadata = payload?.modelMetadata
     ?? (Array.isArray(payload) ? payload.find(item => item?.modelMetadata)?.modelMetadata : null);
+  const evidenceState = evidenceStateFor(key, payload, { modelProduced: Boolean(modelMetadata) });
+  if (!EVIDENCE_STATES.includes(evidenceState)) fail(`Invalid evidence state for ${key}.`);
   return {
     contractVersion: AGENT_CONTRACT_VERSION,
     taskKey: key,
@@ -224,6 +246,9 @@ export function validateTaskOutputEnvelope(key, envelope) {
     }
   }
   if (!EVIDENCE_STATES.includes(envelope.evidenceState)) fail(`${key} evidence state is invalid.`);
+  if (envelope.producer.execution !== null && !MODEL_PRODUCIBLE_EVIDENCE_STATES.includes(envelope.evidenceState)) {
+    fail(`${key} model output cannot carry evidence state ${envelope.evidenceState}.`);
+  }
   requireObject(envelope.provenance, `${key} provenance`);
   requireArray(envelope.provenance.sourceRefs, `${key} source references`);
   payloadValidators[key](envelope.payload);
