@@ -6,6 +6,7 @@ import { createModelGateway } from './model-gateway.js';
 import { sanitizeEvidenceForModel } from './privacy-evidence-gate.js';
 import { RUNTIME_AI_TASK_KEYS } from './responsibility-matrix.js';
 import { createFixtureTaskRegistry } from '../coverage-analysis/task-registry.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterDefinition } from '../coverage-analysis/policy-parameter-registry.js';
 
 const KNOWN_STATUSES = new Set(['known', 'document-backed', 'document_backed', 'institution-confirmed', 'institution_confirmed']);
 const RUNTIME_TASK_NAMES = Object.freeze({
@@ -15,13 +16,6 @@ const RUNTIME_TASK_NAMES = Object.freeze({
   questions: 'question_drafting',
   primary: 'evidence_synthesis',
 });
-const LEGACY_RUNTIME_PARAMETER_KEYS = new Set([
-  'displayName',
-  'subject_identity',
-  'room_rent_limit',
-  'copay',
-  'unclassified_policy_text',
-]);
 
 function fail(code, message) {
   throw Object.assign(new Error(message), { code, statusCode: 503 });
@@ -116,9 +110,19 @@ function groupBySource(items) {
   return [...grouped.values()].map(({ entries, ...source }) => ({ ...source, text: JSON.stringify(entries).slice(0, 4000) }));
 }
 
-function resolveLegacyRuntimePolicy(key) {
-  if (!LEGACY_RUNTIME_PARAMETER_KEYS.has(key)) return null;
-  return { modelExtraction: true, dataClass: 'CONFIDENTIAL', registryVersion: 'legacy-runtime-compatibility-v1' };
+// Default parameter policy: the pinned canonical registry is the only authority.
+// Unknown or legacy-alias keys resolve to null so the privacy gate fails closed
+// (PARAMETER_NOT_CLASSIFIED). RESTRICTED / modelExtraction-denied parameters are
+// returned as-is so the gate rejects them.
+export function resolveCanonicalParameterPolicy(key) {
+  if (typeof key !== 'string') return null;
+  let parameter;
+  try {
+    parameter = getPolicyParameterDefinition(POLICY_PARAMETER_REGISTRY_VERSION, key);
+  } catch {
+    return null;
+  }
+  return { modelExtraction: parameter.modelExtraction, dataClass: parameter.dataClass, registryVersion: POLICY_PARAMETER_REGISTRY_VERSION };
 }
 
 const context = (runtime, purpose, requestedFields) => ({
@@ -262,7 +266,7 @@ function createPreDispatchAuthorization(preDispatchValidator) {
 
 function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization, privacyLimits } = {}) {
   const requestCache = new WeakMap();
-  const resolver = resolveParameterPolicy ?? resolveLegacyRuntimePolicy;
+  const resolver = resolveParameterPolicy ?? resolveCanonicalParameterPolicy;
   const requestBuilders = Object.fromEntries(Object.entries(LIVE_REQUEST_BUILDERS).map(([runtimeKey, build]) => [runtimeKey, async runtime => {
     const task = RUNTIME_TASK_NAMES[runtimeKey];
     const safe = sanitizeEvidenceForModel(build(runtime), { task, resolveParameterPolicy: resolver, limits: privacyLimits });
