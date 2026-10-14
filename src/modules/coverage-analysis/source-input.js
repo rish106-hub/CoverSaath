@@ -72,6 +72,10 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages) {
     trigger: supportedDecisionTrigger(caseRecord.trigger_type),
     statedEstimate: Number(caseRecord.stated_estimate_minor ?? 0) / 100,
     authorizedSourceIds: sources.map(source => source.id),
+    // Exact source-page -> document set selected under current consent. The
+    // pre-dispatch validator re-checks every pair against the database before
+    // each model call, so a page can never be re-attributed to another document.
+    authorizedSources: sources.map(source => ({ sourceId: source.id, documentId: source.document })),
     profilePacket: {
       subjectId: caseRecord.opened_by_adult_id,
       source: { type: 'ocr', ...sources[0], location: `page:${sources[0].page}` },
@@ -91,7 +95,8 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages) {
         .slice(0, 12_000)])),
     },
     groupPolicies: [{
-      policyId: `UNCLASSIFIED:${caseRecord.id}`,
+      // Opaque: this id is echoed into upstream evidence that reaches the model.
+      policyId: `UNCLASSIFIED:${opaque(caseRecord.id)}`,
       evidence,
     }],
     personalPacket: {
