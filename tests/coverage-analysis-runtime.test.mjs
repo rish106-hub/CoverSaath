@@ -10,6 +10,7 @@ import {
   decomposePolicySection,
   validateTaskOutputEnvelope,
 } from '../src/modules/coverage-analysis/index.js';
+import { sanitizeEvidenceForModel } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
 import { ANALYSIS_DAG } from '../src/server/routes/v1-backend-routes.js';
 
 const clone = value => structuredClone(value);
@@ -61,7 +62,7 @@ async function setup(options = {}) {
 
 test('canonical workflow names every executable task with explicit versioned contracts and dependencies', () => {
   assert.equal(COVERAGE_ANALYSIS_WORKFLOW.tasks.length, 22);
-  assert.equal(COVERAGE_ANALYSIS_WORKFLOW.version, '4');
+  assert.equal(COVERAGE_ANALYSIS_WORKFLOW.version, '5');
   assert.deepEqual(COVERAGE_ANALYSIS_WORKFLOW.tasks.find(task => task.key === 'coverage').dependsOn, ['profile', 'group', 'personal']);
   assert.deepEqual(COVERAGE_ANALYSIS_WORKFLOW.tasks.find(task => task.key === 'primary').dependsOn, ['decision', 'householdAction', 'evidence', 'privacy', 'safety', 'questions']);
   assert.ok(COVERAGE_ANALYSIS_WORKFLOW.tasks.every(task => task.inputSchema.endsWith('/input/v1') && task.outputSchema.endsWith('/output/v1')));
@@ -134,8 +135,10 @@ test('persistent coverage worker scopes every claim to its requested run and wor
     requireCoverageConsent: async () => null,
     findIdempotency: async () => null,
     recordIdempotency: async () => null,
-    createRunWithTasks: async () => null,
+    createRunWithParameters: async () => null,
+    verifyRunSourcesCurrent: async () => ({ allowed: true }),
     getCoverageSourcePages: async () => [],
+    loadKnownIdentifiers: async () => [],
     getJob: async runId => runId === job.id ? job : null,
     getTask: async () => null,
     claimNext: async claim => { claims.push(claim); return null; },
@@ -255,4 +258,104 @@ test('invalid agent output fails closed before any downstream task can consume i
   assert.match(run.tasks.group.error, /Group output must be an array/);
   assert.equal(run.tasks.coverage.status, 'pending');
   assert.equal(run.result.blockers[0].code, 'TASK_FAILED');
+});
+
+// Independent derivation of the opaque id the privacy gate shows the model.
+const opaqueSourceId = rawId => sanitizeEvidenceForModel({
+  context: { caseId: 'review-case', subjectId: 'review-subject', purpose: 'Derive opaque id.', requestedFields: [] },
+  sources: [{ id: rawId, version: 'v1', page: null, text: 'synthetic', status: 'known' }],
+  upstream: [],
+}).input.sources[0].id;
+
+const citedFact = sourceId => ({ id: 'fact-1', field: 'd.room_rent_limit', status: 'document-backed', sources: [{ id: sourceId, page: 1, version: '1' }] });
+const reviewContext = (sourceId, inputOverrides = {}) => ({
+  input: {
+    consent: true,
+    authorizedSourceIds: ['page-authorised'],
+    authorizedSources: [{ sourceId: 'page-authorised', documentId: 'document-authorised' }],
+    ...inputOverrides,
+  },
+  upstream: { coverage: { facts: [citedFact(sourceId)] } },
+});
+const reviewCodes = outcome => outcome.findings.map(finding => finding.code);
+
+test('deterministic review maps opaque citation ids back to exactly the run authorised sources', () => {
+  const registry = createFixtureTaskRegistry();
+  const opaque = opaqueSourceId('page-authorised');
+  assert.match(opaque, /^source_[a-f0-9]{24}$/);
+  for (const key of ['evidence', 'privacy']) {
+    assert.deepEqual(registry[key](reviewContext(opaque)), { status: 'passed', findings: [] }, `${key} accepts the exact opaque id`);
+    assert.equal(registry[key](reviewContext('page-authorised')).status, 'passed', `${key} still accepts the raw authorised id`);
+  }
+});
+
+test('deterministic review fails closed for unmapped, foreign, denied, look-alike and unpaired citation ids', () => {
+  const registry = createFixtureTaskRegistry();
+  const authorised = opaqueSourceId('page-authorised');
+  const cases = {
+    'unmapped opaque id': `source_${'0'.repeat(24)}`,
+    'id from another run or case': opaqueSourceId('page-other-run'),
+    'denied document page': opaqueSourceId('page-denied'),
+    'raw id of a denied document': 'page-denied',
+    'truncated look-alike': authorised.slice(0, -1),
+    'extended look-alike': `${authorised}0`,
+    'case-changed look-alike': authorised.toUpperCase(),
+    'prefix-swapped look-alike': authorised.replace('source_', 'Source_'),
+    'padded look-alike': ` ${authorised}`,
+    'empty id': '',
+  };
+  for (const [label, sourceId] of Object.entries(cases)) {
+    const evidence = registry.evidence(reviewContext(sourceId));
+    assert.equal(evidence.status, 'blocked', label);
+    assert.ok(reviewCodes(evidence).includes('SOURCE_NOT_AUTHORIZED'), label);
+    const privacy = registry.privacy(reviewContext(sourceId));
+    assert.equal(privacy.status, 'blocked', label);
+    assert.ok(reviewCodes(privacy).includes('UNSCOPED_SOURCE'), label);
+  }
+  // A run that did not persist authorised source pairs (fixture runs) never gets opaque-id mapping.
+  const { authorizedSources, ...withoutPairs } = reviewContext(authorised).input;
+  assert.ok(reviewCodes(registry.evidence({ ...reviewContext(authorised), input: withoutPairs })).includes('SOURCE_NOT_AUTHORIZED'));
+  // A source that is authorised by id but not paired to a document is not mapped either.
+  const unpaired = reviewContext(authorised, { authorizedSources: [{ sourceId: 'page-denied', documentId: 'document-denied' }] });
+  assert.ok(reviewCodes(registry.evidence(unpaired)).includes('SOURCE_NOT_AUTHORIZED'));
+  assert.ok(reviewCodes(registry.privacy(unpaired)).includes('UNSCOPED_SOURCE'));
+  // Nothing authorised means nothing is accepted.
+  assert.ok(reviewCodes(registry.evidence(reviewContext(authorised, { authorizedSourceIds: [], authorizedSources: [] }))).includes('SOURCE_NOT_AUTHORIZED'));
+});
+
+test('deterministic evidence review requires human review for model-extracted facts and reports excluded or unsent sources', () => {
+  const registry = createFixtureTaskRegistry();
+  const withFact = (status, inputOverrides = {}) => ({
+    ...reviewContext('page-authorised', inputOverrides),
+    upstream: { coverage: { facts: [{ id: 'fact-1', field: 'd.room_rent_limit', status, sources: [{ id: 'page-authorised', page: 1, version: '1' }] }] } },
+  });
+  // Model-extracted facts are unverified candidates: review-required, not releasable.
+  const unverified = registry.evidence(withFact('model_extracted_unverified'));
+  assert.equal(unverified.status, 'blocked');
+  assert.deepEqual(unverified.findings, [{ code: 'HUMAN_REVIEW_REQUIRED', reasonCode: 'model_extracted_unverified', factId: 'fact-1' }]);
+  // Source authorisation is a separate, independent check and still passes.
+  assert.equal(registry.privacy(withFact('model_extracted_unverified')).status, 'passed');
+  // Deterministic document-backed evidence is not affected.
+  assert.deepEqual(registry.evidence(withFact('document-backed')), { status: 'passed', findings: [] });
+  // Excluded and unsent sources surface as findings with opaque ids and reason codes only.
+  const blockers = [
+    { code: 'SOURCE_EXCLUDED', reasonCode: 'RESTRICTED_EVIDENCE', documentId: 'opaque-document-1', pageCount: 2 },
+    { code: 'SOURCE_NOT_SENT', reasonCode: 'REQUEST_BUDGET_EXCEEDED', documentId: 'opaque-document-2', pageCount: 9 },
+  ];
+  const reported = registry.evidence(withFact('document-backed', { sourceBlockers: blockers }));
+  assert.equal(reported.status, 'blocked');
+  assert.deepEqual(reported.findings, blockers.map(({ code, reasonCode, documentId }) => ({ code, reasonCode, documentId })));
+});
+
+test('the coverage graph keeps every model-extracted fact as an explicit unknown', () => {
+  const registry = createFixtureTaskRegistry();
+  const graph = registry.coverage({
+    input: {},
+    upstream: {
+      profile: { profile: {} },
+      group: [{ policyId: 'policy-1', unresolved: [], coverageGraph: { nodes: [{ id: 'n-1', type: 'coverage_fact', fact: 'd.room_rent_limit', value: '5000', status: 'model_extracted_unverified', citations: [{ sourceId: 'page-authorised', page: 1, version: '1' }] }] } }],
+      personal: { dimensions: { suitability: { evidenceGaps: [] }, protection: { assertions: [] }, constraints: { assertions: [] }, economics: { assertions: [] } } },
+    },
+  });
+  assert.deepEqual(graph.unknowns, ['d.room_rent_limit is model-extracted and awaits review.']);
 });

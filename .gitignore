@@ -5,6 +5,7 @@
 !.env.example
 private/
 research/private/
+docs/evidence/
 *.key
 *.pem
 node_modules/

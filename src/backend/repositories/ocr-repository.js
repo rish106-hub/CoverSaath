@@ -94,11 +94,27 @@ export class OcrRepository {
     return this.getJob(jobId);
   }
 
+  // Pages are evidence: parameter observations reference source_pages, so they
+  // are inserted once and never deleted or replaced here. Completing a job that
+  // already completed is a no-op when the result digest is identical and a
+  // stable error otherwise.
   completeJob(jobId, pages, changes) {
     const job = this.getJob(jobId);
     if (!job) throw new Error('OCR job was not found.');
     this.database.exec('BEGIN IMMEDIATE');
     try {
+      const current = this.getJob(jobId);
+      const ownPages = this.database.prepare('SELECT count(*) AS count FROM source_pages WHERE ocr_job_id = ?').get(jobId).count;
+      if (current.status === 'succeeded' || ownPages > 0) {
+        if (current.status === 'succeeded' && ownPages > 0 && typeof changes?.resultDigest === 'string'
+          && changes.resultDigest === current.resultDigest) {
+          this.database.exec('COMMIT');
+          return current;
+        }
+        const error = new Error('This OCR job is already completed; its source pages are immutable.');
+        error.code = current.status === 'succeeded' ? 'OCR_JOB_ALREADY_COMPLETED' : 'OCR_PAGES_ALREADY_EXIST';
+        throw error;
+      }
       const existing = this.database.prepare(`SELECT ocr_job_id FROM source_pages
         WHERE document_upload_id = ? AND source_version = ?`).all(job.documentUploadId, pages[0]?.sourceVersion ?? '');
       if (existing.some(row => row.ocr_job_id !== jobId)) {
@@ -106,7 +122,6 @@ export class OcrRepository {
         error.code = 'OCR_PAGES_ALREADY_EXIST';
         throw error;
       }
-      this.database.prepare('DELETE FROM source_pages WHERE ocr_job_id = ?').run(jobId);
       const insert = this.database.prepare(`INSERT INTO source_pages
         (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
          extracted_text, extraction_status, confidence_basis_points, created_at,

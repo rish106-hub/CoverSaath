@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { COVERAGE_ANALYSIS_WORKFLOW } from './workflow-definition.js';
 import { createCoverageAnalysisFixtureInput } from './fixture-input.js';
-import { createCoverageAnalysisSourceInput } from './source-input.js';
+import { createCoverageAnalysisSourceInput, unclassifiedPolicyId } from './source-input.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION } from './policy-parameter-registry.js';
 import { createFixtureTaskRegistry } from './task-registry.js';
 import {
   createTaskOutputEnvelope,
@@ -16,7 +17,7 @@ const digest = value => createHash('sha256').update(stable(value)).digest('hex')
 function portContract(port) {
   const methods = [
     'getCase', 'requireCoverageConsent', 'findIdempotency', 'recordIdempotency',
-    'createRunWithTasks', 'getCoverageSourcePages', 'getJob', 'getTask', 'claimNext', 'dependencyOutputs',
+    'createRunWithParameters', 'verifyRunSourcesCurrent', 'getCoverageSourcePages', 'loadKnownIdentifiers', 'getJob', 'getTask', 'claimNext', 'dependencyOutputs',
     'completeTask', 'failTask', 'recoverExpiredLeases', 'isConsentActive',
     'stopForRevocation', 'persistTaskArtifact',
   ];
@@ -24,6 +25,27 @@ function portContract(port) {
     throw new TypeError(`Persistent coverage-analysis port must implement: ${methods.join(', ')}.`);
   }
   return port;
+}
+
+// Acquisition seed from the live source intake: 'requested' for every key whose
+// pages were found, 'received' only for keys whose sanitised excerpt is part of
+// the model request. Anything else is rejected rather than guessed.
+function acquisitionSeed(parameterStates) {
+  const seed = { requestedKeys: [], receivedKeys: [] };
+  if (parameterStates === undefined) return seed;
+  if (!Array.isArray(parameterStates)) throw invalidParameterStates();
+  for (const entry of parameterStates) {
+    if (typeof entry?.parameterKey !== 'string') throw invalidParameterStates();
+    if (entry.acquisitionState === 'not_requested') continue;
+    if (!['requested', 'received'].includes(entry.acquisitionState)) throw invalidParameterStates();
+    seed.requestedKeys.push(entry.parameterKey);
+    if (entry.acquisitionState === 'received') seed.receivedKeys.push(entry.parameterKey);
+  }
+  return seed;
+}
+
+function invalidParameterStates() {
+  return Object.assign(new Error('Run input carries invalid parameter acquisition states.'), { code: 'INVALID_PARAMETER_STATES', statusCode: 409 });
 }
 
 export function createPersistentCoverageAnalysisService({
@@ -107,6 +129,17 @@ export function createPersistentCoverageAnalysisService({
         await port.stopForRevocation(runId);
         return port.getJob(runId);
       }
+      // Commit-time re-check of every authorised source. A document grant revoked
+      // or expired while a model call was in flight must not let that call's
+      // result (or anything built on it) be committed; the run is stopped on the
+      // existing revocation path and the in-flight results are discarded.
+      if ((job.execution_mode ?? job.executionMode) === 'live' && outcomes.some(outcome => !outcome.error)) {
+        const sources = await port.verifyRunSourcesCurrent(runId);
+        if (sources?.allowed !== true) {
+          await port.stopForRevocation(runId, { reason: 'source_consent_not_current', reasonCode: sources?.reasonCode ?? 'COMMIT_RECHECK_ERROR' });
+          return port.getJob(runId);
+        }
+      }
       for (const outcome of outcomes) {
         if (outcome.error) {
           await port.failTask(outcome.task.id, {
@@ -160,6 +193,7 @@ export function createPersistentCoverageAnalysisService({
         executionMode,
         modelPermission: executionMode === 'live',
         workflowVersion: COVERAGE_ANALYSIS_WORKFLOW.version,
+        parameterRegistryVersion: POLICY_PARAMETER_REGISTRY_VERSION,
         fixtureVariant,
       };
       const requestDigest = digest(request);
@@ -174,18 +208,42 @@ export function createPersistentCoverageAnalysisService({
         return { created: false, job: await port.getJob(runId) };
       }
 
+      // The household's own identifiers are loaded for this call only, used to
+      // minimise stored excerpts, and never persisted. If they cannot be loaded no
+      // run is created and nothing is stored (fail closed).
       const sourceInput = executionMode === 'live'
         ? createCoverageAnalysisSourceInput(
           { ...caseRecord, consent_grant_id: consentGrantId },
           await port.getCoverageSourcePages(caseId),
+          { registryVersion: POLICY_PARAMETER_REGISTRY_VERSION, knownIdentifiers: await port.loadKnownIdentifiers(caseId) },
         )
         : createCoverageAnalysisFixtureInput(caseRecord, { variant: fixtureVariant });
       const input = {
         ...sourceInput,
+        parameterRegistryVersion: POLICY_PARAMETER_REGISTRY_VERSION,
         modelPermission: executionMode === 'live',
       };
+      // Parameter records reference the household member the analysis is about
+      // (a household_members id, which is the schema's subject FK) and the run's
+      // unclassified placeholder policy. Without a resolvable member the run is
+      // not created: no run may exist without pinned records.
+      const subjectId = caseRecord.analysis_subject_member_id;
+      if (!subjectId || !caseRecord.household_id) {
+        const error = new Error('The case has no household member to attach coverage parameters to.');
+        error.code = 'PARAMETER_SUBJECT_UNRESOLVED';
+        error.statusCode = 409;
+        throw error;
+      }
       const runId = `coverage-run-${randomUUID()}`;
-      await port.createRunWithTasks({
+      await port.createRunWithParameters({
+        parameters: {
+          registryVersion: POLICY_PARAMETER_REGISTRY_VERSION,
+          householdId: caseRecord.household_id,
+          caseId,
+          subjectId,
+          policyId: unclassifiedPolicyId(caseRecord.id),
+          ...acquisitionSeed(input.parameterStates),
+        },
         id: runId,
         caseId,
         workflowName: COVERAGE_ANALYSIS_WORKFLOW.name,
