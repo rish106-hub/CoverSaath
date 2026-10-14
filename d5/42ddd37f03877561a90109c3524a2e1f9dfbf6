@@ -1,0 +1,32 @@
+src/modules/coverage-analysis/index.js
+  s_36e9dbcd177789::t_1df740f39c4fd5 2-7,12,14
+  s_36e9dbcd177789::t_ca4ee9a24b7d86 1
+src/contracts/index.js
+  s_36e9dbcd177789::t_c67280aa0cf68a 1-8
+tests/p1a-analysis-run-api.test.mjs
+  s_36e9dbcd177789::t_f4812f6b68d5f2 136-137,140-141
+tests/mvp-closeout.test.mjs
+  s_36e9dbcd177789::t_f4812f6b68d5f2 278
+src/modules/coverage-analysis/contracts.js
+  s_36e9dbcd177789::t_f4812f6b68d5f2 25-26
+tests/round3-runtime-integration.test.mjs
+  s_36e9dbcd177789::t_6b4c86ce77ff57 149-150
+src/server/routes/v1-backend-routes.js
+  s_36e9dbcd177789::t_f4812f6b68d5f2 81-84,305-306
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d542ddd37f03877561a90109c3524a2e1f9dfbf6",
+  "prompts": {},
+  "sessions": {
+    "s_36e9dbcd177789": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "926d1f4c-f44b-401e-a2c7-0fa5da7e5673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
