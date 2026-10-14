@@ -12,6 +12,7 @@ export { createCoverageAnalysisRuntime } from './runtime.js';
 export { createCoverageAnalysisFixtureInput } from './fixture-input.js';
 export { createPersistentCoverageAnalysisService } from './persistent-service.js';
 export { createCoverageAnalysisSourceInput } from './source-input.js';
+export { MODEL_OBSERVATION_TASK_KEYS, modelObservationCandidates } from './model-observations.js';
 export { POLICY_DECOMPOSITION, buildHouseholdAction, decomposePolicySection } from './policy-decomposition.js';
 export {
   POLICY_PARAMETER_REGISTRY,

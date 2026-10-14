@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
-import { GEMINI_MODEL_RECIPIENT } from '../../modules/ai-analysis/privacy-evidence-gate.js';
+import { GEMINI_MODEL_RECIPIENT, opaqueSourceId } from '../../modules/ai-analysis/privacy-evidence-gate.js';
+import { modelObservationCandidates } from '../../modules/coverage-analysis/model-observations.js';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const textDigest = value => createHash('sha256').update(value, 'utf8').digest('hex');
+const MODEL_OBSERVATION_RECORDER = 'coverage-analysis-runtime';
 const MAX_DISPATCH_SOURCES = 500;
 const ACTIVE_RUN_STATUSES = new Set(['queued', 'running']);
 
@@ -484,6 +487,42 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
         payload: { reason, ...(reasonCode ? { reasonCode } : {}) },
       });
       return getJob(runId);
+    },
+    // Commit-time only (after the consent re-check): the model-extracted values of a completed
+    // extraction task become unverified parameter observations. Each cited opaque id is mapped
+    // back to the sent page it names; a citation that maps to no sent, unredacted page is
+    // dropped. Values stay extracted_unverified (or conflicting) until a reviewer resolves them.
+    // Bound to the task lease; observations, lease check and counts-only audit commit together.
+    // Any failure throws so the task is not completed.
+    recordModelObservations({ runId, taskKey, payload, taskId, workerId }) {
+      const candidates = modelObservationCandidates(taskKey, payload);
+      const empty = Object.freeze({ observations: 0, parameters: 0, conflicting: 0, skipped: 0 });
+      if (candidates.length === 0) return empty;
+      const repository = services.coverageParameters;
+      if (typeof repository?.recordModelExtraction !== 'function') {
+        throw Object.assign(new Error('Coverage parameter persistence is not configured.'), { code: 'PARAMETER_RECORDS_NOT_CONFIGURED', statusCode: 503 });
+      }
+      const run = database.prepare('SELECT id, case_id, input_json FROM workflow_runs WHERE id = ?').get(runId);
+      if (!run) throw Object.assign(new Error('The run was not found.'), { code: 'RUN_NOT_FOUND' });
+      const input = parse(run.input_json);
+      const pages = new Map();
+      for (const page of Array.isArray(input?.sourcePages) ? input.sourcePages : []) {
+        if (typeof page?.text !== 'string' || page.redacted !== undefined || !boundedId(page.sourceId)) continue;
+        pages.set(opaqueSourceId(page.sourceId), page);
+      }
+      // A citation counts only for a page whose excerpt was selected for that parameter.
+      const entries = candidates.flatMap(({ parameterKey, value, sourceIds }) => sourceIds
+        .map(id => pages.get(id))
+        .filter(page => page && Array.isArray(page.parameterKeys) && page.parameterKeys.includes(parameterKey))
+        .map(page => ({
+          parameterKey, value, sourceId: page.sourceId, documentId: page.documentId,
+          version: page.version, page: page.page, sourceDigest: textDigest(page.text),
+        })));
+      if (entries.length === 0) return empty;
+      return repository.recordModelExtraction({
+        workflowRunId: runId, entries, recordedBy: MODEL_OBSERVATION_RECORDER, taskKey,
+        lease: { taskId, workerId }, at: clock().toISOString(),
+      });
     },
     persistTaskArtifact({ run, task, taskKey, output }) {
       services.audit.append({

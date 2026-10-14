@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 const id = prefix => `${prefix}-${randomUUID()}`;
 
 const ERASURE_MARKER = 'consent_revoked';
+// Erasure reasons recorded on observations; anything else is recorded as consent_revoked.
+const OBSERVATION_ERASURE_REASONS = new Set(['consent_revoked', 'source_consent_not_current']);
 const RUN_SCAN_BATCH_SIZE = 100;
 const MAX_ERASURE_RUNS = 5_000;
 
@@ -304,6 +306,16 @@ export class ConsentRepository {
       tasks += Number(nullOutputs.run(at, row.id).changes);
       revokeRun.run(at, row.id);
       supersede.run(row.id);
+      // Parameter observations recorded by the run are derived data too: their values are
+      // erased with the run (counts-only audit inside the parameter repository).
+      if (this.coverageParameters) {
+        this.coverageParameters.redactObservationsForRun({ workflowRunId: row.id, reasonCode: OBSERVATION_ERASURE_REASONS.has(reason) ? reason : ERASURE_MARKER, actorType, actorId, at });
+      } else if (this.database.prepare(`SELECT 1 FROM coverage_parameter_observations observation
+          JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id
+          WHERE parameter.workflow_run_id = ? AND observation.redacted_at IS NULL LIMIT 1`).get(row.id)) {
+        // Fail closed: values would outlive the consent and no database trigger covers runs.
+        throw Object.assign(new Error('Parameter observation erasure is not configured.'), { code: 'ERASURE_NOT_CONFIGURED', statusCode: 503 });
+      }
     }
     if (runs > 0) {
       this.audit?.append({

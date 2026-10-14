@@ -1,5 +1,57 @@
 const criterion = (field, ...patterns) => Object.freeze({ field, patterns: Object.freeze([field, ...patterns]) });
 
+// Canonical registry keys (policy-parameters/v1) placed under the criterion that owns them.
+// Every key in sections A-J appears exactly once; section K keys are household synthesis
+// inputs and are not decomposed. A test keeps this table complete against the registry.
+export const CANONICAL_KEY_CRITERIA = Object.freeze({
+  policy_identity: Object.freeze(['a.insurer_tpa_group_administrator', 'a.contract_and_member_identifiers', 'a.policy_type', 'a.intermediary_of_record']),
+  policy_documents: Object.freeze(['a.document_set', 'a.customer_information_sheet', 'a.document_precedence', 'a.add_ons_and_riders']),
+  document_version: Object.freeze(['a.product_uin_and_version', 'a.source_quality_and_date']),
+  policy_period: Object.freeze(['b.policy_period', 'b.free_look_period']),
+  renewal_and_grace: Object.freeze(['b.grace_period_and_lapse', 'b.renewal_version_diff', 'b.lifelong_renewability']),
+  continuity_credit: Object.freeze(['b.continuity_credit', 'b.moratorium_date']),
+  portability_and_migration: Object.freeze(['b.portability', 'b.group_to_individual_conversion']),
+  life_event_cover_end: Object.freeze(['b.product_withdrawal', 'b.cancellation']),
+  named_insured_members: Object.freeze(['c.named_insured_members', 'c.underwriting_outcome_per_member', 'c.pre_policy_medical_check_up', 'c.proposal_form_declarations', 'c.nominee_and_payout_bank_account']),
+  relationship_and_eligibility: Object.freeze(['c.relationship_definitions', 'c.entry_age_and_maximum_renewal_age', 'c.age_out_rules', 'c.residency_and_occupation']),
+  member_effective_dates: Object.freeze(['c.member_effective_date', 'c.newborn_adoption_marriage']),
+  cover_allocation: Object.freeze(['c.sum_insured_allocation', 'c.floater_exhaustion_exposure']),
+  sum_insured_and_balance: Object.freeze(['d.sum_insured', 'd.amount_already_used', 'd.corporate_buffer', 'd.inflation_protection']),
+  deductible_basis: Object.freeze(['d.top_up_super_top_up', 'd.deductible', 'd.claim_order', 'd.contribution_clause', 'd.deductible_layering']),
+  copay_basis: Object.freeze(['d.co_pay_general', 'd.co_pay_age', 'd.co_pay_zone', 'd.co_pay_non_network_hospital', 'd.co_pay_ped_or_named_disease']),
+  room_and_icu_limits: Object.freeze(['d.room_rent_limit', 'd.proportionate_deduction', 'd.icu_charge_limit']),
+  procedure_and_category_sublimits: Object.freeze(['d.procedure_and_disease_sub_limits', 'd.surgery_bill_components', 'd.package_rates_ppn']),
+  restoration_rules: Object.freeze(['d.restoration_recharge']),
+  no_claim_bonus_rules: Object.freeze(['d.cumulative_no_claim_bonus', 'd.guaranteed_loyalty_bonus']),
+  non_medical_cost_rules: Object.freeze(['d.non_payable_items', 'd.reasonable_and_customary_charges', 'd.attendant_companion_allowance']),
+  inpatient_and_daycare: Object.freeze(['e.in_patient_hospitalisation', 'e.hospital_definition', 'e.medical_necessity_active_treatment', 'e.day_care_procedures', 'e.accident_versus_illness', 'e.geography']),
+  pre_and_post_hospitalisation: Object.freeze(['e.pre_and_post_hospitalisation']),
+  outpatient_and_diagnostics: Object.freeze(['e.opd_teleconsultation_diagnostics', 'e.health_check_up_and_wellness', 'e.vaccination', 'e.second_medical_opinion']),
+  ambulance_and_travel: Object.freeze(['d.ambulance_and_travel']),
+  maternity_and_newborn: Object.freeze(['e.maternity_and_newborn']),
+  organ_donor_and_high_cost_care: Object.freeze(['e.modern_treatments', 'e.high_cost_care', 'e.organ_donor', 'e.bariatric_surgery']),
+  mental_rehabilitation_and_homecare: Object.freeze(['e.mental_health', 'e.rehabilitation_home_care_domiciliary']),
+  ayush_dental_vision: Object.freeze(['e.ayush', 'e.dental_and_vision']),
+  fixed_benefit_riders: Object.freeze(['e.critical_illness_and_fixed_benefit', 'e.hospital_daily_cash']),
+  initial_waiting_period: Object.freeze(['f.initial_waiting_period']),
+  ped_waiting_period: Object.freeze(['f.ped_waiting_period', 'e.pre_existing_and_chronic_care']),
+  specified_condition_waits: Object.freeze(['f.specified_disease_procedure_waits', 'f.waits_on_sum_insured_increase', 'f.waiting_period_buy_down', 'f.relapse_window']),
+  maternity_waiting_period: Object.freeze(['f.maternity_waiting_period']),
+  permanent_and_event_exclusions: Object.freeze(['f.standard_exclusions_with_codes', 'f.permanent_exclusions', 'f.lifestyle_hazardous_self_harm_substance', 'f.cosmetic_experimental_fertility_gender_affirming']),
+  disclosure_and_misrepresentation: Object.freeze(['f.disclosure_at_renewal', 'f.misrepresentation_and_fraud']),
+  network_hospital_and_branch: Object.freeze(['g.preferred_excluded_hospitals', 'g.distance_to_suitable_network_hospital']),
+  dated_cashless_status: Object.freeze(['g.network_status', 'g.cashless_at_non_network_hospitals']),
+  admission_and_preauthorisation_flow: Object.freeze(['g.pre_authorisation', 'g.authorisation_turnaround']),
+  estimate_and_deposit: Object.freeze(['g.room_category_chosen', 'g.deposit_and_estimate']),
+  intimation_and_submission_deadlines: Object.freeze(['h.intimation_deadline', 'h.reimbursement_submission_deadline']),
+  event_document_requirements: Object.freeze(['h.documents_per_event_type', 'h.kyc_at_claim', 'h.who_collects_records']),
+  query_and_partial_settlement: Object.freeze(['h.status_by_authority', 'h.rejection_rules', 'h.settlement_turnaround_and_interest', 'h.partial_settlement_breakdown']),
+  grievance_and_escalation: Object.freeze(['h.grievance_ladder_with_clocks']),
+  premium_and_loading_change: Object.freeze(['i.premium_now', 'i.next_age_band_crossing', 'i.premium_revision_rules', 'i.payment_mode', 'i.tax']),
+  official_service_routes: Object.freeze(['j.in_house_claims_or_tpa']),
+  regulated_and_public_research: Object.freeze(['j.claim_settlement_ratio_by_count_and_amount', 'j.incurred_claim_ratio', 'j.repudiation_ratio', 'j.complaints_per_10000_claims', 'j.average_settlement_turnaround', 'j.solvency_ratio', 'j.network_density_in_household_city', 'j.public_complaint_patterns']),
+});
+
 export const POLICY_DECOMPOSITION = Object.freeze({
   documentIdentity: Object.freeze({ section: 'A', responsibility: 'Document identity and authority', criteria: Object.freeze([
     criterion('policy_identity', 'policy_number', 'certificate', 'insurer', 'tpa'),
@@ -116,6 +168,8 @@ function normalizedField(value) {
 }
 
 function matchesCriterion(fact, definition) {
+  const canonicalKeys = CANONICAL_KEY_CRITERIA[definition.field] ?? [];
+  if ([fact.field, fact.fact].some(field => canonicalKeys.includes(field))) return true;
   const fields = new Set([fact.field, fact.fact]
     .map(normalizedField)
     .filter(Boolean));
