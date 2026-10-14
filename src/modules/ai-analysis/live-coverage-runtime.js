@@ -362,11 +362,10 @@ function assertExactSourceCitations(output, safeRequest) {
 
 // The household's own identifiers are reloaded from the server for every model
 // request (never read from, or stored in, the run input) and handed to the
-// privacy gate for known-value redaction. When a loader is configured, any
-// failure to produce a well-formed list stops the request before the gate and
-// before any dispatch.
+// privacy gate for known-value redaction. The loader is mandatory for live
+// dispatch (checked when the registry is created); any failure to produce a
+// well-formed list stops the request before the gate and before any dispatch.
 async function loadKnownIdentifiers(runtime, knownIdentifierLoader) {
-  if (!knownIdentifierLoader) return undefined;
   const caseId = runtime?.run?.case_id ?? runtime?.run?.caseId;
   let identifiers;
   try {
@@ -391,7 +390,7 @@ function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization,
       task,
       resolveParameterPolicy: key => resolver(key, registryVersion),
       limits: privacyLimits,
-      ...(knownIdentifiers === undefined ? {} : { knownIdentifiers }),
+      knownIdentifiers,
     });
     preDispatchAuthorization.register(task, safe.input, runtime, safe.audit);
     const current = requestCache.get(runtime) ?? new Map();
@@ -414,6 +413,8 @@ export function createGeminiCoverageRegistryFactory({ env = process.env, loadMod
     const config = readConfig(env);
     project ||= createBudgetScope(config.projectBudgetUsd);
     const preDispatchAuthorization = createPreDispatchAuthorization(preDispatchValidator);
+    // Live dispatch without known-value redaction is never allowed.
+    if (typeof knownIdentifierLoader !== 'function') fail('LIVE_AI_CONFIG_INVALID', 'A household identifier loader is required for live model dispatch.');
     const modelRunner = createAiSdkRunner({
       loadModel: loadModel ?? (async () => createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)),
       provider: 'google', model: config.model, modelVersion: config.modelVersion,

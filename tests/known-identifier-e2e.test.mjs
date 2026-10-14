@@ -51,8 +51,12 @@ test('K1 [awaits P0-C rebase]: known household names, phone and date of birth ne
   assert.equal(response.data.tasks.filter(task => task.status === 'completed').length, 22);
 
   const surfaces = { prompt: JSON.stringify(modelRequests.map(request => request.prompt)), persisted: everythingPersisted(app.database), response: response.raw };
+  // Digit-only probes must not match inside random uuids / sha256 digests: stand-alone tokens only.
+  const leaks = (body, fragment) => (/^[0-9]+$/.test(fragment)
+    ? new RegExp(`(?<![0-9a-fA-F])${fragment}(?![0-9a-fA-F])`).test(body)
+    : body.includes(fragment));
   for (const fragment of FRAGMENTS) {
-    for (const [surface, body] of Object.entries(surfaces)) assert.ok(!body.includes(fragment), `${fragment} leaked to ${surface}`);
+    for (const [surface, body] of Object.entries(surfaces)) assert.ok(!leaks(body, fragment), `${fragment} leaked to ${surface}`);
   }
   assert.match(surfaces.prompt, /<NAME_\d+>/, 'known names were replaced by placeholders');
   assert.ok(!/knownIdentifiers/.test(surfaces.persisted), 'the identifier list itself is never persisted');
