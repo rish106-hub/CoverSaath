@@ -10,6 +10,7 @@ import {
   decomposePolicySection,
   validateTaskOutputEnvelope,
 } from '../src/modules/coverage-analysis/index.js';
+import { sanitizeEvidenceForModel } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
 import { ANALYSIS_DAG } from '../src/server/routes/v1-backend-routes.js';
 
 const clone = value => structuredClone(value);
@@ -255,4 +256,67 @@ test('invalid agent output fails closed before any downstream task can consume i
   assert.match(run.tasks.group.error, /Group output must be an array/);
   assert.equal(run.tasks.coverage.status, 'pending');
   assert.equal(run.result.blockers[0].code, 'TASK_FAILED');
+});
+
+// Independent derivation of the opaque id the privacy gate shows the model.
+const opaqueSourceId = rawId => sanitizeEvidenceForModel({
+  context: { caseId: 'review-case', subjectId: 'review-subject', purpose: 'Derive opaque id.', requestedFields: [] },
+  sources: [{ id: rawId, version: 'v1', page: null, text: 'synthetic', status: 'known' }],
+  upstream: [],
+}).input.sources[0].id;
+
+const citedFact = sourceId => ({ id: 'fact-1', field: 'd.room_rent_limit', status: 'document-backed', sources: [{ id: sourceId, page: 1, version: '1' }] });
+const reviewContext = (sourceId, inputOverrides = {}) => ({
+  input: {
+    consent: true,
+    authorizedSourceIds: ['page-authorised'],
+    authorizedSources: [{ sourceId: 'page-authorised', documentId: 'document-authorised' }],
+    ...inputOverrides,
+  },
+  upstream: { coverage: { facts: [citedFact(sourceId)] } },
+});
+const reviewCodes = outcome => outcome.findings.map(finding => finding.code);
+
+test('deterministic review maps opaque citation ids back to exactly the run authorised sources', () => {
+  const registry = createFixtureTaskRegistry();
+  const opaque = opaqueSourceId('page-authorised');
+  assert.match(opaque, /^source_[a-f0-9]{24}$/);
+  for (const key of ['evidence', 'privacy']) {
+    assert.deepEqual(registry[key](reviewContext(opaque)), { status: 'passed', findings: [] }, `${key} accepts the exact opaque id`);
+    assert.equal(registry[key](reviewContext('page-authorised')).status, 'passed', `${key} still accepts the raw authorised id`);
+  }
+});
+
+test('deterministic review fails closed for unmapped, foreign, denied, look-alike and unpaired citation ids', () => {
+  const registry = createFixtureTaskRegistry();
+  const authorised = opaqueSourceId('page-authorised');
+  const cases = {
+    'unmapped opaque id': `source_${'0'.repeat(24)}`,
+    'id from another run or case': opaqueSourceId('page-other-run'),
+    'denied document page': opaqueSourceId('page-denied'),
+    'raw id of a denied document': 'page-denied',
+    'truncated look-alike': authorised.slice(0, -1),
+    'extended look-alike': `${authorised}0`,
+    'case-changed look-alike': authorised.toUpperCase(),
+    'prefix-swapped look-alike': authorised.replace('source_', 'Source_'),
+    'padded look-alike': ` ${authorised}`,
+    'empty id': '',
+  };
+  for (const [label, sourceId] of Object.entries(cases)) {
+    const evidence = registry.evidence(reviewContext(sourceId));
+    assert.equal(evidence.status, 'blocked', label);
+    assert.ok(reviewCodes(evidence).includes('SOURCE_NOT_AUTHORIZED'), label);
+    const privacy = registry.privacy(reviewContext(sourceId));
+    assert.equal(privacy.status, 'blocked', label);
+    assert.ok(reviewCodes(privacy).includes('UNSCOPED_SOURCE'), label);
+  }
+  // A run that did not persist authorised source pairs (fixture runs) never gets opaque-id mapping.
+  const { authorizedSources, ...withoutPairs } = reviewContext(authorised).input;
+  assert.ok(reviewCodes(registry.evidence({ ...reviewContext(authorised), input: withoutPairs })).includes('SOURCE_NOT_AUTHORIZED'));
+  // A source that is authorised by id but not paired to a document is not mapped either.
+  const unpaired = reviewContext(authorised, { authorizedSources: [{ sourceId: 'page-denied', documentId: 'document-denied' }] });
+  assert.ok(reviewCodes(registry.evidence(unpaired)).includes('SOURCE_NOT_AUTHORIZED'));
+  assert.ok(reviewCodes(registry.privacy(unpaired)).includes('UNSCOPED_SOURCE'));
+  // Nothing authorised means nothing is accepted.
+  assert.ok(reviewCodes(registry.evidence(reviewContext(authorised, { authorizedSourceIds: [], authorizedSources: [] }))).includes('SOURCE_NOT_AUTHORIZED'));
 });

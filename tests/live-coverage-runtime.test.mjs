@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { RUNTIME_AI_TASK_KEYS, createGeminiCoverageRegistryFactory } from '../src/modules/ai-analysis/index.js';
 import { GEMINI_MODEL_RECIPIENT, resolveCanonicalParameterPolicy } from '../src/modules/ai-analysis/live-coverage-runtime.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../src/modules/coverage-analysis/index.js';
-import { auditActions, liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
+import { sanitizeEvidenceForModel } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+import { auditActions, liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
 function liveRegistryFactory({ modelRequests = [], loadedModels = [], ...factoryOptions } = {}) {
   return createGeminiCoverageRegistryFactory({
@@ -180,4 +181,76 @@ test('a throwing or non-affirmative validator denies dispatch with a stable code
     assert.equal(modelRequests.length, 0);
     assert.equal(loadedModels.length, 0);
   }
+});
+
+const opaqueSourceId = rawId => sanitizeEvidenceForModel({
+  context: { caseId: 'review-case', subjectId: 'review-subject', purpose: 'Derive opaque id.', requestedFields: [] },
+  sources: [{ id: rawId, version: 'v1', page: null, text: 'synthetic', status: 'known' }],
+  upstream: [],
+}).input.sources[0].id;
+
+function reviewOutputs(database, runId) {
+  return Object.fromEntries(database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(runId)
+    .map(row => [row.task_kind, JSON.parse(row.output_json ?? "null")?.payload ?? null]));
+}
+
+test('live happy path: opaque model citations map back to authorised pages, so review passes and the gate releases', async t => {
+  const modelRequests = [];
+  const app = await startLiveServer(t, { modelRequests });
+  const scenario = await setupLiveCase(app);
+  const run = await scenario.startLiveRun();
+  assert.equal(run.status, 202);
+  assert.equal(run.data.tasks.length, 22);
+  assert.equal(run.data.tasks.filter(task => task.status === 'completed').length, 22);
+  assert.equal(run.data.modelUsage.calls, 5);
+  assert.equal(modelRequests.length, 5);
+
+  // The model only ever saw the opaque id, never the raw page id.
+  const opaque = opaqueSourceId(scenario.pageId);
+  assert.ok(modelRequests.every(request => request.prompt.includes(opaque) || !request.prompt.includes(scenario.pageId)));
+  assert.ok(modelRequests.every(request => !request.prompt.includes(scenario.pageId)));
+  assert.ok(modelRequests.some(request => request.prompt.includes(opaque)));
+
+  const outputs = reviewOutputs(app.database, run.data.id);
+  assert.deepEqual(outputs.evidence_review.findings, []);
+  assert.deepEqual(outputs.privacy_review.findings, []);
+  assert.equal(outputs.evidence_review.status, 'passed');
+  assert.equal(outputs.privacy_review.status, 'passed');
+  const allFindings = JSON.stringify(outputs);
+  assert.doesNotMatch(allFindings, /SOURCE_NOT_AUTHORIZED|UNSCOPED_SOURCE/);
+  // Release status: deterministic gate releases the analysis; no external action is authorised.
+  assert.equal(outputs.bounded_synthesis.status, 'ready');
+  assert.equal(outputs.deterministic_release_gate.status, 'released');
+  assert.equal(outputs.deterministic_release_gate.externalActionsAuthorized, false);
+  assert.equal(outputs.bounded_synthesis.householdAction.recommendation.externalActionsAuthorized, false);
+});
+
+test('live run never releases when a model cites an opaque id of a page outside the run', async t => {
+  const foreign = opaqueSourceId('page-from-another-run');
+  const app = await startLiveServer(t, {
+    output: (agentId, input) => {
+      const output = mockOutput(agentId, input);
+      if (output.facts) output.facts[0].citations = [foreign];
+      return output;
+    },
+  });
+  const scenario = await setupLiveCase(app);
+  const run = await scenario.startLiveRun();
+  // The model boundary rejects the citation first; review is the second, independent defence.
+  assert.notEqual(run.data.status, 'completed');
+  assert.equal(run.data.tasks.filter(task => task.status === 'completed').length < 22, true);
+  const outputs = reviewOutputs(app.database, run.data.id);
+  assert.notEqual(outputs.deterministic_release_gate?.status, 'released');
+});
+
+test('a denied document stays out of the authorised mapping so its opaque id is never accepted', async t => {
+  const app = await startLiveServer(t);
+  const scenario = await setupLiveCase(app);
+  const denied = scenario.addDocument({ suffix: 'denied', scopeRecipient: 'someone-else' });
+  const run = await scenario.startLiveRun('live-denied-doc');
+  const input = JSON.parse(app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id).input_json);
+  assert.ok(!input.authorizedSourceIds.includes(denied.pageId), 'denied document page must not be authorised');
+  assert.ok(!input.authorizedSources.some(source => source.documentId === denied.documentId));
+  assert.ok(!run.raw.includes(denied.pageId));
+  assert.ok(!run.raw.includes(opaqueSourceId(denied.pageId)));
 });
