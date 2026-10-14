@@ -112,7 +112,7 @@ test('a model that obeys an injected instruction is rejected before acceptance',
     const registry = createGeminiCoverageRegistryFactory({
       env: liveEnv,
       ...stubModelDriver({ modelRequests, output: (agentId, input) => ({ ...mockOutput(agentId, input), summary: obeyed }) }),
-      preDispatchValidator: async () => true,
+      knownIdentifierLoader: () => [], preDispatchValidator: async () => true,
     })();
     await assert.rejects(registry.profile(runtime), { code: 'unsupported_claim' });
     assert.equal(modelRequests.length, 1);
@@ -219,7 +219,7 @@ test('each citation resolves only to its own source; no alias maps to another do
   const registry = createGeminiCoverageRegistryFactory({
     env: liveEnv,
     ...stubModelDriver({ output: (_agentId, input) => ({ facts: [{ id: 'f-1', field: 'd.room_rent_limit', value: '7000', status: 'known', citations: [input.sources[pick].id] }], summary: 'Extracted.' }) }),
-    preDispatchValidator: async () => true,
+    knownIdentifierLoader: () => [], preDispatchValidator: async () => true,
   })();
   const [result] = await registry.group(runtime);
   const citation = result.coverageGraph.nodes[0].citations[0];
@@ -231,7 +231,7 @@ test('each citation resolves only to its own source; no alias maps to another do
   const lookAlike = createGeminiCoverageRegistryFactory({
     env: liveEnv,
     ...stubModelDriver({ output: (_agentId, input) => ({ facts: [{ id: 'f-1', field: 'd.room_rent_limit', value: '7000', status: 'known', citations: [input.sources[1].id.toUpperCase()] }], summary: 'Extracted.' }) }),
-    preDispatchValidator: async () => true,
+    knownIdentifierLoader: () => [], preDispatchValidator: async () => true,
   })();
   await assert.rejects(lookAlike.group(runtime), { code: 'missing_citation' });
 });

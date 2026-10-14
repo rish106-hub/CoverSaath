@@ -160,7 +160,7 @@ test('live runtime dispatches only sanitized evidence and runs the injected auth
   const factory = createGeminiCoverageRegistryFactory({
     env: liveEnv,
     resolveParameterPolicy: () => policy(),
-    preDispatchValidator: async value => { validationInput = value; return true; },
+    knownIdentifierLoader: () => [], preDispatchValidator: async value => { validationInput = value; return true; },
     loadModel: async () => ({ mocked: true }),
     createAgent: () => ({
       generate: async ({ prompt }) => {
@@ -185,7 +185,7 @@ test('live runtime dispatches only sanitized evidence and runs the injected auth
   const deniedFactory = createGeminiCoverageRegistryFactory({
     env: liveEnv,
     resolveParameterPolicy: () => policy(),
-    preDispatchValidator: async () => false,
+    knownIdentifierLoader: () => [], preDispatchValidator: async () => false,
     loadModel: async () => ({ mocked: true }),
     createAgent: () => ({ generate: async () => { modelCalls += 1; } }),
   });
@@ -260,7 +260,7 @@ test('restricted evidence reaching the live runtime makes zero provider calls an
     const factory = createGeminiCoverageRegistryFactory({
       env: liveEnv,
       resolveParameterPolicy: () => policy(),
-      preDispatchValidator: async () => { validatorCalls += 1; return true; },
+      knownIdentifierLoader: () => [], preDispatchValidator: async () => { validatorCalls += 1; return true; },
       loadModel: async () => ({ mocked: true }),
       createAgent: () => ({ generate: async () => { providerCalls += 1; return {}; } }),
     });

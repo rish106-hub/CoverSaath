@@ -86,7 +86,7 @@ test('C1: the analysis subject is the subject member adult, not the case opener'
   // Dispatch validator: subject check and coverage re-check use the same subject.
   const service = createPersistentCoverageAnalysisService({
     port,
-    liveRegistry: createGeminiCoverageRegistryFactory({ env: liveEnv, ...stubModelDriver(), preDispatchValidator: () => false })(),
+    liveRegistry: createGeminiCoverageRegistryFactory({ env: liveEnv, ...stubModelDriver(), knownIdentifierLoader: () => [], preDispatchValidator: () => false })(),
   });
   const { job } = await service.createAnalysisRun({ caseId: scenario.caseId, consentGrantId: subjectCoverage, executionMode: 'live', modelPermission: true, idempotencyKey: 'subject-not-opener' });
   const request = subjectId => ({

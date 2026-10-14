@@ -34,7 +34,7 @@ function liveService(app, { modelRequests = [], knownIdentifierLoader, portOverr
     env: liveEnv,
     ...stubModelDriver({ modelRequests }),
     preDispatchValidator: request => basePort.authorizeModelDispatch(request),
-    ...(knownIdentifierLoader ? { knownIdentifierLoader } : {}),
+    knownIdentifierLoader: knownIdentifierLoader ?? (caseId => basePort.loadKnownIdentifiers(caseId)),
   })();
   return { services, port: basePort, service: createPersistentCoverageAnalysisService({ port, liveRegistry: registry }) };
 }
@@ -214,6 +214,17 @@ test('K1: every model request reloads the identifiers for the run\'s case server
   assert.deepEqual(calls, Array(5).fill(scenario.caseId));
   const stored = app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(job.id).input_json;
   assert.ok(!/knownIdentifiers|Synthetic owner/.test(stored), 'the household identifiers are never part of run input');
+});
+
+test('K1: a live registry cannot be created without a household identifier loader', () => {
+  const modelRequests = [];
+  for (const knownIdentifierLoader of [undefined, null, true, 'load', {}]) {
+    const factory = createGeminiCoverageRegistryFactory({
+      env: liveEnv, ...stubModelDriver({ modelRequests }), preDispatchValidator: async () => true, knownIdentifierLoader,
+    });
+    assert.throws(() => factory(), { code: 'LIVE_AI_CONFIG_INVALID' });
+  }
+  assert.equal(modelRequests.length, 0);
 });
 
 for (const [label, loader] of [

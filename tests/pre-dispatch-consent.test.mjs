@@ -18,7 +18,7 @@ function liveService(app, modelRequests) {
   const registry = createGeminiCoverageRegistryFactory({
     env: liveEnv,
     ...stubModelDriver({ modelRequests }),
-    preDispatchValidator: request => {
+    knownIdentifierLoader: caseId => port.loadKnownIdentifiers(caseId), preDispatchValidator: request => {
       validatorCalls.push(request);
       return port.authorizeModelDispatch(request);
     },
@@ -158,7 +158,7 @@ async function dispatchFixture(t) {
   const scenario = await setupLiveCase(app, { pageText: PAGE_TEXT });
   const services = createBackendServices(app.database);
   const port = createCoverageAnalysisPort({ database: app.database, services });
-  const service = createPersistentCoverageAnalysisService({ port, liveRegistry: createGeminiCoverageRegistryFactory({ env: liveEnv, ...stubModelDriver(), preDispatchValidator: () => false })() });
+  const service = createPersistentCoverageAnalysisService({ port, liveRegistry: createGeminiCoverageRegistryFactory({ env: liveEnv, ...stubModelDriver(), knownIdentifierLoader: () => [], preDispatchValidator: () => false })() });
   const { job } = await service.createAnalysisRun({ caseId: scenario.caseId, consentGrantId: scenario.coverageConsentId, executionMode: 'live', modelPermission: true, idempotencyKey: 'dispatch-fixture' });
   const baseRequest = () => ({
     task: 'profile_extraction',

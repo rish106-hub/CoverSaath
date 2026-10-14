@@ -68,11 +68,20 @@ test('G1: policy wording that resembles identity labels is left intact', () => {
 });
 
 const escapeRegExp = value => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Persisted rows and prompts carry random uuids and sha256 digests, whose hex digits
+// can contain a short number by chance. A digit-only probe therefore counts as a leak
+// only as a stand-alone token, i.e. not embedded in a longer run of hex characters.
+// A real leak (the number, with or without spaces, in running text) still matches.
+const leakPattern = fragment => (/^[0-9 ]+$/.test(fragment)
+  ? new RegExp(`(?<![0-9a-fA-F])${escapeRegExp(fragment)}(?![0-9a-fA-F])`)
+  : new RegExp(escapeRegExp(fragment)));
 
 test('G1 end to end: OCR identifiers never reach the provider, run input, task output or audit', async t => {
   const modelRequests = [];
   const app = await startLiveServer(t, { modelRequests });
-  const pageText = 'Proposer MRS. KAVYA PLACEHOLDER. Mobile: 98765 43210. Address: 12 Synthetic Road';
+  // The identifiers share one allowlisted line (a requested parameter is named), since
+  // the runtime sends only allowlisted lines of a page.
+  const pageText = 'Room rent limit is 5000 for proposer MRS. KAVYA PLACEHOLDER, Mobile: 98765 43210, Address: 12 Synthetic Road';
   const scenario = await setupLiveCase(app, { pageText, suffix: 'g1-e2e' });
   const response = await scenario.startLiveRun('g1-end-to-end');
   assert.equal(response.status, 202);
@@ -87,7 +96,7 @@ test('G1 end to end: OCR identifiers never reach the provider, run input, task o
   };
   for (const fragment of ['KAVYA', 'Kavya', 'PLACEHOLDER', '98765', '43210', '9876543210', '12 Synthetic Road', 'Synthetic Road']) {
     for (const [surface, body] of Object.entries(surfaces)) {
-      assert.doesNotMatch(body, new RegExp(escapeRegExp(fragment)), `${fragment} leaked to ${surface}`);
+      assert.doesNotMatch(body, leakPattern(fragment), `${fragment} leaked to ${surface}`);
     }
   }
   assert.match(surfaces.prompt, /<NAME_\d+>/);

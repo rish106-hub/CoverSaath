@@ -44,7 +44,7 @@ const page = (index, overrides = {}) => ({
   ...overrides,
 });
 
-const runtimeOf = input => ({ run: { id: 'run-synthetic', workflow_version: '5' }, input, upstream: {} });
+const runtimeOf = input => ({ run: { id: 'run-synthetic', case_id: 'case-synthetic', workflow_version: '5' }, input, upstream: {} });
 const TASKS = { profile: 'profile_extraction', group: 'group_cover_extraction', personal: 'personal_cover_extraction' };
 
 function assertWithinGateAndSchema(input) {
@@ -173,7 +173,7 @@ test('live resolver uses the registry version pinned by the run and fails closed
   const registry = createGeminiCoverageRegistryFactory({
     env: liveEnv,
     ...stubModelDriver({ modelRequests }),
-    preDispatchValidator: async () => true,
+    knownIdentifierLoader: () => [], preDispatchValidator: async () => true,
     resolveParameterPolicy: (key, version) => { resolutions.push(version); return resolveCanonicalParameterPolicy(key, version); },
   })();
   await registry.profile(runtimeOf(input));

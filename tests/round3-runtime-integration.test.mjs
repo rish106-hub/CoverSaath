@@ -195,7 +195,7 @@ function liveService(app, modelRequests) {
   const registry = createGeminiCoverageRegistryFactory({
     env: liveEnv,
     ...stubModelDriver({ modelRequests }),
-    preDispatchValidator: request => port.authorizeModelDispatch(request),
+    knownIdentifierLoader: caseId => port.loadKnownIdentifiers(caseId), preDispatchValidator: request => port.authorizeModelDispatch(request),
   })();
   return { services, port, service: createPersistentCoverageAnalysisService({ port, liveRegistry: registry }) };
 }
