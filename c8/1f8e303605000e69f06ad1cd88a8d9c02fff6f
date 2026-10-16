@@ -1,0 +1,25 @@
+scripts/check-architecture.mjs
+  s_36e9dbcd177789::t_fa4c63210dfbc9 46,49,52
+tests/backend-api.test.mjs
+  s_36e9dbcd177789::t_5cd0ecad9a7f7e 70
+docs/iterations/LATEST.md
+  s_36e9dbcd177789::t_fa4c63210dfbc9 78
+working/working.md
+  s_36e9dbcd177789::t_5cd0ecad9a7f7e 233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c81f8e303605000e69f06ad1cd88a8d9c02fff6f",
+  "prompts": {},
+  "sessions": {
+    "s_36e9dbcd177789": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "926d1f4c-f44b-401e-a2c7-0fa5da7e5673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
