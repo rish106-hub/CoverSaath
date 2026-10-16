@@ -19,6 +19,8 @@ export function readServerConfig(env = process.env) {
     maxCases: boundedInteger(env.MAX_ACTIVE_CASES, 100, 'MAX_ACTIVE_CASES', 100_000),
     maxRunsPerCase: boundedInteger(env.MAX_RUNS_PER_CASE, 10, 'MAX_RUNS_PER_CASE', 100),
     rateLimitPerMinute: boundedInteger(env.API_RATE_LIMIT_PER_MINUTE, 600, 'API_RATE_LIMIT_PER_MINUTE', 100_000),
+    // Not read by the server: kept so a bad budget fails at startup rather than on the first live
+    // run. live-coverage-runtime.js reads the same variables with its own bounds.
     budgetUsd: positiveAmount(env.ORCHESTRATION_RUN_BUDGET_USD, 'ORCHESTRATION_RUN_BUDGET_USD', 1),
     projectBudgetUsd: positiveAmount(env.ORCHESTRATION_PROJECT_BUDGET_USD, 'ORCHESTRATION_PROJECT_BUDGET_USD'),
   });

@@ -20,15 +20,15 @@ Status: describes controls present in the repository at the commit that added th
 - API to database: in-process SQLite; no database network surface.
 - API to model provider: Google Gemini only, through the model gateway. This is the one outbound path with household-derived content.
 - Integrations (Sarvam, Gnani, Pine Labs, email): no network call is implemented.
-- OCR text and model output: untrusted input (`AGENTS.md`). The model has no tools (`ai-sdk-runner.js`, `tools: {}`).
+- OCR text, documents and model output: untrusted evidence, never instructions (`AGENTS.md`, `src/modules/ai-analysis/prompts.js:7`). The model has no tools (`ai-sdk-runner.js`, `tools: {}`).
 - Not present: upload route, public hosting, webhook receiver, admin UI, outbound email.
 
 ## Implemented controls
 
 | Control | Where |
 |---|---|
-| Loopback only: server binds `127.0.0.1`; Host must be a local allowlisted value, Origin must be `localhost:5173`/`127.0.0.1:5173`, `Sec-Fetch-Site: cross-site` is rejected. No CORS headers are emitted. | `src/server/server.js:7`, `src/shared/http/security.js:6`, `create-server.js:109` |
-| Rate limit per client address (default 600 per minute, max 100,000), session cap, case cap, per-case active-run cap, 16 KiB JSON body cap | `security.js:14`, `config.js`, `request.js:3`, `v1-backend-routes.js:96` |
+| Loopback only: server binds `127.0.0.1`; Host must be a local allowlisted value, Origin must be `localhost:5173`/`127.0.0.1:5173`, `Sec-Fetch-Site: cross-site` is rejected. No CORS headers are emitted. | `src/server/server.js:7`, `src/shared/http/security.js:6`, `create-server.js:64` |
+| Rate limit per client address (default 600 per minute, max 100,000), session cap, case cap, per-case active-run cap, 16 KiB JSON body cap | `security.js:14`, `config.js`, `request.js:3`, `v1-backend-routes.js:104` |
 | Security headers on every JSON response: `no-store`, `nosniff`, `no-referrer`, `X-Frame-Options: DENY`, restrictive CSP and Permissions-Policy | `src/shared/http/request.js:19` |
 | Bearer sessions: 32 random bytes, only the sha256 digest stored, expiry and revocation checked, capped session count | `auth-repository.js:13-47` |
 | Bootstrap token (`KNOWVIA_BOOTSTRAP_TOKEN`, 32-256 chars) creates the first household; constant-time comparison; readiness fails if unset | `tenant-access-service.js:19-37`, `v1-backend-routes.js:148` |
@@ -36,7 +36,7 @@ Status: describes controls present in the repository at the commit that added th
 | Field-level read consent: case, source pack, audit and analysis reads need a subject-granted `read` scope for the viewer and purpose; DTOs are redacted (no payloads, hashes, leases, actor ids) | `read-response-policy.js:1-30`, `consent-repository.js:93-129` |
 | Consent derivation: analysis subject is derived once in SQL (`analysis_subject_adult_id`); a foreign or missing subject matches no consent | `coverage-analysis-port.js:20-41` |
 | Model disclosure consent: a page is eligible only if its document is active, clean, encrypted, OCR-succeeded and covered by a current `document_processing` grant from the subject with scope `document`, action `derive`, category `insurance_document` and recipient exactly `google-gemini`. A NULL recipient never matches. | `coverage-analysis-port.js:51-85`, `privacy-evidence-gate.js:14` |
-| Pre-dispatch validator, wired by default and not replaceable through the server: re-checks run, subject, grant and every source immediately before each provider call; any internal error denies | `coverage-analysis-port.js:138-195`, `create-server.js:76`, `live-coverage-runtime.js:307-340` |
+| Pre-dispatch validator, wired by default and not replaceable through the server: re-checks run, subject, grant and every source immediately before each provider call; any internal error denies | `coverage-analysis-port.js:138-195`, `create-server.js:31`, `live-coverage-runtime.js:307-340` |
 | Commit-time re-check: after a call returns, consent and all sources are re-checked; on change results are discarded, the run stops and derived data is erased in one transaction | `persistent-service.js:129-143`, `coverage-analysis-port.js:446-480` |
 | Privacy evidence gate (`knowvia-privacy-evidence-v3`): normalisation, per-request placeholders such as `<PHONE_1>`, redaction of the household's own known names, dates of birth, phones and emails (loaded per call, never persisted), rejection of RESTRICTED data and payment cards, limits of 30 sources, 4,000 bytes per source, 48,000 bytes total, 16,000-byte scan cap, 240 structured items | `privacy-evidence-gate.js:9-32,336-348`, `coverage-analysis-port.js:236` |
 | Model authority limits: five model tasks, all `propose`; model output maps only to Unknown or Conflicting and to unknown, extracted_unverified or conflicting; never proven, calculated, dynamic or release; the database enforces the same rules by trigger (migration 005) | `src/contracts/ai-authority.js`, `docs/adr/0003-ai-authority.md`, `005_evidence_completion_parameters.sql:250-326` |

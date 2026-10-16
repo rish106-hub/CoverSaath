@@ -12,7 +12,7 @@ Approved tool: **repomap**.
 
 ## Models
 
-The 2026-10 production plan of action overrides the GPT model table in `CLAUDE.md` with Claude models:
+Model roles from the 2026-10 production plan of action:
 
 | Role | Model | Effort |
 |---|---|---|
@@ -33,11 +33,11 @@ The model assignment in each phase section of the plan wins over the summary tab
 
 ## Local tools
 
-Record presence and version in the intake. Do not install a CLI without the CERT installation record.
+Record presence and version in the intake. Do not install a CLI without recording need, version, smoke test and rollback in the task's exec plan.
 
 | Tool | Use | Required from |
 |---|---|---|
-| Node.js (>= 22.12) and npm | runtime, tests, build | Phase 0 |
+| Node.js (>= 22.16) and npm | runtime, tests, build | Phase 0 |
 | gh | pull requests, repository settings | Phase 1 |
 | Docker | local PostgreSQL | Phase 1 |
 | psql | PostgreSQL checks | Phase 1 |
