@@ -173,6 +173,16 @@ test('P1-A: TaskResultEnvelope rejects unknown and missing fields at every level
   }
 });
 
+test('P1-A: a run with no workflow version is rejected on invocation and on write', () => {
+  const { workflowVersion, ...unpinned } = runV6;
+  assert.equal(workflowVersion, '6');
+  assert.throws(() => assertExecutableWorkflowVersion(unpinned), versionCode);
+  assert.throws(() => assertExecutableWorkflowVersion({ ...runV6, workflowVersion: null }), versionCode);
+  assert.throws(() => validateTaskInvocation('profile', { input: {}, upstream: {}, run: unpinned }), versionCode);
+  assert.throws(() => createTaskOutputEnvelope({ key: 'profile', payload: profilePayload(), run: unpinned }), versionCode);
+  assert.throws(() => createTaskOutputEnvelope({ key: 'profile', payload: profilePayload(), run: { ...runV6, workflowVersion: '' } }), versionCode);
+});
+
 test('P1-A: a wrong workflow version is rejected on invocation, on write and on read', () => {
   const runV5 = { ...runV6, workflowVersion: '5' };
   assert.throws(() => validateTaskInvocation('profile', { input: {}, upstream: {}, run: runV5 }), versionCode);
