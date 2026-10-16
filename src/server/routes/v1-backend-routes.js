@@ -76,12 +76,17 @@ export function errorResponse(error) {
     IDEMPOTENCY_CONFLICT: 409,
     CASE_NOT_READY_FOR_ANALYSIS: 409,
   };
-  // Only application codes (UPPER_SNAKE, not Node/driver ERR_* codes) carry deliberate,
-  // client-safe messages. Uncoded errors and runtime or driver errors (ERR_SQLITE_ERROR,
-  // ERR_INVALID_ARG_TYPE, ...) are internal: their text, SQL and values never leave the server.
-  const deliberate = typeof error.code === 'string' && /^[A-Z][A-Z0-9_]{2,79}$/.test(error.code) && !error.code.startsWith('ERR_');
+  // Only application codes carry deliberate, client-safe messages: UPPER_SNAKE with at least one
+  // underscore, not a Node/driver ERR_* code, and not an operating-system error (ENOENT,
+  // ECONNREFUSED, ...), which carries syscall/errno. Uncoded, runtime, driver and system errors
+  // are internal: their text, SQL, paths and values never leave the server.
+  const deliberate = typeof error.code === 'string'
+    && /^[A-Z][A-Z0-9]*_[A-Z0-9_]{1,78}$/.test(error.code)
+    && !error.code.startsWith('ERR_')
+    && error.syscall === undefined
+    && typeof error.errno !== 'number';
   const code = deliberate ? error.code : 'BACKEND_REQUEST_FAILED';
-  const status = error.statusCode || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
+  const status = error.statusCode || (deliberate && error.status) || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
   const message = deliberate ? error.message : 'The request could not be completed.';
   return { status, body: { error: { code, message } } };
 }

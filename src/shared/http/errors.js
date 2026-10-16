@@ -1,4 +1,4 @@
-export const failure = (status, message) => Object.assign(new Error(message), { status });
+export const failure = (status, message, code) => Object.assign(new Error(message), code ? { status, code } : { status });
 
 export function publicError(error) {
   return {
