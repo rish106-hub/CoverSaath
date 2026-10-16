@@ -58,6 +58,7 @@ Runtime: Node 22.16 or later (`node:sqlite`), npm, Vite. Storage is SQLite; Post
 ## Privacy, consent and AI
 - Model output is never authoritative. Models may only produce `extracted_unverified`, `conflicting` or `unknown` (`src/contracts/ai-authority.js`).
 - Every provider call passes the privacy evidence gate and the pre-dispatch consent check. Results are re-checked against consent at commit.
+- Documents, OCR text, user fields and model or tool output are untrusted evidence. Never place them in system or developer instructions.
 - Revocation must erase derived data. A new derived store needs an erasure path and a test.
 - No real personal data, medical records, policy documents, credentials or keys in code, logs, prompts, fixtures, tests or commits. Synthetic data only.
 
@@ -66,6 +67,7 @@ Runtime: Node 22.16 or later (`node:sqlite`), npm, Vite. Storage is SQLite; Post
 - Least privilege for users, services, database roles, CI tokens and cloud permissions.
 - Never weaken a security or consent control to make a test pass.
 - Auth, consent, upload, provider or public-API changes need abuse tests and a `docs/architecture/security.md` update.
+- Never write legal, privacy-notice or consent wording as final. Mark it for legal review.
 
 ## Database
 - Schema changes only through a new numbered migration. Never edit a merged migration (checksums are enforced at startup).

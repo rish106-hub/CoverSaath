@@ -24,7 +24,7 @@ The earlier in-memory demo API was removed. The authenticated `/api/v1` API is t
 | `modules/ai-analysis/` | Model eligibility matrix, prompts, output schemas, privacy evidence gate, model gateway, Gemini runtime. |
 | `modules/document-intake/` | File validation, AES-256-GCM local byte storage, OCR contracts and service, in-memory fixtures. Not reachable from any route. |
 | `modules/insurance-rules/` | Deterministic policy, continuity, cash-exposure and route rules. |
-| `agents/` | Domain specialists the fixture task registry calls: profile, group health, personal health, decision. `coverage-orchestrator.js` is imported only by the legacy engine being removed. |
+| `agents/` | Domain specialists the fixture task registry calls: profile, group health, personal health, decision. `coverage-orchestrator.js` (`buildCoverageGraph`) has no runtime caller since the legacy engine was removed; only its own test uses it. |
 | `contracts/` | Frozen cross-module contracts: task shapes, workflow graph and checksum, execution policy, error codes, API schemas, persistence ports, AI authority. |
 | `integrations/` | Sarvam OCR, Gnani voice, Pine Labs payment and email boundaries. All fail closed (`provider-boundary.js`); no provider network call is implemented. |
 | `evaluation/` | Offline safety evaluator and reference dataset (`npm run eval:safety`). |
@@ -37,9 +37,9 @@ The earlier in-memory demo API was removed. The authenticated `/api/v1` API is t
 - Any `src/` directory or `.js` file name that is not lowercase kebab-case (`index.js` allowed).
 - `shared/` importing anything outside `shared/`.
 - `integrations/` importing anything outside `integrations/`.
-- `agents/` importing `adapters`, `backend`, `integrations`, `server` or `ui`.
-- `backend/` importing `adapters`, `server` or `ui`.
-- `ui/` importing `adapters`, `backend`, `integrations` or `server`.
+- `agents/` importing `backend`, `integrations`, `server` or `ui`.
+- `backend/` importing `server` or `ui`.
+- `ui/` importing `backend`, `integrations` or `server`.
 - Code outside `integrations/` importing it other than through `src/integrations/index.js`.
 
 Not covered by the check:

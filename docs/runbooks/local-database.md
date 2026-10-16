@@ -82,6 +82,8 @@ This deletes all local households, sessions, cases, consents and audit events. S
 
 Tests do not touch this file: they use `:memory:` or temporary databases.
 
+The removed legacy demo API wrote unencrypted run JSON to `.local/runs/`. Nothing reads or erases it any more. Delete that folder by hand (`rm -rf .local/runs`) after confirming it holds only synthetic demo data.
+
 ## Not covered
 
 - Production or shared environments, PostgreSQL (planned in ADR 0002, not built), replication, point-in-time recovery, encrypted backups, restore drills, RPO/RTO (Not decided).
