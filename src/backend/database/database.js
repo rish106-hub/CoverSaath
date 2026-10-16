@@ -58,7 +58,7 @@ export function runMigrations(database, { directory = migrationDirectory } = {})
   return completed;
 }
 
-const expectedTables = Object.freeze([
+export const expectedTables = Object.freeze([
   'schema_migrations', 'households', 'adult_users', 'household_roles', 'household_members',
   'consent_grants', 'consent_scopes', 'consent_revocations', 'service_cases', 'case_participants',
   'document_uploads', 'ocr_jobs', 'source_pages', 'insurers', 'policies', 'policy_members',
@@ -72,9 +72,9 @@ const expectedTables = Object.freeze([
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
 ]);
 
-const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
+export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
 
-const criticalTriggers = Object.freeze([
+export const criticalTriggers = Object.freeze([
   'consent_revocations_mark_grant', 'integration_outbox_requires_active_consent',
   'audit_events_no_update', 'audit_events_no_delete',
   'workflow_task_dependencies_same_run_insert', 'workflow_task_dependencies_same_run_update',
@@ -104,7 +104,7 @@ const criticalTriggers = Object.freeze([
   'coverage_parameter_observations_active_document_insert', 'coverage_parameter_observations_human_review_insert',
 ]);
 
-const criticalIndexes = Object.freeze([
+export const criticalIndexes = Object.freeze([
   'consent_grants_subject_idx', 'service_cases_household_idx', 'document_uploads_household_consent_idx',
   'source_pages_ocr_job_idx', 'policy_members_member_idx', 'evidence_facts_case_idx',
   'workflow_runs_case_idx', 'workflow_tasks_claim_idx', 'workflow_tasks_lease_idx',
@@ -117,7 +117,7 @@ const criticalIndexes = Object.freeze([
   'coverage_parameter_observations_parameter_idx', 'coverage_parameter_observations_document_idx',
 ]);
 
-const requiredColumns = Object.freeze({
+export const requiredColumns = Object.freeze({
   document_uploads: ['logical_document_id', 'source_version'],
   evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status'],
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],

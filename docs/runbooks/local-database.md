@@ -86,7 +86,7 @@ The removed legacy demo API wrote unencrypted run JSON to `.local/runs/`. Nothin
 
 ## Not covered
 
-- Production or shared environments, PostgreSQL (planned in ADR 0002, not built), replication, point-in-time recovery, encrypted backups, restore drills, RPO/RTO (Not decided).
+- Production or shared environments, PostgreSQL (see [local-postgres](local-postgres.md); not the runtime yet), replication, point-in-time recovery, encrypted backups, restore drills, RPO/RTO (Not decided).
 - Retention execution and legal-hold handling (Not decided; see `docs/architecture/data.md`).
 - Rolling back a migration. Migrations are forward-only; the repository rules prefer expand-only changes with a forward fix or restore path (`src/backend/database/AGENTS.md`).
 - Incident response and credential rotation.
