@@ -77,6 +77,12 @@ async function withHarnessLock(admin, work) {
 }
 
 const quote = identifier => `"${identifier.replaceAll('"', '""')}"`;
+const isSafeHarnessDatabaseName = (name, digest) => {
+  const expectedPrefix = `${BUILD_PREFIX}${digest}_`;
+  return typeof name === 'string'
+    && name.startsWith(expectedPrefix)
+    && /^[0-9]+$/.test(name.slice(expectedPrefix.length));
+};
 
 // A session that just closed can linger for a moment; retry while the server reports "in use".
 async function retryWhileInUse(operation, attempts = 40) {
@@ -97,7 +103,12 @@ async function databaseExists(admin, name) {
 async function buildTemplate(admin, digest, directory) {
   const finalName = `${TEMPLATE_PREFIX}${digest}`;
   const stale = await admin.query('SELECT datname FROM pg_database WHERE datname LIKE $1', [`${BUILD_PREFIX}${digest}\\_%`]);
-  for (const { datname } of stale.rows) await admin.query(`DROP DATABASE IF EXISTS ${quote(datname)} WITH (FORCE)`);
+  for (const { datname } of stale.rows) {
+    if (!isSafeHarnessDatabaseName(datname, digest)) {
+      throw new Error(`Refusing to drop unexpected database name: ${String(datname)}`);
+    }
+    await admin.query(`DROP DATABASE IF EXISTS ${quote(datname)} WITH (FORCE)`);
+  }
   const buildName = `${BUILD_PREFIX}${digest}_${process.pid}`;
   await admin.query(`CREATE DATABASE ${quote(buildName)} TEMPLATE template0 ENCODING 'UTF8' LOCALE 'C'`);
   try {
