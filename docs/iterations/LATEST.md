@@ -75,7 +75,7 @@ Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/compl
 - Consent expiry (as opposed to revocation) keeps observations, run excerpts and task outputs until a retention policy is decided (review F3, owner decision).
 - Conflict detection reads at most 500 observations per parameter.
 
-- Owner-accepted: the hardcoded `+91` handoff fallback in `src/orchestration/index.js` is the owner's own number.
+- The hardcoded `+91` handoff fallback was removed with the legacy demo API (`src/orchestration/` no longer exists).
 - `docs/evidence/` still exists in public git history until the owner decides on a purge.
 - npm audit high: `source-map-js` (GHSA-68fv-2mgg-jv7q), reached only through `vite` at build time. Handled in Phase 1 (P1-D).
 - Over-redaction: claim or admission dates on member rows are treated as dates of birth; capitalised two-word phrases before relationship words may be over-redacted.
