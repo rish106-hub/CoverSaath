@@ -276,7 +276,7 @@ flowchart TD
 | `src/ui/api/`, `src/ui/state/` | Authenticated client and workspace state controller |
 | `tests/` | Unit, integration, security, contract, safety and migration proof |
 
-Supporting material stays outside the repository root. Tracked evidence is in `docs/evidence/`. Strategy
+Supporting material stays outside the repository root. Interview evidence is private and not tracked (`docs/evidence/` is ignored). Strategy
 answers describe the build spec; they do not replace it. Historical asset filenames retain their real names.
 
 ## Data and security limits

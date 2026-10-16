@@ -2,7 +2,7 @@
 
 ## Objective
 
-Phase 0 of the production plan of action: close the unfinished evidence-completion work and establish a verified baseline. Intake and corrections: [p0-baseline-intake.md](../exec-plans/active/p0-baseline-intake.md). Original slice intake: [evidence-completion-mvp-intake.md](../exec-plans/active/evidence-completion-mvp-intake.md).
+Phase 0 of the production plan of action: close the unfinished evidence-completion work and establish a verified baseline. Intake and corrections: [p0-baseline-intake.md](../exec-plans/completed/p0-baseline-intake.md). Original slice intake: [evidence-completion-mvp-intake.md](../exec-plans/completed/evidence-completion-mvp-intake.md).
 
 ## Classification and state
 
@@ -60,7 +60,7 @@ Claude models per the POA: Opus 5.5 high (central, privacy, reviews), Sonnet 5.5
 
 ## Section 1: evidence-completion MVP close-out
 
-Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/active/evidence-completion-mvp-intake.md), implementation step 7 and acceptance criteria 7 and 11.
+Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/completed/evidence-completion-mvp-intake.md), implementation step 7 and acceptance criteria 7 and 11.
 
 - Model-extracted values become parameter evidence at commit time only, after the consent re-check. Each value cited to a sent page that was selected for that key is stored as a `document_extraction` / `not_reviewed` observation (source id, document id, version, page, excerpt digest). Agreeing values resolve to `extracted_unverified` and disagreeing values to `conflicting`, both under model authority, and all observations are kept. States set by a human reviewer, an official source or a calculation are never replaced. Writes are bound to the task lease and the run status, with a counts-only audit in the same transaction (`model-observations.js`, `recordModelObservations`, `recordModelExtraction`).
 - Migration 006 (expand-only): observations require an active document, and `human_review` observations require an in-progress or completed `human_reviews` row whose reviewer is the recorder. The repository enforces the same rules.
