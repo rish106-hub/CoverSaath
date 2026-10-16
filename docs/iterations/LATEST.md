@@ -2,7 +2,7 @@
 
 ## Objective
 
-Phase 0 of the production plan of action: close the unfinished evidence-completion work and establish a verified baseline. Intake and corrections: [p0-baseline-intake.md](../exec-plans/active/p0-baseline-intake.md). Original slice intake: [evidence-completion-mvp-intake.md](../exec-plans/active/evidence-completion-mvp-intake.md).
+Phase 0 of the production plan of action: close the unfinished evidence-completion work and establish a verified baseline. Intake and corrections: [p0-baseline-intake.md](../exec-plans/completed/p0-baseline-intake.md). Original slice intake: [evidence-completion-mvp-intake.md](../exec-plans/completed/evidence-completion-mvp-intake.md).
 
 ## Classification and state
 
@@ -43,7 +43,7 @@ Earlier evidence (branch tip d042e88):
 - Parameter records: each run is pinned to a registry version, and every registry key gets a record in the same transaction as the run. Authority is derived server-side, and DB constraints stop model authority from reaching proven, calculated or dynamic. An erasure path exists for observations, and registry versions live in a table.
 - Revocation erases derived run data (page excerpts and task outputs), marks the runs revoked and writes a counts-only audit event.
 - OCR pages are immutable after completion.
-- Docs: restored `docs/CERT.md` and `docs/agent-tooling.md`. `docs/evidence/` is untracked and ignored.
+- Docs: restored `docs/agent-tooling.md` (and `docs/CERT.md`, later folded into `AGENTS.md`). `docs/evidence/` is untracked and ignored.
 
 ## Graph impact
 
@@ -61,7 +61,7 @@ Claude models per the POA: Opus 5.5 high (central, privacy, reviews), Sonnet 5.5
 
 ## Section 1: evidence-completion MVP close-out
 
-Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/active/evidence-completion-mvp-intake.md), implementation step 7 and acceptance criteria 7 and 11.
+Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/completed/evidence-completion-mvp-intake.md), implementation step 7 and acceptance criteria 7 and 11.
 
 - Model-extracted values become parameter evidence at commit time only, after the consent re-check. Each value cited to a sent page that was selected for that key is stored as a `document_extraction` / `not_reviewed` observation (source id, document id, version, page, excerpt digest). Agreeing values resolve to `extracted_unverified` and disagreeing values to `conflicting`, both under model authority, and all observations are kept. States set by a human reviewer, an official source or a calculation are never replaced. Writes are bound to the task lease and the run status, with a counts-only audit in the same transaction (`model-observations.js`, `recordModelObservations`, `recordModelExtraction`).
 - Migration 006 (expand-only): observations require an active document, and `human_review` observations require an in-progress or completed `human_reviews` row whose reviewer is the recorder. The repository enforces the same rules.
@@ -75,7 +75,7 @@ Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/activ
 - Consent expiry (as opposed to revocation) keeps observations, run excerpts and task outputs until a retention policy is decided (review F3, owner decision).
 - Conflict detection reads at most 500 observations per parameter.
 
-- Owner-accepted: the hardcoded `+91` handoff fallback in `src/orchestration/index.js` is the owner's own number.
+- The hardcoded `+91` handoff fallback was removed with the legacy demo API (`src/orchestration/` no longer exists).
 - `docs/evidence/` still exists in public git history until the owner decides on a purge.
 - npm audit high: `source-map-js` (GHSA-68fv-2mgg-jv7q), reached only through `vite` at build time. Handled in Phase 1 (P1-D).
 - Over-redaction: claim or admission dates on member rows are treated as dates of birth; capitalised two-word phrases before relationship words may be over-redacted.
@@ -94,9 +94,21 @@ Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/activ
 - Not verified locally: the GitHub-hosted CodeQL and dependency-review runs (need the repository settings below).
 - Known: one unreproduced intermittent failure in `pre-dispatch-consent.test.mjs` (suspected same-millisecond task claim ordering); watch CI.
 
+## Section 2b: lean AGENTS.md and legacy demo API removal
+
+Owner decisions (2026-10-16): apply the lean AGENTS.md model, CoverSaath is the canonical product name, remove the legacy demo API.
+
+- Instructions: the 1,103-line AGENTS.md/CLAUDE.md copies are replaced by a 93-line `AGENTS.md`; `CLAUDE.md` is the one-line import `@AGENTS.md`; directory rules in `src/backend/database/`, `src/modules/ai-analysis/`, `src/integrations/`; `docs/CERT.md` removed; finished exec plans in `docs/exec-plans/completed/`; `engines.node >=22.16.0`. Product docs stay in `working/` and `building/` (registry v1 cites `building/policy-parameters.md`). Remaining `knowvia` identifiers are renamed later with a compatibility plan.
+- New source-of-truth docs: `docs/architecture/{system,data,security}.md`, `docs/runbooks/local-database.md`. No `scale.md` until workload numbers exist.
+- Legacy removal: `src/core`, `src/orchestration`, `src/models`, `src/adapters`, `scripts/orchestration-demo.mjs`, `ENABLE_LEGACY_DEMO_API`, the memory-only demo cookie, `@ai-sdk/openai`, `OPENAI_API_KEY` and `HUMAN_HANDOFF_PHONE` are gone. Only `/api/v1/*` is served; other paths return 404 `ROUTE_NOT_FOUND`, also with the old flag set. 38 legacy-only tests deleted; safety-eval assertions retargeted to canonical validators; new tests for removed routes, the loopback guard (Host, Origin, Sec-Fetch-Site; previously covered only by a legacy test) and the integrations HRMS status.
+- Agents: Sonnet 5.5 for legacy removal and architecture docs (separate worktrees, no shared files); Opus 5.5 central and read-only review.
+- Verification: `npm run check` (108 source files, 360/360 tests, build); safety eval 23/23, no failures; `git diff --check` clean; lockfile in sync; new guard test mutation-checked per guard line.
+- Review (Opus, read-only): PASS, no P0-P2. P3s fixed: stale doc facts and line references, the dropped untrusted-text and legal-wording rules restored in `AGENTS.md`, optional live-model env names documented, `.local/runs` cleanup note. Open P3s: `src/agents/coverage-orchestrator.js` has no runtime caller; no integration test for security headers and 429; `retention_records` and the audit hash chain are written or defined but never read or verified; document-intake storage is not wired to a route.
+
 ## Next action
 
-1. Owner: review and merge the Section 2 PR (`claude/p1-integration`).
-2. Owner: repository settings from P1-D (dependency graph, Dependabot alerts and security updates, secret scanning with push protection, private vulnerability reporting, CodeQL advanced setup only, read-only Actions token, fork approval, a `main` ruleset requiring `CI / verify`).
-3. Then: the AGENTS.md migration and legacy demo API removal (`claude/agents-migration`), and Section 3 (PostgreSQL, ADR 0002).
-4. Owner decisions still open: consent-expiry retention, second maintainer, Azure and residency owner, `docs/evidence/` history purge.
+1. Owner: merge PR #5 (Section 2), then the AGENTS.md/legacy-removal PR stacked on it.
+2. Owner: repository settings from P1-D. CodeQL default setup is enabled and blocks the pinned advanced workflow ("CodeQL analyses from advanced configurations cannot be processed when the default setup is enabled"): switch CodeQL to advanced. Also dependency graph, Dependabot alerts and security updates, secret scanning with push protection, private vulnerability reporting, read-only Actions token, fork approval, a `main` ruleset requiring `CI / verify`.
+3. Owner: delete the local `.local/runs/` folder left by the legacy demo store.
+4. Next section: Section 3, PostgreSQL (ADR 0002). Needs a runtime choice: Docker Desktop, Homebrew PostgreSQL, or CI service container only.
+5. Owner decisions still open: consent-expiry retention, second maintainer, Azure and residency owner, `docs/evidence/` history purge.

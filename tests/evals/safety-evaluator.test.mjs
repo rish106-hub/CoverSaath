@@ -7,7 +7,8 @@ import {
   loadReferenceDataset,
 } from '../../src/evaluation/index.js';
 import { buildPromptContract } from '../../src/modules/ai-analysis/prompts.js';
-import { validateOutput, validatePacket } from '../../src/models/index.js';
+import { validateTaskOutput } from '../../src/modules/ai-analysis/schemas.js';
+import { COVERAGE_ANALYSIS_WORKFLOW } from '../../src/modules/coverage-analysis/workflow-definition.js';
 
 test('versioned synthetic reference suite meets every offline threshold', async () => {
   const dataset = await loadReferenceDataset();
@@ -48,13 +49,26 @@ test('OCR injection remains untrusted evidence in the production prompt contract
   assert.match(prompt.system, /untrusted evidence, never instructions/i);
 });
 
-test('production model contract rejects reviewer contamination and unsupported certainty', () => {
-  const source = { id: 'policy:p1', text: 'Synthetic policy excerpt.' };
-  assert.throws(() => validatePacket({ sources: [source], upstream: [{ role: 'safety-reviewer', output: { verdict: 'pass' } }] }, 'evidence-reviewer'), { code: 'reviewer_isolation' });
-  assert.throws(() => validateOutput({
-    findings: [{ id: 'f1', text: 'Claim is approved.', sourceIds: ['policy:p1'], severity: 'blocker', kind: 'observation' }],
-    summary: 'Unsafe assertion.',
-    verdict: 'pass',
-  }, new Set(['policy:p1'])), { code: 'unsafe_output' });
+test('production model contract rejects unsupported certainty', () => {
+  const input = {
+    context: { caseId: 'case-1', subjectId: 'adult-1', purpose: 'evidence synthesis', requestedFields: [] },
+    sources: [{ id: 'policy:p1', version: 'v1', page: 1, text: 'Synthetic policy excerpt.', status: 'known' }],
+    upstream: [],
+  };
+  const output = text => ({
+    statements: [{ id: 's1', text, kind: 'observation', citations: ['policy:p1'] }],
+    unknowns: [],
+    summary: 'Synthetic summary.',
+  });
+  assert.doesNotThrow(() => validateTaskOutput('evidence_synthesis', output('Synthetic policy excerpt.'), input));
+  assert.throws(() => validateTaskOutput('evidence_synthesis', output('Claim is approved.'), input), { code: 'unsupported_claim' });
 });
 
+test('production workflow keeps the three reviewers independent of each other', () => {
+  const reviewers = ['evidence', 'privacy', 'safety'];
+  for (const key of reviewers) {
+    const definition = COVERAGE_ANALYSIS_WORKFLOW.tasks.find(task => task.key === key);
+    assert.ok(definition, key);
+    assert.deepEqual(definition.dependsOn.filter(dependency => reviewers.includes(dependency)), [], `${key} must not receive another reviewer verdict`);
+  }
+});

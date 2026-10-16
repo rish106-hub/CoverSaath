@@ -67,6 +67,7 @@ test('versioned backend persists cases and queued analysis across restart', asyn
   assert.equal(integrations.status, 200);
   assert.equal(integrations.data.providers.sarvam.networkAttempted, false);
   assert.equal(integrations.data.providers.gnani.status, 'not_configured');
+  assert.deepEqual(integrations.data.hrms, { status: 'on_hold', intake: 'manual_upload_only' });
 
   const matrix = await app.call(`/api/v1/households/${identity.data.household.id}`, { token });
   assert.equal(matrix.status, 200);

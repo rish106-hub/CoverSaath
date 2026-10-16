@@ -12,7 +12,7 @@ Approved tool: **repomap**.
 
 ## Models
 
-The 2026-10 production plan of action overrides the GPT model table in `CLAUDE.md` with Claude models:
+Model roles from the 2026-10 production plan of action:
 
 | Role | Model | Effort |
 |---|---|---|
@@ -33,12 +33,30 @@ The model assignment in each phase section of the plan wins over the summary tab
 
 ## Local tools
 
-Record presence and version in the intake. Do not install a CLI without the CERT installation record.
+Record presence and version in the intake. Do not install a CLI without recording need, version, smoke test and rollback in the task's exec plan.
 
 | Tool | Use | Required from |
 |---|---|---|
-| Node.js (>= 22.12) and npm | runtime, tests, build | Phase 0 |
+| Node.js (>= 22.16) and npm | runtime, tests, build | Phase 0 |
 | gh | pull requests, repository settings | Phase 1 |
 | Docker | local PostgreSQL | Phase 1 |
 | psql | PostgreSQL checks | Phase 1 |
 | Azure CLI and Bicep | infrastructure | Phase 2 (dev environment) or Phase 6 |
+
+## Task states and review format
+
+- Hand off risky work with one state: `READY`, `BLOCKED` or `NOT_APPLICABLE`.
+- Review findings: ID, severity (P0–P3), evidence (`file:line`), affected area, fix, verification, disposition.
+- Phase gate: no P0/P1, no privacy, security, migration, permission or deployment P2, and one independent human approval.
+
+## Optional per-machine tools
+
+Install once per machine, never per task, and never as application dependencies. Pin to a tag or commit before use.
+
+| Tool | Install (verify the pin first) | Check |
+|---|---|---|
+| Caveman (Codex) | `npx -y github:JuliusBrussee/caveman#v4.0.1 -- --only codex` | `$caveman status` |
+| GStack (Codex) | clone `garrytan/gstack` at a pinned commit, then `./setup --host codex` | `npx skills ls -g -a codex --json` |
+| taste-skill (UI work only) | `npx skills add https://github.com/Leonxlnx/taste-skill --skill design-taste-frontend` at a pinned ref | `npx skills ls -g -a codex --json` |
+
+A specialist agent gets one named skill, one owned scope and one handoff.
