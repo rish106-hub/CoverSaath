@@ -17,10 +17,10 @@
     "check": "npm run check:architecture && npm test && npm run build"
   },
   "devDependencies": {
-    "vite": "8.3.0"
+    "vite": "8.3.4"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.71",
-    "ai": "^7.0.102"
+    "@ai-sdk/google": "^4.0.94",
+    "ai": "^7.0.138"
   }
 }
