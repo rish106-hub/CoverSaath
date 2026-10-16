@@ -58,13 +58,11 @@ PostgreSQL work (Phase 1) needs fixed interfaces. Before this change the workflo
   - `validateTaskOutputEnvelope` rejects any envelope whose `provenance.workflowVersion` is not `6`, including a missing version. This is the strict read side.
   - In the persistent worker, a v5 task fails with `last_error_code = WORKFLOW_VERSION_MISMATCH`, and its descendants are blocked with `UPSTREAM_WORKFLOW_VERSION_MISMATCH`. Nothing is completed and no parameter observation is recorded.
 - **Idempotency.** `workflowVersion` is part of the `analysis_run` request digest. A key first used against v5 and replayed within 24 h is therefore `IDEMPOTENCY_CONFLICT`, never a replay of the v5 run and never a new v6 run.
-- **Run objects with no version.** On the write side, a run object that carries no version is treated as unpinned rather than rejected. This keeps an existing hand-built test stub working (`tests/mvp-closeout.test.mjs` F1). Persisted rows always have a version (`workflow_version NOT NULL`), and output stamped without a version is refused by the strict read side. Follow-up for the central owner: add `workflow_version` to that stub, then make the write-side check strict.
+- **Run objects with no version.** The write side is strict: `validateTaskInvocation` and `createTaskOutputEnvelope` reject a run object with no version with `WORKFLOW_VERSION_MISMATCH`, like any other version. The hand-built stub in `tests/mvp-closeout.test.mjs` (F1) now carries `workflow_version`. Persisted rows always have a version (`workflow_version NOT NULL`).
 
-## Finding F-API-1 (not fixed here; routes are outside P1-A ownership)
+## Finding F-API-1 (fixed during Phase 1 integration)
 
-`handleV1BackendRoute` returns the promise from `createAnalysisRun` without awaiting it inside its `try`. An error raised asynchronously by the analysis service therefore skips `errorResponse` and reaches the server's `publicError` handler. Affected codes include `IDEMPOTENCY_CONFLICT`, `CASE_NOT_READY_FOR_ANALYSIS`, `CONSENT_REQUIRED`, `PARAMETER_SUBJECT_UNRESOLVED` and `SOURCE_PACK_REQUIRED`. The client gets `{ error: <string> }` with no code, and the status is `error.statusCode` or 400. For example, `IDEMPOTENCY_CONFLICT` is returned as 400 instead of 409.
-
-`validateApiErrorBody` accepts both shapes, and `tests/p1a-analysis-run-api.test.mjs` pins today's behaviour. Suggested fix: `return await createAnalysisRun(...)`.
+`handleV1BackendRoute` returned the promise from `createAnalysisRun` without awaiting it inside its `try`, so errors raised asynchronously by the analysis service skipped `errorResponse` and reached the server's `publicError` handler as `{ error: <string> }` with no code (for example `IDEMPOTENCY_CONFLICT` as 400 instead of 409). The route now uses `return await createAnalysisRun(...)`, so these errors get the coded `{ error: { code, message } }` body and their registered status. `errorResponse` also hides driver and runtime messages (`ERR_*` codes, SQLite errors) behind `BACKEND_REQUEST_FAILED`. `tests/p1a-analysis-run-api.test.mjs` and `tests/p1-error-redaction.test.mjs` pin this.
 
 ## Rollback
 

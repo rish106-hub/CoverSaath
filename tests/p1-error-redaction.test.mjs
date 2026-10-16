@@ -2,6 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
+import { Readable } from 'node:stream';
+import { readBody } from '../src/shared/http/index.js';
 import { errorResponse } from '../src/server/routes/v1-backend-routes.js';
 
 test('a real node:sqlite constraint error is returned as a generic coded body', () => {
@@ -23,4 +26,28 @@ test('Node ERR_* and uncoded errors are hidden; application codes keep their mes
   assert.equal(errorResponse(new Error('internal detail')).body.error.code, 'BACKEND_REQUEST_FAILED');
   const app = Object.assign(new Error('Idempotency key was reused with a different request.'), { code: 'IDEMPOTENCY_CONFLICT' });
   assert.deepEqual(errorResponse(app), { status: 409, body: { error: { code: 'IDEMPOTENCY_CONFLICT', message: app.message } } });
+});
+
+test('operating-system errors are hidden, including their file paths', () => {
+  let thrown;
+  try { readFileSync('/nonexistent-coversaath-probe/secret-household.json'); } catch (error) { thrown = error; }
+  assert.equal(thrown.code, 'ENOENT');
+  const response = errorResponse(thrown);
+  assert.equal(response.body.error.code, 'BACKEND_REQUEST_FAILED');
+  assert.ok(!/ENOENT|secret-household|nonexistent/.test(JSON.stringify(response.body)));
+  const errnoOnly = Object.assign(new Error('connect ECONNREFUSED 10.0.0.5:5432'), { code: 'SOCKET_REFUSED', errno: -61 });
+  assert.equal(errorResponse(errnoOnly).body.error.code, 'BACKEND_REQUEST_FAILED');
+});
+
+const request = (contentType, body) => Object.assign(Readable.from(body === undefined ? [] : [body]), { headers: contentType ? { 'content-type': contentType } : {} });
+async function readBodyFailure(req, options) {
+  try { await readBody(req, options); } catch (error) { return errorResponse(error); }
+  assert.fail('readBody should have refused the request');
+}
+
+test('request body errors keep their status, a stable code and their message', async () => {
+  assert.deepEqual(await readBodyFailure(request('text/plain', 'x')), { status: 415, body: { error: { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'Use JSON.' } } });
+  assert.deepEqual(await readBodyFailure(request('application/json', 'x'.repeat(40)), { limitBytes: 16 }), { status: 413, body: { error: { code: 'REQUEST_TOO_LARGE', message: 'Request is too large.' } } });
+  assert.deepEqual(await readBodyFailure(request('application/json', '{not json')), { status: 400, body: { error: { code: 'INVALID_JSON_BODY', message: 'Provide a JSON object.' } } });
+  assert.deepEqual(await readBodyFailure(request('application/json', '[1]')), { status: 400, body: { error: { code: 'INVALID_JSON_BODY', message: 'Provide a JSON object.' } } });
 });
