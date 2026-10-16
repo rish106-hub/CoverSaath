@@ -109,10 +109,10 @@ export function validateCreateAnalysisRunResponse(response) {
 }
 
 /**
- * Error bodies. Route-level errors use { error: { code, message } }. Errors raised
- * asynchronously by the analysis service escape the route mapper and reach the server's
- * publicError handler, which returns { error: <string> } with no code (see ADR 0001,
- * finding F-API-1). Both shapes are accepted here so the contract matches reality.
+ * Error bodies. The /api/v1 route mapper returns { error: { code, message } }, including for
+ * errors raised asynchronously by the analysis service (ADR 0001, finding F-API-1, fixed).
+ * The { error: <string> } shape is still produced by the server's top-level publicError
+ * handler for failures outside the route mapper, so both shapes are accepted here.
  */
 export function validateApiErrorBody(body) {
   if (body && typeof body === 'object' && !Array.isArray(body) && Object.keys(body).length === 1 && isString(body.error)) {
