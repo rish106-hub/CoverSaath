@@ -67,7 +67,7 @@ Status: describes controls present in the repository at the commit that added th
 | Provider call without verified contract | Fail-closed boundary | `tests/integrations.test.mjs` |
 | Audit rewrite | Append-only triggers | `tests/database-schema.test.mjs` |
 | Duplicate or replayed run request | Idempotency key and digest | `tests/p1a-analysis-run-api.test.mjs`, `tests/p1a-execution-policy.test.mjs` |
-| DNS rebinding, foreign Origin | Host/Origin checks | Only `tests/api.test.mjs` (Origin case, legacy demo suite); no other test references them |
+| DNS rebinding, foreign Origin, cross-site browser call | Host/Origin/Sec-Fetch-Site checks | `tests/local-request-guard.test.mjs` |
 
 ## Known gaps
 

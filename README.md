@@ -107,8 +107,8 @@ Scoped consent + immutable synthetic source packet
 
 Only source-evidence extraction, question drafting and synthesis are model-eligible. Classification,
 privacy, safety, money, release and actions remain deterministic. Fixture mode is explicit, zero-cost coded output. The persisted
-HTTP workflow currently exposes fixture execution only; it rejects live execution instead of silently
-falling back.
+HTTP workflow defaults to fixture execution. Live execution (`executionMode: 'live'`) requires explicit
+`modelPermission`, a configured Gemini model and current document consent; it never silently falls back to fixtures.
 
 ### Agent handoff contract
 
@@ -181,7 +181,7 @@ Verify current provider rates and billing conversion before any live run.
 
 ## Run
 
-Requires Node 22.12 or later.
+Requires Node 22.16 or later.
 
 ```sh
 npm install
@@ -205,7 +205,7 @@ The build produces frontend assets only. It does not deploy the API or configure
 - Authenticated, tenant-scoped household, case, consent, workflow and audit persistence.
 - Per-field and per-viewer grants with explicit purpose, recipient, expiry and immediate revocation.
 - Policy-first workspace with a visible A-J breakdown followed by exactly two care routes: planned procedure and emergency help.
-- Canonical coverage workflow v4 with 22 active tasks, A-K policy decomposition and one deterministic release gate.
+- Canonical coverage workflow v6 (pinned graph checksum) with 22 active tasks, A-K policy decomposition and one deterministic release gate.
 - Versioned agent input and output schemas, validated handoff envelopes, source references and six evidence states.
 - Parallel profile, group-cover and personal-cover specialists; evidence, privacy and safety reviewers.
 - Structured question drafting for named institutional owners. Drafting never sends a message.
