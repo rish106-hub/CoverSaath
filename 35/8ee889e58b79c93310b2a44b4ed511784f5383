@@ -1,0 +1,25 @@
+docs/exec-plans/active/p1b-s32-async-runtime.md
+  s_36e9dbcd177789::t_a61193fb08d1b1 1-113
+tests/p1a-persistence-ports.test.mjs
+  s_36e9dbcd177789::t_259b6dbf9cb441 129,132-133
+docs/adr/0004-postgresql-runtime.md
+  s_36e9dbcd177789::t_a0ba49a55c0642 14
+docs/exec-plans/active/p1b-postgres.md
+  s_36e9dbcd177789::t_5ff9ee42d74809 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "358ee889e58b79c93310b2a44b4ed511784f5383",
+  "prompts": {},
+  "sessions": {
+    "s_36e9dbcd177789": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "926d1f4c-f44b-401e-a2c7-0fa5da7e5673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
