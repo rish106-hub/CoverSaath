@@ -2,7 +2,7 @@
 
 - Owner: central integration owner. Branch: `claude/p1-postgres` (stacked slice branches merge into it).
 - Risk class: migration-sensitive, data-sensitive, security-sensitive (consent, tenant isolation, audit).
-- Decision record: `docs/adr/0004-postgresql-runtime.md`.
+- Decision record: `docs/adr/0004-postgresql-runtime.md`. S3.2 design and decisions: [p1b-s32-async-runtime](p1b-s32-async-runtime.md).
 - Runtime choice (owner, 2026-10-16): Homebrew PostgreSQL locally; CI uses a PostgreSQL service container.
 
 ## Outcome

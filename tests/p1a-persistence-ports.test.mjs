@@ -126,8 +126,9 @@ test('P1-A ports: a fully asynchronous adapter runs a fixture analysis end to en
   assert.deepEqual([replay.created, replay.job.id], [false, created.job.id]);
 });
 
-test('P1-A ports: no database driver dependency was added', () => {
+test('P1-B dependencies: pg is the only database package, with no ORM or query builder (ADR 0004)', () => {
   const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const names = Object.keys({ ...manifest.dependencies, ...manifest.devDependencies });
-  assert.deepEqual(names.filter(name => /^(?:pg|postgres|pg-.*|@neondatabase\/.*|knex|kysely|drizzle-orm|prisma)$/.test(name)), []);
+  assert.deepEqual(names.filter(name => /^(?:pg|postgres|pg-.*|@neondatabase\/.*|knex|kysely|drizzle-orm|prisma|sequelize|typeorm|mikro-orm|@prisma\/.*)$/.test(name)), ['pg']);
+  assert.equal(Object.hasOwn(manifest.devDependencies ?? {}, 'pg'), false);
 });
