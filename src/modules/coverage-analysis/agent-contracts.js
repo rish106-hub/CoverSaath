@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
-import { taskDefinition } from './workflow-definition.js';
-import { inputSchemaId, outputSchemaId } from './contract-ids.js';
+import { COVERAGE_ANALYSIS_WORKFLOW_VERSION, taskDefinition } from './workflow-definition.js';
+import { WORKFLOW_VERSION_MISMATCH, assertExecutableWorkflowVersion } from './contracts.js';
+import {
+  validateTaskInvocationShape,
+  validateTaskResultEnvelopeShape,
+} from '../../contracts/task-contracts.js';
 
 export const AGENT_CONTRACT_VERSION = 'knowvia-agent-contract-v1';
 export const EVIDENCE_STATES = Object.freeze(['Proven', 'Calculated', 'Reported', 'Dynamic', 'Unknown', 'Conflicting']);
@@ -187,11 +191,14 @@ function evidenceStateFor(key, payload, { modelProduced = false } = {}) {
   return 'Unknown';
 }
 
-export function validateTaskInvocation(key, { input, upstream }) {
+// TaskInvocation contract: exactly { input, upstream, run }, the run pinned to the current
+// workflow version, and upstream keyed by exactly the task's dependencies.
+export function validateTaskInvocation(key, invocation) {
   const definition = taskDefinition(key);
   if (!definition) fail(`Unknown workflow task: ${key}.`);
-  requireObject(input, `${key} root input`);
-  requireObject(upstream, `${key} upstream input`);
+  validateTaskInvocationShape(invocation, `${key} invocation`);
+  assertExecutableWorkflowVersion(invocation.run);
+  const { upstream } = invocation;
   const actual = Object.keys(upstream).sort();
   const expected = [...definition.dependsOn].sort();
   if (actual.length !== expected.length || actual.some((item, index) => item !== expected[index])) {
@@ -200,15 +207,19 @@ export function validateTaskInvocation(key, { input, upstream }) {
   return { inputSchema: definition.inputSchema, outputSchema: definition.outputSchema };
 }
 
+// TaskResultEnvelope contract. The envelope is validated on write as well as on read, so a
+// result that could never be consumed (for example model metadata on a deterministic task,
+// such as the release gate) is refused before it is stored.
 export function createTaskOutputEnvelope({ key, payload, run }) {
   const definition = taskDefinition(key);
   if (!definition) fail(`Unknown workflow task: ${key}.`);
+  assertExecutableWorkflowVersion(run);
   payloadValidators[key](payload);
   const modelMetadata = payload?.modelMetadata
     ?? (Array.isArray(payload) ? payload.find(item => item?.modelMetadata)?.modelMetadata : null);
   const evidenceState = evidenceStateFor(key, payload, { modelProduced: Boolean(modelMetadata) });
   if (!EVIDENCE_STATES.includes(evidenceState)) fail(`Invalid evidence state for ${key}.`);
-  return {
+  return validateEnvelope(key, {
     contractVersion: AGENT_CONTRACT_VERSION,
     taskKey: key,
     taskKind: definition.kind,
@@ -228,12 +239,21 @@ export function createTaskOutputEnvelope({ key, payload, run }) {
     },
     evidenceState,
     payload: clone(payload),
-  };
+  }, { requireCurrentVersion: false });
 }
 
+// Read side: strict. Output from any other workflow version (or with no version) never
+// enters a current run.
 export function validateTaskOutputEnvelope(key, envelope) {
+  return validateEnvelope(key, envelope, { requireCurrentVersion: true });
+}
+
+function validateEnvelope(key, envelope, { requireCurrentVersion }) {
   const definition = taskDefinition(key);
-  requireObject(envelope, `${key} output envelope`);
+  validateTaskResultEnvelopeShape(envelope, `${key} output envelope`);
+  if (requireCurrentVersion && envelope.provenance.workflowVersion !== COVERAGE_ANALYSIS_WORKFLOW_VERSION) {
+    throw Object.assign(new TypeError(`${key} output was produced by workflow version ${String(envelope.provenance.workflowVersion)} and cannot enter version ${COVERAGE_ANALYSIS_WORKFLOW_VERSION}.`), { code: WORKFLOW_VERSION_MISMATCH });
+  }
   if (!definition || envelope.contractVersion !== AGENT_CONTRACT_VERSION || envelope.taskKey !== key || envelope.taskKind !== definition.kind) {
     fail(`${key} output envelope identity is invalid.`);
   }
