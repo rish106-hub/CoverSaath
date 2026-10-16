@@ -36,7 +36,7 @@ npm run db:init             # create or migrate the local SQLite database
 npm run dev                 # local UI + API (loopback only)
 git diff --check
 ```
-Runtime: Node 22.16 or later (`node:sqlite`), npm, Vite. Storage is SQLite; PostgreSQL is planned (ADR 0002), not built. No deployment target exists.
+Runtime: Node 22.16 or later (`node:sqlite`), npm, Vite. Storage is SQLite; PostgreSQL is in progress (ADR 0004, `docs/runbooks/local-postgres.md`). No deployment target exists.
 
 ## Working loop
 1. Restate the goal, user impact, scope, non-goals and acceptance criteria.

@@ -10,7 +10,7 @@ Phase 0 of the production plan of action: close the unfinished evidence-completi
 TASK CLASS = S2
 CERT = READY (code gate green)
 PHASE 0 GATE = REVIEW 3 PASS (no P0/P1; P2 fixed); pending owner approval
-PHASE 1 = P1-A + P1-D integrated (Section 2, review PASS); P1-B PostgreSQL and P1-C governance open
+PHASE 1 = P1-A + P1-D integrated (Section 2, review PASS); P1-B PostgreSQL: S3.1 schema foundation done, S3.2/S3.3 open; P1-C governance open
 PRODUCTION READINESS = FAIL
 ```
 
@@ -69,6 +69,15 @@ Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/compl
 - Decomposition: `CANONICAL_KEY_CRITERIA` places all 129 registry keys in sections A-J under exactly one criterion, so live sections are no longer all gaps.
 - Verification: `npm run check` passes (architecture, 349/349 tests, build). Safety eval has no failures and `git diff --check` is clean. The lease-skip test was mutation-checked: it fails when the fix is removed.
 - Independent review (Opus, read-only): PASS, with no P0/P1 and no privacy P2. Integrity P2s F1 (lease) and F2 (`UNKNOWN` placeholder) and P3s F4-F8 are fixed with tests. Open owner decision F3: consent expiry (as opposed to revocation) does not erase observations, run excerpts or task outputs. Retention policy is needed.
+
+## Section 3 (P1-B PostgreSQL): S3.1 schema foundation
+
+Branch `claude/p1-postgres`. Handoff for the next agent: [p1b-handoff.md](../exec-plans/active/p1b-handoff.md).
+
+- PostgreSQL 17 baseline migrations equal to SQLite 001–006, migration runner (advisory lock, checksums), pool factory, schema validation, `julianday(text)` port (107 parity inputs, 0 differences), test harness (template database plus one clone per test). Runtime is still SQLite.
+- Catalog, both engines: 41 tables + `schema_migrations`, 85 foreign keys (plan said 84), 64 indexes, 56 triggers (47 critical), 126 CHECKs. Every trigger has a PostgreSQL test; 14 of 14 mutation checks detected.
+- Evidence (merge on `claude/p1-postgres`): `npm run check` with PostgreSQL 393/393 pass; without `TEST_DATABASE_URL` 362 pass, 31 skipped visibly, 0 fail. `npm run eval:safety` no failures. `git diff --check` clean.
+- Unverified: independent Opus review of S3.1 was still running at handoff.
 
 ## Accepted risks and known limitations
 
