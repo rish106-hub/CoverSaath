@@ -1,0 +1,38 @@
+docs/iterations/LATEST.md
+  s_36e9dbcd177789::t_aa990279585c47 5,63
+src/integrations/AGENTS.md
+  s_36e9dbcd177789::t_aa990279585c47 1-9
+package.json
+  s_36e9dbcd177789::t_aa990279585c47 7
+src/modules/ai-analysis/AGENTS.md
+  s_36e9dbcd177789::t_aa990279585c47 1-10
+README.md
+  s_36e9dbcd177789::t_401f255d25dd13 279
+src/backend/database/AGENTS.md
+  s_36e9dbcd177789::t_aa990279585c47 1-11
+docs/agent-tooling.md
+  s_36e9dbcd177789::t_aa990279585c47 45-62
+AGENTS.md
+  s_36e9dbcd177789::t_aa990279585c47 1,4-7,9-17,19-91
+  s_36e9dbcd177789::t_401f255d25dd13 8,18
+CLAUDE.md
+  s_36e9dbcd177789::t_aa990279585c47 1
+package-lock.json
+  s_36e9dbcd177789::t_264baecb96ac54 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d634175d23f9fd6e8286d568a0fcddcf6c21ecf4",
+  "prompts": {},
+  "sessions": {
+    "s_36e9dbcd177789": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "926d1f4c-f44b-401e-a2c7-0fa5da7e5673",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
