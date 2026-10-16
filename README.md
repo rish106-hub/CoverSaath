@@ -107,8 +107,8 @@ Scoped consent + immutable synthetic source packet
 
 Only source-evidence extraction, question drafting and synthesis are model-eligible. Classification,
 privacy, safety, money, release and actions remain deterministic. Fixture mode is explicit, zero-cost coded output. The persisted
-HTTP workflow currently exposes fixture execution only; it rejects live execution instead of silently
-falling back. The separate command-line orchestration path remains available for bounded live diagnostics.
+HTTP workflow defaults to fixture execution. Live execution (`executionMode: 'live'`) requires explicit
+`modelPermission`, a configured Gemini model and current document consent; it never silently falls back to fixtures.
 
 ### Agent handoff contract
 
@@ -141,14 +141,9 @@ fixture execution even when a key is present. The authenticated live API refuses
 case has protected, clean, encrypted OCR pages and the request explicitly grants model-sharing permission.
 Live provider calls have not been exercised in this checkout.
 
-For a key-free backend check while the API is running:
-
-```sh
-npm run orchestrate -- --fixture
-```
-
-The old memory-only demo API is disabled by default. Set `ENABLE_LEGACY_DEMO_API=true` only for its isolated
-compatibility tests. It is not the product API and must remain disabled in deployed environments.
+The local API serves only the authenticated `/api/v1` routes. Every other API path returns a coded
+`ROUTE_NOT_FOUND` 404. The former memory-only demo API and its `ENABLE_LEGACY_DEMO_API` flag were removed;
+that variable is no longer read, so a leftover value in `.env.local` has no effect.
 
 ### Handoff and safety
 
@@ -159,7 +154,7 @@ No AI, Gnani agent or IVR is placed in front of the emergency route.
 Warnings stay visible. Material issues block release. Citation IDs alone are insufficient; coverage
 observations must match the literal synthetic source. Primary free-form summaries are retained for
 inspection, but the released summary is deterministic. Questions and unknowns cannot invent amounts.
-Neither a reviewer nor the demo human can override insurer authority.
+Neither a reviewer nor a human operator can override insurer authority.
 
 ### Implementation map and limits
 
@@ -173,7 +168,6 @@ Neither a reviewer nor the demo human can override insurer authority.
 | `src/server/policies/` | Read authorization and redacted response contracts |
 | `src/backend/` | Local SQLite schema, repositories, services and deterministic state rules |
 | `src/integrations/` | Provider-specific fail-closed boundaries; no verified provider calls |
-| `scripts/orchestration-demo.mjs` | Execution monitor without frontend or private model reasoning |
 
 SQLite persists authenticated sessions, cases and workflow tasks across restart. It is still a single-process
 local database, not a managed multi-region service or distributed queue. A retry may repeat a billed model
@@ -187,7 +181,7 @@ Verify current provider rates and billing conversion before any live run.
 
 ## Run
 
-Requires Node 22.12 or later.
+Requires Node 22.16 or later.
 
 ```sh
 npm install
@@ -211,7 +205,7 @@ The build produces frontend assets only. It does not deploy the API or configure
 - Authenticated, tenant-scoped household, case, consent, workflow and audit persistence.
 - Per-field and per-viewer grants with explicit purpose, recipient, expiry and immediate revocation.
 - Policy-first workspace with a visible A-J breakdown followed by exactly two care routes: planned procedure and emergency help.
-- Canonical coverage workflow v4 with 22 active tasks, A-K policy decomposition and one deterministic release gate.
+- Canonical coverage workflow v6 (pinned graph checksum) with 22 active tasks, A-K policy decomposition and one deterministic release gate.
 - Versioned agent input and output schemas, validated handoff envelopes, source references and six evidence states.
 - Parallel profile, group-cover and personal-cover specialists; evidence, privacy and safety reviewers.
 - Structured question drafting for named institutional owners. Drafting never sends a message.
@@ -276,7 +270,7 @@ flowchart TD
 | `src/ui/api/`, `src/ui/state/` | Authenticated client and workspace state controller |
 | `tests/` | Unit, integration, security, contract, safety and migration proof |
 
-Supporting material stays outside the repository root. Tracked evidence is in `docs/evidence/`. Strategy
+Supporting material stays outside the repository root. Interview evidence is private and not tracked (`docs/evidence/` is ignored). Strategy
 answers describe the build spec; they do not replace it. Historical asset filenames retain their real names.
 
 ## Data and security limits

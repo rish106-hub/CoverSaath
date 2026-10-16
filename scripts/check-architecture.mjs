@@ -43,13 +43,13 @@ for (const file of sourceFiles) {
     if (sourceArea === 'integrations' && targetArea && targetArea !== 'integrations') {
       violations.push(`${location}: integration code cannot import ${specifier}.`);
     }
-    if (sourceArea === 'agents' && ['adapters', 'backend', 'integrations', 'server', 'ui'].includes(targetArea)) {
+    if (sourceArea === 'agents' && ['backend', 'integrations', 'server', 'ui'].includes(targetArea)) {
       violations.push(`${location}: agent code cannot import ${specifier}.`);
     }
-    if (sourceArea === 'backend' && ['adapters', 'server', 'ui'].includes(targetArea)) {
+    if (sourceArea === 'backend' && ['server', 'ui'].includes(targetArea)) {
       violations.push(`${location}: backend code cannot import ${specifier}.`);
     }
-    if (sourceArea === 'ui' && ['adapters', 'backend', 'integrations', 'server'].includes(targetArea)) {
+    if (sourceArea === 'ui' && ['backend', 'integrations', 'server'].includes(targetArea)) {
       violations.push(`${location}: UI code cannot import ${specifier}.`);
     }
     if (sourceArea !== 'integrations' && targetArea === 'integrations' && !target.endsWith(`${sep}integrations${sep}index.js`)) {
