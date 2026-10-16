@@ -50,10 +50,29 @@ async function applyMigration(client, version, sql) {
 // The pool's statement and lock timeouts apply: use a pool configured for migrations when a file
 // needs longer.
 export async function runPostgresMigrations(pool, { directory = postgresMigrationDirectory } = {}) {
-  const files = postgresMigrationFiles(directory).map(version => ({
-    version,
-    sql: readFileSync(resolve(directory, version), 'utf8'),
-  }));
+  const trustedBaseDirectory = resolve(postgresMigrationDirectory);
+  const resolvedDirectory = resolve(directory);
+
+  if (resolvedDirectory !== trustedBaseDirectory && !resolvedDirectory.startsWith(`${trustedBaseDirectory}/`)) {
+    throw new PostgresDatabaseError(
+      'POSTGRES_MIGRATION_DIRECTORY_NOT_ALLOWED',
+      `Migration directory must be within ${trustedBaseDirectory}: ${resolvedDirectory}`,
+    );
+  }
+
+  const files = postgresMigrationFiles(resolvedDirectory).map(version => {
+    const migrationPath = resolve(resolvedDirectory, version);
+    if (migrationPath !== resolvedDirectory && !migrationPath.startsWith(`${resolvedDirectory}/`)) {
+      throw new PostgresDatabaseError(
+        'POSTGRES_MIGRATION_PATH_NOT_ALLOWED',
+        `Migration path escapes allowed directory: ${migrationPath}`,
+      );
+    }
+    return {
+      version,
+      sql: readFileSync(migrationPath, 'utf8'),
+    };
+  });
   const client = await pool.connect();
   try {
     await client.query('SELECT pg_advisory_lock($1::bigint)', [MIGRATION_LOCK_KEY]);
