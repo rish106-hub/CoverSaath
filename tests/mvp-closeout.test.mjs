@@ -275,7 +275,7 @@ test('F1: the persistent worker skips a result whose lease was lost instead of f
   let recordCalls = 0;
   const leaseLost = Object.assign(new Error('lost'), { code: 'TASK_LEASE_LOST' });
   const { createPersistentCoverageAnalysisService, COVERAGE_ANALYSIS_WORKFLOW } = await import('../src/modules/coverage-analysis/index.js');
-  const run = { id: 'run-f1', status: 'running', workflow_name: COVERAGE_ANALYSIS_WORKFLOW.name, consent_grant_id: 'c', execution_mode: 'live', input_json: '{}' };
+  const run = { id: 'run-f1', status: 'running', workflow_name: COVERAGE_ANALYSIS_WORKFLOW.name, workflow_version: COVERAGE_ANALYSIS_WORKFLOW.version, consent_grant_id: 'c', execution_mode: 'live', input_json: '{}' };
   const definition = COVERAGE_ANALYSIS_WORKFLOW.tasks.find(item => item.key === 'profile');
   let claimed = false;
   const registry = Object.fromEntries(COVERAGE_ANALYSIS_WORKFLOW.tasks.map(item => [item.key, async () => ({})]));

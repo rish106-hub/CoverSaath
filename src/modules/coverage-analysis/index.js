@@ -1,9 +1,17 @@
-export { COVERAGE_ANALYSIS_WORKFLOW, taskDefinition } from './workflow-definition.js';
+export {
+  COVERAGE_ANALYSIS_WORKFLOW,
+  COVERAGE_ANALYSIS_WORKFLOW_NAME,
+  COVERAGE_ANALYSIS_WORKFLOW_VERSION,
+  taskDefinition,
+  validateCoverageWorkflowDefinition,
+} from './workflow-definition.js';
 export {
   RUN_STATES,
   TASK_STATES,
   TERMINAL_RUN_STATES,
+  WORKFLOW_VERSION_MISMATCH,
   assertCoverageAnalysisPort,
+  assertExecutableWorkflowVersion,
   createTaskRecords,
   validateRunRecord,
 } from './contracts.js';

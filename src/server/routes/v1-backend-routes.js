@@ -66,7 +66,7 @@ function idempotencyKey(req) {
   return key;
 }
 
-function errorResponse(error) {
+export function errorResponse(error) {
   const statusByCode = {
     CONSENT_REQUIRED: 403,
     CONSENT_SCOPE_REQUIRED: 403,
@@ -76,9 +76,19 @@ function errorResponse(error) {
     IDEMPOTENCY_CONFLICT: 409,
     CASE_NOT_READY_FOR_ANALYSIS: 409,
   };
-  const code = error.code || 'BACKEND_REQUEST_FAILED';
-  const status = error.statusCode || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
-  return { status, body: { error: { code, message: error.message } } };
+  // Only application codes carry deliberate, client-safe messages: UPPER_SNAKE with at least one
+  // underscore, not a Node/driver ERR_* code, and not an operating-system error (ENOENT,
+  // ECONNREFUSED, ...), which carries syscall/errno. Uncoded, runtime, driver and system errors
+  // are internal: their text, SQL, paths and values never leave the server.
+  const deliberate = typeof error.code === 'string'
+    && /^[A-Z][A-Z0-9]*_[A-Z0-9_]{1,78}$/.test(error.code)
+    && !error.code.startsWith('ERR_')
+    && error.syscall === undefined
+    && typeof error.errno !== 'number';
+  const code = deliberate ? error.code : 'BACKEND_REQUEST_FAILED';
+  const status = error.statusCode || (deliberate && error.status) || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
+  const message = deliberate ? error.message : 'The request could not be completed.';
+  return { status, body: { error: { code, message } } };
 }
 
 function job(database, runId) {
@@ -299,7 +309,8 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     const runMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/analysis-runs$/);
     if (req.method === 'POST' && runMatch) {
       services.access.requireCase(principal, runMatch[1], { write: true });
-      return createAnalysisRun({ req, database, services, caseId: runMatch[1], body: await readBody(req), config, liveRegistryFactory });
+      // Awaited inside the try so asynchronous service errors map through errorResponse.
+      return await createAnalysisRun({ req, database, services, caseId: runMatch[1], body: await readBody(req), config, liveRegistryFactory });
     }
     const auditMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/audit-events$/);
     if (req.method === 'GET' && auditMatch) {
