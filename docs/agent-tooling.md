@@ -42,3 +42,21 @@ Record presence and version in the intake. Do not install a CLI without the CERT
 | Docker | local PostgreSQL | Phase 1 |
 | psql | PostgreSQL checks | Phase 1 |
 | Azure CLI and Bicep | infrastructure | Phase 2 (dev environment) or Phase 6 |
+
+## Task states and review format
+
+- Hand off risky work with one state: `READY`, `BLOCKED` or `NOT_APPLICABLE`.
+- Review findings: ID, severity (P0–P3), evidence (`file:line`), affected area, fix, verification, disposition.
+- Phase gate: no P0/P1, no privacy, security, migration, permission or deployment P2, and one independent human approval.
+
+## Optional per-machine tools
+
+Install once per machine, never per task, and never as application dependencies. Pin to a tag or commit before use.
+
+| Tool | Install (verify the pin first) | Check |
+|---|---|---|
+| Caveman (Codex) | `npx -y github:JuliusBrussee/caveman#v4.0.1 -- --only codex` | `$caveman status` |
+| GStack (Codex) | clone `garrytan/gstack` at a pinned commit, then `./setup --host codex` | `npx skills ls -g -a codex --json` |
+| taste-skill (UI work only) | `npx skills add https://github.com/Leonxlnx/taste-skill --skill design-taste-frontend` at a pinned ref | `npx skills ls -g -a codex --json` |
+
+A specialist agent gets one named skill, one owned scope and one handoff.
