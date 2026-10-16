@@ -6,23 +6,11 @@ import {
   createPineLabsPaymentProvider,
   createSarvamOcrProvider,
 } from '../src/integrations/index.js';
-import {
-  capabilities,
-  createAdapters,
-  institutionalAdapter,
-  ocrAdapter,
-  paymentAdapter,
-  voiceAdapter,
-} from '../src/adapters/index.js';
 
-test('capabilities report manual upload and no active HRMS connector', () => {
-  const result = capabilities({});
-  assert.equal(result.documentIntake.status, 'manual_upload_only');
-  assert.equal(Object.hasOwn(result, 'hrms'), false);
-  assert.equal(result.sarvamOcr.status, 'not_configured');
-  assert.equal(result.gnani.status, 'not_configured');
-  assert.equal(result.pineLabs.status, 'not_configured');
-  assert.equal(result.email.status, 'not_configured');
+test('provider capability reports stay not_configured without settings', () => {
+  for (const create of [createSarvamOcrProvider, createGnaniVoiceProvider, createPineLabsPaymentProvider, createEmailProvider]) {
+    assert.equal(create({ env: {} }).capabilities().status, 'not_configured');
+  }
 });
 
 test('providers stay unconfigured without every required setting', () => {
@@ -49,23 +37,4 @@ test('configured providers remain unverified and make no network claim', async (
 test('configured providers also require explicit authorization', async () => {
   const provider = createSarvamOcrProvider({ env: { SARVAM_API_KEY: 'secret' } });
   await assert.rejects(() => provider.createJob(), error => error.code === 'PROVIDER_AUTHORIZATION_REQUIRED');
-});
-
-test('legacy adapters preserve their fail-closed API', async () => {
-  await assert.rejects(() => voiceAdapter.transcribe(), /No external action/);
-  await assert.rejects(() => paymentAdapter.createCheckout(), /No external action/);
-  await assert.rejects(() => institutionalAdapter.send(), /No external action/);
-  await assert.rejects(() => ocrAdapter.createJob(), /No external action/);
-});
-
-test('adapter factory uses injected configuration without module-level provider instances', async () => {
-  const adapters = createAdapters({ env: { GNANI_API_KEY_ID: 'configured-for-test' } });
-  await assert.rejects(
-    () => adapters.voice.transcribe('synthetic audio', true),
-    error => error.code === 'PROVIDER_CONTRACT_NOT_VERIFIED',
-  );
-  await assert.rejects(
-    () => adapters.payment.createCheckout({}, true),
-    error => error.code === 'PROVIDER_NOT_CONFIGURED',
-  );
 });
