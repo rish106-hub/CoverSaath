@@ -10,7 +10,8 @@ Phase 0 of the production plan of action: close the unfinished evidence-completi
 TASK CLASS = S2
 CERT = READY (code gate green)
 PHASE 0 GATE = REVIEW 3 PASS (no P0/P1; P2 fixed); pending owner approval
-PRODUCTION READINESS = FAIL (Phases 1–6 not started)
+PHASE 1 = P1-A + P1-D integrated (Section 2, review PASS); P1-B PostgreSQL and P1-C governance open
+PRODUCTION READINESS = FAIL
 ```
 
 ## Verification evidence (review 3 fixes on top of 04db540)
@@ -83,8 +84,19 @@ Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/activ
 - Parameter records point at a placeholder `UNCLASSIFIED:<hex>` policy and cannot be re-pointed. A classified policy gets new records (Phase 4 design item).
 - No UI flow grants a document `derive` scope naming `google-gemini`. Live analysis is reachable through the API only (Phase 2, P2-D).
 
+## Section 2: Phase 1 contracts and CI (P1-A + P1-D integration)
+
+- P1-A (contracts): workflow v6 with graph checksum `39384121…e9fa1`; frozen task invocation, result envelope and persistence-port contracts in `src/contracts/`; one stable error-code registry with a drift test; `WORKFLOW_VERSION_MISMATCH` gate on invocation, write and read (a run with no version is rejected too); ADRs 0001-0003.
+- P1-D (CI security): `CI / verify` (npm ci, architecture, tests, build, safety eval on Node 22), CodeQL, dependency review (fails on high), Dependabot for npm and actions; every action pinned to a verified SHA; `SECURITY.md`.
+- Central fixes: F-API-1 (analysis-run errors now return coded bodies and their registered status, e.g. `IDEMPOTENCY_CONFLICT` 409). `errorResponse` hides driver, runtime and operating-system messages behind `BACKEND_REQUEST_FAILED`; request-body errors keep coded 415/413/400.
+- Verification: `npm run check` passes (114 source files, 397/397 tests, build); safety eval no failures; `git diff --check` clean. New tests were mutation-checked.
+- Independent review (Opus, read-only): first pass FAIL on one P2 (driver error messages reached clients) plus doc/test gaps; all fixed. Re-review PASS. Accepted P3: F4 (model-assist execution inferred from model metadata).
+- Not verified locally: the GitHub-hosted CodeQL and dependency-review runs (need the repository settings below).
+- Known: one unreproduced intermittent failure in `pre-dispatch-consent.test.mjs` (suspected same-millisecond task claim ordering); watch CI.
+
 ## Next action
 
-1. Commit the review 3 fixes on `claude/p0-integration`.
-2. Owner approval of the PR from `claude/p0-integration` to `main`.
-3. Before Phase 1: resolve the open decisions in the intake (history purge, broken evidence links, second maintainer, Azure and residency owner, legal/privacy approver).
+1. Owner: review and merge the Section 2 PR (`claude/p1-integration`).
+2. Owner: repository settings from P1-D (dependency graph, Dependabot alerts and security updates, secret scanning with push protection, private vulnerability reporting, CodeQL advanced setup only, read-only Actions token, fork approval, a `main` ruleset requiring `CI / verify`).
+3. Then: the AGENTS.md migration and legacy demo API removal (`claude/agents-migration`), and Section 3 (PostgreSQL, ADR 0002).
+4. Owner decisions still open: consent-expiry retention, second maintainer, Azure and residency owner, `docs/evidence/` history purge.
