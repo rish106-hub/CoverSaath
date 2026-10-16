@@ -71,7 +71,7 @@ Not covered by the check:
 
 ## Runtime and deployment
 
-- Node `>=22.12.0` (`package.json` engines), `node:sqlite`, Vite 8.3.0 for the UI build; `ai`, `@ai-sdk/google` and `@ai-sdk/openai` are runtime dependencies.
+- Node `>=22.16.0` (`package.json` engines), `node:sqlite`, Vite 8.3.0 for the UI build; `ai` and `@ai-sdk/google` are the runtime dependencies.
 - One process. `src/server/server.js` listens on `127.0.0.1:8787` only; `npm run dev` also starts Vite on `127.0.0.1:5173` and proxies `/api`.
 - Storage is one local SQLite file. Analysis work runs inside the API process; there is no queue, worker fleet, cache or container.
 - No deployment target, infrastructure code, hosting, observability stack or capacity numbers exist. CI (`.github/workflows/`) only checks and scans. Scale claims are unsupported (`AGENTS.md`).
