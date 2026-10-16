@@ -8,7 +8,7 @@ Status: describes the repository at the commit that added this file. Companion d
 - `openDatabase` (`src/backend/database/database.js:171`) creates the directory with mode `0700`, sets `foreign_keys = ON`, `busy_timeout = 5000` and, for file databases, `journal_mode = WAL`; `:memory:` is used by tests.
 - All tables are `STRICT`. Timestamps are ISO-8601 UTC text. Money is integer minor units (`service_cases.stated_estimate_minor` with `currency`).
 - The database stores controlled paths, hashes, derived facts, permissions and audit records. Document bytes live outside SQLite (`001_initial_schema.sql:1-3`).
-- PostgreSQL is planned (ADR 0002) and not built. No `pg` dependency exists. The port contract in `src/contracts/persistence-ports.js` is the only preparation; routes and `TenantAccessService` still read `workflow_*` tables with direct SQL and are outside that port (ADR 0002, "Consequences and gaps").
+- PostgreSQL is in progress (Section 3; ADR 0004, `docs/exec-plans/active/p1b-postgres.md`, local setup in [local-postgres](../runbooks/local-postgres.md)). The runtime still uses SQLite: `pg` is a dependency, but no runtime code imports it yet. The port contract in `src/contracts/persistence-ports.js` is the only preparation; routes and `TenantAccessService` still read `workflow_*` tables with direct SQL and are outside that port (ADR 0002, "Consequences and gaps").
 
 ## Migrations
 
