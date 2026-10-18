@@ -10,7 +10,8 @@ Phase 0 of the production plan of action: close the unfinished evidence-completi
 TASK CLASS = S2
 CERT = READY (code gate green)
 PHASE 0 GATE = REVIEW 3 PASS (no P0/P1; P2 fixed); pending owner approval
-PHASE 1 = P1-A + P1-D integrated (Section 2, review PASS); P1-B PostgreSQL: S3.1 merged, review hardening in progress, S3.2/S3.3 open; P1-C governance open
+PHASE 1 = P1-A + P1-D integrated (Section 2, review PASS); P1-B PostgreSQL: S3.1 and its review hardening merged (evidence fact erasure #13, forward fix #16), S3.2/S3.3 open, runtime still SQLite; P1-C governance open
+BLOCK 1 INPUT = merged (#12) and verified locally (#14: real clamd, browser); sandboxed parser, PostgreSQL runtime and Azure staging open
 PRODUCTION READINESS = FAIL
 ```
 
@@ -72,7 +73,7 @@ Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/compl
 
 ## Section 3 (P1-B PostgreSQL): S3.1 schema foundation
 
-PR #8 merged to `main` at `5b5fef5`. Review hardening branch: `codex/p1b-s31-hardening`. Handoff: [p1b-handoff.md](../exec-plans/active/p1b-handoff.md).
+PR #8 merged to `main` at `5b5fef5`. Review hardening (`codex/p1b-s31-hardening`) merged to `main` through #12; P2-2 fix in #13 and #16. Handoff: [p1b-handoff.md](../exec-plans/active/p1b-handoff.md).
 
 - PostgreSQL 17 baseline migrations equal SQLite 001–006. The runner, pool factory, schema validation, `julianday(text)` port and isolated database test harness are implemented. Runtime is still SQLite.
 - The independent S3.1 review failed on one P1 and four P2 issues: `TRUNCATE` bypassed row triggers; temporary tables could shadow guard lookups; an ICU database named `C` could pass validation with incompatible ordering; URL timeout parameters overrode pool policy; a second migration runner leaked a raw lock-timeout error.
@@ -95,7 +96,7 @@ Owner chose a redaction carve-out over an accepted risk (2026-10-18). Plan: [evi
 
 ## Section 4: Block 1 input (document ingestion)
 
-Branch `claude/block1-input`, stacked on the S3.1 hardening PR. Owner decisions (2026-10-18): ClamAV via clamd, encrypted local store behind the byte-storage port, 15 MiB, Block 1 before S3.2. Design: [block-1-input.md](../architecture/block-1-input.md), [pipeline-blocks.md](../architecture/pipeline-blocks.md), [ADR 0005](../adr/0005-document-intake-validation-and-scanning.md).
+Merged to `main`: #12 (`claude/block1-input`, with the S3.1 hardening) and #14 (`claude/block1-verify`). #15 limits `/api/v1/ready` schema detail to loopback callers. Owner decisions (2026-10-18): ClamAV via clamd, encrypted local store behind the byte-storage port, 15 MiB, Block 1 before S3.2. Design: [block-1-input.md](../architecture/block-1-input.md), [pipeline-blocks.md](../architecture/pipeline-blocks.md), [ADR 0005](../adr/0005-document-intake-validation-and-scanning.md).
 
 - Routes: `POST /api/v1/cases/{caseId}/documents` (raw `application/pdf`, `Idempotency-Key`, kind `policy_wording|policy_schedule|endorsement`, uploader grant), `GET /api/v1/cases/{caseId}/documents`, `GET /api/v1/documents/{id}` with user-facing statuses. SQLite migration 008 and PostgreSQL migration 004 (expand-only) add `scan_attempts`, `next_scan_at`, unique indexes for live content and logical versions per household, and a work index.
 - Security: authorization before any body byte; 15 MiB cap on declared and streamed length; bounded PDF inspection (encrypted, active content, page limit, deflate bombs); encrypted storage with validated storage keys; row, audit and idempotency in one transaction; quarantine until a clean clamd scan; infected or tampered bytes deleted; revocation now also deletes encrypted bytes through the worker.
@@ -106,7 +107,7 @@ Branch `claude/block1-input`, stacked on the S3.1 hardening PR. Owner decisions 
 - Review round 2: PASS. Residual P3s fixed: failed byte deletions defer on the row instead of exhausting in memory; a missing object is rejected only after three attempts and only when the storage root exists (an unmounted volume defers); a scanner that keeps returning an error is rejected after ten attempts (`SCAN_FAILED_REPEATEDLY`); deletion drops the upload's idempotency records and the hourly sweep purges expired idempotency rows in every scope. Open P2 (documented): the PDF check is a heuristic in the API process (an object header split by a comment inside skipped bytes is not detected); clamd PDF scanning is required and a sandboxed parser is milestone 2b.
 - Evidence (final): with PostgreSQL `npm run check` passes (485/485, build); without it 449 pass and 36 skip; safety eval no failures; `git diff --check` clean. Every review fix has a mutation-checked test.
 - Not verified at merge: a real ClamAV daemon (fake clamd only); the UI in a browser against the real route; Azure.
-- Verification follow-up (branch `claude/block1-verify`, 2026-10-18):
+- Verification follow-up (#14, `claude/block1-verify`, 2026-10-18):
   - Real ClamAV 1.5.4 (Homebrew) with the runbook settings, signatures main 63 / daily 28157 / bytecode 339 (freshclam printed `NULL X509 store` for the `.sign` files; every database test passed). Opt-in `tests/clamd-integration.test.mjs` (skips unless `CLAMD_TEST_HOST`): PING, EICAR `blocked` with `Eicar-Test-Signature`, synthetic PDF `clean`, 15 MiB input `clean`, 17 MiB input `SCANNER_ERROR` non-retryable (clamd logged `INSTREAM: Size limit reached`). 5/5 pass.
   - API with `DOCUMENT_SCAN_MODE=clamd`: two uploads went `Received, waiting for security checks` to `Passed security checks` within 8 s; three uploads left pending under `disabled` were scanned clean after restart (rows `malware_status=clean`, `scan_attempts=0`). ClamAV's EICAR signature matches only at offset 0, so an EICAR string inside a PDF scans clean and a raw EICAR file is rejected as not a PDF before scanning: the blocked path is proven at scanner level with real clamd and through the API with the fake clamd only.
   - Browser (dev server, synthetic PDFs, built-in browser): three defects found and fixed. (1) The panel was pre-filled with the coverage grant, so every upload failed with `CONSENT_REQUIRED` and the list returned 403: the UI now asks for a separate `document_processing` grant (document `collect`, case `source_pack_metadata` read for the uploader) through an explicit "Allow document upload" action (draft copy, legal review). (2) JSON API errors dropped the server code, so list failures showed "The upload failed": the client now keeps a validated `code` and `status`, and list failures get list wording. (3) The list did not reload when consent arrived: it now reloads on case or consent change and is not requested without a grant ID. Verified after the fixes: upload of 6 MB and 347 B PDFs (201), damaged PDF shows the damaged message with Retry, a wrong consent ID fails and Retry with the corrected ID succeeds with the same idempotency key, a duplicate shows 409 wording, the list refreshes and polls to the final status. Progress bars reached 100%; intermediate progress was not observable on loopback.
@@ -152,8 +153,11 @@ Owner decisions (2026-10-16): apply the lean AGENTS.md model, CoverSaath is the 
 
 ## Next action
 
-1. Finish the S3.1 hardening re-review, then merge its PR before starting S3.2.
-2. Start S3.2 WP0 from updated `main`. Follow [p1b-handoff.md](../exec-plans/active/p1b-handoff.md).
-3. Owner: repository settings from P1-D. CodeQL default setup is enabled and conflicts with the pinned advanced workflow. Switch CodeQL to advanced. Also configure dependency graph, Dependabot alerts and security updates, secret scanning with push protection, private vulnerability reporting, read-only Actions token, fork approval and a `main` ruleset requiring `CI / verify`.
-4. Owner: delete the local `.local/runs/` folder left by the legacy demo store.
-5. Owner decisions still open: consent-expiry retention, second maintainer, Azure and residency owner, `docs/evidence/` history purge.
+Still unverified for Block 1: a real ClamAV daemon blocking a document through the API (proven at scanner level only; the API blocked path uses the fake clamd); a real clamd in any deployed environment; intermediate upload progress in the UI (not observable on loopback); the UI against anything but the local dev server; any Azure deployment.
+
+1. Block 1 hardening: sandboxed PDF parser (milestone 2b), closing the open P2 that the PDF check is a heuristic in the API process.
+2. Start S3.2 WP0 from updated `main` (the S3.1 hardening gate is met). Follow [p1b-handoff.md](../exec-plans/active/p1b-handoff.md).
+3. Azure staging per [azure-staging.md](../runbooks/azure-staging.md) after the owner names the Azure and residency owner; then verify the upload journey and clamd there.
+4. Owner: repository settings from P1-D. CodeQL default setup is enabled and conflicts with the pinned advanced workflow. Switch CodeQL to advanced. Also configure dependency graph, Dependabot alerts and security updates, secret scanning with push protection, private vulnerability reporting, read-only Actions token, fork approval and a `main` ruleset requiring `CI / verify`.
+5. Owner: delete the local `.local/runs/` folder left by the legacy demo store.
+6. Owner decisions still open: consent-expiry retention (F3, also keeps evidence facts), second maintainer, Azure and residency owner, `docs/evidence/` history purge.
