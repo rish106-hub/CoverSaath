@@ -116,3 +116,15 @@ test('uploadDocument rejects with the server error code on failure and resolves 
   await assert.rejects(client.uploadDocument(args), error => error.code === 'UNSUPPORTED_MEDIA_TYPE' && error.status === 415);
   assert.equal((await client.uploadDocument(args)).idempotentReplay, true);
 });
+
+test('JSON request errors keep the server error code so list failures get a specific message', async () => {
+  const fetchImpl = async () => ({
+    ok: false, status: 403,
+    json: async () => ({ error: { code: 'FIELD_ACCESS_REQUIRED', message: 'denied' } }),
+  });
+  const client = createV1Client({ fetchImpl });
+  await assert.rejects(client.listCaseDocuments('case-1'), error => error.code === 'FIELD_ACCESS_REQUIRED' && error.status === 403);
+  assert.equal(messageForErrorCode('FIELD_ACCESS_REQUIRED'), ERROR_MESSAGES.FIELD_ACCESS_REQUIRED);
+  const odd = createV1Client({ fetchImpl: async () => ({ ok: false, status: 500, json: async () => ({ error: { code: '<script>' } }) }) });
+  await assert.rejects(odd.listCaseDocuments('case-1'), error => error.code === undefined);
+});

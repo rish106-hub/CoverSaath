@@ -48,4 +48,14 @@ Run clamd as a container in the same virtual network as the App Service, listeni
 - A synthetic EICAR test file must be reported as `FOUND`.
 - Pending documents with a growing `scan_attempts` mean clamd is unreachable or misconfigured; they resume automatically once it is fixed.
 
-Not verified in this repository: a real clamd run. Tests use a fake clamd server.
+## Integration test
+
+With clamd running locally:
+
+```bash
+CLAMD_TEST_HOST=127.0.0.1 CLAMD_TEST_PORT=3310 node --test tests/clamd-integration.test.mjs
+```
+
+It checks PING, EICAR blocked, a synthetic PDF clean, a 15 MiB input fully scanned, and a 17 MiB input refused as `SCANNER_ERROR` (never clean). Without `CLAMD_TEST_HOST` the tests skip, so CI does not need clamd.
+
+Verified 2026-10-18 with ClamAV 1.5.4 (Homebrew) and the settings above. ClamAV's EICAR signature matches only at offset 0: an EICAR string inside a PDF scans clean. Use a raw EICAR file for scanner checks; the upload route rejects it as not a PDF before scanning.

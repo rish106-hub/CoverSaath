@@ -6,6 +6,7 @@ export function createWorkspaceController({ client, onChange = () => {} } = {}) 
     policyCaseRecord: null,
     policyConsent: null,
     policyJob: null,
+    documentConsent: null,
     caseRecord: null,
     consent: null,
     job: null,
@@ -76,9 +77,28 @@ export function createWorkspaceController({ client, onChange = () => {} } = {}) 
         const result = await createCaseAndRun({ triggerType: 'user_requested_review' });
         state.policyCaseRecord = result.record;
         state.policyConsent = result.consent;
+        state.documentConsent = null; // its read scope names the previous case
         state.policyJob = result.job;
         state.matrix = await client.householdMatrix(state.identity.householdId);
         state.notice = 'Synthetic policy breakdown completed and persisted. No PDF reader, model or external provider was called.';
+      });
+    },
+    // Uploads need their own document_processing grant; the coverage grant above does not cover them.
+    // LEGAL REVIEW REQUIRED: the UI wording around this grant is draft copy.
+    async grantDocumentConsent() {
+      return work(async () => {
+        if (!state.identity) throw new Error('Connect an authenticated household first.');
+        if (!state.policyCaseRecord) throw new Error('Run the policy breakdown before uploading documents.');
+        state.documentConsent = await client.grantConsent({
+          householdId: state.identity.householdId,
+          subjectAdultId: state.identity.adultId,
+          purpose: 'document_processing',
+          scopes: [
+            { resourceType: 'document', action: 'collect', dataCategory: 'insurance_document' },
+            { resourceType: 'case', resourceId: state.policyCaseRecord.id, action: 'read', dataCategory: 'source_pack_metadata', recipient: state.identity.adultId },
+          ],
+        });
+        state.notice = 'Document upload consent recorded for this case.';
       });
     },
     async createAndAnalyze({ route, estimateMinor = null }) {

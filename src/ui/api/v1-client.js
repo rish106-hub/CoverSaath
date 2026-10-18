@@ -1,5 +1,9 @@
 function requestError(response, payload) {
-  return new Error(payload?.error?.message ?? payload?.message ?? `Request failed (${response.status}).`);
+  const error = new Error(payload?.error?.message ?? payload?.message ?? `Request failed (${response.status}).`);
+  const code = payload?.error?.code;
+  if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(code)) error.code = code;
+  error.status = response.status;
+  return error;
 }
 
 export function createV1Client({ fetchImpl = fetch, xhrFactory = () => new XMLHttpRequest() } = {}) {

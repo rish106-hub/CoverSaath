@@ -15,6 +15,7 @@ export const ERROR_MESSAGES = Object.freeze({
   IDEMPOTENCY_KEY_REQUIRED: 'The upload could not be tracked safely. Remove the file and add it again.',
   CONSENT_REQUIRED: 'Document consent is needed before uploading. Check the consent ID.',
   CONSENT_SCOPE_REQUIRED: 'This consent does not cover document upload for this case.',
+  FIELD_ACCESS_REQUIRED: 'This consent does not allow showing documents for this case.',
   CASE_NOT_FOUND: 'We could not find this case in your household.',
   DUPLICATE_DOCUMENT: 'This document was already uploaded to this case.',
   IDEMPOTENCY_CONFLICT: 'This upload key was already used for a different file. Remove the file and add it again.',

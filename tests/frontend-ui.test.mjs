@@ -59,6 +59,34 @@ test('policy reconstruction gates planned care while emergency skips analysis', 
   assert.deepEqual(analyses, ['case-1', 'case-2']);
 });
 
+test('document upload uses its own document_processing grant, not the coverage grant', async () => {
+  const grants = [];
+  const client = {
+    setSessionToken() {},
+    createCase: async body => ({ id:'case-1', trigger_type:body.triggerType, revision:'r1' }),
+    transitionCase: async (id, body) => ({ id, revision:body.toStatus }),
+    grantConsent: async body => { grants.push(body); return { id:`consent-${grants.length}` }; },
+    startAnalysis: async () => ({ id:'run-1', status:'completed', tasks:[] }),
+    householdMatrix: async () => ({ members:[] }),
+  };
+  const controller = createWorkspaceController({ client });
+  await controller.connect({ sessionToken:'x'.repeat(32), householdId:'h1', adultId:'a1', memberId:'m1' });
+  await controller.grantDocumentConsent();
+  assert.equal(grants.length, 0, 'no grant before a policy case exists');
+  await controller.reconstructPolicy();
+  assert.equal(controller.snapshot().documentConsent, null);
+  await controller.grantDocumentConsent();
+  const grant = grants.at(-1);
+  assert.equal(grant.purpose, 'document_processing');
+  assert.deepEqual(grant.scopes, [
+    { resourceType:'document', action:'collect', dataCategory:'insurance_document' },
+    { resourceType:'case', resourceId:'case-1', action:'read', dataCategory:'source_pack_metadata', recipient:'a1' },
+  ]);
+  assert.equal(controller.snapshot().documentConsent.id, 'consent-2');
+  await controller.reconstructPolicy();
+  assert.equal(controller.snapshot().documentConsent, null, 'a new policy case needs its own document grant');
+});
+
 test('responsive theme includes dark mode and reduced-motion handling', () => {
   assert.match(stylesSource, /prefers-color-scheme\s*:\s*dark/);
   assert.match(stylesSource, /prefers-reduced-motion\s*:\s*reduce/);
