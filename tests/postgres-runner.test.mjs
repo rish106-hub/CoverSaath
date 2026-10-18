@@ -12,7 +12,7 @@ import {
 } from './support/postgres.mjs';
 import { insert, one } from './support/postgres-fixtures.mjs';
 
-const baseline = ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql'];
+const baseline = ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql'];
 
 function scratchDirectory(t, files = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-pg-migrations-'));
@@ -40,7 +40,7 @@ test('a fresh database migrates, records checksums, validates, and a repeat run 
     {
       valid: true, missingTables: [], missingViews: [], missingTriggers: [], missingIndexes: [], missingColumns: [],
       disabledTriggers: [], foreignKeyErrors: 0, collation: 'C', localeProvider: 'c', orderingValid: true,
-      collationValid: true, unsafeFunctionSearchPaths: [], migrationCount: 3,
+      collationValid: true, unsafeFunctionSearchPaths: [], migrationCount: 4,
     },
   );
   const publicTemporary = await one(pool, `SELECT count(*)::int AS n
