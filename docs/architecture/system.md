@@ -10,6 +10,8 @@ Naming: CoverSaath is the canonical product name. Some `knowvia` identifiers rem
 
 The earlier in-memory demo API was removed. The authenticated `/api/v1` API is the only API.
 
+Pipeline block map and Block 1 design: [pipeline-blocks.md](pipeline-blocks.md), [block-1-input.md](block-1-input.md).
+
 ## Module map (`src/`)
 
 | Area | Responsibility |
