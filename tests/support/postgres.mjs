@@ -10,7 +10,7 @@
 // use it to prove a test fails when a trigger is broken; its digest selects its own template.
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import pg from 'pg';
 import {
   createPostgresPool, postgresMigrationDirectory, postgresMigrationFiles, runPostgresMigrations,
@@ -40,7 +40,16 @@ export function postgresTestOptions() {
 }
 
 export function migrationDirectory() {
-  return process.env.COVERSAATH_PG_MIGRATIONS_DIR || postgresMigrationDirectory;
+  const override = process.env.COVERSAATH_PG_MIGRATIONS_DIR?.trim();
+  const root = resolve(postgresMigrationDirectory);
+  if (!override) return root;
+
+  const candidate = resolve(override);
+  if (candidate === root || candidate.startsWith(root + sep)) {
+    return candidate;
+  }
+
+  throw new Error('COVERSAATH_PG_MIGRATIONS_DIR must be within the default migrations directory.');
 }
 
 export function migrationSetDigest(directory = migrationDirectory()) {
