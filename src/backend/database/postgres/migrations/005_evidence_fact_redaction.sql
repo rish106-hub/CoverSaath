@@ -10,7 +10,8 @@ ALTER TABLE public.evidence_facts ADD CONSTRAINT evidence_facts_redaction_check 
   (redaction_reason_code IS NULL AND redacted_at IS NULL)
   OR (
     redaction_reason_code IS NOT NULL AND redacted_at IS NOT NULL
-    AND redacted_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.*Z$'
+    AND redacted_at ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$'
+    AND public.julianday(redacted_at) IS NOT NULL
     AND length(redaction_reason_code) BETWEEN 1 AND 64
     AND NOT (redaction_reason_code ~ '[^a-z0-9_]')
   )
@@ -72,6 +73,28 @@ FOR EACH ROW
 WHEN (NEW.redacted_at IS NOT NULL OR NEW.redaction_reason_code IS NOT NULL)
 EXECUTE FUNCTION public.evidence_facts_redaction_insert_fn();
 
+-- A fact cannot cite a page of a document whose erasure has started: the safety net below only
+-- fires on the transition, so a later insert would otherwise keep its value.
+CREATE FUNCTION public.evidence_facts_erased_document_insert_fn() RETURNS trigger LANGUAGE plpgsql
+SET search_path TO pg_catalog, public, pg_temp AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.source_pages AS page
+    JOIN public.document_uploads AS document ON document.id = page.document_upload_id
+    WHERE page.id = NEW.source_page_id AND document.lifecycle_state IN ('deletion_requested', 'deleted')
+  ) THEN
+    RAISE EXCEPTION 'evidence facts cannot cite an erased document';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER evidence_facts_erased_document_insert
+BEFORE INSERT ON public.evidence_facts
+FOR EACH ROW
+WHEN (NEW.source_page_id IS NOT NULL)
+EXECUTE FUNCTION public.evidence_facts_erased_document_insert_fn();
+
 -- Safety net: fact values can never outlive a document deletion request or consent
 -- revocation, which moves the document to deletion_requested. The repository erasure path
 -- runs first and adds the audit event; this trigger guarantees the redaction itself.
@@ -96,3 +119,17 @@ FOR EACH ROW
 WHEN (NEW.lifecycle_state IN ('deletion_requested', 'deleted')
   AND OLD.lifecycle_state NOT IN ('deletion_requested', 'deleted'))
 EXECUTE FUNCTION public.evidence_facts_redact_on_document_erasure_fn();
+
+-- Backfill: facts of documents whose erasure started before this migration.
+UPDATE public.evidence_facts
+SET epistemic_state = 'unknown', value_json = NULL, source_page_id = NULL, source_locator = NULL,
+    institutional_source_ref = NULL, calculation_method = NULL, permitted_viewers_json = NULL,
+    effective_at = NULL,
+    redacted_at = public.coversaath_utc_now(),
+    redaction_reason_code = 'document_erasure'
+WHERE redacted_at IS NULL
+  AND source_page_id IN (
+    SELECT page.id FROM public.source_pages AS page
+    JOIN public.document_uploads AS document ON document.id = page.document_upload_id
+    WHERE document.lifecycle_state IN ('deletion_requested', 'deleted')
+  );

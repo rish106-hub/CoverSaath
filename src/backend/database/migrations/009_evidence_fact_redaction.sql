@@ -9,7 +9,8 @@ ALTER TABLE evidence_facts ADD COLUMN redaction_reason_code TEXT CHECK (
   (redaction_reason_code IS NULL AND redacted_at IS NULL)
   OR (
     redaction_reason_code IS NOT NULL AND redacted_at IS NOT NULL
-    AND redacted_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]*Z'
+    AND redacted_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z'
+    AND julianday(redacted_at) IS NOT NULL
     AND length(redaction_reason_code) BETWEEN 1 AND 64
     AND redaction_reason_code NOT GLOB '*[^a-z0-9_]*'
   )
@@ -61,6 +62,19 @@ BEGIN
   SELECT RAISE(ABORT, 'evidence facts cannot be inserted redacted');
 END;
 
+-- A fact cannot cite a page of a document whose erasure has started: the safety net below only
+-- fires on the transition, so a later insert would otherwise keep its value.
+CREATE TRIGGER evidence_facts_erased_document_insert
+BEFORE INSERT ON evidence_facts
+WHEN NEW.source_page_id IS NOT NULL AND EXISTS (
+  SELECT 1 FROM source_pages page
+  JOIN document_uploads document ON document.id = page.document_upload_id
+  WHERE page.id = NEW.source_page_id AND document.lifecycle_state IN ('deletion_requested', 'deleted')
+)
+BEGIN
+  SELECT RAISE(ABORT, 'evidence facts cannot cite an erased document');
+END;
+
 -- Safety net: fact values can never outlive a document deletion request or consent
 -- revocation, which moves the document to deletion_requested. The repository erasure path
 -- runs first and adds the audit event; this trigger guarantees the redaction itself.
@@ -78,3 +92,17 @@ BEGIN
   WHERE redacted_at IS NULL
     AND source_page_id IN (SELECT id FROM source_pages WHERE document_upload_id = NEW.id);
 END;
+
+-- Backfill: facts of documents whose erasure started before this migration.
+UPDATE evidence_facts
+SET epistemic_state = 'unknown', value_json = NULL, source_page_id = NULL, source_locator = NULL,
+    institutional_source_ref = NULL, calculation_method = NULL, permitted_viewers_json = NULL,
+    effective_at = NULL,
+    redacted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+    redaction_reason_code = 'document_erasure'
+WHERE redacted_at IS NULL
+  AND source_page_id IN (
+    SELECT page.id FROM source_pages page
+    JOIN document_uploads document ON document.id = page.document_upload_id
+    WHERE document.lifecycle_state IN ('deletion_requested', 'deleted')
+  );
