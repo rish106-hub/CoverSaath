@@ -1,0 +1,26 @@
+docs/architecture/system.md
+  s_6d18a01095c0b8::t_bdf5b7cc65ba19 13-14
+docs/adr/0005-document-intake-validation-and-scanning.md
+  s_6d18a01095c0b8::t_88a24ac01a9855 1-38
+docs/architecture/pipeline-blocks.md
+  s_6d18a01095c0b8::t_0e1617496d49be 1-104
+docs/architecture/block-1-input.md
+  s_6d18a01095c0b8::t_6f26a0232b8a79 1-2,4-129
+  s_6d18a01095c0b8::t_3add3b97ecd5f9 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26dc0393a80d366fcce8cabb2afd4c80cbaf1af9",
+  "prompts": {},
+  "sessions": {
+    "s_6d18a01095c0b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7ba5b91-6e7f-489e-b54a-d02f152b251e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
