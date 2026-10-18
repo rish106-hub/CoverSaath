@@ -84,7 +84,8 @@ export const criticalTriggers = Object.freeze([
   'document_uploads_quarantine_after_insert', 'document_uploads_activation_guard',
   'policies_household_source_insert', 'policy_members_household_refs_insert',
   'evidence_facts_household_refs_insert', 'coverage_graph_snapshots_household_case_insert',
-  'evidence_facts_provenance_immutable', 'evidence_facts_no_delete', 'fact_conflicts_same_fact_insert',
+  'evidence_facts_provenance_immutable', 'evidence_facts_no_delete', 'evidence_facts_redaction_insert',
+  'evidence_facts_redact_on_document_erasure', 'fact_conflicts_same_fact_insert',
   'coverage_graph_nodes_snapshot_fact_insert', 'coverage_graph_edges_snapshot_nodes_insert',
   'workflow_runs_household_consent_insert',
   'consent_scopes_profile_viewer_insert', 'consent_scopes_profile_viewer_update',
@@ -122,7 +123,7 @@ export const criticalIndexes = Object.freeze([
 
 export const requiredColumns = Object.freeze({
   document_uploads: ['logical_document_id', 'source_version', 'scan_attempts', 'next_scan_at'],
-  evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status'],
+  evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status', 'redacted_at', 'redaction_reason_code'],
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],
   ocr_jobs: ['contract_version', 'authorization_json', 'result_json', 'result_digest', 'updated_at'],

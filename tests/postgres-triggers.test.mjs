@@ -653,6 +653,95 @@ test('redaction withdraws resolutions and document erasure redacts observations'
   proves('coverage_parameter_observations_redact_on_document_erasure');
 });
 
+test('evidence facts allow only the redaction update; document erasure redacts them', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const appendOnly = 'evidence facts are append only; add a superseding fact';
+  const documentFact = id => insert(pool, 'evidence_facts', {
+    id, household_id: a.household, case_id: a.case, policy_id: a.policy, subject_member_id: a.member,
+    epistemic_state: 'known', value_json: '{"limit":5000}', evidence_kind: 'document', provenance_kind: 'document_page',
+    source_page_id: a.page, source_locator: 'page 3, table 2', institutional_source_ref: 'ref-1',
+    calculation_method: 'none', permitted_viewers_json: '["adult-a"]', effective_at: at,
+    statement_adult_id: a.adult, review_status: 'unreviewed', subject_confirmation_state: 'not_applicable',
+  });
+  const redaction = {
+    epistemic_state: "'unknown'", value_json: 'NULL', source_page_id: 'NULL', source_locator: 'NULL',
+    institutional_source_ref: 'NULL', calculation_method: 'NULL', permitted_viewers_json: 'NULL', effective_at: 'NULL',
+    redacted_at: `'${later}'`, redaction_reason_code: "'consent_revoked'",
+  };
+  const erase = (overrides = {}) => Object.entries({ ...redaction, ...overrides }).map(([column, value]) => `${column} = ${value}`).join(', ');
+  await documentFact('f-redact');
+
+  // Redaction plus any change to an immutable column is rejected.
+  const immutable = {
+    id: "'f-renamed'", household_id: `'${b.household}'`, case_id: 'NULL', policy_id: 'NULL', subject_member_id: 'NULL',
+    fact_key: "'other_key'", evidence_kind: "'fixture'", provenance_kind: "'fixture'", statement_adult_id: 'NULL',
+    asserted_by: "'someone-else'", observed_at: `'${later}'`, retrieved_at: `'${later}'`, confidence_basis_points: '1',
+    review_status: "'reviewed'", subject_confirmation_state: "'confirmed'", expires_at: `'${later}'`,
+    supersedes_fact_id: `'${a.fact}'`, created_at: `'${later}'`,
+  };
+  for (const [column, value] of Object.entries(immutable)) {
+    await rejects(pool.query(`UPDATE evidence_facts SET ${erase({ [column]: value })} WHERE id = 'f-redact'`), appendOnly);
+  }
+  // A partial redaction is rejected: every value-bearing column must be erased and the state UNKNOWN.
+  const retained = {
+    value_json: "'5000'", source_page_id: `'${a.page}'`, source_locator: "'page 3'", institutional_source_ref: "'ref-1'",
+    calculation_method: "'none'", permitted_viewers_json: "'[]'", effective_at: `'${at}'`, epistemic_state: "'conflict'",
+    redacted_at: 'NULL', redaction_reason_code: 'NULL',
+  };
+  for (const [column, value] of Object.entries(retained)) {
+    await rejects(pool.query(`UPDATE evidence_facts SET ${erase({ [column]: value })} WHERE id = 'f-redact'`), appendOnly);
+  }
+  for (const value of ["''", "'yesterday'"]) {
+    await assert.rejects(pool.query(`UPDATE evidence_facts SET ${erase({ redacted_at: value })} WHERE id = 'f-redact'`), { code: '23514' });
+  }
+  await pool.query(`UPDATE evidence_facts SET ${erase()} WHERE id = 'f-redact'`);
+  const redacted = await one(pool, "SELECT * FROM evidence_facts WHERE id = 'f-redact'");
+  assert.equal(redacted.epistemic_state, 'unknown');
+  assert.equal(redacted.value_json, null);
+  assert.equal(redacted.source_page_id, null);
+  assert.equal(redacted.redaction_reason_code, 'consent_revoked');
+  assert.equal(redacted.fact_key, 'room_limit', 'provenance and identity survive');
+  assert.equal(redacted.statement_adult_id, a.adult);
+  // A redacted fact is final.
+  await rejects(pool.query(`UPDATE evidence_facts SET redacted_at = '${at}' WHERE id = 'f-redact'`), appendOnly);
+  await rejects(pool.query("UPDATE evidence_facts SET redaction_reason_code = 'other' WHERE id = 'f-redact'"), appendOnly);
+  await rejects(pool.query("DELETE FROM evidence_facts WHERE id = 'f-redact'"), appendOnly);
+  proves('evidence_facts_provenance_immutable');
+
+  const insertedRedacted = 'evidence facts cannot be inserted redacted';
+  await rejects(insert(pool, 'evidence_facts', {
+    id: 'f-born-redacted', household_id: a.household, redacted_at: at, redaction_reason_code: 'consent_revoked',
+  }), insertedRedacted);
+  await insert(pool, 'evidence_facts', { id: 'f-born-plain', household_id: a.household });
+  proves('evidence_facts_redaction_insert');
+
+  // Document erasure redacts facts sourced from the document's pages, and only those.
+  await insert(pool, 'document_uploads', {
+    id: 'document-fact-erase', household_id: a.household, case_id: a.case, uploaded_by_adult_id: a.adult,
+    consent_grant_id: a.consent, storage_path: 'fixture/fact-erase',
+  });
+  await insert(pool, 'source_pages', { id: 'page-fact-erase', document_upload_id: 'document-fact-erase' });
+  await insert(pool, 'evidence_facts', {
+    id: 'f-erase', household_id: a.household, epistemic_state: 'known', value_json: '7', evidence_kind: 'document',
+    provenance_kind: 'document_page', source_page_id: 'page-fact-erase', source_locator: 'p1',
+  });
+  await documentFact('f-other-document');
+  await pool.query("UPDATE document_uploads SET lifecycle_state = 'quarantined' WHERE id = 'document-fact-erase'");
+  assert.equal((await one(pool, "SELECT redacted_at FROM evidence_facts WHERE id = 'f-erase'")).redacted_at, null,
+    'quarantine is not erasure');
+  await pool.query("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-fact-erase'");
+  const row = await one(pool, "SELECT * FROM evidence_facts WHERE id = 'f-erase'");
+  assert.equal(row.value_json, null);
+  assert.equal(row.source_page_id, null);
+  assert.equal(row.source_locator, null);
+  assert.equal(row.epistemic_state, 'unknown');
+  assert.equal(row.redaction_reason_code, 'document_erasure');
+  assert.match(row.redacted_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.equal((await one(pool, "SELECT redacted_at FROM evidence_facts WHERE id = 'f-other-document'")).redacted_at, null,
+    'facts of another document are untouched');
+  proves('evidence_facts_redact_on_document_erasure');
+});
+
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const catalog = (await pool.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname")).rows.map(row => row.tgname);
