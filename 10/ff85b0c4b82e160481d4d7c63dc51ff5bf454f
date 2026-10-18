@@ -1,0 +1,25 @@
+docs/iterations/LATEST.md
+  s_6d18a01095c0b8::t_66d51c5a7e31f6 102
+docs/architecture/block-1-input.md
+  s_6d18a01095c0b8::t_095d3e13f4362e 131
+docs/runbooks/azure-staging.md
+  s_6d18a01095c0b8::t_c280f8d7150d23 3,5,7,9,12-22,25-42,44,48,51-53,56,59,86,102,153,204,208-209,244,246,258,262,266,270,276,280,284,288,294,300,322,327,341,345
+docs/adr/0005-document-intake-validation-and-scanning.md
+  s_6d18a01095c0b8::t_095d3e13f4362e 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "10ff85b0c4b82e160481d4d7c63dc51ff5bf454f",
+  "prompts": {},
+  "sessions": {
+    "s_6d18a01095c0b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7ba5b91-6e7f-489e-b54a-d02f152b251e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
