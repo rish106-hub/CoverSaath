@@ -17,7 +17,7 @@ npm run db:init
 - Reads `.env.local` if present (`node --env-file-if-exists=.env.local`), so `DATABASE_PATH` can live there. Set only the variable name in `.env.local`; never paste secrets into a shell history or this document.
 - Creates the directory (mode 0700), applies any new migrations and prints JSON: `path`, `valid`, `missingTables`, `missingViews`, `missingTriggers`, `missingIndexes`, `missingColumns`, `foreignKeyErrors`, `integrity`, `migrationCount`.
 - Healthy output: `"valid": true`, `"integrity": "ok"`, `"migrationCount": 6`.
-- The command exits 0 even when `valid` is `false`. Read the JSON, do not rely on the exit code. `GET /api/v1/ready` also returns 503 with the same detail when the schema is invalid or `KNOWVIA_BOOTSTRAP_TOKEN` is not set.
+- The command exits 0 even when `valid` is `false`. Read the JSON, do not rely on the exit code. `GET /api/v1/ready` also returns 503, with the same detail for loopback callers, when the schema is invalid or `KNOWVIA_BOOTSTRAP_TOKEN` is not set.
 
 ## "Applied migration changed"
 

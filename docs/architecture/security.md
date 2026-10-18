@@ -16,7 +16,7 @@ Status: describes controls present in the repository at the commit that added th
 
 ## Trust boundaries and entry points
 
-- Browser to API: only `127.0.0.1:8787`, directly or through the Vite proxy on `127.0.0.1:5173`. Every `/api/v1` route except `/health`, `/live`, `/ready` and household bootstrap requires a bearer session.
+- Browser to API: only `127.0.0.1:8787`, directly or through the Vite proxy on `127.0.0.1:5173`. Every `/api/v1` route except `/health`, `/live`, `/ready` and household bootstrap requires a bearer session. `/ready` returns only `{ status, checks }` (booleans) unless the caller is loopback (see below).
 - API to database: in-process SQLite; no database network surface. PostgreSQL is test-only until S3.2.
 - API to model provider: Google Gemini only, through the model gateway. This is the one outbound path with household-derived content.
 - Integrations (Sarvam, Gnani, Pine Labs, email): no network call is implemented.
@@ -29,6 +29,7 @@ Status: describes controls present in the repository at the commit that added th
 | Control | Where |
 |---|---|
 | Loopback only: server binds `127.0.0.1`; Host must be a local allowlisted value, Origin must be `localhost:5173`/`127.0.0.1:5173`, `Sec-Fetch-Site: cross-site` is rejected. No CORS headers are emitted. | `src/server/server.js:7`, `src/shared/http/security.js:6`, `create-server.js:64` |
+| Readiness detail is loopback only: `GET /api/v1/ready` returns the schema validation result (`database`) and `externalProviderCalls` only when the TCP peer is a loopback address, no proxy forwarding header (`Forwarded`, `X-Forwarded-For`, `X-Forwarded-Host`, `X-Real-IP`, `X-Client-IP`, `X-Original-Host`) is present and `assertLocalRequest` passes; Host or Origin headers alone never qualify. A proxy that strips all forwarding headers and rewrites Host would defeat this, so a public deployment must keep forwarding headers. Everyone else gets `{ status, checks }` with booleans. Abuse test: `tests/ready-detail.test.mjs`. | `src/shared/http/security.js` `isLoopbackRequest`, `v1-backend-routes.js:175` |
 | Rate limit per client address (default 600 per minute, max 100,000), session cap, case cap, per-case active-run cap, 16 KiB JSON body cap | `security.js:14`, `config.js`, `request.js:3`, `v1-backend-routes.js:104` |
 | Security headers on every JSON response: `no-store`, `nosniff`, `no-referrer`, `X-Frame-Options: DENY`, restrictive CSP and Permissions-Policy | `src/shared/http/request.js:19` |
 | Bearer sessions: 32 random bytes, only the sha256 digest stored, expiry and revocation checked, capped session count | `auth-repository.js:13-47` |

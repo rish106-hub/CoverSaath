@@ -1,5 +1,5 @@
 import { readBody } from '../http/request.js';
-import { readBinaryBody } from '../../shared/http/index.js';
+import { isLoopbackRequest, readBinaryBody } from '../../shared/http/index.js';
 import { MAX_DOCUMENT_BYTES } from '../../modules/document-intake/index.js';
 import { documentDto } from '../../backend/services/index.js';
 import { validateSchema } from '../../backend/database/index.js';
@@ -175,12 +175,13 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     if (req.method === 'GET' && url.pathname === '/api/v1/ready') {
       const schema = validateSchema(database);
       const ready = schema.valid && services.access.bootstrapConfigured;
-      return { status: ready ? 200 : 503, body: {
+      const body = {
         status: ready ? 'ready' : 'not_ready',
         checks: { database: schema.valid, authentication: services.access.bootstrapConfigured },
-        database: schema,
-        externalProviderCalls: false,
-      } };
+      };
+      // Schema detail (missing tables, triggers, migration count) is for local operators only.
+      if (isLoopbackRequest(req)) Object.assign(body, { database: schema, externalProviderCalls: false });
+      return { status: ready ? 200 : 503, body };
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/households') {
       services.access.requireBootstrap(req.headers.authorization);
