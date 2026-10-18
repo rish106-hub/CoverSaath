@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostgresDatabaseError } from './errors.js';
 
@@ -51,10 +51,18 @@ async function applyMigration(client, version, sql) {
 // disables lock_timeout on the checked-out connection; it is restored as soon as the lock is held.
 // The wait is still bounded by the pool's statement_timeout.
 export async function runPostgresMigrations(pool, { directory = postgresMigrationDirectory } = {}) {
-  const files = postgresMigrationFiles(directory).map(version => ({
-    version,
-    sql: readFileSync(resolve(directory, version), 'utf8'),
-  }));
+  // The directory is supplied by code (tests use scratch directories), never by a request.
+  // Filenames must match NNN_name.sql and each resolved path must stay inside the directory.
+  // Errors never include filesystem paths.
+  const root = resolve(directory);
+  const files = postgresMigrationFiles(root).map(version => {
+    const migrationPath = resolve(root, version);
+    const offset = relative(root, migrationPath);
+    if (!offset || offset.startsWith('..') || isAbsolute(offset) || offset.includes('/') || offset.includes('\\')) {
+      throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'A migration file path is not allowed.');
+    }
+    return { version, sql: readFileSync(migrationPath, 'utf8') };
+  });
   let client;
   try {
     client = await pool.connect();
