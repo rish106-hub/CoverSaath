@@ -1,0 +1,19 @@
+docs/runbooks/azure-staging.md
+  s_0b378cf06b3947::t_a6885f4275c882 192,194-196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a6f74743e7517d9a744a1af20cd8796d5ceb619b",
+  "prompts": {},
+  "sessions": {
+    "s_0b378cf06b3947": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "27cef32e-9b63-4f4c-83c5-05844b28a2f1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
