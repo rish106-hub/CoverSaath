@@ -13,7 +13,7 @@ The proposal's technology list (FastAPI, Celery, Redis, S3 or R2, Supabase or Cl
 | 3 | AuthN and AuthZ | `api_sessions`, household ownership in `tenant-access-service.js`, per-adult consent. The uploader comes from the session. | Implemented. A managed identity provider is Phase 2. |
 | 4 | Upload orchestration | Bytes go through the API (Architecture A) into the byte-storage port. One request per file. No signed URLs, no `upload_sessions`. | Implemented as a temporary decision. Signed-URL direct upload is planned. |
 | 5 | Object storage | AES-256-GCM local store (document id as AAD) under `DOCUMENT_STORAGE_PATH`, key from `DOCUMENT_ENCRYPTION_KEY_BASE64`. Quarantine is a database state, not a bucket. | Implemented locally. Azure Blob is planned, owner decision open. |
-| 6 | Server validation | Filename sanitizing, magic bytes, MIME and extension agreement, 15 MiB cap while streaming, SHA-256, duplicate detection, `pdf-inspection.js`, ClamAV via `clamd-scanner.js` and `scan-worker.js`. | Implemented in this slice. Sandbox is planned. |
+| 6 | Server validation | Filename sanitizing, magic bytes, MIME and extension agreement, 15 MiB cap while streaming, SHA-256, duplicate detection, `pdf-inspection.js` run in a permission-restricted child process (`sandboxed-pdf-inspection.js`, `pdf-inspection-child.mjs`), ClamAV via `clamd-scanner.js` and `scan-worker.js`. | Implemented. The inspection child is process isolation plus the Node permission model, not an OS sandbox ([ADR 0005 Amendment 1](../adr/0005-document-intake-validation-and-scanning.md)). |
 | 7 | Document registration | `document_uploads` (id, household, case, uploader, consent grant, kind, filename, storage path, SHA-256, MIME, size, malware, lifecycle, logical document id, source version), `audit_events`, `idempotency_keys`. | Implemented. `insurance_products`, `policy_documents` and `upload_sessions` are planned. |
 | 8 | Classification and routing | Only the user-supplied `X-Document-Kind` (`policy_wording`, `policy_schedule`, `endorsement`). | Minimal. Rules-first classification is planned. Model output would be `extracted_unverified` and never sets a trusted type. |
 | 9 | Async processing | The `document_uploads` row is the durable queue. `scan-worker.js` rescans pending rows after restart. | Implemented for scanning only. Classification and OCR jobs are planned (milestone 3). |
@@ -24,7 +24,7 @@ The proposal's technology list (FastAPI, Celery, Redis, S3 or R2, Supabase or Cl
 | Milestone | Proposal scope | Status |
 |---|---|---|
 | 1 Trustworthy upload | Boxes 1-5 and basic 7. Done when five PDFs survive a refresh, in the right household, and another user cannot see them. | Implemented in this slice (upload route, list routes, UI panel). |
-| 2 Secure acceptance | Box 6 and rest of 7. Server checks, structure inspection, malware scan, quarantine to trusted. | Mostly implemented in this slice. Gaps: process sandbox (2b), single-document user deletion. |
+| 2 Secure acceptance | Box 6 and rest of 7. Server checks, structure inspection, malware scan, quarantine to trusted. | Mostly implemented. 2b (inspection in a separate restricted process) is implemented as a Node child process with the permission model; no seccomp, namespaces or rlimits, and no network denial on Node 22 to 24. Gap: single-document user deletion. |
 | 3 Independent processing | Boxes 8-9. Queue, worker, classification, retries, stuck-job recovery. | Planned. The existing task queue (`workflow_tasks`, leases) is the intended base. S3.2 adds `SKIP LOCKED`. |
 | 4 Parsing interface | Box 10. Versioned handoff, job identity, structured errors. | Planned. Uses `knowvia.ocr.v1`. |
 
@@ -53,7 +53,7 @@ The proposal's technology list (FastAPI, Celery, Redis, S3 or R2, Supabase or Cl
 
 ## Gaps and planned work
 
-- PDF inspection in a separate restricted process (milestone 2b).
+- A stronger PDF inspection boundary than the Node permission model (container with seccomp or a separate qpdf service) once a deployment target exists. Milestone 2b itself is done (ADR 0005 Amendment 1).
 - A single-document user deletion route. Today deletion happens through consent revocation (which marks `deletion_requested`) and malware removal.
 - `insurance_products`, `policy_documents` and `upload_sessions` tables, and automatic policy linking.
 - `employer_benefit_booklet` is in `DOCUMENT_KINDS` but not in the `document_uploads.document_kind` CHECK. Adding it needs a table rebuild migration on both engines. Deferred. The route does not accept it.
@@ -90,6 +90,7 @@ User-facing status: `received_pending_checks` (quarantined, pending), `accepted`
 | Malware | Yes at the API with an injected scanner (bytes deleted, document `rejected`); clamd protocol with a fake clamd server (`tests/clamd-scanner.test.mjs`). A real ClamAV is not tested. |
 | Password required | Yes: `PDF_PASSWORD_REQUIRED` |
 | Corrupt or unsafe PDF | Yes: magic bytes, structure, JavaScript, Launch, embedded files, page limit, deflate bombs (`tests/pdf-inspection.test.mjs`) |
+| Inspection child hangs, crashes, floods output or is not sandboxed | Yes: timeout with `SIGKILL`, crash, signal, non-zero exit, malformed or oversized output, spawn error and inactive permission model all reject the upload; queue full is `PDF_INSPECTION_BUSY`; denials are proven from inside a child (`tests/pdf-inspection-sandbox.test.mjs`). Network denial is proven only on Node 25 and later. |
 | 300-page file | Allowed (limit 500 pages); over-limit rejection is covered |
 | Two users, identical files | Yes: stored separately with separate ownership |
 | Consent revocation | Yes: revocation marks the upload `deletion_requested` and the worker deletes the bytes |
@@ -124,7 +125,7 @@ User-facing status: `received_pending_checks` (quarantined, pending), `accepted`
 | Malware scanner | Decided: ClamAV clamd ([ADR 0005](../adr/0005-document-intake-validation-and-scanning.md)). Azure container is open. |
 | Upload size | Decided: 15 MiB. Owner may revisit. Batch limits: no batch endpoint. |
 | Object storage provider and direct upload | Open. Azure Blob is likely. Needs an ADR. |
-| PDF inspection library and sandbox | Open. In-process bounded inspection is the interim. |
+| PDF inspection library and sandbox | Decided: keep the pure-Node `inspectPdf`, run it in a Node child process with the permission model, no qpdf, no new dependency ([ADR 0005 Amendment 1](../adr/0005-document-intake-validation-and-scanning.md)). An OS-level sandbox is open until a deployment target exists. |
 | Password-protected PDFs | Decided: reject. |
 | Identity provider | Open. Phase 2. |
 | Separate queue | Rejected unless measured. |

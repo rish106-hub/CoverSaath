@@ -78,6 +78,10 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   PDF_PAGE_LIMIT: entry(422, 'request', false),
   PDF_RESOURCE_LIMIT: entry(422, 'request', false),
   PDF_UNSUPPORTED_ENCODING: entry(422, 'request', false),
+  // Sandboxed PDF inspection (ADR 0005 amendment). Every one rejects the upload; none is clean.
+  PDF_INSPECTION_FAILED: entry(422, 'request', false),
+  PDF_INSPECTION_BUSY: entry(429, 'capacity', true),
+  PDF_INSPECTION_UNAVAILABLE: entry(503, 'configuration', true),
   // Scanner and storage codes seen by the document worker (never returned to clients).
   SCANNER_UNAVAILABLE: entry(null, 'task_failure', true),
   SCANNER_ERROR: entry(null, 'task_failure', true),

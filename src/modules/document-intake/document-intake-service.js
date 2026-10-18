@@ -62,7 +62,10 @@ export function createDocumentIntakeService({ repository, storage, mode = 'live'
       const consent = await repository.getConsent(consentGrantId);
       assertConsent(consent, { householdId, uploadedByAdultId }, now());
       const validated = validateDocumentFile({ filename: input.filename, declaredMimeType: input.mimeType, bytes: input.bytes, maxBytes });
-      const inspection = inspectFile ? inspectFile(validated) : null;
+      // inspectFile may be asynchronous (the sandboxed PDF inspector). A rejection rejects the upload.
+      const inspection = inspectFile ? await inspectFile(validated) : null;
+      // Inspection can take seconds: re-check consent so a grant revoked meanwhile stores nothing.
+      if (inspectFile) assertConsent(await repository.getConsent(consentGrantId), { householdId, uploadedByAdultId }, now());
       const contentSha256 = createHash('sha256').update(validated.bytes).digest('hex');
       if (await repository.findByHash(householdId, contentSha256)) throw new DocumentIntakeError('DUPLICATE_DOCUMENT', 'The same document bytes already exist for this household.');
       if (await repository.findVersion(householdId, logicalDocumentId, input.version)) throw new DocumentIntakeError('DOCUMENT_VERSION_EXISTS', 'This immutable document version already exists.');
