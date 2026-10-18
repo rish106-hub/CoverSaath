@@ -1,0 +1,34 @@
+src/ui/api/v1-client.js
+  s_6d18a01095c0b8::t_7c5ddb45459e77 5
+  s_6d18a01095c0b8::t_bf35ff5dab8e40 48-81
+src/ui/state/document-selection.js
+  s_6d18a01095c0b8::t_5c7979a200875e 1-99
+src/ui/app.js
+  s_6d18a01095c0b8::t_f5c014dfe30f99 29-31
+  s_6d18a01095c0b8::t_a2251c90addd4c 4
+  s_6d18a01095c0b8::t_0e020ede278096 100-104
+  s_6d18a01095c0b8::t_9ea6950b72607a 243
+tests/ui-document-upload.test.mjs
+  s_6d18a01095c0b8::t_e8a040af1e0ce7 1-118
+src/ui/components/document-upload.js
+  s_6d18a01095c0b8::t_b0d314b0f2ec85 170
+  s_6d18a01095c0b8::t_bd47d6a60600b4 1-169,171-253
+src/ui/styles.css
+  s_6d18a01095c0b8::t_acc6a3849c272c 188-198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3e98235e4876bf339c761811e43ad929b9f14357",
+  "prompts": {},
+  "sessions": {
+    "s_6d18a01095c0b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7ba5b91-6e7f-489e-b54a-d02f152b251e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
