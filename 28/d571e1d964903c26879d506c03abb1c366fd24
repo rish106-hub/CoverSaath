@@ -1,0 +1,22 @@
+tests/document-upload-api.test.mjs
+  s_6d18a01095c0b8::t_331ea23192babb 388-391,404,406-407,418
+  s_6d18a01095c0b8::t_3d8c13f262f38d 217-218,226-233
+src/server/create-server.js
+  s_6d18a01095c0b8::t_331ea23192babb 95-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "28d571e1d964903c26879d506c03abb1c366fd24",
+  "prompts": {},
+  "sessions": {
+    "s_6d18a01095c0b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7ba5b91-6e7f-489e-b54a-d02f152b251e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
