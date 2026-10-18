@@ -32,8 +32,13 @@ function safeMetadata(record) {
   return copy;
 }
 
-export function createDocumentIntakeService({ repository, storage, mode = 'live', now = () => new Date(), maxBytes } = {}) {
+// inspectFile(validated) runs after signature checks and before any byte is stored; it throws a
+// DocumentIntakeError to reject the file and may return { pageCount }. persistenceContext is passed
+// through to repository.createDocument so a persistent repository can commit the row, its audit
+// event and an idempotency record in one transaction.
+export function createDocumentIntakeService({ repository, storage, mode = 'live', now = () => new Date(), maxBytes, inspectFile = null } = {}) {
   if (!['live', 'fixture'].includes(mode)) throw new TypeError('Document intake mode must be live or fixture.');
+  if (inspectFile !== null && typeof inspectFile !== 'function') throw new TypeError('inspectFile must be a function.');
   assertDocumentRepository(repository);
   assertByteStorage(storage, mode);
 
@@ -57,6 +62,7 @@ export function createDocumentIntakeService({ repository, storage, mode = 'live'
       const consent = await repository.getConsent(consentGrantId);
       assertConsent(consent, { householdId, uploadedByAdultId }, now());
       const validated = validateDocumentFile({ filename: input.filename, declaredMimeType: input.mimeType, bytes: input.bytes, maxBytes });
+      const inspection = inspectFile ? inspectFile(validated) : null;
       const contentSha256 = createHash('sha256').update(validated.bytes).digest('hex');
       if (await repository.findByHash(householdId, contentSha256)) throw new DocumentIntakeError('DUPLICATE_DOCUMENT', 'The same document bytes already exist for this household.');
       if (await repository.findVersion(householdId, logicalDocumentId, input.version)) throw new DocumentIntakeError('DOCUMENT_VERSION_EXISTS', 'This immutable document version already exists.');
@@ -82,12 +88,12 @@ export function createDocumentIntakeService({ repository, storage, mode = 'live'
           : 'Upload acceptance does not establish policy meaning, applicability or approval.',
       };
       try {
-        await repository.createDocument(record);
+        await repository.createDocument(record, input.persistenceContext);
       } catch (error) {
         await storage.remove({ storageKey });
         throw error;
       }
-      return safeMetadata(record);
+      return safeMetadata(inspection?.pageCount ? { ...record, pageCount: inspection.pageCount } : record);
     },
 
     async recordMalwareScan({ documentId, status, scannerReference = null }) {

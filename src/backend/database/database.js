@@ -116,10 +116,12 @@ export const criticalIndexes = Object.freeze([
   'ocr_jobs_lifecycle_idx',
   'coverage_parameter_records_run_idx', 'coverage_parameter_records_case_idx',
   'coverage_parameter_observations_parameter_idx', 'coverage_parameter_observations_document_idx',
+  'document_uploads_household_content_live_uidx', 'document_uploads_household_logical_version_uidx',
+  'document_uploads_work_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
-  document_uploads: ['logical_document_id', 'source_version'],
+  document_uploads: ['logical_document_id', 'source_version', 'scan_attempts', 'next_scan_at'],
   evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status'],
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],

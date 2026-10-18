@@ -84,19 +84,22 @@ User-facing status: `received_pending_checks` (quarantined, pending), `accepted`
 
 | Scenario | Covered here? |
 |---|---|
-| Same PDF uploaded twice | Yes: idempotent replay, `IDEMPOTENCY_CONFLICT`, `DUPLICATE_DOCUMENT` |
-| Someone else's policy or guessed document id | Yes: same not-found response as a missing id, cross-household read denied |
-| Over size limit | Yes: cap enforced while streaming |
-| Malware | Yes: scanner and worker with a fake clamd. A real clamd is not tested. |
+| Same PDF uploaded twice | Yes: idempotent replay, `IDEMPOTENCY_CONFLICT`, `DUPLICATE_DOCUMENT`, five concurrent retries create one document (`tests/document-upload-api.test.mjs`) |
+| Someone else's policy or guessed document id | Yes: a foreign document id gets the same `DOCUMENT_NOT_FOUND` body as a missing one; another household cannot list, read or upload into the case; another household's grant is refused |
+| Over size limit | Yes: a declared `Content-Length` over 15 MiB is refused before reading, and a chunked body with no length is cut off at the cap |
+| Malware | Yes at the API with an injected scanner (bytes deleted, document `rejected`); clamd protocol with a fake clamd server (`tests/clamd-scanner.test.mjs`). A real ClamAV is not tested. |
 | Password required | Yes: `PDF_PASSWORD_REQUIRED` |
-| Corrupt PDF | Yes for bad magic bytes and malformed structure within the bounded inspection |
-| 300-page file | Not covered. The limit is 500 pages; over-limit is covered. |
+| Corrupt or unsafe PDF | Yes: magic bytes, structure, JavaScript, Launch, embedded files, page limit, deflate bombs (`tests/pdf-inspection.test.mjs`) |
+| 300-page file | Allowed (limit 500 pages); over-limit rejection is covered |
 | Two users, identical files | Yes: stored separately with separate ownership |
-| Deletion during processing, consent revocation | Yes: revocation marks the upload `deletion_requested` |
-| Browser refresh | Yes: list after a fresh request |
-| Storage failing, database transaction failure | Yes: bytes removed when the insert fails, no row when storage fails |
-| Worker crash, same job runs twice | Partly: the row stays pending and is rescanned. Counters are in memory. |
-| Internet drops mid-upload | Not covered. A partial body is rejected, but no network-fault test exists. |
+| Consent revocation | Yes: revocation marks the upload `deletion_requested` and the worker deletes the bytes |
+| Deletion during processing | Partly: guarded transitions never resurrect a rejected or deleted document. No user delete route yet. |
+| Browser refresh / server restart | Yes: the list survives a server restart (test and a manual run against the real server) |
+| Storage failing, database insert failing | Yes: bytes removed when the insert fails; no row or idempotency record when storage fails |
+| Worker crash, same job runs twice | Yes: attempts and next due time live on the row; transitions are conditional so a second result is ignored; revocation during an in-flight scan never activates the document |
+| Scanner outage | Yes: scans defer on the row with capped backoff and complete after recovery; deletion work is served before any scan backlog |
+| Concurrent duplicates with different keys | Yes: unique indexes allow one upload of the same content or logical version |
+| Internet drops mid-upload | Not covered by a network-fault test. A partial body never becomes a row. |
 | No extractable text | Not applicable until Block 2. |
 | Queue unavailable | Not applicable. The database is the queue. |
 | Expired signed URL | Not applicable. No signed URLs. |
@@ -125,5 +128,5 @@ User-facing status: `received_pending_checks` (quarantined, pending), `accepted`
 | Password-protected PDFs | Decided: reject. |
 | Identity provider | Open. Phase 2. |
 | Separate queue | Rejected unless measured. |
-| Azure staging `DOCUMENT_SCAN_MODE=structural_only` | Not read by the code. Align or remove (see ADR 0005). |
+| Azure staging `DOCUMENT_SCAN_MODE=structural_only` | Now a startup error. Set `disabled` or `clamd` before deploying (see ADR 0005). |
 | Retention for expired (not revoked) consent | Open. Owner decision F3 in `docs/iterations/LATEST.md`. |

@@ -55,7 +55,7 @@ Notes:
 
 Gaps:
 
-- `DocumentIntakeService.requestDeletion` and `completeDeletion` (which removes the encrypted bytes) exist, but the service is not wired to the SQLite database or any route and nothing schedules `completeDeletion`.
+- Encrypted document bytes: consent revocation marks uploads `deletion_requested`; the document worker (started with the server whenever encrypted storage is configured) removes the bytes and marks the row `deleted` with filename `[deleted]` and a counts-only `document.bytes_deleted` audit event (`document-upload-service.js` `processDocument`, `document-repository.js` `completeDeletion`). A malware hit, tampered ciphertext or a missing object follows the same path. The row stays as a tombstone with the content hash and storage reference replaced by random values. An hourly sweep removes ciphertext and temporary files with no live row once they are an hour old.
 - Revocation of a grant does not delete `document_uploads` rows, `consent_*` rows or audit events.
 
 ## Retention

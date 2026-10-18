@@ -1,4 +1,7 @@
 import { readBody } from '../http/request.js';
+import { readBinaryBody } from '../../shared/http/index.js';
+import { MAX_DOCUMENT_BYTES } from '../../modules/document-intake/index.js';
+import { documentDto } from '../../backend/services/index.js';
 import { validateSchema } from '../../backend/database/index.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../../modules/coverage-analysis/index.js';
@@ -141,7 +144,26 @@ function createAnalysisRun({ req, database, services, caseId, body, config, live
   });
 }
 
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory }) {
+// Document routes answer a missing case and another household's case identically.
+function requireDocumentCase(services, principal, caseId, options) {
+  try {
+    return services.access.requireCase(principal, caseId, options);
+  } catch (error) {
+    if (['CASE_NOT_FOUND', 'HOUSEHOLD_NOT_FOUND'].includes(error.code)) {
+      throw Object.assign(new Error('Case not found.'), { code: 'CASE_NOT_FOUND', statusCode: 404 });
+    }
+    throw error;
+  }
+}
+
+function documentNotFound() {
+  const error = new Error('Document not found.');
+  error.code = 'DOCUMENT_NOT_FOUND';
+  error.statusCode = 404;
+  return error;
+}
+
+export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -290,6 +312,40 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
           status, terminal_reason, created_at, finished_at
         FROM workflow_runs WHERE case_id = ? ORDER BY created_at, id`).all(caseRecord.id);
       return { status: 200, body: sourcePackDto(caseRecord.id, sources, workflows) };
+    }
+    const documentsMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/documents$/);
+    if (req.method === 'POST' && documentsMatch) {
+      // Authorise and check configuration before reading a single body byte.
+      const caseRecord = requireDocumentCase(services, principal, documentsMatch[1], { write: true });
+      if (!documentUploads?.configured) {
+        const error = new Error('Document storage is not configured.');
+        error.code = 'DOCUMENT_STORAGE_NOT_CONFIGURED';
+        error.statusCode = 503;
+        throw error;
+      }
+      const bytes = await readBinaryBody(req, { contentType: 'application/pdf', limitBytes: MAX_DOCUMENT_BYTES });
+      return await documentUploads.upload({ principal, caseRecord, headers: req.headers, bytes });
+    }
+    if (req.method === 'GET' && documentsMatch) {
+      const caseRecord = requireDocumentCase(services, principal, documentsMatch[1]);
+      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      return { status: 200, body: documentUploads.listForCase(caseRecord) };
+    }
+    const documentMatch = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)$/);
+    if (req.method === 'GET' && documentMatch) {
+      // A missing document and another household's document get the same response.
+      const record = documentUploads?.getDocument(documentMatch[1]);
+      if (!record?.caseId) throw documentNotFound();
+      let caseRecord;
+      try {
+        caseRecord = services.access.requireCase(principal, record.caseId);
+      } catch (error) {
+        if (['CASE_NOT_FOUND', 'HOUSEHOLD_NOT_FOUND'].includes(error.code)) throw documentNotFound();
+        throw error;
+      }
+      if (caseRecord.household_id !== record.householdId) throw documentNotFound();
+      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      return { status: 200, body: documentDto(record) };
     }
     const transitionMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/transitions$/);
     if (req.method === 'POST' && transitionMatch) {
