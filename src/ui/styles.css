@@ -185,3 +185,14 @@ pre { max-width:100%; overflow:auto; font-size:.75rem; }
   header{padding:13px 18px}.header-note{display:none}.prototype{padding:9px 18px}.shell{padding:18px 14px 46px}.emergency{grid-template-columns:1fr;gap:14px}.emergency-actions{align-items:start;flex-direction:column}.intro{min-height:auto;grid-template-columns:1fr;gap:18px;padding:48px 4px 30px}.intro>p{padding:0}.matrix-heading,.route-heading,.policy-foundation-head{align-items:start;flex-direction:column;padding:20px}.policy-foundation{padding:0 0 18px}.policy-foundation-head{padding-bottom:0}.policy-foundation-head .button{width:100%}.policy-empty{margin:18px}.breakdown-grid{grid-template-columns:1fr;margin:18px}.matrix-table{display:grid;gap:10px;padding:12px}.matrix-head{display:none}.matrix-row{display:grid;grid-template-columns:1fr auto;gap:7px 12px;min-height:0;padding:16px;border:1px solid var(--line);border-radius:12px}.matrix-row>span:nth-child(2),.matrix-row>span:nth-child(3){grid-column:1/-1}.matrix-row>span:nth-child(4){grid-column:1}.matrix-row>span:nth-child(5){grid-column:2;grid-row:1}.member-detail{align-items:start;flex-direction:column;padding:20px}.route-chooser{grid-template-columns:1fr;padding:0 18px}.layout{grid-template-columns:1fr}.intake{position:static}.empty{min-height:320px;padding:26px}.case-top{align-items:start;flex-direction:column}.layer-tabs{grid-template-columns:1fr 1fr}.data-grid{grid-template-columns:1fr 1fr}.state-list{grid-template-columns:1fr 1fr}.purchase-controls{flex-direction:column}
 }
 @media (max-width:480px) { .brand small{display:none}.layer-tabs,.state-list,.data-grid{grid-template-columns:1fr}.layer-tab span{display:none}.panel{padding:18px}.actions .button{width:100%} }
+.upload-panel { display:grid; gap:14px; margin-top:20px; }
+.upload-list { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+.upload-item { display:grid; gap:8px; padding:12px 14px; background:var(--surface-subtle); border:1px solid var(--line); border-radius:var(--radius-control); }
+.upload-error { border-color:var(--danger); background:var(--danger-soft); }
+.upload-meta { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 14px; }
+.upload-name { overflow-wrap:anywhere; }
+.upload-status { color:var(--muted); font-size:.88rem; }
+.upload-error .upload-status { color:var(--danger); }
+.upload-progress { height:8px; background:var(--surface-strong); border-radius:99px; overflow:hidden; }
+.upload-progress>span { display:block; height:100%; width:0; background:var(--accent); transition:width 150ms ease; }
+.upload-actions { display:flex; gap:10px; }
