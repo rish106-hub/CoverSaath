@@ -1,4 +1,6 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { isDatabaseInterface } from '../database/postgres/db.js';
+import { householdLock } from '../database/postgres/locks.js';
 
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
@@ -8,34 +10,70 @@ function stable(value) {
   return value;
 }
 
+function requireFields({ action, resourceType, resourceId }) {
+  if (!action || !resourceType || !resourceId) throw new Error('Audit action, resource type and resource id are required.');
+}
+
+const INSERT_EVENT = `
+  INSERT INTO audit_events
+    (household_id, case_id, actor_type, actor_id, action, resource_type, resource_id,
+     event_payload_json, previous_event_hash, event_hash, occurred_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+// Appends to a per-household hash chain. On the node:sqlite runtime the single writer serialises
+// appends and append() returns the event. On the PostgreSQL interface (S3.2) append() returns a
+// Promise: it runs in a transaction (a savepoint inside a caller's transaction) that holds the
+// household advisory lock while it reads the previous hash and inserts, so concurrent appends
+// cannot fork the chain. Callers that also lock rows must take the household lock first (lock
+// order, design section 3); the advisory lock is re-entrant within one transaction.
 export class AuditRepository {
   constructor(database, { clock = () => new Date() } = {}) {
     this.database = database;
     this.clock = clock;
   }
 
+  #event({ householdId, caseId, actorType, actorId, action, resourceType, resourceId, payload }, previous) {
+    const occurredAt = this.clock().toISOString();
+    const payloadJson = JSON.stringify(stable(payload));
+    const material = JSON.stringify(stable({ householdId, caseId, actorType, actorId, action, resourceType, resourceId, payload, previous, occurredAt }));
+    const eventHash = createHash('sha256').update(material).digest('hex');
+    const params = [householdId, caseId, actorType, actorId, action, resourceType, resourceId, payloadJson, previous, eventHash, occurredAt];
+    return { occurredAt, eventHash, params };
+  }
+
   append({ householdId = null, caseId = null, actorType = 'system', actorId = 'local-backend', action, resourceType, resourceId, payload = {} }) {
-    if (!action || !resourceType || !resourceId) throw new Error('Audit action, resource type and resource id are required.');
+    const input = { householdId, caseId, actorType, actorId, action, resourceType, resourceId, payload };
+    if (isDatabaseInterface(this.database)) return this.#appendPostgres(input);
+    requireFields(input);
     const previous = this.database.prepare(`
       SELECT event_hash FROM audit_events
       WHERE (household_id = ? OR (? IS NULL AND household_id IS NULL))
       ORDER BY id DESC LIMIT 1
     `).get(householdId, householdId)?.event_hash ?? null;
-    const occurredAt = this.clock().toISOString();
-    const payloadJson = JSON.stringify(stable(payload));
-    const material = JSON.stringify(stable({ householdId, caseId, actorType, actorId, action, resourceType, resourceId, payload, previous, occurredAt }));
-    const eventHash = createHash('sha256').update(material).digest('hex');
-    const result = this.database.prepare(`
-      INSERT INTO audit_events
-        (household_id, case_id, actor_type, actor_id, action, resource_type, resource_id,
-         event_payload_json, previous_event_hash, event_hash, occurred_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(householdId, caseId, actorType, actorId, action, resourceType, resourceId, payloadJson, previous, eventHash, occurredAt);
+    const { occurredAt, eventHash, params } = this.#event(input, previous);
+    const result = this.database.prepare(INSERT_EVENT).run(...params);
     return { id: Number(result.lastInsertRowid), eventHash, previousEventHash: previous, occurredAt };
   }
 
+  async #appendPostgres(input) {
+    requireFields(input);
+    const db = this.database;
+    return db.transaction(async () => {
+      // Untyped `? IS NULL` fails on PostgreSQL (42P18), so the NULL chain has its own query.
+      const previousRow = input.householdId === null
+        ? await db.one('SELECT event_hash FROM audit_events WHERE household_id IS NULL ORDER BY id DESC LIMIT 1')
+        : await db.one('SELECT event_hash FROM audit_events WHERE household_id = ? ORDER BY id DESC LIMIT 1', [input.householdId]);
+      const previous = previousRow?.event_hash ?? null;
+      const { occurredAt, eventHash, params } = this.#event(input, previous);
+      const { rows: [row] } = await db.query(`${INSERT_EVENT} RETURNING id`, params);
+      return { id: row.id, eventHash, previousEventHash: previous, occurredAt };
+    }, { locks: [householdLock(input.householdId)] });
+  }
+
   listForCase(caseId) {
+    if (isDatabaseInterface(this.database)) {
+      return this.database.many('SELECT * FROM audit_events WHERE case_id = ? ORDER BY id', [caseId]);
+    }
     return this.database.prepare('SELECT * FROM audit_events WHERE case_id = ? ORDER BY id').all(caseId);
   }
 }
-
