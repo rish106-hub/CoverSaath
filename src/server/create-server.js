@@ -9,7 +9,7 @@ import {
   createClamdScanner,
   createDocumentScanWorker,
   createEncryptedLocalByteStorage,
-  inspectPdf,
+  createSandboxedPdfInspector,
 } from '../modules/document-intake/index.js';
 import {
   createEmailProvider,
@@ -36,6 +36,17 @@ export function createApiServer({
     : null;
   const scanner = documentScanner
     ?? (config.documents.clamd ? createClamdScanner(config.documents.clamd) : null);
+  // Untrusted PDF structure is parsed only in a permission-restricted child process (ADR 0005).
+  // Events carry reason codes and numbers only, never document content.
+  const pdfInspector = documentStorage
+    ? createSandboxedPdfInspector({
+      onEvent: event => {
+        if (event.type === 'pdf_inspection_busy' || (event.type === 'pdf_inspection_failed' && event.reason !== 'rejected')) {
+          console.warn(JSON.stringify({ event: event.type, reason: event.reason ?? null, exitCode: event.exitCode ?? null, signal: event.signal ?? null }));
+        }
+      },
+    })
+    : null;
   const rateLimiter = createRateLimiter({ limit: config.rateLimitPerMinute });
   // The live path always re-checks current document consent from the database
   // immediately before every provider call and always runs the privacy gate.
@@ -67,7 +78,7 @@ export function createApiServer({
       repository: services.documents,
       storage: documentStorage,
       scanner,
-      inspectFile: validated => (validated.detectedMimeType === 'application/pdf' ? inspectPdf(validated.bytes) : null),
+      inspectFile: validated => (validated.detectedMimeType === 'application/pdf' ? pdfInspector.inspect(validated.bytes) : null),
       limits: {
         maxDocumentsPerCase: config.documents.maxDocumentsPerCase,
         maxPendingPerHousehold: config.documents.maxPendingPerHousehold,
@@ -141,6 +152,7 @@ export function createApiServer({
       workerStopped = worker ? worker.stop().catch(() => {}) : Promise.resolve();
     });
   }
+  if (pdfInspector) server.once('close', () => pdfInspector.close());
   // The database closes only after in-flight document work has finished.
   if (ownsDatabase) server.once('close', () => { workerStopped.then(() => database?.close()); });
   return server;
