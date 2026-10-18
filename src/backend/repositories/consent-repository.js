@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 const id = prefix => `${prefix}-${randomUUID()}`;
 
 const ERASURE_MARKER = 'consent_revoked';
-// Erasure reasons recorded on observations; anything else is recorded as consent_revoked.
+// Erasure reasons recorded on observations and evidence facts; anything else is recorded as consent_revoked.
 const OBSERVATION_ERASURE_REASONS = new Set(['consent_revoked', 'source_consent_not_current']);
 const RUN_SCAN_BATCH_SIZE = 100;
 const MAX_ERASURE_RUNS = 5_000;
@@ -230,7 +230,8 @@ export class ConsentRepository {
    *   - every task output is nulled (all tasks are downstream of model extraction of those pages)
    *     and pending, running and completed tasks become revoked;
    *   - queued, running, completed and blocked runs become revoked; graph snapshots are superseded.
-   * One audit event records counts only. Idempotent. Returns the counts.
+   * Evidence facts sourced from pages of `documentIds` are redacted (value and locators erased).
+   * One audit event per store records counts only. Idempotent. Returns the counts.
    */
   eraseDerivedRunData({
     householdId = null, documentIds = [], runIds = [], consentGrantId = null, reason = ERASURE_MARKER,
@@ -323,6 +324,29 @@ export class ConsentRepository {
         payload: { reason, runs, tasks, pages, documents: documents.size },
       });
     }
-    return Object.freeze({ runs, tasks, pages });
+    // Evidence facts sourced from the affected documents are derived data too: the one permitted
+    // update (migration 009) erases their value and locators and marks them UNKNOWN. Scoped to the
+    // household when known. Counts only are audited.
+    let facts = 0;
+    if (documents.size > 0) {
+      const redactFacts = this.database.prepare(`UPDATE evidence_facts
+        SET epistemic_state = 'unknown', value_json = NULL, source_page_id = NULL, source_locator = NULL,
+            institutional_source_ref = NULL, calculation_method = NULL, permitted_viewers_json = NULL,
+            effective_at = NULL, redacted_at = ?, redaction_reason_code = ?
+        WHERE redacted_at IS NULL
+          AND (? IS NULL OR household_id = ?)
+          AND source_page_id IN (SELECT id FROM source_pages WHERE document_upload_id = ?)`);
+      const reasonCode = OBSERVATION_ERASURE_REASONS.has(reason) ? reason : ERASURE_MARKER;
+      for (const documentId of documents) {
+        facts += Number(redactFacts.run(at, reasonCode, householdId, householdId, documentId).changes);
+      }
+    }
+    if (facts > 0) {
+      this.audit?.append({
+        householdId, caseId, actorType, actorId, action: 'evidence.facts_erased', resourceType, resourceId,
+        payload: { reason, facts, documents: documents.size },
+      });
+    }
+    return Object.freeze({ runs, tasks, pages, facts });
   }
 }
