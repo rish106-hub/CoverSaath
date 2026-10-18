@@ -1,0 +1,58 @@
+docs/adr/0005-document-intake-validation-and-scanning.md
+  s_3fac516aaf027d::t_e0bb1ec5158a7a 21
+  s_3fac516aaf027d::t_01284336690792 36-40,42-57,60
+  s_3fac516aaf027d::t_e8a21301e4e2c2 15
+  s_3fac516aaf027d::t_8e252bf2e7557a 41
+  s_3fac516aaf027d::t_82e1ad283fdcd6 61
+tests/pdf-inspection-sandbox.test.mjs
+  s_3fac516aaf027d::t_adf860063a5443 167
+  s_3fac516aaf027d::t_0ace34067b3d66 1-166,168-300,304-308,311-391
+  s_3fac516aaf027d::t_2bb0a3f76c2a84 301-303
+  s_3fac516aaf027d::t_ad86f2f5898437 309-310
+src/modules/document-intake/sandboxed-pdf-inspection.js
+  s_3fac516aaf027d::t_cd99cb3ff67b44 158-159
+  s_3fac516aaf027d::t_70e1e056da3efc 228
+  s_3fac516aaf027d::t_efcded654e6dfb 2
+  s_3fac516aaf027d::t_c42a22e28b240b 1,3-71,73-116,119-132,134-157,160-227,229-238
+  s_3fac516aaf027d::t_3ad31c3d704ce8 72
+  s_3fac516aaf027d::t_b9e306e9aeaf91 117-118
+  s_3fac516aaf027d::t_6946c4c1e71288 133
+src/modules/document-intake/document-intake-service.js
+  s_3fac516aaf027d::t_31ee6978f73d61 65-68
+src/modules/document-intake/index.js
+  s_3fac516aaf027d::t_b5b94233082918 10
+docs/architecture/block-1-input.md
+  s_3fac516aaf027d::t_06377a245803e2 128
+  s_3fac516aaf027d::t_0afa29782f9c31 16
+  s_3fac516aaf027d::t_791c37bb815c5d 27
+  s_3fac516aaf027d::t_e68686a8e8fa8c 56
+  s_3fac516aaf027d::t_acec43bb302cfe 93
+src/server/create-server.js
+  s_3fac516aaf027d::t_1c79514d9dfec8 39-49
+  s_3fac516aaf027d::t_2473dd431974b4 12
+  s_3fac516aaf027d::t_2073b86d46cd13 155
+  s_3fac516aaf027d::t_66c7de330e10e3 81
+src/modules/document-intake/pdf-inspection-child.mjs
+  s_3fac516aaf027d::t_82a807fc970942 10-11
+  s_3fac516aaf027d::t_d3923599f8d0e7 38-43,46-48
+  s_3fac516aaf027d::t_b895bf231e5d4a 1-9,12-35,49-76
+  s_3fac516aaf027d::t_bf68f30549ad2b 36-37,44-45
+src/contracts/error-codes.js
+  s_3fac516aaf027d::t_82172b7d70bb71 81-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "537386f9f9a6a308d0cd5cfc8f59cc117e5828a2",
+  "prompts": {},
+  "sessions": {
+    "s_3fac516aaf027d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b79f2b41-509a-43b9-8403-2cd3396b8398",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
