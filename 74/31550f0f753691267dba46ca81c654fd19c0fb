@@ -1,0 +1,31 @@
+docs/architecture/data.md
+  s_6d18a01095c0b8::t_a901f406ec54e7 20
+src/shared/http/security.js
+  s_6d18a01095c0b8::t_a901f406ec54e7 14-31
+src/shared/http/index.js
+  s_6d18a01095c0b8::t_a901f406ec54e7 3
+tests/ready-detail.test.mjs
+  s_6d18a01095c0b8::t_a901f406ec54e7 1-108
+docs/runbooks/local-database.md
+  s_6d18a01095c0b8::t_a901f406ec54e7 20
+src/server/routes/v1-backend-routes.js
+  s_6d18a01095c0b8::t_a901f406ec54e7 2,178,181-184
+docs/architecture/security.md
+  s_6d18a01095c0b8::t_a901f406ec54e7 19,32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7431550f0f753691267dba46ca81c654fd19c0fb",
+  "prompts": {},
+  "sessions": {
+    "s_6d18a01095c0b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7ba5b91-6e7f-489e-b54a-d02f152b251e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
