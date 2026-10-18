@@ -128,5 +128,5 @@ User-facing status: `received_pending_checks` (quarantined, pending), `accepted`
 | Password-protected PDFs | Decided: reject. |
 | Identity provider | Open. Phase 2. |
 | Separate queue | Rejected unless measured. |
-| Azure staging `DOCUMENT_SCAN_MODE=structural_only` | Now a startup error. Set `disabled` or `clamd` before deploying (see ADR 0005). |
+| Deployed `DOCUMENT_SCAN_MODE` value | Anything other than `disabled` or `clamd` is a startup error. Check it before deploying (Azure staging runbook, Step 1). |
 | Retention for expired (not revoked) consent | Open. Owner decision F3 in `docs/iterations/LATEST.md`. |

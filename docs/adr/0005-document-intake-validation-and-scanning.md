@@ -21,7 +21,7 @@ Block 1 had validation and encrypted storage code but no route, no scanner and n
 - Parsing untrusted PDFs in the API process is a risk. The inspection is bounded and rejects early, but it is not a sandbox. A sandboxed process is planned (milestone 2b).
 - Scanning depends on clamd being reachable. If it is down, documents stay quarantined and are retried. Users see "Received, waiting for checks".
 - Attempt counters reset on restart. This is safe because the row stays pending and is scanned again.
-- Azure needs a clamd container or a different scanner. The Azure staging setting `DOCUMENT_SCAN_MODE=structural_only` is now a startup error (unknown modes fail closed). Change it to `disabled` or `clamd` before deploying this code.
+- Azure needs a clamd container or a different scanner. Any `DOCUMENT_SCAN_MODE` other than `disabled` or `clamd` is a startup error (unknown modes fail closed); check the deployed setting before deploying (see the Azure staging runbook, Step 1).
 - The local encryption key in `DOCUMENT_ENCRYPTION_KEY_BASE64` is a stopgap. Key Vault and managed identity are planned for Azure.
 - Deduplication stays inside one household. Identical bytes in another household are stored separately.
 - Upload and consent wording shown to users is pending legal review.
