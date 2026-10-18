@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -174,11 +174,20 @@ export function purgeExpiredIdempotencyKeys(database, { at = new Date().toISOStr
 }
 
 export function openDatabase({ path = '.local/knowvia.sqlite', migrate = true } = {}) {
-  if (path !== ':memory:') mkdirSync(dirname(resolve(path)), { recursive: true, mode: 0o700 });
-  const database = new DatabaseSync(path);
+  const inMemory = path === ':memory:';
+  const databaseRoot = resolve('.local');
+  const resolvedPath = inMemory ? ':memory:' : resolve(databaseRoot, path);
+  if (!inMemory) {
+    const relativeToRoot = relative(databaseRoot, resolvedPath);
+    if (relativeToRoot.startsWith('..') || relativeToRoot === '' || relativeToRoot.startsWith('../')) {
+      throw new Error('Invalid database path: path must be within .local');
+    }
+    mkdirSync(dirname(resolvedPath), { recursive: true, mode: 0o700 });
+  }
+  const database = new DatabaseSync(resolvedPath);
   database.exec('PRAGMA foreign_keys = ON');
   database.exec('PRAGMA busy_timeout = 5000');
-  if (path !== ':memory:') database.exec('PRAGMA journal_mode = WAL');
+  if (!inMemory) database.exec('PRAGMA journal_mode = WAL');
   if (migrate) {
     runMigrations(database);
     purgeExpiredIdempotencyKeys(database);
