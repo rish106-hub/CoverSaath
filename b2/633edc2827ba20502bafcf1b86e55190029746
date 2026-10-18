@@ -1,0 +1,41 @@
+tests/support/parameter-fixtures.mjs
+  s_3fac516aaf027d::t_6470e72512d0ea 2-3,18-24,26-27,29-30,34-35,38-39,41,46,52-53,55-56,59,61,65,67,70-84
+src/backend/database/index.js
+  s_3fac516aaf027d::t_fdef11890fed73 2-8
+src/backend/database/postgres/errors.js
+  s_3fac516aaf027d::t_879121208d2217 3-4,12-98
+src/backend/database/postgres/placeholders.js
+  s_3fac516aaf027d::t_78d814e8a203f9 1-121
+tests/support/pg.mjs
+  s_3fac516aaf027d::t_6577374e418cd8 1-40,43-63
+  s_3fac516aaf027d::t_f0e6490d2b25ce 41-42
+tests/audit-chain-concurrency.test.mjs
+  s_3fac516aaf027d::t_3b6f13501a2adc 1-121
+src/backend/database/postgres/locks.js
+  s_3fac516aaf027d::t_60d46ac7388c03 1-54
+src/backend/repositories/audit-repository.js
+  s_3fac516aaf027d::t_0e7cfdd4f74adf 1-3,13-28,35-43,45-47,53-54,58-72,74-76
+tests/db-interface.test.mjs
+  s_3fac516aaf027d::t_dfb5f97ec7d7b7 367-376,378,380-384,387,389-391,393-396
+  s_3fac516aaf027d::t_d17536d32feec0 1-366,377,379,385-386,388,392,397-595
+src/backend/database/postgres/db.js
+  s_3fac516aaf027d::t_ab2d448f99fd07 223
+  s_3fac516aaf027d::t_6e53557f35c6b5 200-205
+  s_3fac516aaf027d::t_f0e41ae2fcbb6d 1-199,206-222,224-291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b2633edc2827ba20502bafcf1b86e55190029746",
+  "prompts": {},
+  "sessions": {
+    "s_3fac516aaf027d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b79f2b41-509a-43b9-8403-2cd3396b8398",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
