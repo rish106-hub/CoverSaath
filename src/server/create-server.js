@@ -92,6 +92,9 @@ export function createApiServer({
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = getBackend();
         const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory });
+        // A body refused mid-stream is never drained: close the connection after answering so the
+        // client gets the 413 and the server stops receiving bytes.
+        if (backendResult.status === 413) res.setHeader('Connection', 'close');
         return send(backendResult.status, backendResult.body);
       }
       return send(404, { error: { code: 'ROUTE_NOT_FOUND', message: 'Use the authenticated /api/v1 API.' } });

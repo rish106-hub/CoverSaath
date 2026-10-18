@@ -214,7 +214,8 @@ test('server-side validation rejects unsafe or invalid uploads before storing an
     assert.equal(result.data.error.code, code, name);
   }
 
-  // A declared Content-Length above the cap is refused before the body is read.
+  // A declared Content-Length above the cap is refused before the body is read. The server answers
+  // 413 and closes the connection, so a client still sending may see the socket drop instead.
   const tooLarge = await fetch(`http://127.0.0.1:${app.server.address().port}/api/v1/cases/${owner.caseId}/documents`, {
     method: 'POST',
     headers: {
@@ -222,9 +223,14 @@ test('server-side validation rejects unsafe or invalid uploads before storing an
       'X-Document-Kind': 'policy_schedule', 'X-Consent-Grant-Id': owner.grantId, 'X-Filename': 'big.pdf',
     },
     body: Buffer.alloc(15 * 1024 * 1024 + 1, 0x20),
-  });
-  assert.equal(tooLarge.status, 413);
-  assert.equal((await tooLarge.json()).error.code, 'REQUEST_TOO_LARGE');
+  }).catch(error => ({ dropped: ['EPIPE', 'ECONNRESET'].includes(error?.cause?.code), error }));
+  if (tooLarge.dropped === undefined) {
+    assert.equal(tooLarge.status, 413);
+    assert.equal(tooLarge.headers.get('connection'), 'close');
+    assert.equal((await tooLarge.json()).error.code, 'REQUEST_TOO_LARGE');
+  } else {
+    assert.equal(tooLarge.dropped, true, String(tooLarge.error));
+  }
 
   // Unauthenticated callers never reach validation.
   const anonymous = await app.upload({ ...owner, token: 'not-a-session' });
@@ -379,7 +385,10 @@ test('a streamed body without Content-Length is cut off at the cap', async t => 
   const app = await start({ database, env: h.env });
   t.after(async () => { await app.stop(); database.close(); });
   const owner = await household(app, 'Chunked');
-  const result = await new Promise((resolve, reject) => {
+  const result = await new Promise(resolvePromise => {
+    // Settles exactly once: on the response, on a socket error, or when the socket closes.
+    let settled = false;
+    const resolve = value => { if (!settled) { settled = true; resolvePromise(value); } };
     const req = request({
       host: '127.0.0.1', port: app.server.address().port, method: 'POST',
       path: `/api/v1/cases/${owner.caseId}/documents`,
@@ -392,8 +401,10 @@ test('a streamed body without Content-Length is cut off at the cap', async t => 
       let text = '';
       response.on('data', chunk => { text += chunk; });
       response.on('end', () => resolve({ status: response.statusCode, data: JSON.parse(text) }));
+      response.on('error', () => resolve({ status: 'socket-closed' }));
     });
-    req.on('error', reject);
+    req.on('error', () => resolve({ status: 'socket-closed' }));
+    req.on('close', () => setTimeout(() => resolve({ status: 'socket-closed' }), 50));
     const chunk = Buffer.alloc(1024 * 1024, 0x20);
     let sent = 0;
     const pump = () => {
@@ -404,7 +415,7 @@ test('a streamed body without Content-Length is cut off at the cap', async t => 
       req.end();
     };
     pump();
-  }).catch(error => ({ status: 'socket-closed', error }));
+  });
   // Either the coded 413 arrives, or the server closes the socket mid-upload; never a stored file.
   if (result.status !== 'socket-closed') {
     assert.equal(result.status, 413);
