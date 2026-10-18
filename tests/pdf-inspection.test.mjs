@@ -234,3 +234,93 @@ test('a 15 MiB synthetic PDF is inspected in under 2000 ms', () => {
   assert.equal(result.pageCount, 300);
   assert.ok(elapsedMs < 2000, `took ${elapsedMs} ms`);
 });
+
+// --- Security review regressions: hidden structure and untyped object streams ---
+
+function xorshiftBytes(size, seed) {
+  const out = Buffer.alloc(size);
+  let x = seed >>> 0;
+  for (let i = 0; i < size; i += 1) {
+    x ^= x << 13; x >>>= 0;
+    x ^= x >>> 17;
+    x ^= x << 5; x >>>= 0;
+    out[i] = x & 0xff;
+  }
+  return out;
+}
+
+const withHiddenStream = (data, { useLength = true } = {}) => buildPdf([
+  '<< /Type /Catalog /Pages 2 0 R /OpenAction 5 0 R >>',
+  pageTree([3]),
+  page(),
+  useLength ? streamBody('', data) : Buffer.concat([toBuf('<< >>\nstream\n'), toBuf(data), toBuf('\nendstream')]),
+]);
+
+test('an object header hidden inside stream data is rejected', () => {
+  const hidden = '5 0 obj << /S /JavaScript /JS (app.alert(1)) >> endobj';
+  rejects(withHiddenStream(hidden, { useLength: false }), 'PDF_STRUCTURE_INVALID');
+  rejects(withHiddenStream(`junk\n${hidden}\n`), 'PDF_STRUCTURE_INVALID');
+  rejects(withHiddenStream('5\r\n0\tobj<<>>'), 'PDF_STRUCTURE_INVALID');
+});
+
+test('a trailer, startxref or xref table hidden inside stream data is rejected', () => {
+  rejects(withHiddenStream(' trailer << /Encrypt 7 0 R >> ', { useLength: false }), 'PDF_STRUCTURE_INVALID');
+  rejects(withHiddenStream('trailer\n<< >>'), 'PDF_STRUCTURE_INVALID');
+  rejects(withHiddenStream('abc startxref 10'), 'PDF_STRUCTURE_INVALID');
+  rejects(withHiddenStream('abc\nxref\n0 1\n0000000000 65535 f \n'), 'PDF_STRUCTURE_INVALID');
+});
+
+test('object headers hidden in comments or literal strings are rejected', () => {
+  rejects(onePage('% 5 0 obj << /JS (x) >> endobj\n'), 'PDF_STRUCTURE_INVALID');
+  rejects(onePage('/Title (5 0 obj << /JS (x) >> endobj)'), 'PDF_STRUCTURE_INVALID');
+  rejects(onePage('/Title (trailer << /Encrypt 1 0 R >>)'), 'PDF_STRUCTURE_INVALID');
+});
+
+test('near-miss words in stream data do not trigger the hidden-structure guard', () => {
+  const benign = 'object 5 obj 5 0 objx 0 obj obj0 the trailer is long a xref table startx ref\nxref 5\n';
+  assert.equal(inspectPdf(withHiddenStream(benign)).pageCount, 1);
+  assert.equal(inspectPdf(onePage('/Title (object 12 obj trailer) % xref and obj\n')).pageCount, 1);
+});
+
+test('15 MiB of seeded random bytes in a non-ObjStm stream is accepted quickly', () => {
+  const pdf = buildPdf([catalog, pageTree([3]), page('/Contents 4 0 R'), streamBody('/Filter /DCTDecode', xorshiftBytes(15 * 1024 * 1024, 0x9e3779b9))]);
+  const started = process.hrtime.bigint();
+  const result = inspectPdf(pdf);
+  const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+  assert.equal(result.pageCount, 1);
+  assert.ok(elapsedMs < 2000, `took ${elapsedMs} ms`);
+});
+
+test('a stream with /N and /First is inflated as an object stream without /Type /ObjStm', () => {
+  const inner = '5 0 << /S /JavaScript /JS (app.alert(1)) >>';
+  const z = deflateSync(Buffer.from(inner, 'latin1'));
+  rejects(buildPdf([catalog, pageTree([3]), page(), streamBody('/N 1 /First 4 /Filter /FlateDecode', z)]), 'PDF_ACTIVE_CONTENT');
+  rejects(buildPdf([catalog, pageTree([3]), page(), streamBody('/Type 9 0 R /N 1 /First 4 /Filter /FlateDecode', z)]), 'PDF_ACTIVE_CONTENT');
+  const hex = `${Buffer.from(inner, 'latin1').toString('hex')}>`;
+  rejects(buildPdf([catalog, pageTree([3]), page(), streamBody('/N 1 /First 4 /Filter /ASCIIHexDecode', hex)]), 'PDF_UNSUPPORTED_ENCODING');
+  rejects(buildPdf([catalog, pageTree([3]), page(), streamBody('/N 1 /First 4 /Filter 8 0 R', z)]), 'PDF_UNSUPPORTED_ENCODING');
+  const pagesInside = buildPdf([catalog, streamBody('/N 2 /First 8 /Filter /FlateDecode', deflateSync(Buffer.from(`2 0 3 40 ${pageTree([3])} ${page()}`, 'latin1')))]);
+  assert.deepEqual({ ...inspectPdf(pagesInside) }, { pageCount: 1, objectStreamCount: 1, pdfVersion: '1.7' });
+});
+
+function appendUpdate(base, body, trailerExtra) {
+  const offset = base.length;
+  return Buffer.concat([base, toBuf(`6 0 obj\n${body}\nendobj\nxref\n6 1\n${String(offset).padStart(10, '0')} 00000 n \ntrailer\n<< /Size 7 /Root 1 0 R /Prev 0 ${trailerExtra} >>\nstartxref\n${offset}\n%%EOF\n`)]);
+}
+
+test('incremental updates and later trailers are scanned', () => {
+  const base = onePage();
+  rejects(appendUpdate(base, '<< /S /JavaScript /JS (x) >>', ''), 'PDF_ACTIVE_CONTENT');
+  rejects(appendUpdate(base, '<< /Filter /Standard >>', '/Encrypt 6 0 R'), 'PDF_PASSWORD_REQUIRED');
+  assert.equal(inspectPdf(appendUpdate(base, '<< /Producer (synthetic) >>', '')).pageCount, 1);
+});
+
+test('/Encrypt in an xref stream dictionary after an object stream is detected', () => {
+  const pdf = buildPdf([
+    catalog,
+    objStmBody([{ num: 2, body: pageTree([3]) }, { num: 3, body: page() }]),
+    streamBody('/Type /XRef /Size 5 /W [1 2 1] /Root 1 0 R /Encrypt 4 0 R', Buffer.alloc(20, 1)),
+    '<< /Filter /Standard >>',
+  ], { trailer: false });
+  rejects(pdf, 'PDF_PASSWORD_REQUIRED');
+});
