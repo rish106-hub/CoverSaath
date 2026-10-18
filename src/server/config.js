@@ -12,6 +12,36 @@ function positiveAmount(value, name, max = Infinity) {
   return parsed;
 }
 
+const SCAN_MODES = Object.freeze(['disabled', 'clamd']);
+
+// Document intake settings. Storage stays unconfigured (uploads return 503) until a key is set; a
+// key that is set but invalid fails at startup. Scanning is disabled by default, which keeps every
+// upload quarantined. An unknown scan mode is a startup error rather than a silent downgrade.
+function readDocumentConfig(env) {
+  const scanMode = env.DOCUMENT_SCAN_MODE ?? 'disabled';
+  if (!SCAN_MODES.includes(scanMode)) throw new Error('Invalid DOCUMENT_SCAN_MODE.');
+  const clamd = scanMode === 'clamd'
+    ? Object.freeze({
+      host: (() => {
+        const host = String(env.CLAMD_HOST ?? '').trim();
+        if (!host || host.includes('/') || host.length > 253) throw new Error('Invalid CLAMD_HOST.');
+        return host;
+      })(),
+      port: boundedInteger(env.CLAMD_PORT, 3310, 'CLAMD_PORT', 65_535),
+      timeoutMs: boundedInteger(env.CLAMD_TIMEOUT_MS, 30_000, 'CLAMD_TIMEOUT_MS', 300_000),
+    })
+    : null;
+  return Object.freeze({
+    storagePath: env.DOCUMENT_STORAGE_PATH || '.local/documents',
+    encryptionKeyBase64: env.DOCUMENT_ENCRYPTION_KEY_BASE64 || null,
+    scanMode,
+    clamd,
+    maxDocumentsPerCase: boundedInteger(env.MAX_DOCUMENTS_PER_CASE, 50, 'MAX_DOCUMENTS_PER_CASE', 1_000),
+    maxPendingPerHousehold: boundedInteger(env.MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD, 20, 'MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD', 1_000),
+    workerSweepMs: boundedInteger(env.DOCUMENT_WORKER_SWEEP_MS, 30_000, 'DOCUMENT_WORKER_SWEEP_MS', 3_600_000),
+  });
+}
+
 export function readServerConfig(env = process.env) {
   return Object.freeze({
     sessionTtlMs: boundedInteger(env.SESSION_TTL_SECONDS, 3600, 'SESSION_TTL_SECONDS', 86_400) * 1000,
@@ -23,5 +53,6 @@ export function readServerConfig(env = process.env) {
     // run. live-coverage-runtime.js reads the same variables with its own bounds.
     budgetUsd: positiveAmount(env.ORCHESTRATION_RUN_BUDGET_USD, 'ORCHESTRATION_RUN_BUDGET_USD', 1),
     projectBudgetUsd: positiveAmount(env.ORCHESTRATION_PROJECT_BUDGET_USD, 'ORCHESTRATION_PROJECT_BUDGET_USD'),
+    documents: readDocumentConfig(env),
   });
 }

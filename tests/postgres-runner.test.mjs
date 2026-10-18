@@ -12,7 +12,7 @@ import {
 } from './support/postgres.mjs';
 import { insert, one } from './support/postgres-fixtures.mjs';
 
-const baseline = ['001_baseline_schema.sql', '002_baseline_triggers.sql'];
+const baseline = ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql'];
 
 function scratchDirectory(t, files = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-pg-migrations-'));
@@ -39,9 +39,14 @@ test('a fresh database migrates, records checksums, validates, and a repeat run 
     { ...validation, foreignKeyErrors: validation.foreignKeyErrors.length },
     {
       valid: true, missingTables: [], missingViews: [], missingTriggers: [], missingIndexes: [], missingColumns: [],
-      disabledTriggers: [], foreignKeyErrors: 0, collation: 'C', collationValid: true, migrationCount: 2,
+      disabledTriggers: [], foreignKeyErrors: 0, collation: 'C', localeProvider: 'c', orderingValid: true,
+      collationValid: true, unsafeFunctionSearchPaths: [], migrationCount: 4,
     },
   );
+  const publicTemporary = await one(pool, `SELECT count(*)::int AS n
+    FROM pg_database d, LATERAL aclexplode(COALESCE(d.datacl, acldefault('d', d.datdba))) acl
+    WHERE d.datname = current_database() AND acl.grantee = 0 AND acl.privilege_type = 'TEMPORARY'`);
+  assert.equal(publicTemporary.n, 0, 'PUBLIC cannot create temporary objects in the migrated database');
 });
 
 test('a changed applied migration is refused and nothing later is applied', postgresTestOptions(), async t => {
@@ -71,6 +76,7 @@ test('a failing migration file rolls back completely and can be fixed and re-run
   await assert.rejects(runPostgresMigrations(pool, { directory }), error => {
     assert.equal(error.code, 'POSTGRES_MIGRATION_FAILED');
     assert.match(error.message, /002_broken\.sql/);
+    assert.doesNotMatch(error.message, /division by zero/i);
     return true;
   });
   assert.deepEqual((await pool.query('SELECT version FROM schema_migrations')).rows.map(row => row.version), ['001_good.sql']);
@@ -85,14 +91,16 @@ test('a failing migration file rolls back completely and can be fixed and re-run
   assert.deepEqual(await runPostgresMigrations(pool, { directory }), ['002_broken.sql']);
 });
 
-test('concurrent runners apply each file exactly once', postgresTestOptions(), async t => {
+test('concurrent runners wait beyond pool lock_timeout and apply each file exactly once', postgresTestOptions(), async t => {
   const { pool, url } = await useBlankDatabase(t);
   const directory = scratchDirectory(t, {
     '001_log.sql': 'CREATE TABLE apply_log (version text);\n',
     '002_entry.sql': "INSERT INTO apply_log VALUES ('002');\nSELECT pg_sleep(0.3);\n",
     '003_entry.sql': "INSERT INTO apply_log VALUES ('003');\n",
   });
-  const pools = Array.from({ length: 5 }, () => createPostgresPool({ connectionString: url, max: 2, applicationName: 'runner-race' }));
+  const pools = Array.from({ length: 5 }, () => createPostgresPool({
+    connectionString: url, max: 2, lockTimeoutMs: 50, applicationName: 'runner-race',
+  }));
   t.after(() => Promise.all(pools.map(item => item.end())));
   const results = await Promise.all(pools.map(item => runPostgresMigrations(item, { directory })));
   assert.deepEqual(results.flat().sort(), ['001_log.sql', '002_entry.sql', '003_entry.sql']);
@@ -105,6 +113,28 @@ test('concurrent runners apply each file exactly once', postgresTestOptions(), a
   const applied = await Promise.all(racers.map(item => runPostgresMigrations(item)));
   assert.deepEqual(applied.flat().sort(), baseline);
   assert.equal((await validatePostgresSchema(real.pool)).valid, true);
+});
+
+test('the migration runner restores lock_timeout and redacts setup failures', postgresTestOptions(), async t => {
+  const { url } = await useBlankDatabase(t);
+  const pool = createPostgresPool({ connectionString: url, max: 1, lockTimeoutMs: 77, applicationName: 'runner-restore' });
+  t.after(() => pool.end());
+  const directory = scratchDirectory(t, {
+    '001_one.sql': "CREATE TABLE one_table (lock_timeout text);\nINSERT INTO one_table VALUES (current_setting('lock_timeout'));\n",
+  });
+  await runPostgresMigrations(pool, { directory });
+  assert.equal((await one(pool, "SELECT current_setting('lock_timeout') AS value")).value, '77ms');
+  // Migration statements run under the pool lock_timeout; only the advisory-lock wait disables it.
+  assert.equal((await one(pool, 'SELECT lock_timeout FROM one_table')).lock_timeout, '77ms');
+
+  await assert.rejects(runPostgresMigrations({
+    connect: async () => { throw new Error('secret-host.example internal driver detail'); },
+  }, { directory }), error => {
+    assert.equal(error.code, 'POSTGRES_MIGRATION_FAILED');
+    assert.equal(error.message, 'PostgreSQL migration runner could not connect.');
+    assert.doesNotMatch(error.message, /secret-host|driver/i);
+    return true;
+  });
 });
 
 test('validatePostgresSchema reports a dropped, disabled or missing critical object', postgresTestOptions(), async t => {
@@ -122,6 +152,10 @@ test('validatePostgresSchema reports a dropped, disabled or missing critical obj
   assert.equal(result.valid, false);
   assert.deepEqual(result.missingTriggers, ['audit_events_no_delete']);
 
+  await pool.query('DROP TRIGGER audit_events_no_truncate ON audit_events');
+  result = await validatePostgresSchema(pool);
+  assert.deepEqual(result.missingTriggers, ['audit_events_no_delete', 'audit_events_no_truncate']);
+
   await pool.query('DROP INDEX workflow_tasks_claim_idx');
   assert.deepEqual((await validatePostgresSchema(pool)).missingIndexes, ['workflow_tasks_claim_idx']);
 
@@ -135,6 +169,22 @@ test('validatePostgresSchema reports a dropped, disabled or missing critical obj
   const missing = await validatePostgresSchema(pool);
   assert.deepEqual(missing.missingTables, ['integration_webhook_events']);
   assert.equal(missing.valid, false);
+});
+
+test('validatePostgresSchema rejects a guard function without the fixed search path', postgresTestOptions(), async t => {
+  const { pool } = await useTestDatabase(t);
+  await pool.query('ALTER FUNCTION document_uploads_household_refs_insert_fn() RESET search_path');
+  const result = await validatePostgresSchema(pool);
+  assert.equal(result.valid, false);
+  assert.deepEqual(result.unsafeFunctionSearchPaths, ['document_uploads_household_refs_insert_fn()']);
+});
+
+test('validatePostgresSchema ignores extension-owned functions in the project schema', postgresTestOptions(), async t => {
+  const { pool } = await useTestDatabase(t);
+  await pool.query('CREATE EXTENSION pgcrypto SCHEMA public');
+  const result = await validatePostgresSchema(pool);
+  assert.deepEqual(result.unsafeFunctionSearchPaths, []);
+  assert.equal(result.valid, true);
 });
 
 test('validatePostgresSchema finds orphaned rows behind a NOT VALID foreign key', postgresTestOptions(), async t => {
@@ -167,6 +217,22 @@ test('validatePostgresSchema rejects a database whose collation is not C', postg
   assert.equal(result.collationValid, false);
   assert.equal(result.valid, false);
   assert.notEqual(result.collation, 'C');
+});
+
+test('validatePostgresSchema rejects ICU even when datcollate reports C', postgresTestOptions(), async t => {
+  let handle;
+  try {
+    handle = await useBlankDatabase(t, { locale: 'C', localeProvider: 'icu', icuLocale: 'en-US' });
+  } catch (error) {
+    t.skip(`ICU database creation is unavailable on this server: ${error.code}`);
+    return;
+  }
+  await runPostgresMigrations(handle.pool);
+  const result = await validatePostgresSchema(handle.pool);
+  assert.equal(result.collation, 'C');
+  assert.equal(result.localeProvider, 'i');
+  assert.equal(result.collationValid, false);
+  assert.equal(result.valid, false);
 });
 
 test('the harness keeps one idle template per migration digest and drops its clones', postgresTestOptions(), async t => {

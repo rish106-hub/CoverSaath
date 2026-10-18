@@ -1,6 +1,7 @@
 import './styles.css';
 import { createV1Client } from './api/v1-client.js';
 import { createWorkspaceController } from './state/workspace-controller.js';
+import { createDocumentUploadPanel } from './components/document-upload.js';
 import { createEvidenceStateKey, createRouteChooser, evidenceTone } from './components/household-workspace.js';
 
 function el(tag, attrs = {}, ...children) {
@@ -24,6 +25,9 @@ let activeRoute = 'planned_care';
 let activeLayer = 'decision';
 const controller = createWorkspaceController({ client, onChange(next) { view = next; render(); } });
 view = controller.snapshot();
+
+// Long-lived so selected files, progress and polling survive full re-renders.
+const documentPanel = createDocumentUploadPanel({ el, client });
 
 const tag = (label, tone = '') => el('span', { class:`tag ${tone}` }, label);
 const hint = value => el('p', { class:'hint' }, value);
@@ -91,6 +95,11 @@ function matrixPanel() {
         el('span', { role:'cell' }, String(member.policiesFound)),
         el('span', { role:'cell' }, member.immediateIssue?.triggerType?.replaceAll('_', ' ') ?? 'No active case'),
         el('span', { role:'cell' }, tag(member.immediateIssue ? 'Dynamic' : 'Unknown', member.immediateIssue ? 'dynamic' : 'unknown'))))));
+}
+
+function documentUploadSection() {
+  documentPanel.setContext({ caseId: view.policyCaseRecord?.id ?? '', consentGrantId: view.policyConsent?.id ?? '' });
+  return documentPanel.element;
 }
 
 function actionPanel() {
@@ -231,7 +240,7 @@ function render() {
         el('h1', {}, 'Your policy, ready before care happens.')),
         el('p', {}, 'Break down the policy once, then use the same source-backed record for planned care or an emergency.')),
       messages,
-      view.identity ? [matrixPanel(), policyBreakdownPanel(), view.policyJob?.status === 'completed'
+      view.identity ? [matrixPanel(), documentUploadSection(), policyBreakdownPanel(), view.policyJob?.status === 'completed'
         ? el('div', { class:'layout', id:'care-routes' }, actionPanel(), resultPanel())
         : null] : setupPanel(),
       createEvidenceStateKey({ el, tag }),

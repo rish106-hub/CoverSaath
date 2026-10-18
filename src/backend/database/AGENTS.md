@@ -1,11 +1,12 @@
-# Database (local rules)
+# Database rules
 
-Applies to `src/backend/database/` and `src/backend/repositories/`. Root `AGENTS.md` still applies.
+Applies to `src/backend/database/`. Root and `src/backend/AGENTS.md` still apply.
 
-- Add a migration as the next `NNN_snake_case.sql`. Never edit, rename or reorder a merged migration; `openDatabase` rejects a changed checksum.
-- Expand-only by default. A contracting change (drop, rename, tighten) needs an exec plan with a compatibility window and a forward-fix or restore path.
-- A trigger or constraint that protects an invariant goes into `criticalTriggers` in `database.js`, with a test that it fires.
-- Adding a migration updates the migration count and list tests (`tests/database-schema.test.mjs`, `tests/database-integrity-v2.test.mjs`, `tests/evidence-completion-persistence.test.mjs`).
-- Note any SQLite-only construct in the migration header; PostgreSQL parity is planned (ADR 0002).
-- Repositories: parameterised and bounded queries, multi-row invariants in one transaction, audit event in that same transaction, counts-only audit metadata (no document text or identifiers).
-- Every table holding household-derived data needs an erasure path called from consent revocation, with a test.
+- Add the next `NNN_snake_case.sql` migration in the affected engine directory. Never edit, rename or reorder a merged migration.
+- Expand-only by default. Contracting changes need an exec plan, compatibility window and forward-fix or restore path.
+- Protect invariants with constraints, foreign keys, triggers and transactions. Add a behaviour test that fails when the guard is removed.
+- PostgreSQL functions that read project relations must schema-qualify them or fix `search_path` to `pg_catalog, public, pg_temp`.
+- Runtime roles must not own schema objects or have `TRUNCATE`, database `TEMPORARY`, migration or role-management privileges.
+- Keep queries bounded and parameterised. Store timestamps in UTC and money in integer minor units with currency.
+- Validate migration checksums, required objects, disabled guards, collation assumptions and foreign-key integrity.
+- PostgreSQL transition decisions live in ADR 0004 and the active Section 3 exec plan.

@@ -8,17 +8,19 @@ Status: describes the repository at the commit that added this file. Companion d
 - `openDatabase` (`src/backend/database/database.js:171`) creates the directory with mode `0700`, sets `foreign_keys = ON`, `busy_timeout = 5000` and, for file databases, `journal_mode = WAL`; `:memory:` is used by tests.
 - All tables are `STRICT`. Timestamps are ISO-8601 UTC text. Money is integer minor units (`service_cases.stated_estimate_minor` with `currency`).
 - The database stores controlled paths, hashes, derived facts, permissions and audit records. Document bytes live outside SQLite (`001_initial_schema.sql:1-3`).
-- PostgreSQL is in progress (Section 3; ADR 0004, `docs/exec-plans/active/p1b-postgres.md`, local setup in [local-postgres](../runbooks/local-postgres.md)). The runtime still uses SQLite: `pg` is a dependency, but no runtime code imports it yet. The port contract in `src/contracts/persistence-ports.js` is the only preparation; routes and `TenantAccessService` still read `workflow_*` tables with direct SQL and are outside that port (ADR 0002, "Consequences and gaps").
+- PostgreSQL is in progress (Section 3; ADR 0004, `docs/exec-plans/active/p1b-postgres.md`, local setup in [local-postgres](../runbooks/local-postgres.md)). Three PostgreSQL migrations now provide the SQLite-equivalent baseline plus hardening for `TRUNCATE`, function `search_path`, collation validation and pool or runner error boundaries. The runtime still uses SQLite: `pg` is a dependency, but no runtime code imports it yet. The port contract in `src/contracts/persistence-ports.js` is the only preparation; routes and `TenantAccessService` still read `workflow_*` tables with direct SQL and are outside that port (ADR 0002, "Consequences and gaps").
 
 ## Migrations
 
 Mechanism (`runMigrations`, `database.js:22`):
 
-- Files `src/backend/database/migrations/NNN_snake_case.sql`, applied in sorted order, each inside `BEGIN IMMEDIATE`. Six exist: 001 initial schema, 002 integrity and provenance, 003 tenant auth and permissions, 004 OCR contract and provenance, 005 evidence-completion parameters, 006 parameter observation guards.
+- Files `src/backend/database/migrations/NNN_snake_case.sql`, applied in sorted order, each inside `BEGIN IMMEDIATE`. Seven exist: 001 initial schema, 002 integrity and provenance, 003 tenant auth and permissions, 004 OCR contract and provenance, 005 evidence-completion parameters, 006 parameter observation guards, 007 append-only delete guards.
 - `schema_migrations(version, checksum, applied_at)` stores a sha256 of each applied file.
 - A changed applied file throws `Migration failed: <file>: Applied migration changed: <file>` and rolls back. One exception is hard-coded: a known older checksum of `002_integrity_and_provenance.sql` is refreshed instead (`legacyMigrationChecksums`).
-- `validateSchema` (`database.js:133`) checks expected tables (42, including `schema_migrations`), views, `criticalTriggers` (47), critical indexes, required columns, `PRAGMA foreign_key_check` and `PRAGMA quick_check`. It is not called when a database is opened. It runs in `npm run db:init` (prints the result; the exit code stays 0 even when `valid` is false) and in `GET /api/v1/ready` (503 when invalid).
+- `validateSchema` (`database.js:133`) checks expected tables (42, including `schema_migrations`), views, `criticalTriggers` (49), critical indexes, required columns, `PRAGMA foreign_key_check` and `PRAGMA quick_check`. It is not called when a database is opened. It runs in `npm run db:init` (prints the result; the exit code stays 0 even when `valid` is false) and in `GET /api/v1/ready` (503 when invalid).
 - Rules for authors are in `src/backend/database/AGENTS.md`: new numbered migration only, expand-only by default, invariant triggers go into `criticalTriggers` with a test.
+
+PostgreSQL migrations live in `src/backend/database/postgres/migrations/`. Migrations 001 and 002 are the merged baseline. Migration 003 adds missing `DELETE` and statement-level `TRUNCATE` guards, fixes project-function `search_path`, revokes the default database `TEMPORARY` privilege from `PUBLIC` and removes `PUBLIC` `TRUNCATE` rights on protected tables. A dedicated least-privilege runtime role is still S3.2 work.
 
 ## Tables by domain
 
@@ -53,7 +55,7 @@ Notes:
 
 Gaps:
 
-- `DocumentIntakeService.requestDeletion` and `completeDeletion` (which removes the encrypted bytes) exist, but the service is not wired to the SQLite database or any route and nothing schedules `completeDeletion`.
+- Encrypted document bytes: consent revocation marks uploads `deletion_requested`; the document worker (started with the server whenever encrypted storage is configured) removes the bytes and marks the row `deleted` with filename `[deleted]` and a counts-only `document.bytes_deleted` audit event (`document-upload-service.js` `processDocument`, `document-repository.js` `completeDeletion`). A malware hit, tampered ciphertext or a missing object follows the same path. The row stays as a tombstone with the content hash and storage reference replaced by random values. An hourly sweep removes ciphertext and temporary files with no live row once they are an hour old.
 - Revocation of a grant does not delete `document_uploads` rows, `consent_*` rows or audit events.
 
 ## Retention

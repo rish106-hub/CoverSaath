@@ -16,6 +16,25 @@ export async function readBody(req, { limitBytes = 16_384 } = {}) {
   }
 }
 
+// Reads a raw binary body of one exact media type, never buffering more than limitBytes + one chunk.
+// A declared Content-Length above the limit is refused before any byte is read.
+export async function readBinaryBody(req, { contentType, limitBytes }) {
+  const declaredType = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+  if (declaredType !== contentType) throw failure(415, `Use ${contentType}.`, 'UNSUPPORTED_MEDIA_TYPE');
+  const declaredLength = req.headers['content-length'];
+  if (declaredLength !== undefined && (!/^\d{1,12}$/.test(declaredLength) || Number(declaredLength) > limitBytes)) {
+    throw failure(413, 'Request is too large.', 'REQUEST_TOO_LARGE');
+  }
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of req) {
+    total += chunk.length;
+    if (total > limitBytes) throw failure(413, 'Request is too large.', 'REQUEST_TOO_LARGE');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, total);
+}
+
 export function prepareJsonResponse(res) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');

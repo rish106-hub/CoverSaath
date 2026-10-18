@@ -19,6 +19,8 @@ const COVERED_FILES = [
   'src/modules/coverage-analysis/contracts.js',
   'src/modules/coverage-analysis/workflow-definition.js',
   'src/server/routes/v1-backend-routes.js',
+  'src/backend/services/document-upload-service.js',
+  'src/backend/repositories/document-repository.js',
   'src/contracts/task-contracts.js',
   'src/contracts/workflow-graph.js',
   'src/contracts/execution-policy.js',

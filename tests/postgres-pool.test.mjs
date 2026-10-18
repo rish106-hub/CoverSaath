@@ -16,7 +16,11 @@ test('the pool factory requires a URL and never echoes it', () => {
       return true;
     });
   }
-  for (const bad of [{ max: 0 }, { statementTimeoutMs: -1 }, { lockTimeoutMs: 1.5 }, { idleInTransactionTimeoutMs: '5' }, { applicationName: '' }]) {
+  for (const bad of [
+    { max: 0 }, { statementTimeoutMs: 0 }, { lockTimeoutMs: 0 }, { lockTimeoutMs: 1.5 },
+    { idleInTransactionTimeoutMs: 0 }, { idleInTransactionTimeoutMs: '5' }, { connectionTimeoutMs: 0 },
+    { applicationName: '' },
+  ]) {
     assert.throws(() => createPostgresPool({ connectionString: 'postgres://u:p@localhost/db', ...bad }), { code: 'DATABASE_POOL_OPTION_INVALID' });
   }
 });
@@ -34,6 +38,10 @@ test('every pooled connection carries the timeouts and application name, whateve
   const url = new URL(testDatabaseUrl());
   url.searchParams.set('options', '-c statement_timeout=1');
   url.searchParams.set('application_name', 'from-the-url');
+  url.searchParams.set('statement_timeout', '1');
+  url.searchParams.set('lock_timeout', '1');
+  url.searchParams.set('idle_in_transaction_session_timeout', '1');
+  url.searchParams.set('replication', 'database');
   const pool = createPostgresPool({
     connectionString: url.toString(), max: 3, statementTimeoutMs: 12_345, lockTimeoutMs: 2_345, idleInTransactionTimeoutMs: 34_567,
     applicationName: 'coversaath-pool-test',
@@ -48,6 +56,8 @@ test('every pooled connection carries the timeouts and application name, whateve
       { statement: '12345ms', lock: '2345ms', idle: '34567ms', name: 'coversaath-pool-test' },
     );
   }
+  // A replication connection rejects the extended protocol that parameterised queries use.
+  assert.equal((await pool.query('SELECT $1::int AS value', [7])).rows[0].value, 7);
   assert.equal(pool.options.max, 3);
 });
 
