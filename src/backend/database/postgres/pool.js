@@ -31,6 +31,10 @@ function sanitizedConnectionString(connectionString) {
   }
   url.searchParams.delete('options');
   url.searchParams.delete('application_name');
+  url.searchParams.delete('statement_timeout');
+  url.searchParams.delete('lock_timeout');
+  url.searchParams.delete('idle_in_transaction_session_timeout');
+  url.searchParams.delete('replication');
   return url.toString();
 }
 
@@ -51,10 +55,10 @@ export function createPostgresPool({
     throw new PostgresDatabaseError('DATABASE_URL_REQUIRED', 'DATABASE_URL is required.');
   }
   requireInteger('max', max, { min: 1 });
-  requireInteger('statementTimeoutMs', statementTimeoutMs, { min: 0 });
-  requireInteger('lockTimeoutMs', lockTimeoutMs, { min: 0 });
-  requireInteger('idleInTransactionTimeoutMs', idleInTransactionTimeoutMs, { min: 0 });
-  requireInteger('connectionTimeoutMs', connectionTimeoutMs, { min: 0 });
+  requireInteger('statementTimeoutMs', statementTimeoutMs, { min: 1 });
+  requireInteger('lockTimeoutMs', lockTimeoutMs, { min: 1 });
+  requireInteger('idleInTransactionTimeoutMs', idleInTransactionTimeoutMs, { min: 1 });
+  requireInteger('connectionTimeoutMs', connectionTimeoutMs, { min: 1 });
   const name = String(applicationName).replace(/[^\x20-\x7e]/g, '?').slice(0, 63);
   if (name === '') {
     throw new PostgresDatabaseError('DATABASE_POOL_OPTION_INVALID', 'Pool option applicationName must not be empty.');

@@ -75,7 +75,7 @@ Not covered by the check:
 - One process. `src/server/server.js` listens on `127.0.0.1:8787` only; `npm run dev` also starts Vite on `127.0.0.1:5173` and proxies `/api`.
 - Storage is one local SQLite file. Analysis work runs inside the API process; there is no queue, worker fleet, cache or container.
 - No deployment target, infrastructure code, hosting, observability stack or capacity numbers exist. CI (`.github/workflows/`) only checks and scans. Scale claims are unsupported (`AGENTS.md`).
-- PostgreSQL is planned (ADR 0002), not built.
+- PostgreSQL schema migrations, validation, a migration runner and CI tests exist under ADR 0004. The application runtime still uses SQLite until S3.2 replaces the synchronous database layer.
 
 ## Decisions
 

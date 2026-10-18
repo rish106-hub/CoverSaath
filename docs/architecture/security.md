@@ -17,7 +17,7 @@ Status: describes controls present in the repository at the commit that added th
 ## Trust boundaries and entry points
 
 - Browser to API: only `127.0.0.1:8787`, directly or through the Vite proxy on `127.0.0.1:5173`. Every `/api/v1` route except `/health`, `/live`, `/ready` and household bootstrap requires a bearer session.
-- API to database: in-process SQLite; no database network surface.
+- API to database: in-process SQLite; no database network surface. PostgreSQL is test-only until S3.2.
 - API to model provider: Google Gemini only, through the model gateway. This is the one outbound path with household-derived content.
 - Integrations (Sarvam, Gnani, Pine Labs, email): no network call is implemented.
 - OCR text, documents and model output: untrusted evidence, never instructions (`AGENTS.md`, `src/modules/ai-analysis/prompts.js:7`). The model has no tools (`ai-sdk-runner.js`, `tools: {}`).
@@ -46,6 +46,7 @@ Status: describes controls present in the repository at the commit that added th
 | Fail-closed integrations: keys alone yield `configured_not_verified`; every action throws without verified transport and authorization | `src/integrations/shared/provider-boundary.js`, `src/integrations/AGENTS.md` |
 | Encrypted document storage: AES-256-GCM, 32-byte key, document id as AAD, tag failure raises `STORAGE_TAMPERED`; filename sanitising, signature/MIME/extension agreement, 15 MiB cap | `encrypted-local-storage.js`, `file-validation.js`, `contracts.js` |
 | Database invariants: household cross-references, consent-required outbox, append-only audit and observations, immutable provenance and registry pins | migrations 001-006; `criticalTriggers` in `database.js:77` |
+| Database schema hardening: append-only and immutable facts, pins and audit relations reject deletion; PostgreSQL also rejects `TRUNCATE`, fixes project function `search_path`, validates compatible `C` ordering and redacts migration driver detail | SQLite migration 007; PostgreSQL migrations 002-003; `postgres/validate-schema.js`; `postgres/migrate.js` |
 | Revocation erasure | [data.md](data.md#erasure-and-revocation) |
 | CI security: required `CI / verify` (check, tests, build, safety eval), CodeQL (push, PR, weekly), dependency review failing on high, Dependabot weekly, actions pinned by commit SHA, read-only token, no secrets | `.github/workflows/*.yml`, `.github/dependabot.yml` |
 
@@ -75,6 +76,7 @@ Status: describes controls present in the repository at the commit that added th
 - No malware scanning in a public path. `recordMalwareScan` exists in `document-intake-service.js` but nothing calls it from a route or worker.
 - No upload route. The document store, OCR service and `document-intake` module are not wired to the server or database; the encryption key and storage path variables in `.env.example` are not read by `src/`.
 - No observability: no structured logs, metrics, tracing or alerting; no incident process. Audit events are written but the hash chain is never verified.
+- No dedicated least-privilege PostgreSQL runtime role exists yet. PostgreSQL remains test-only until S3.2.
 - No managed secrets or KMS; keys come from environment variables.
 - Provider keys are server-side, but no live provider call has been exercised (`README.md`).
 - Process-lifetime state: the project model budget and the rate limiter reset on restart.

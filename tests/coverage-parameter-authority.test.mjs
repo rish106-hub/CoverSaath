@@ -389,6 +389,7 @@ test('pins are idempotent for the same version, immutable and never re-pinned', 
   assert.deepEqual(repository.pinRegistry({ workflowRunId: 'run-parameters', registryVersion: v1 }), first);
   database.prepare("INSERT INTO coverage_parameter_registry_versions (version, registered_at) VALUES ('policy-parameters/v2', ?)").run(at);
   assert.throws(() => database.exec("UPDATE coverage_parameter_registry_pins SET registry_version = 'policy-parameters/v2'"), /immutable/);
+  assert.throws(() => database.exec("DELETE FROM coverage_parameter_registry_pins WHERE workflow_run_id = 'run-parameters'"), /immutable/);
 });
 
 test('initializeRunParameters pins the run and creates every registry parameter idempotently', t => {
