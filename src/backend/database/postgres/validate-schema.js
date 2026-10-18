@@ -3,6 +3,17 @@ import {
 } from '../database.js';
 
 const REQUIRED_COLLATION = 'C';
+const SAFE_LOCALE_PROVIDERS = new Set(['b', 'c']);
+const REQUIRED_FUNCTION_SEARCH_PATH = 'search_path=pg_catalog, public, pg_temp';
+const POSTGRES_ONLY_CRITICAL_TRIGGERS = Object.freeze([
+  'audit_events_no_truncate',
+  'coverage_parameter_observation_rules_no_truncate',
+  'coverage_parameter_observations_no_truncate',
+  'coverage_parameter_registry_pins_no_truncate',
+  'coverage_parameter_registry_versions_no_truncate',
+  'evidence_facts_no_truncate',
+]);
+const requiredTriggers = Object.freeze([...criticalTriggers, ...POSTGRES_ONLY_CRITICAL_TRIGGERS]);
 
 const quote = identifier => `"${String(identifier).replaceAll('"', '""')}"`;
 
@@ -67,22 +78,43 @@ export async function validatePostgresSchema(pool) {
     WHERE NOT t.tgisinternal AND n.nspname = current_schema()`)).rows;
   const triggers = new Set(triggerRows.map(row => row.name));
   const disabledTriggers = triggerRows
-    .filter(row => criticalTriggers.includes(row.name) && row.enabled !== 'O')
+    .filter(row => requiredTriggers.includes(row.name) && row.enabled !== 'O')
     .map(row => row.name);
   const missingTables = expectedTables.filter(name => !tables.has(name));
   const missingViews = expectedViews.filter(name => !views.has(name));
-  const missingTriggers = criticalTriggers.filter(name => !triggers.has(name));
+  const missingTriggers = requiredTriggers.filter(name => !triggers.has(name));
   const missingIndexes = criticalIndexes.filter(name => !indexes.has(name));
   const missingColumns = Object.entries(requiredColumns)
     .flatMap(([table, list]) => list.map(column => `${table}.${column}`))
     .filter(column => !columns.has(column));
-  const collation = (await pool.query('SELECT datcollate FROM pg_database WHERE datname = current_database()')).rows[0].datcollate;
+  const databaseLocale = (await pool.query(`
+    SELECT datcollate, datlocprovider::text AS locale_provider,
+      ('B' COLLATE "default" < 'a' COLLATE "default") AS uppercase_before_lowercase
+    FROM pg_database WHERE datname = current_database()`)).rows[0];
+  const functionRows = (await pool.query(`
+    SELECT p.oid::regprocedure::text AS name, p.proconfig AS settings
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = current_schema() AND p.prokind = 'f'
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_depend d
+        WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e'
+      )
+    ORDER BY p.oid::regprocedure::text`)).rows;
+  const unsafeFunctionSearchPaths = functionRows
+    .filter(row => !Array.isArray(row.settings) || !row.settings.includes(REQUIRED_FUNCTION_SEARCH_PATH))
+    .map(row => row.name);
+  const collation = databaseLocale.datcollate;
+  const localeProvider = databaseLocale.locale_provider;
+  const orderingValid = databaseLocale.uppercase_before_lowercase === true;
   const migrationCount = tables.has('schema_migrations')
     ? (await pool.query('SELECT count(*)::int AS count FROM schema_migrations')).rows[0].count
     : 0;
   const foreignKeyProblems = missingTables.length === 0 ? await foreignKeyErrors(pool) : [];
-  const collationValid = collation === REQUIRED_COLLATION;
-  const valid = [missingTables, missingViews, missingTriggers, missingIndexes, missingColumns, disabledTriggers, foreignKeyProblems]
+  const collationValid = collation === REQUIRED_COLLATION && SAFE_LOCALE_PROVIDERS.has(localeProvider) && orderingValid;
+  const valid = [
+    missingTables, missingViews, missingTriggers, missingIndexes, missingColumns, disabledTriggers, foreignKeyProblems,
+    unsafeFunctionSearchPaths,
+  ]
     .every(items => items.length === 0) && collationValid;
   return {
     valid,
@@ -94,7 +126,10 @@ export async function validatePostgresSchema(pool) {
     disabledTriggers,
     foreignKeyErrors: foreignKeyProblems,
     collation,
+    localeProvider,
+    orderingValid,
     collationValid,
+    unsafeFunctionSearchPaths,
     migrationCount,
   };
 }

@@ -193,10 +193,13 @@ export async function createTestDatabase({ directory } = {}) {
 }
 
 // An empty database (C collation unless `locale` says otherwise) with no migrations, for runner tests.
-export async function createBlankDatabase({ locale = 'C' } = {}) {
+export async function createBlankDatabase({ locale = 'C', localeProvider, icuLocale } = {}) {
   const name = cloneName();
+  const safeLocale = locale.replaceAll("'", '');
+  const provider = localeProvider === undefined ? '' : ` LOCALE_PROVIDER ${['builtin', 'icu', 'libc'].includes(localeProvider) ? localeProvider : 'invalid'}`;
+  const icu = icuLocale === undefined ? '' : ` ICU_LOCALE '${icuLocale.replaceAll("'", '')}'`;
   await withAdmin(admin => admin.query(
-    `CREATE DATABASE ${quote(name)} TEMPLATE template0 ENCODING 'UTF8' LOCALE '${locale.replaceAll("'", '')}'`,
+    `CREATE DATABASE ${quote(name)} TEMPLATE template0 ENCODING 'UTF8'${provider}${icu} LOCALE '${safeLocale}'`,
   ));
   return makeHandle(name);
 }

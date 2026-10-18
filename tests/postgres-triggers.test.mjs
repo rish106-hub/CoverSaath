@@ -32,9 +32,10 @@ test('audit events are append only; revocation marks the grant; outbox needs act
   assert.ok(BigInt(event.id) > 0n, 'identity key is assigned');
   await rejects(pool.query("UPDATE audit_events SET action = 'changed'"), 'audit events are append only');
   await rejects(pool.query('DELETE FROM audit_events'), 'audit events are append only');
+  await rejects(pool.query('TRUNCATE audit_events'), 'audit events are append only');
   assert.equal((await pool.query('UPDATE audit_events SET action = $1 WHERE false', ['none'])).rowCount, 0, 'row-level: no row, no fire');
   assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM audit_events')).n, 1);
-  proves('audit_events_no_update', 'audit_events_no_delete');
+  proves('audit_events_no_update', 'audit_events_no_delete', 'audit_events_no_truncate');
 
   await insert(pool, 'consent_grants', { id: 'consent-active', household_id: a.household, subject_adult_id: a.adult });
   await insert(pool, 'consent_grants', { id: 'consent-revoked', household_id: a.household, subject_adult_id: a.adult, revoked_at: later });
@@ -244,8 +245,10 @@ test('documents, policies and evidence are household and consent scoped', postgr
   const appendOnly = 'evidence facts are append only; add a superseding fact';
   await rejects(pool.query("UPDATE evidence_facts SET review_status = 'reviewed' WHERE id = 'f-known'"), appendOnly);
   await rejects(pool.query('UPDATE evidence_facts SET fact_key = fact_key'), appendOnly);
+  await rejects(pool.query("DELETE FROM evidence_facts WHERE id = 'f-known'"), appendOnly);
+  await rejects(pool.query('TRUNCATE evidence_facts CASCADE'), appendOnly);
   assert.equal((await pool.query('UPDATE evidence_facts SET fact_key = fact_key WHERE false')).rowCount, 0);
-  proves('evidence_facts_provenance_immutable');
+  proves('evidence_facts_provenance_immutable', 'evidence_facts_no_delete', 'evidence_facts_no_truncate');
 
   const conflictMessage = 'conflict facts must share a household and fact key';
   await fact('f-other-key', { fact_key: 'other_key' });
@@ -438,25 +441,57 @@ test('coverage parameter records, observations and registry metadata are guarded
   await rejects(pool.query("UPDATE coverage_parameter_observations SET redaction_reason_code = 'other' WHERE id = 'o-ok'"), appendOnly);
   proves('coverage_parameter_observations_no_update');
   await rejects(pool.query('DELETE FROM coverage_parameter_observations'), appendOnly);
+  await rejects(pool.query('TRUNCATE coverage_parameter_observations CASCADE'), appendOnly);
   assert.equal((await pool.query("DELETE FROM coverage_parameter_observations WHERE id = 'nothing'")).rowCount, 0);
-  proves('coverage_parameter_observations_no_delete');
+  proves('coverage_parameter_observations_no_delete', 'coverage_parameter_observations_no_truncate');
 
   await rejects(pool.query("UPDATE coverage_parameter_registry_pins SET pinned_at = '2026-10-16T12:00:00.000Z'"), 'registry pins are immutable');
   await rejects(pool.query('UPDATE coverage_parameter_registry_pins SET registry_version = registry_version'), 'registry pins are immutable');
+  await rejects(pool.query('DELETE FROM coverage_parameter_registry_pins WHERE workflow_run_id = $1', [a.run]), 'registry pins are immutable');
   await insert(pool, 'workflow_runs', { id: 'run-second', case_id: a.case });
   await insert(pool, 'coverage_parameter_registry_pins', { workflow_run_id: 'run-second' });
-  proves('coverage_parameter_registry_pins_immutable');
+  await rejects(pool.query('TRUNCATE coverage_parameter_registry_pins CASCADE'), 'registry pins are immutable');
+  proves(
+    'coverage_parameter_registry_pins_immutable', 'coverage_parameter_registry_pins_no_delete',
+    'coverage_parameter_registry_pins_no_truncate',
+  );
   await rejects(pool.query("UPDATE coverage_parameter_registry_versions SET registered_at = 'x'"), 'registry versions are immutable');
   await rejects(pool.query('DELETE FROM coverage_parameter_registry_versions'), 'registry versions are immutable');
   await pool.query("INSERT INTO coverage_parameter_registry_versions (version, registered_at) VALUES ('policy-parameters/v2', $1)", [at]);
   assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM coverage_parameter_registry_versions')).n, 2);
-  proves('coverage_parameter_registry_versions_immutable', 'coverage_parameter_registry_versions_no_delete');
+  await rejects(pool.query('TRUNCATE coverage_parameter_registry_versions CASCADE'), 'registry versions are immutable');
+  proves(
+    'coverage_parameter_registry_versions_immutable', 'coverage_parameter_registry_versions_no_delete',
+    'coverage_parameter_registry_versions_no_truncate',
+  );
   await rejects(pool.query('UPDATE coverage_parameter_observation_rules SET requires_accepted = 0'), 'observation rules are immutable');
   await rejects(pool.query('DELETE FROM coverage_parameter_observation_rules'), 'observation rules are immutable');
   await pool.query(`INSERT INTO coverage_parameter_observation_rules
     (extraction_method, resolution_state, transition_authority, requires_accepted)
     VALUES ('human_report', 'unknown', 'deterministic', 0)`);
-  proves('coverage_parameter_observation_rules_immutable', 'coverage_parameter_observation_rules_no_delete');
+  await rejects(pool.query('TRUNCATE coverage_parameter_observation_rules'), 'observation rules are immutable');
+  proves(
+    'coverage_parameter_observation_rules_immutable', 'coverage_parameter_observation_rules_no_delete',
+    'coverage_parameter_observation_rules_no_truncate',
+  );
+});
+
+test('temporary tables cannot replace relations used by guard functions', postgresTestOptions(), async t => {
+  const { pool } = await useTestDatabase(t);
+  const client = await pool.connect();
+  try {
+    const world = await seedWorld(client, 'search-path');
+    await client.query('UPDATE public.consent_grants SET revoked_at = $1 WHERE id = $2', [later, world.consent]);
+    await client.query('CREATE TEMP TABLE consent_grants AS SELECT * FROM public.consent_grants');
+    await client.query('UPDATE pg_temp.consent_grants SET revoked_at = NULL WHERE id = $1', [world.consent]);
+    await rejects(insert(client, 'document_uploads', {
+      id: 'document-temp-shadow', household_id: world.household, case_id: world.case,
+      uploaded_by_adult_id: world.adult, consent_grant_id: world.consent,
+    }), 'document must be household and active-consent scoped');
+    assert.equal((await one(client, "SELECT count(*)::int AS n FROM public.document_uploads WHERE id = 'document-temp-shadow'")).n, 0);
+  } finally {
+    client.release();
+  }
 });
 
 test('coverage parameter resolutions derive authority from the observation', postgresTestOptions(), async t => {

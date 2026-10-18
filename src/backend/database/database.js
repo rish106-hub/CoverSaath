@@ -84,7 +84,7 @@ export const criticalTriggers = Object.freeze([
   'document_uploads_quarantine_after_insert', 'document_uploads_activation_guard',
   'policies_household_source_insert', 'policy_members_household_refs_insert',
   'evidence_facts_household_refs_insert', 'coverage_graph_snapshots_household_case_insert',
-  'evidence_facts_provenance_immutable', 'fact_conflicts_same_fact_insert',
+  'evidence_facts_provenance_immutable', 'evidence_facts_no_delete', 'fact_conflicts_same_fact_insert',
   'coverage_graph_nodes_snapshot_fact_insert', 'coverage_graph_edges_snapshot_nodes_insert',
   'workflow_runs_household_consent_insert',
   'consent_scopes_profile_viewer_insert', 'consent_scopes_profile_viewer_update',
@@ -98,7 +98,8 @@ export const criticalTriggers = Object.freeze([
   'coverage_parameter_resolutions_model_no_downgrade', 'coverage_parameter_resolutions_not_permitted_exit',
   'coverage_parameter_observations_redaction_resets_resolution',
   'coverage_parameter_observations_redact_on_document_erasure',
-  'coverage_parameter_registry_pins_immutable', 'coverage_parameter_registry_versions_immutable',
+  'coverage_parameter_registry_pins_immutable', 'coverage_parameter_registry_pins_no_delete',
+  'coverage_parameter_registry_versions_immutable',
   'coverage_parameter_registry_versions_no_delete', 'coverage_parameter_observation_rules_immutable',
   'coverage_parameter_observation_rules_no_delete',
   'coverage_parameter_observations_active_document_insert', 'coverage_parameter_observations_human_review_insert',
@@ -115,10 +116,12 @@ export const criticalIndexes = Object.freeze([
   'ocr_jobs_lifecycle_idx',
   'coverage_parameter_records_run_idx', 'coverage_parameter_records_case_idx',
   'coverage_parameter_observations_parameter_idx', 'coverage_parameter_observations_document_idx',
+  'document_uploads_household_content_live_uidx', 'document_uploads_household_logical_version_uidx',
+  'document_uploads_work_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
-  document_uploads: ['logical_document_id', 'source_version'],
+  document_uploads: ['logical_document_id', 'source_version', 'scan_attempts', 'next_scan_at'],
   evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status'],
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],

@@ -6,7 +6,7 @@ Status: describes controls present in the repository at the commit that added th
 
 | Asset | Where it lives | Sensitivity |
 |---|---|---|
-| Insurance documents and OCR page text | `document_uploads`, `source_pages` (bytes in the encrypted store, not wired to any route) | RESTRICTED: personal and medical content |
+| Insurance documents and OCR page text | `document_uploads`, `source_pages` (bytes in the encrypted store, written only by the authenticated upload route) | RESTRICTED: personal and medical content |
 | Household identity: names, dates of birth, contact details | `adult_users`, `household_members` | Personal data |
 | Consent grants, scopes, revocations | `consent_*` | Authority for every disclosure |
 | Derived data: excerpts in run input, task outputs, parameter observations | `workflow_runs`, `workflow_tasks`, `coverage_parameter_observations` | Derived from consented documents; erased on revocation |
@@ -17,11 +17,12 @@ Status: describes controls present in the repository at the commit that added th
 ## Trust boundaries and entry points
 
 - Browser to API: only `127.0.0.1:8787`, directly or through the Vite proxy on `127.0.0.1:5173`. Every `/api/v1` route except `/health`, `/live`, `/ready` and household bootstrap requires a bearer session.
-- API to database: in-process SQLite; no database network surface.
+- API to database: in-process SQLite; no database network surface. PostgreSQL is test-only until S3.2.
 - API to model provider: Google Gemini only, through the model gateway. This is the one outbound path with household-derived content.
 - Integrations (Sarvam, Gnani, Pine Labs, email): no network call is implemented.
 - OCR text, documents and model output: untrusted evidence, never instructions (`AGENTS.md`, `src/modules/ai-analysis/prompts.js:7`). The model has no tools (`ai-sdk-runner.js`, `tools: {}`).
-- Not present: upload route, public hosting, webhook receiver, admin UI, outbound email.
+- Document upload: `POST /api/v1/cases/{caseId}/documents` (raw `application/pdf`, ADR 0005). Uploaded PDFs are untrusted input until inspected and scanned.
+- Not present: public hosting, webhook receiver, admin UI, outbound email.
 
 ## Implemented controls
 
@@ -45,7 +46,12 @@ Status: describes controls present in the repository at the commit that added th
 | Error redaction: only UPPER_SNAKE application codes carry their message; driver, Node `ERR_*` and uncoded errors return `BACKEND_REQUEST_FAILED` with a generic message | `errorResponse`, `v1-backend-routes.js:69-87` |
 | Fail-closed integrations: keys alone yield `configured_not_verified`; every action throws without verified transport and authorization | `src/integrations/shared/provider-boundary.js`, `src/integrations/AGENTS.md` |
 | Encrypted document storage: AES-256-GCM, 32-byte key, document id as AAD, tag failure raises `STORAGE_TAMPERED`; filename sanitising, signature/MIME/extension agreement, 15 MiB cap | `encrypted-local-storage.js`, `file-validation.js`, `contracts.js` |
+| Upload authorization: session-derived uploader; case household check before any body byte is read; current `document_processing` grant from the uploader with document `collect` scope in the case household; foreign document ids answer exactly like missing ones; list and status reads require the source-pack field grant | `v1-backend-routes.js` (documents routes), `document-upload-service.js` |
+| Upload validation before storage: 415 for any type but `application/pdf`; declared length and streamed bytes capped at 15 MiB; magic bytes, MIME and extension agreement; bounded PDF inspection rejects encrypted PDFs, JavaScript, Launch, embedded files, XFA, RichMedia, over 500 pages and deflate bombs in object streams; per-case and per-household pending caps (429) | `shared/http/request.js` (`readBinaryBody`), `pdf-inspection.js`, `document-upload-service.js` |
+| Upload integrity: row, counts-only audit event and idempotency record in one transaction; same key and bytes replay, changed bytes 409; bytes removed if the insert fails; storage keys must be 64 hex characters before any filesystem access | `document-repository.js`, `document-intake-service.js`, `encrypted-local-storage.js` |
+| Quarantine and malware scanning: uploads stay `quarantined`/`pending` until a ClamAV clamd scan marks them clean; `DOCUMENT_SCAN_MODE` defaults to `disabled` (nothing activates); infected or tampered bytes are deleted and the document is `rejected`; guarded transitions never resurrect a rejected or deleted document; the worker also deletes bytes of documents whose deletion was requested (revocation) | `clamd-scanner.js`, `scan-worker.js`, `document-repository.js`, ADR 0005 |
 | Database invariants: household cross-references, consent-required outbox, append-only audit and observations, immutable provenance and registry pins | migrations 001-006; `criticalTriggers` in `database.js:77` |
+| Database schema hardening: append-only and immutable facts, pins and audit relations reject deletion; PostgreSQL also rejects `TRUNCATE`, fixes project function `search_path`, validates compatible `C` ordering and redacts migration driver detail | SQLite migration 007; PostgreSQL migrations 002-003; `postgres/validate-schema.js`; `postgres/migrate.js` |
 | Revocation erasure | [data.md](data.md#erasure-and-revocation) |
 | CI security: required `CI / verify` (check, tests, build, safety eval), CodeQL (push, PR, weekly), dependency review failing on high, Dependabot weekly, actions pinned by commit SHA, read-only token, no secrets | `.github/workflows/*.yml`, `.github/dependabot.yml` |
 
@@ -64,6 +70,7 @@ Status: describes controls present in the repository at the commit that added th
 | Request flood | Rate limiter and capacity caps | `tests/http-security.test.mjs` (limiter), `tests/server-config.test.mjs` |
 | Spend exhaustion by repeated denials | Reservation release | `tests/review3-fixes.test.mjs` (R3-1) |
 | Tampered or malformed stored document | AEAD, validation | `tests/document-intake.test.mjs` |
+| Unsafe, oversized or foreign uploads | Upload validation, inspection, authorization, quarantine | `tests/document-upload-api.test.mjs`, `tests/pdf-inspection.test.mjs`, `tests/clamd-scanner.test.mjs`, `tests/scan-worker.test.mjs` |
 | Provider call without verified contract | Fail-closed boundary | `tests/integrations.test.mjs` |
 | Audit rewrite | Append-only triggers | `tests/database-schema.test.mjs` |
 | Duplicate or replayed run request | Idempotency key and digest | `tests/p1a-analysis-run-api.test.mjs`, `tests/p1a-execution-policy.test.mjs` |
@@ -72,9 +79,14 @@ Status: describes controls present in the repository at the commit that added th
 ## Known gaps
 
 - No identity provider or MFA. Bootstrap token plus self-issued bearer sessions only (`README.md`).
-- No malware scanning in a public path. `recordMalwareScan` exists in `document-intake-service.js` but nothing calls it from a route or worker.
-- No upload route. The document store, OCR service and `document-intake` module are not wired to the server or database; the encryption key and storage path variables in `.env.example` are not read by `src/`.
+- PDF inspection runs in the API process, not a sandbox; it is bounded and dependency-free but is still parsing untrusted bytes in a process that can reach the database (ADR 0005).
+- Malware scanning was tested only against a fake clamd server; no real ClamAV has been exercised. With `DOCUMENT_SCAN_MODE=disabled` no upload ever reaches OCR.
+- No user-facing single-document delete route; deletion happens through consent revocation or a malware hit.
+- The PDF inspection is a bounded heuristic, not a full parser; malware scanning is the required second layer. clamd must use the settings in [the ClamAV runbook](../runbooks/clamav.md) or over-limit files are reported clean.
+- Upload capacity counts and inserts are not atomic, so the per-case and per-household caps can be exceeded slightly under concurrency.
+- The OCR service is still not wired to a route.
 - No observability: no structured logs, metrics, tracing or alerting; no incident process. Audit events are written but the hash chain is never verified.
+- No dedicated least-privilege PostgreSQL runtime role exists yet. PostgreSQL remains test-only until S3.2.
 - No managed secrets or KMS; keys come from environment variables.
 - Provider keys are server-side, but no live provider call has been exercised (`README.md`).
 - Process-lifetime state: the project model budget and the rate limiter reset on restart.

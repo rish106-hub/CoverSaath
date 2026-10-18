@@ -6,6 +6,14 @@ import { postgresTestOptions, useTestDatabase } from './support/postgres.mjs';
 
 const TYPE_MAP = { TEXT: 'text', INTEGER: 'bigint' };
 const ACTIONS = { a: 'NO ACTION', r: 'RESTRICT', c: 'CASCADE', n: 'SET NULL', d: 'SET DEFAULT' };
+const POSTGRES_ONLY_TRIGGERS = new Set([
+  'audit_events_no_truncate',
+  'coverage_parameter_observation_rules_no_truncate',
+  'coverage_parameter_observations_no_truncate',
+  'coverage_parameter_registry_pins_no_truncate',
+  'coverage_parameter_registry_versions_no_truncate',
+  'evidence_facts_no_truncate',
+]);
 
 function sqliteCatalog(database) {
   const objects = database.prepare("SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
@@ -116,6 +124,7 @@ async function postgresCatalog(pool) {
     FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
     WHERE NOT t.tgisinternal AND c.relnamespace = current_schema()::regnamespace ORDER BY t.tgname`);
   for (const row of triggers) {
+    if (POSTGRES_ONLY_TRIGGERS.has(row.name)) continue;
     const events = [row.type & 4 ? 'INSERT' : null, row.type & 8 ? 'DELETE' : null, row.type & 16 ? 'UPDATE' : null].filter(Boolean);
     assert.equal(events.length, 1, `${row.name} must have exactly one event`);
     assert.ok(row.type & 1, `${row.name} must be a row trigger`);
@@ -193,8 +202,8 @@ test('seed rows equal the SQLite seed rows', postgresTestOptions(), async t => {
   assert.match(registered, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 });
 
-test('the PostgreSQL migrations record exactly the baseline files', postgresTestOptions(), async t => {
+test('the PostgreSQL migrations record exactly the immutable migration files', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const versions = (await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows.map(row => row.version);
-  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql']);
+  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql']);
 });

@@ -1,5 +1,6 @@
 // Synthetic fixtures for the PostgreSQL schema tests. No real data.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 
 export const at = '2026-10-16T10:00:00.000Z';
 export const later = '2026-10-16T11:00:00.000Z';
@@ -23,7 +24,8 @@ const defaults = {
   case_participants: () => ({ participant_role: 'operator', created_at: at }),
   document_uploads: id => ({
     id, document_kind: 'policy_schedule', original_filename: 'fixture.pdf', storage_path: `fixture/${id}`,
-    content_sha256: hex('a'), mime_type: 'application/pdf', byte_size: 100, malware_status: 'clean',
+    // Distinct per document: live content is unique per household (migration 004).
+    content_sha256: createHash('sha256').update(String(id)).digest('hex'), mime_type: 'application/pdf', byte_size: 100, malware_status: 'clean',
     encryption_status: 'encrypted_local', lifecycle_state: 'active', uploaded_at: at,
   }),
   ocr_jobs: id => ({ id, provider: 'fixture', status: 'succeeded', attempt_count: 1, requested_at: at }),

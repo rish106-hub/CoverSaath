@@ -12,6 +12,15 @@ test('server configuration has explicit bounded defaults', () => {
     rateLimitPerMinute: 600,
     budgetUsd: undefined,
     projectBudgetUsd: undefined,
+    documents: {
+      storagePath: '.local/documents',
+      encryptionKeyBase64: null,
+      scanMode: 'disabled',
+      clamd: null,
+      maxDocumentsPerCase: 50,
+      maxPendingPerHousehold: 20,
+      workerSweepMs: 30_000,
+    },
   });
 });
 
@@ -24,6 +33,10 @@ test('server capacity and rate settings are bounded before listening', () => {
     ['MAX_RUNS_PER_CASE', '101'],
     ['ORCHESTRATION_RUN_BUDGET_USD', 'NaN'],
     ['ORCHESTRATION_PROJECT_BUDGET_USD', '0'],
+    ['DOCUMENT_SCAN_MODE', 'structural_only'],
+    ['MAX_DOCUMENTS_PER_CASE', '0'],
+    ['MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD', '1001'],
+    ['DOCUMENT_WORKER_SWEEP_MS', '0'],
   ]) {
     assert.throws(() => createApiServer({ env: { [name]: value } }), new RegExp(`Invalid ${name}`));
   }
