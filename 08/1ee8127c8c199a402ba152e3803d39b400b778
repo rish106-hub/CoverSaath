@@ -1,0 +1,26 @@
+src/modules/document-intake/pdf-inspection.js
+  s_6d18a01095c0b8::t_dc3db4807a4e8e 146-147
+  s_6d18a01095c0b8::t_501eaa6c52b263 65-66
+  s_6d18a01095c0b8::t_02ca05601f4319 359
+  s_6d18a01095c0b8::t_712b2eec9b8660 1-63,67-145,148-358,360-367
+  s_6d18a01095c0b8::t_4fd0bebdeed471 64
+tests/pdf-inspection.test.mjs
+  s_6d18a01095c0b8::t_2c666ab1ca0af4 1-225,227-236
+  s_6d18a01095c0b8::t_ee85f33dd07c35 226
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "081ee8127c8c199a402ba152e3803d39b400b778",
+  "prompts": {},
+  "sessions": {
+    "s_6d18a01095c0b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7ba5b91-6e7f-489e-b54a-d02f152b251e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
