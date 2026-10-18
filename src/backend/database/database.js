@@ -85,6 +85,7 @@ export const criticalTriggers = Object.freeze([
   'policies_household_source_insert', 'policy_members_household_refs_insert',
   'evidence_facts_household_refs_insert', 'coverage_graph_snapshots_household_case_insert',
   'evidence_facts_provenance_immutable', 'evidence_facts_no_delete', 'evidence_facts_redaction_insert',
+  'evidence_facts_erased_document_insert', 'evidence_facts_redaction_format_update',
   'evidence_facts_redact_on_document_erasure', 'fact_conflicts_same_fact_insert',
   'coverage_graph_nodes_snapshot_fact_insert', 'coverage_graph_edges_snapshot_nodes_insert',
   'workflow_runs_household_consent_insert',

@@ -691,9 +691,15 @@ test('evidence facts allow only the redaction update; document erasure redacts t
   for (const [column, value] of Object.entries(retained)) {
     await rejects(pool.query(`UPDATE evidence_facts SET ${erase({ [column]: value })} WHERE id = 'f-redact'`), appendOnly);
   }
-  for (const value of ["''", "'yesterday'"]) {
-    await assert.rejects(pool.query(`UPDATE evidence_facts SET ${erase({ redacted_at: value })} WHERE id = 'f-redact'`), { code: '23514' });
+  for (const value of ["''", "'yesterday'", "'2026-10-18T12:00:00Z'", "'2026-10-18T12:00:00.000Zjunk'", "'2026-13-01T00:00:00.000Z'", "'2026-10-18T25:00:00.000Z'"]) {
+    // The 006 format trigger (P0001) runs before the 005 CHECK (23514); either rejects.
+    await assert.rejects(pool.query(`UPDATE evidence_facts SET ${erase({ redacted_at: value })} WHERE id = 'f-redact'`),
+      error => ['23514', 'P0001'].includes(error.code));
   }
+  // A value the 005 CHECK accepts (seconds without milliseconds) is rejected by the 006 trigger.
+  await rejects(pool.query(`UPDATE evidence_facts SET ${erase({ redacted_at: "'2026-10-18T12:00:00Z'" })} WHERE id = 'f-redact'`),
+    'evidence fact redaction time must be ISO-8601 UTC with milliseconds');
+  proves('evidence_facts_redaction_format_update');
   await pool.query(`UPDATE evidence_facts SET ${erase()} WHERE id = 'f-redact'`);
   const redacted = await one(pool, "SELECT * FROM evidence_facts WHERE id = 'f-redact'");
   assert.equal(redacted.epistemic_state, 'unknown');
@@ -739,7 +745,29 @@ test('evidence facts allow only the redaction update; document erasure redacts t
   assert.match(row.redacted_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   assert.equal((await one(pool, "SELECT redacted_at FROM evidence_facts WHERE id = 'f-other-document'")).redacted_at, null,
     'facts of another document are untouched');
+  // A direct move to deleted is erasure too.
+  await pool.query("UPDATE document_uploads SET lifecycle_state = 'deleted' WHERE id = $1", [a.document]);
+  const deleted = await one(pool, "SELECT * FROM evidence_facts WHERE id = 'f-other-document'");
+  assert.equal(deleted.value_json, null);
+  assert.equal(deleted.source_page_id, null);
+  assert.equal(deleted.redaction_reason_code, 'document_erasure');
   proves('evidence_facts_redact_on_document_erasure');
+
+  // Erasure has started: a new fact cannot cite those pages; a live document still can.
+  const erasedMessage = 'evidence facts cannot cite an erased document';
+  const cite = (id, source_page_id) => insert(pool, 'evidence_facts', {
+    id, household_id: a.household, epistemic_state: 'known', value_json: '7', evidence_kind: 'document',
+    provenance_kind: 'document_page', source_page_id,
+  });
+  await rejects(cite('f-after-request', 'page-fact-erase'), erasedMessage);
+  await rejects(cite('f-after-delete', a.page), erasedMessage);
+  await insert(pool, 'document_uploads', {
+    id: 'document-fact-live', household_id: a.household, case_id: a.case, uploaded_by_adult_id: a.adult,
+    consent_grant_id: a.consent, storage_path: 'fixture/fact-live',
+  });
+  await insert(pool, 'source_pages', { id: 'page-fact-live', document_upload_id: 'document-fact-live' });
+  await cite('f-live', 'page-fact-live');
+  proves('evidence_facts_erased_document_insert');
 });
 
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {
