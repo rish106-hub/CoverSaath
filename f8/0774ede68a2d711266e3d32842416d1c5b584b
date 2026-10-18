@@ -1,0 +1,21 @@
+src/backend/database/postgres/migrate.js
+  s_6d18a01095c0b8::t_b0cc3adceddd8b 3,54-65
+tests/support/postgres.mjs
+  s_6d18a01095c0b8::t_784006e92dd050 80-85,106-111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f80774ede68a2d711266e3d32842416d1c5b584b",
+  "prompts": {},
+  "sessions": {
+    "s_6d18a01095c0b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7ba5b91-6e7f-489e-b54a-d02f152b251e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
