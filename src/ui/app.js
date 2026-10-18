@@ -98,8 +98,16 @@ function matrixPanel() {
 }
 
 function documentUploadSection() {
-  documentPanel.setContext({ caseId: view.policyCaseRecord?.id ?? '', consentGrantId: view.policyConsent?.id ?? '' });
-  return documentPanel.element;
+  documentPanel.setContext({ caseId: view.policyCaseRecord?.id ?? '', consentGrantId: view.documentConsent?.id ?? '' });
+  if (!view.policyCaseRecord || view.documentConsent) return documentPanel.element;
+  // LEGAL REVIEW REQUIRED: draft consent copy.
+  return el('div', {},
+    el('section', { class:'panel', 'aria-labelledby':'doc-consent-title' },
+      el('h2', { id:'doc-consent-title' }, 'Allow document upload for this case'),
+      hint('Uploading needs your separate permission for this service to collect your insurance documents, and to show you the status of documents on this case. Draft wording pending legal review.'),
+      el('button', { class:'button', type:'button', disabled:view.busy, onClick:() => controller.grantDocumentConsent() },
+        view.busy ? 'Working...' : 'Allow document upload')),
+    documentPanel.element);
 }
 
 function actionPanel() {

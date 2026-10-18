@@ -1,9 +1,10 @@
 import {
-  DOCUMENT_KINDS, formatBytes, messageForErrorCode, selectionKey, statusLabel, validateSelection,
+  DOCUMENT_KINDS, ERROR_MESSAGES, formatBytes, messageForErrorCode, selectionKey, statusLabel, validateSelection,
 } from '../state/document-selection.js';
 
 export const POLL_INTERVAL_MS = 3000;
 export const POLL_MAX_MS = 2 * 60 * 1000;
+const LIST_ERROR = 'The documents for this case could not be loaded. Refresh to try again.';
 
 const kindLabel = kind => DOCUMENT_KINDS.find(([value]) => value === kind)?.[1] ?? kind;
 
@@ -23,7 +24,9 @@ export function createDocumentUploadPanel({
   const touched = { caseId: false, consent: false };
   const polls = new Map(); // document id -> { startedAt, timer }
   let nextId = 1;
-  let loadedCase = '';
+  let loadedContext = '';
+  let listNoticeShown = false;
+  let listedCase = '';
 
   const live = el('div', { class:'sr-only', role:'status', 'aria-live':'polite' });
   const announce = text => { live.textContent = ''; live.textContent = text; };
@@ -207,16 +210,23 @@ export function createDocumentUploadPanel({
   }
 
   async function refresh() {
-    if (!state.caseId) { state.documents = []; stopPolling(); renderDocuments(); return; }
+    // Listing needs the document consent's read scope; without a grant ID the request can only fail.
+    if (!state.caseId || !state.consentGrantId) { state.documents = []; stopPolling(); renderDocuments(); return; }
     const caseId = state.caseId;
+    // Never show one case's documents under another case while the new list loads or fails.
+    if (caseId !== listedCase) { state.documents = []; stopPolling(); renderDocuments(); listedCase = caseId; }
     try {
       const result = await client.listCaseDocuments(caseId);
       if (caseId !== state.caseId) return;
       state.documents = result.documents ?? [];
-      loadedCase = caseId;
+      if (listNoticeShown) { notice.textContent = ''; listNoticeShown = false; }
       trackPending();
     } catch (error) {
-      notice.textContent = messageForErrorCode(error?.code);
+      if (caseId !== state.caseId) return;
+      // A list failure is not an upload failure; never show the upload fallback for it.
+      listNoticeShown = true;
+      notice.textContent = Object.prototype.hasOwnProperty.call(ERROR_MESSAGES, error?.code) || error?.code === 'NETWORK_ERROR'
+        ? messageForErrorCode(error.code) : LIST_ERROR;
     }
     renderDocuments();
   }
@@ -225,7 +235,9 @@ export function createDocumentUploadPanel({
     if (!touched.caseId && caseId && caseInput.value !== caseId) { caseInput.value = caseId; state.caseId = caseId; }
     if (!touched.consent && consentGrantId && consentInput.value !== consentGrantId) { consentInput.value = consentGrantId; state.consentGrantId = consentGrantId; }
     updateButtons();
-    if (state.caseId && state.caseId !== loadedCase) { loadedCase = state.caseId; void refresh(); }
+    // A new consent can change what the list may show, so reload on either change.
+    const context = `${state.caseId}|${state.consentGrantId}`;
+    if (state.caseId && context !== loadedContext) { loadedContext = context; void refresh(); }
   }
 
   const element = el('section', { class:'panel upload-panel', 'aria-labelledby':'doc-upload-title' },
