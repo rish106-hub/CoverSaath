@@ -1,0 +1,52 @@
+src/backend/database/migrations/010_evidence_fact_redaction_hardening.sql
+  s_6d18a01095c0b8::t_7674b2ca680712 1-40
+tests/postgres-triggers.test.mjs
+  s_6d18a01095c0b8::t_c683222efa5257 694,748-753,755-770
+  s_6d18a01095c0b8::t_57b652e36952bd 699,701-702
+  s_6d18a01095c0b8::t_4ed2a43a49921d 700
+  s_6d18a01095c0b8::t_04c010a922d971 695-697
+docs/exec-plans/active/evidence-facts-erasure.md
+  s_6d18a01095c0b8::t_b9db3f19959890 32
+  s_6d18a01095c0b8::t_c683222efa5257 11,33
+tests/database-integrity-v2.test.mjs
+  s_6d18a01095c0b8::t_7674b2ca680712 87
+tests/postgres-runner.test.mjs
+  s_6d18a01095c0b8::t_7674b2ca680712 15,43
+tests/postgres-catalog-parity.test.mjs
+  s_6d18a01095c0b8::t_7674b2ca680712 208
+docs/architecture/data.md
+  s_6d18a01095c0b8::t_c683222efa5257 20,51,61
+  s_6d18a01095c0b8::t_b9db3f19959890 11,17,23,35,54
+src/backend/database/postgres/migrations/006_evidence_fact_redaction_hardening.sql
+  s_6d18a01095c0b8::t_34549ec2fa4d3f 3-4,27-43
+  s_6d18a01095c0b8::t_7674b2ca680712 1-2,5-26,44-56
+docs/iterations/LATEST.md
+  s_6d18a01095c0b8::t_c683222efa5257 89,92,94
+  s_6d18a01095c0b8::t_b9db3f19959890 91
+tests/evidence-fact-redaction.test.mjs
+  s_6d18a01095c0b8::t_34549ec2fa4d3f 127,166-167,181-183
+  s_6d18a01095c0b8::t_c683222efa5257 3-8,59-64,126,128,145,148-165,168-180,184-188,205,248
+  s_6d18a01095c0b8::t_04c010a922d971 125
+tests/database-schema.test.mjs
+  s_6d18a01095c0b8::t_7674b2ca680712 35
+tests/evidence-completion-persistence.test.mjs
+  s_6d18a01095c0b8::t_7674b2ca680712 77
+src/backend/database/database.js
+  s_6d18a01095c0b8::t_b9db3f19959890 88
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e44935f82f8bf4472d7a77f087b11455464f8c36",
+  "prompts": {},
+  "sessions": {
+    "s_6d18a01095c0b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7ba5b91-6e7f-489e-b54a-d02f152b251e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
