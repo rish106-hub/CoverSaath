@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
+import { copyFileSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
+import { openDatabase, runMigrations } from '../src/backend/database/index.js';
 import { AuditRepository } from '../src/backend/repositories/audit-repository.js';
 import { ConsentRepository } from '../src/backend/repositories/consent-repository.js';
 import { EvidenceRepository } from '../src/backend/repositories/evidence-repository.js';
@@ -50,6 +55,12 @@ const redaction = {
   epistemic_state: "'unknown'", value_json: 'NULL', source_page_id: 'NULL', source_locator: 'NULL',
   institutional_source_ref: 'NULL', calculation_method: 'NULL', permitted_viewers_json: 'NULL', effective_at: 'NULL',
   redacted_at: `'${later}'`, redaction_reason_code: "'consent_revoked'",
+};
+// Every value-bearing column the redaction must clear.
+const erasedColumns = ['value_json', 'source_page_id', 'source_locator', 'institutional_source_ref', 'calculation_method', 'permitted_viewers_json', 'effective_at'];
+const assertErased = (fact, label) => {
+  for (const column of erasedColumns) assert.equal(fact[column], null, `${label}: ${column} erased`);
+  assert.equal(fact.epistemic_state, 'unknown', `${label}: state UNKNOWN`);
 };
 const erase = (overrides = {}) => Object.entries({ ...redaction, ...overrides }).map(([column, value]) => `${column} = ${value}`).join(', ');
 
@@ -111,8 +122,10 @@ test('evidence facts cannot be inserted redacted and reason codes are constraine
   // The pairing and format CHECK also guards the redaction update itself.
   const erasure = overrides => database.exec(`UPDATE evidence_facts SET ${erase(overrides)} WHERE id = 'fact-plain'`);
   assert.throws(() => erasure({ redaction_reason_code: "'Consent Revoked'" }), /CHECK constraint failed/);
-  assert.throws(() => erasure({ redacted_at: "''" }), /CHECK constraint failed/);
-  assert.throws(() => erasure({ redacted_at: "'yesterday'" }), /CHECK constraint failed/);
+  assert.throws(() => erasure({ redacted_at: "''" }), /CHECK constraint failed|ISO-8601 UTC with milliseconds/);
+  for (const value of ["'yesterday'", "'2026-10-18T12:00:00Z'", "'2026-10-18T12:00:00.000Zjunk'", "'2026-13-01T00:00:00.000Z'", "'2026-10-18T25:00:00.000Z'"]) {
+    assert.throws(() => erasure({ redacted_at: value }), /CHECK constraint failed|ISO-8601 UTC with milliseconds/, `redacted_at ${value}`);
+  }
   erasure();
 });
 
@@ -129,8 +142,50 @@ test('document erasure redacts facts sourced from that document and only those',
   assert.equal(erased.epistemic_state, 'unknown');
   assert.equal(erased.redaction_reason_code, 'document_erasure');
   assert.match(erased.redacted_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assertErased(erased, 'deletion_requested');
   assert.equal(evidence.get('fact-kept').redacted_at, null);
   assert.deepEqual(evidence.get('fact-kept').value, { limitMinor: 500000, currency: 'INR' });
+
+  // A direct move to deleted is erasure too.
+  database.exec("UPDATE document_uploads SET lifecycle_state = 'deleted' WHERE id = 'document-kept'");
+  assertErased(evidence.get('fact-kept'), 'deleted');
+  assert.equal(evidence.get('fact-kept').redaction_reason_code, 'document_erasure');
+});
+
+test('a fact cannot cite a page of a document whose erasure has started', t => {
+  const { database, evidence } = open(t);
+  documentFact(evidence, 'fact-before');
+  database.exec("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-parameters'");
+  assert.throws(() => documentFact(evidence, 'fact-after-request'), /evidence facts cannot cite an erased document/);
+  database.exec("UPDATE document_uploads SET lifecycle_state = 'deleted' WHERE id = 'document-kept'");
+  assert.throws(() => documentFact(evidence, 'fact-after-delete', 'page-kept'), /evidence facts cannot cite an erased document/);
+  documentFact(evidence, 'fact-live', 'page-other');
+  assert.equal(evidence.get('fact-live').redacted_at, null);
+});
+
+test('migration 010 redacts facts of documents whose erasure started before 009', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'coversaath-010-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const source = fileURLToPath(new URL('../src/backend/database/migrations', import.meta.url));
+  for (const name of readdirSync(source).filter(file => /^00[1-8]_.*\.sql$/.test(file))) copyFileSync(join(source, name), join(directory, name));
+  const database = new DatabaseSync(':memory:');
+  t.after(() => database.close());
+  database.exec('PRAGMA foreign_keys = ON');
+  runMigrations(database, { directory });
+  seedParameterWorld(database);
+  const evidence = new EvidenceRepository(database, { clock: () => new Date(at) });
+  documentFact(evidence, 'fact-erased-document');
+  documentFact(evidence, 'fact-live-document', 'page-other');
+  database.exec("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-parameters'");
+
+  // 009 and 010 are applied after the erasure began; 010 carries the backfill (009 is immutable).
+  for (const name of ['009_evidence_fact_redaction.sql', '010_evidence_fact_redaction_hardening.sql']) copyFileSync(join(source, name), join(directory, name));
+  assert.deepEqual(runMigrations(database, { directory }), ['009_evidence_fact_redaction.sql', '010_evidence_fact_redaction_hardening.sql']);
+  const erased = database.prepare("SELECT * FROM evidence_facts WHERE id = 'fact-erased-document'").get();
+  assertErased(erased, 'backfill');
+  assert.equal(erased.redaction_reason_code, 'document_erasure');
+  assert.match(erased.redacted_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.equal(database.prepare("SELECT redacted_at FROM evidence_facts WHERE id = 'fact-live-document'").get().redacted_at, null);
 });
 
 test('consent revocation redacts facts derived from the revoked documents with a counts-only audit event', t => {
@@ -147,6 +202,7 @@ test('consent revocation redacts facts derived from the revoked documents with a
 
   for (const id of ['fact-page-1', 'fact-page-2']) {
     const fact = evidence.get(id);
+    assertErased(fact, id);
     assert.equal(fact.value, null, `${id} value erased`);
     assert.equal(fact.source_page_id, null);
     assert.equal(fact.redacted_at, later);
@@ -189,6 +245,6 @@ test('commit-time erasure redacts facts with its reason and stays inside the hou
   });
   assert.equal(result.facts, 1);
   assert.equal(evidence.get('fact-stale').redaction_reason_code, 'source_consent_not_current');
-  assert.equal(evidence.get('fact-stale').value, null);
+  assertErased(evidence.get('fact-stale'), 'commit-time');
   assert.equal(database.prepare("SELECT count(*) AS count FROM audit_events WHERE action = 'evidence.facts_erased'").get().count, 1);
 });

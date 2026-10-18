@@ -205,5 +205,5 @@ test('seed rows equal the SQLite seed rows', postgresTestOptions(), async t => {
 test('the PostgreSQL migrations record exactly the immutable migration files', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const versions = (await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows.map(row => row.version);
-  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql']);
+  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql']);
 });
