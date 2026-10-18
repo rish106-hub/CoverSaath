@@ -10,7 +10,7 @@ Phase 0 of the production plan of action: close the unfinished evidence-completi
 TASK CLASS = S2
 CERT = READY (code gate green)
 PHASE 0 GATE = REVIEW 3 PASS (no P0/P1; P2 fixed); pending owner approval
-PHASE 1 = P1-A + P1-D integrated (Section 2, review PASS); P1-B PostgreSQL: S3.1 schema foundation done, S3.2/S3.3 open; P1-C governance open
+PHASE 1 = P1-A + P1-D integrated (Section 2, review PASS); P1-B PostgreSQL: S3.1 merged, review hardening in progress, S3.2/S3.3 open; P1-C governance open
 PRODUCTION READINESS = FAIL
 ```
 
@@ -72,12 +72,15 @@ Closes the open items of [evidence-completion-mvp-intake.md](../exec-plans/compl
 
 ## Section 3 (P1-B PostgreSQL): S3.1 schema foundation
 
-Branch `claude/p1-postgres`. Handoff for the next agent: [p1b-handoff.md](../exec-plans/active/p1b-handoff.md).
+PR #8 merged to `main` at `5b5fef5`. Review hardening branch: `codex/p1b-s31-hardening`. Handoff: [p1b-handoff.md](../exec-plans/active/p1b-handoff.md).
 
-- PostgreSQL 17 baseline migrations equal to SQLite 001–006, migration runner (advisory lock, checksums), pool factory, schema validation, `julianday(text)` port (107 parity inputs, 0 differences), test harness (template database plus one clone per test). Runtime is still SQLite.
-- Catalog, both engines: 41 tables + `schema_migrations`, 85 foreign keys (plan said 84), 64 indexes, 56 triggers (47 critical), 126 CHECKs. Every trigger has a PostgreSQL test; 14 of 14 mutation checks detected.
-- Evidence (merge on `claude/p1-postgres`): `npm run check` with PostgreSQL 393/393 pass; without `TEST_DATABASE_URL` 362 pass, 31 skipped visibly, 0 fail. `npm run eval:safety` no failures. `git diff --check` clean.
-- Unverified: independent Opus review of S3.1 was still running at handoff.
+- PostgreSQL 17 baseline migrations equal SQLite 001–006. The runner, pool factory, schema validation, `julianday(text)` port and isolated database test harness are implemented. Runtime is still SQLite.
+- The independent S3.1 review failed on one P1 and four P2 issues: `TRUNCATE` bypassed row triggers; temporary tables could shadow guard lookups; an ICU database named `C` could pass validation with incompatible ordering; URL timeout parameters overrode pool policy; a second migration runner leaked a raw lock-timeout error.
+- SQLite migration 007 and PostgreSQL migration 003 add missing fact and registry-pin `DELETE` guards. PostgreSQL migration 003 also adds six `TRUNCATE` guards, fixes all project function search paths and revokes default `PUBLIC` temporary-schema and protected-table truncate privileges. Pool settings now reject zero and strip URL overrides. Migration locking waits outside the ordinary lock timeout, redacts driver errors and destroys a connection if unlock or timeout restoration fails. Validation now checks locale provider, ordering and function search paths.
+- Catalog: 41 tables + `schema_migrations`, 85 foreign keys, 64 indexes, 58 shared row triggers (49 critical) and 126 CHECKs. PostgreSQL adds six required statement triggers. The original 14 of 14 mutation checks detect their mutations; hardening tests also detect missing guards and unsafe function search path.
+- Re-review (Opus, read-only): FAIL on two P2s, both outside the earlier five findings, which are confirmed fixed. P2-1 (fixed): the runner kept `lock_timeout = 0` for every migration statement, not only the advisory-lock wait, so DDL could queue indefinitely; it now restores the pool setting as soon as the lock is held. P2-2 (open, owner decision): `evidence_facts` blocks UPDATE, DELETE and TRUNCATE with no redaction exception and has no erasure path, so revocation cannot erase its `value_json` or `source_page_id`. The gap predates S3.1 (UPDATE was already blocked); the new guards make it explicit. Choose a redaction carve-out (like observations) or record an accepted risk. P3s fixed: extension-owned functions are excluded from the search-path check; `replication` is stripped from `DATABASE_URL`. Each new test was mutation-checked.
+- Current evidence: with PostgreSQL, `npm run check` passes architecture, 398/398 tests and build. Without `TEST_DATABASE_URL`, 362 pass and 36 PostgreSQL tests skip visibly, 0 failures. Safety eval no failures; `git diff --check` clean.
+- Remaining P3: `julianday` depends on `standard_conforming_strings` and differs from SQLite on fractions longer than about 310 digits; catalog parity still relies on behaviour tests for most function definitions; `REVOKE TEMPORARY` is a database ACL, not schema, so a restored or cloned database regains defaults and validation does not check it (owners and superusers keep TEMP and TRUNCATE anyway; the S3.2 least-privilege runtime role closes this); the advisory-lock wait is still bounded by `statement_timeout` (default 30 s), so a second runner fails with a generic coded error if the first takes longer.
 
 ## Accepted risks and known limitations
 
@@ -107,7 +110,7 @@ Branch `claude/p1-postgres`. Handoff for the next agent: [p1b-handoff.md](../exe
 
 Owner decisions (2026-10-16): apply the lean AGENTS.md model, CoverSaath is the canonical product name, remove the legacy demo API.
 
-- Instructions: the 1,103-line AGENTS.md/CLAUDE.md copies are replaced by a 93-line `AGENTS.md`; `CLAUDE.md` is the one-line import `@AGENTS.md`; directory rules in `src/backend/database/`, `src/modules/ai-analysis/`, `src/integrations/`; `docs/CERT.md` removed; finished exec plans in `docs/exec-plans/completed/`; `engines.node >=22.16.0`. Product docs stay in `working/` and `building/` (registry v1 cites `building/policy-parameters.md`). Remaining `knowvia` identifiers are renamed later with a compatibility plan.
+- Instructions: the 1,103-line AGENTS.md/CLAUDE.md copies were replaced by a lean root `AGENTS.md`; `CLAUDE.md` is the one-line import `@AGENTS.md`. The current migration removes duplicated backend rules from root, keeps root below 100 lines and adds a 12-line `src/backend/AGENTS.md` above the focused database, AI and integration rules. Product docs stay in `working/` and `building/` (registry v1 cites `building/policy-parameters.md`). Remaining `knowvia` identifiers are renamed later with a compatibility plan.
 - New source-of-truth docs: `docs/architecture/{system,data,security}.md`, `docs/runbooks/local-database.md`. No `scale.md` until workload numbers exist.
 - Legacy removal: `src/core`, `src/orchestration`, `src/models`, `src/adapters`, `scripts/orchestration-demo.mjs`, `ENABLE_LEGACY_DEMO_API`, the memory-only demo cookie, `@ai-sdk/openai`, `OPENAI_API_KEY` and `HUMAN_HANDOFF_PHONE` are gone. Only `/api/v1/*` is served; other paths return 404 `ROUTE_NOT_FOUND`, also with the old flag set. 38 legacy-only tests deleted; safety-eval assertions retargeted to canonical validators; new tests for removed routes, the loopback guard (Host, Origin, Sec-Fetch-Site; previously covered only by a legacy test) and the integrations HRMS status.
 - Agents: Sonnet 5.5 for legacy removal and architecture docs (separate worktrees, no shared files); Opus 5.5 central and read-only review.
@@ -116,8 +119,8 @@ Owner decisions (2026-10-16): apply the lean AGENTS.md model, CoverSaath is the 
 
 ## Next action
 
-1. Owner: merge PR #5 (Section 2), then the AGENTS.md/legacy-removal PR stacked on it.
-2. Owner: repository settings from P1-D. CodeQL default setup is enabled and blocks the pinned advanced workflow ("CodeQL analyses from advanced configurations cannot be processed when the default setup is enabled"): switch CodeQL to advanced. Also dependency graph, Dependabot alerts and security updates, secret scanning with push protection, private vulnerability reporting, read-only Actions token, fork approval, a `main` ruleset requiring `CI / verify`.
-3. Owner: delete the local `.local/runs/` folder left by the legacy demo store.
-4. Next section: Section 3, PostgreSQL (ADR 0002). Needs a runtime choice: Docker Desktop, Homebrew PostgreSQL, or CI service container only.
+1. Finish the S3.1 hardening re-review, then merge its PR before starting S3.2.
+2. Start S3.2 WP0 from updated `main`. Follow [p1b-handoff.md](../exec-plans/active/p1b-handoff.md).
+3. Owner: repository settings from P1-D. CodeQL default setup is enabled and conflicts with the pinned advanced workflow. Switch CodeQL to advanced. Also configure dependency graph, Dependabot alerts and security updates, secret scanning with push protection, private vulnerability reporting, read-only Actions token, fork approval and a `main` ruleset requiring `CI / verify`.
+4. Owner: delete the local `.local/runs/` folder left by the legacy demo store.
 5. Owner decisions still open: consent-expiry retention, second maintainer, Azure and residency owner, `docs/evidence/` history purge.

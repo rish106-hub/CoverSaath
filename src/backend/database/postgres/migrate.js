@@ -41,37 +41,66 @@ async function applyMigration(client, version, sql) {
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     if (error instanceof PostgresDatabaseError) throw error;
-    throw new PostgresDatabaseError('POSTGRES_MIGRATION_FAILED', `Migration failed: ${version}: ${error.message}`, { cause: error });
+    throw new PostgresDatabaseError('POSTGRES_MIGRATION_FAILED', `Migration failed: ${version}`, { cause: error });
   }
 }
 
 // Applies every pending migration file, each in its own transaction, under one session advisory
 // lock so concurrent runners apply each file exactly once. Returns the versions applied by this run.
-// The pool's statement and lock timeouts apply: use a pool configured for migrations when a file
-// needs longer.
+// The pool's statement and lock timeouts apply to migration statements. Only the advisory-lock wait
+// disables lock_timeout on the checked-out connection; it is restored as soon as the lock is held.
+// The wait is still bounded by the pool's statement_timeout.
 export async function runPostgresMigrations(pool, { directory = postgresMigrationDirectory } = {}) {
   const files = postgresMigrationFiles(directory).map(version => ({
     version,
     sql: readFileSync(resolve(directory, version), 'utf8'),
   }));
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
+  } catch (error) {
+    throw new PostgresDatabaseError('POSTGRES_MIGRATION_FAILED', 'PostgreSQL migration runner could not connect.', { cause: error });
+  }
+  let destroyClient = false;
+  let lockHeld = false;
+  let previousLockTimeout;
+  try {
+    previousLockTimeout = (await client.query("SELECT current_setting('lock_timeout') AS value")).rows[0].value;
+    await client.query("SELECT set_config('lock_timeout', '0', false)");
     await client.query('SELECT pg_advisory_lock($1::bigint)', [MIGRATION_LOCK_KEY]);
-    try {
-      await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
-        version text PRIMARY KEY,
-        checksum text NOT NULL,
-        applied_at text NOT NULL
-      )`);
-      const applied = [];
-      for (const { version, sql } of files) {
-        if (await applyMigration(client, version, sql)) applied.push(version);
-      }
-      return applied;
-    } finally {
-      await client.query('SELECT pg_advisory_unlock($1::bigint)', [MIGRATION_LOCK_KEY]).catch(() => {});
+    lockHeld = true;
+    // lock_timeout 0 covers only the advisory-lock wait. Migration statements run under the pool's
+    // lock_timeout so DDL never queues indefinitely behind a long transaction.
+    await client.query("SELECT set_config('lock_timeout', $1, false)", [previousLockTimeout]);
+    await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
+      version text PRIMARY KEY,
+      checksum text NOT NULL,
+      applied_at text NOT NULL
+    )`);
+    const applied = [];
+    for (const { version, sql } of files) {
+      if (await applyMigration(client, version, sql)) applied.push(version);
     }
+    return applied;
+  } catch (error) {
+    if (error instanceof PostgresDatabaseError) throw error;
+    throw new PostgresDatabaseError('POSTGRES_MIGRATION_FAILED', 'PostgreSQL migration runner failed.', { cause: error });
   } finally {
-    client.release();
+    if (lockHeld) {
+      try {
+        const unlocked = await client.query('SELECT pg_advisory_unlock($1::bigint) AS unlocked', [MIGRATION_LOCK_KEY]);
+        if (unlocked.rows[0]?.unlocked !== true) destroyClient = true;
+      } catch {
+        destroyClient = true;
+      }
+    }
+    if (!destroyClient && previousLockTimeout !== undefined) {
+      try {
+        await client.query("SELECT set_config('lock_timeout', $1, false)", [previousLockTimeout]);
+      } catch {
+        destroyClient = true;
+      }
+    }
+    client.release(destroyClient);
   }
 }
