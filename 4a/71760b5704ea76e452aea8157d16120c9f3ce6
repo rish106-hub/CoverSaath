@@ -1,0 +1,30 @@
+src/modules/document-intake/scan-worker.js
+  s_6d18a01095c0b8::t_99a5e7f5d6dc49 45
+  s_6d18a01095c0b8::t_8564d213827143 1-44,46-137
+tests/clamd-scanner.test.mjs
+  s_6d18a01095c0b8::t_01f278adbd556e 1-192,194-234
+  s_6d18a01095c0b8::t_5aaf317af469b1 193
+src/modules/document-intake/clamd-scanner.js
+  s_6d18a01095c0b8::t_5aaf317af469b1 102
+  s_6d18a01095c0b8::t_511f010de56170 64
+  s_6d18a01095c0b8::t_5991e9e04e6537 1-63,65-101,103-127
+tests/scan-worker.test.mjs
+  s_6d18a01095c0b8::t_286a8684f6db5a 1-88,90-104,106-293
+  s_6d18a01095c0b8::t_5aaf317af469b1 89,105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a71760b5704ea76e452aea8157d16120c9f3ce6",
+  "prompts": {},
+  "sessions": {
+    "s_6d18a01095c0b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7ba5b91-6e7f-489e-b54a-d02f152b251e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
