@@ -1,0 +1,35 @@
+tests/ready-detail.test.mjs
+  s_294f213b2edd23::t_60c87e418b3724 52-70
+  s_294f213b2edd23::t_6a65bf50c85286 1-51,71-108
+src/shared/http/index.js
+  s_294f213b2edd23::t_dadcdff8d3c57d 3
+src/server/routes/v1-backend-routes.js
+  s_294f213b2edd23::t_8b797c38d2cb4b 2
+  s_294f213b2edd23::t_dadcdff8d3c57d 178,181-184
+docs/runbooks/local-database.md
+  s_294f213b2edd23::t_2d9246d7284ef7 20
+docs/architecture/security.md
+  s_294f213b2edd23::t_60c87e418b3724 32
+  s_294f213b2edd23::t_2d9246d7284ef7 19
+src/shared/http/security.js
+  s_294f213b2edd23::t_dadcdff8d3c57d 14-15,21-22,24-31
+  s_294f213b2edd23::t_60c87e418b3724 16-20,23
+docs/architecture/data.md
+  s_294f213b2edd23::t_2d9246d7284ef7 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "00869e9d8d55380d9e7fe7ab10775dea03641d91",
+  "prompts": {},
+  "sessions": {
+    "s_294f213b2edd23": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ea96559e-5fa8-4f78-b684-91b7cce1a92d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
