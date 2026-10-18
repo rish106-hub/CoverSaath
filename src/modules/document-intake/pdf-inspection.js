@@ -83,10 +83,77 @@ function parseInteger(buf, start, end) {
   return value;
 }
 
+const OBJ_TAIL = Buffer.from('bj', 'latin1');
+const TRAILER_TAIL = Buffer.from('railer', 'latin1');
+const STARTXREF_TAIL = Buffer.from('tartxref', 'latin1');
+const XREF_TAIL = Buffer.from('ref', 'latin1');
+const MAX_GAP = 32;
+
+const matchAt = (buf, k, end, tail) => k + tail.length <= end && buf.compare(tail, 0, tail.length, k, k + tail.length) === 0;
+const isDigit = c => c >= 0x30 && c <= 0x39;
+
+// `k` is the index of "obj"; true when it is preceded by "<digits> <digits> "
+// and followed by whitespace, a delimiter or the end of the range.
+function isObjectHeader(buf, k, start, end) {
+  if (k + 3 < end && CLASS[buf[k + 3]] === 0) return false;
+  let j = k - 1;
+  for (let pass = 0; pass < 2; pass += 1) {
+    const wsStop = Math.max(start, j - MAX_GAP);
+    const wsFrom = j;
+    while (j >= wsStop && CLASS[buf[j]] === 1) j -= 1;
+    if (j === wsFrom) return false;
+    const digitStop = Math.max(start, j - 10);
+    const digitFrom = j;
+    while (j >= digitStop && isDigit(buf[j])) j -= 1;
+    if (j === digitFrom) return false;
+  }
+  return true;
+}
+
+/**
+ * Viewers reach objects through xref byte offsets, so an object header or a
+ * trailer placed inside bytes this scanner skips (stream data, comments,
+ * literal strings) would be live but unseen. Rejects any such range that holds
+ * `N G obj`, `trailer <<`, `startxref`, or `xref` + EOL + digit at a line start.
+ * One linear pass with O(1) bounded look-around per candidate byte; random
+ * binary data needs a multi-byte exact structure to match.
+ */
+function assertNoHiddenStructure(buf, start, end) {
+  for (let k = start; k < end; k += 1) {
+    const c = buf[k];
+    let hidden = false;
+    if (c === 0x6f) { // o
+      hidden = matchAt(buf, k + 1, end, OBJ_TAIL) && isObjectHeader(buf, k, start, end);
+    } else if (c === 0x74) { // t
+      if (matchAt(buf, k + 1, end, TRAILER_TAIL)) {
+        let j = k + 7;
+        const stop = Math.min(end, j + MAX_GAP);
+        while (j < stop && CLASS[buf[j]] === 1) j += 1;
+        hidden = j + 1 < end && buf[j] === 0x3c && buf[j + 1] === 0x3c;
+      }
+    } else if (c === 0x73) { // s
+      hidden = matchAt(buf, k + 1, end, STARTXREF_TAIL);
+    } else if (c === 0x78) { // x
+      if ((k === start || buf[k - 1] === 0x0a || buf[k - 1] === 0x0d) && matchAt(buf, k + 1, end, XREF_TAIL)) {
+        let j = k + 4;
+        const stop = Math.min(end, j + MAX_GAP);
+        while (j < stop && (buf[j] === 0x20 || buf[j] === 0x09)) j += 1;
+        if (j < end && (buf[j] === 0x0a || buf[j] === 0x0d)) {
+          while (j < stop && CLASS[buf[j]] === 1) j += 1;
+          hidden = j < end && isDigit(buf[j]);
+        }
+      }
+    }
+    if (hidden) fail('PDF_STRUCTURE_INVALID', 'The PDF has hidden or malformed structure.');
+  }
+}
+
 function freshObjectState() {
   return {
     dictDepth: 0,
     isObjStm: false,
+    hasN: false,
+    hasFirst: false,
     length: null,
     lengthState: 0,
     filterState: 0, // 1 after /Filter, 2 inside filter array
@@ -115,6 +182,11 @@ function freshObjectState() {
  * - `/Type /Page` is counted once per raw object number (incremental updates
  *   that redefine a page do not double count). Inside object streams each
  *   occurrence counts, which can only over-count.
+ * - Skipped bytes (stream data, comment text, literal string contents) are
+ *   checked by assertNoHiddenStructure for object headers and trailers. That
+ *   check does not allow comments inside `N G obj`, so a header split by a
+ *   comment inside skipped bytes is not detected.
+ * This is a bounded heuristic over untrusted bytes, not a full PDF parser.
  */
 function scan(buf, mode, findings, limits) {
   const raw = mode === 'raw';
@@ -176,6 +248,8 @@ function scan(buf, mode, findings, limits) {
         if (name === 'Length') state.lengthState = 1;
         else if (name === 'Filter') state.filterState = 1;
         else if (name === 'DecodeParms') state.decodeParmsState = 1;
+        else if (name === 'N') state.hasN = true;
+        else if (name === 'First') state.hasFirst = true;
       }
       if (name === 'Predictor') state.predictorState = 1;
     }
@@ -206,7 +280,12 @@ function scan(buf, mode, findings, limits) {
       if (end > start && buf[end - 1] === 0x0d) end -= 1;
       next = k + ENDSTREAM.length;
     }
-    if (state.isObjStm) {
+    // Every raw stream body is skipped for name matching, so it must not hide
+    // objects or trailers that a viewer could reach through an xref offset.
+    assertNoHiddenStructure(buf, start, end);
+    // An object stream is any stream whose dictionary has /N and /First, even
+    // when /Type is missing, indirect or wrong.
+    if (state.isObjStm || (state.hasN && state.hasFirst)) {
       findings.objectStreamCount += 1;
       if (findings.objectStreamCount > limits.maxObjectStreams) findings.tooManyObjectStreams = true;
       else {
@@ -226,7 +305,9 @@ function scan(buf, mode, findings, limits) {
     const cls = CLASS[c];
     if (cls === 1) { i += 1; continue; }
     if (c === 0x25) { // % comment to end of line
+      const commentStart = i + 1;
       while (i < length && buf[i] !== 0x0a && buf[i] !== 0x0d) i += 1;
+      if (raw) assertNoHiddenStructure(buf, commentStart, i);
       continue;
     }
     if (c === 0x2f) { // name
@@ -240,6 +321,7 @@ function scan(buf, mode, findings, limits) {
     if (c === 0x28) { // literal string
       let depth = 1;
       i += 1;
+      const stringStart = i;
       while (i < length) {
         const s = buf[i];
         if (s === 0x5c) { i += 2; continue; }
@@ -248,6 +330,7 @@ function scan(buf, mode, findings, limits) {
         i += 1;
       }
       if (i >= length) fail('PDF_STRUCTURE_INVALID', 'The PDF has an unterminated string.');
+      if (raw) assertNoHiddenStructure(buf, stringStart, i);
       i += 1;
       if (raw) onValueToken('string');
       continue;
