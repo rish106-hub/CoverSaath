@@ -1,0 +1,232 @@
+docs/architecture/system.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 68
+  s_db32069030d1f2::t_32d7c1208f4752 15,25-29,42-43,48,75-76
+docs/iterations/LATEST.md
+  s_db32069030d1f2::t_94c1a9734841c7 5
+  s_db32069030d1f2::t_013e758cc8d855 3,7,9-16,18,20-27,29,31,33,35-40,42,44,46,48-53
+tests/p1a-ai-authority.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 13,20-22,27
+tests/policy-structuring-authority.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 5
+tests/policy-structuring-sectioner.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3
+tests/pre-dispatch-consent.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 4-6
+.gitignore
+  s_db32069030d1f2::t_9ce0eeb43497d2 19
+tests/clamd-integration.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3
+tests/document-upload-api.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 803,834
+scripts/eval-parse.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 13,63-65
+tests/policy-structuring-journey.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 5
+docs/adr/0006-policy-document-structuring.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 5,14,16,101,128
+src/backend/repositories/coverage-parameter-repository.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 7,18
+tests/privacy-evidence-gate.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3,8
+tests/model-boundary-safety.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-4
+tests/privacy-gate-tables.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3
+src/backend/services/document-upload-service.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 2
+tests/pdf-segmentation.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 4
+tests/postgres-source-page-blocks.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 5-6
+src/server/routes/v1-backend-routes.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 3,7,9
+tests/certainty-filter.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 4
+README.md
+  s_db32069030d1f2::t_e21848b512f1ae 1,3,5,7,9,11-16,18,20,23-36,39,42-49,52,54,57,62,64,66-69,72,74,76-80,82,84,86,88-95,97,99,101-106,108,110
+tests/ai-analysis.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 12
+tests/outgoing-payload-structuring.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3
+tests/review3-fixes.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 7-9
+tests/ocr-pipeline.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 9
+.github/workflows/ci.yml
+  s_db32069030d1f2::t_08ea425396c69b 67
+src/server/create-server.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 15,24
+tests/privacy-gate-r2.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 10
+tests/round3-runtime-integration.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 6-9
+tests/policy-structuring-validator.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-4
+tests/pdf-inspection-sandbox.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 20,27,133
+docs/exec-plans/completed/evidence-completion-mvp-intake.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 227-231,236-237
+tests/insurance-rules.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 7
+tests/postgres-triggers.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 4
+docs/exec-plans/active/policy-document-structuring.xml
+  s_86129b27dbf7d6::t_5bdd40b178880d 19-21,89
+src/backend/services/coverage-analysis-port.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 2-3
+tests/known-identifier-e2e.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 13-14
+docs/exec-plans/active/sarvam-gemini-parse-validation.xml
+  s_86129b27dbf7d6::t_5bdd40b178880d 61
+tests/policy-structuring-review-fixes.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-4
+tests/pdf-inspection.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 4-5
+tests/p1a-execution-policy.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 14-15,239,242,251,254
+tests/privacy-gate-r4.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 10
+tests/round4-runtime.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 12-14
+working/product-answers-round-2.md
+  s_86129b27dbf7d6::t_945c65faed12a7 1-495
+tests/policy-structuring-coverage-report.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-7
+tests/analysis-subject-consent.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 10-12
+tests/coverage-parameter-authority.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 16-17
+src/contracts/ai-authority.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-5
+src/backend/repositories/ocr-repository.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 2
+tests/coverage-source-consent.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 5
+src/backend/repositories/consent-repository.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 3
+tests/p1a-error-codes.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 17-20
+src/backend/services/policy-structuring-service.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 1-2,5
+tests/p1a-persistence-ports.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 10
+tests/policy-structuring-critical-fields.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3
+tests/policy-structuring-extractor.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-4
+working/working.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 232
+docs/architecture/security.md
+  s_db32069030d1f2::t_32d7c1208f4752 19,51
+  s_86129b27dbf7d6::t_5bdd40b178880d 24
+tests/clamd-scanner.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 4
+package.json
+  s_db32069030d1f2::t_08ea425396c69b 10,13
+tests/coverage-analysis-runtime.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 12-13
+docs/exec-plans/active/p1b-handoff.md
+  s_db32069030d1f2::t_d3dc8f7e016e4f 150
+docs/runbooks/azure-staging.md
+  s_db32069030d1f2::t_32d7c1208f4752 319
+tests/policy-structuring-reconciler.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-5,115
+tests/sarvam-live.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 6
+tests/field-adjudicator.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-5
+tests/evals/safety-evaluator.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 9-11
+tests/document-intake.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 13
+docs/architecture/block-1-input.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 111
+  s_db32069030d1f2::t_32d7c1208f4752 11-12,26-27,38
+tests/live-evidence-selection.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 4-9
+tests/policy-structuring-selection.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-5
+tests/scan-worker.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3
+tests/evals/parse-accuracy.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 7-9
+scripts/eval-structuring-accuracy.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 11-12
+tests/p1a-workflow-contracts.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 8,11,17-18
+tests/live-coverage-runtime.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-6
+tests/privacy-gate-split-tables.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 3
+working/product-answers.md
+  s_86129b27dbf7d6::t_945c65faed12a7 1-507,509-521,523-536
+  s_db32069030d1f2::t_d3dc8f7e016e4f 508,522
+src/features/ai-analysis/AGENTS.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 1-11
+docs/exec-plans/active/block-2-closeout.xml
+  s_86129b27dbf7d6::t_5bdd40b178880d 34-36,134-135,165,168,196-197,227
+AGENTS.md
+  s_db32069030d1f2::t_4743900490baa8 18,26-35,47
+src/contracts/persistence-ports.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 115
+working/answer-to-build-map.md
+  s_db32069030d1f2::t_fb12ffa3653f43 4
+scripts/check-architecture.mjs
+  s_db32069030d1f2::t_5e3022df2ee1bc 47-50,53
+  s_db32069030d1f2::t_255e7b0d2699ff 17
+docs/adr/0001-workflow-v6-contracts.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 5
+docs/architecture/pipeline-blocks.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 26,34,46,56
+  s_db32069030d1f2::t_32d7c1208f4752 24,59-60,65-66,69-70
+docs/adr/0002-persistence-port.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 43
+tests/ocr-stored-blocks.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 10-11
+src/backend/repositories/policy-structuring-repository.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 7
+tests/mvp-closeout.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 10-14,271,277
+tests/sarvam-doc-ai.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 4
+docs/exec-plans/active/block-2-sarvam-document-ai.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 29
+tests/parameter-registry.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 9,18
+src/features/input/AGENTS.md
+  s_db32069030d1f2::t_2579201dc2dce2 1-12
+docs/adr/0005-document-intake-validation-and-scanning.md
+  s_86129b27dbf7d6::t_5bdd40b178880d 5
+scripts/structure-policy.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 17-20,24
+src/contracts/execution-policy.js
+  s_86129b27dbf7d6::t_5bdd40b178880d 3-4
+tests/model-evidence-state.test.mjs
+  s_86129b27dbf7d6::t_5bdd40b178880d 7,12
+docs/exec-plans/completed/backend-first-layout.md
+  s_86129b27dbf7d6::t_3e6e0eb289f9fd 1-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e75c33796fded318acd9a9cf8cec72acd14b63a",
+  "prompts": {},
+  "sessions": {
+    "s_86129b27dbf7d6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1557a-0d9a-73a3-98aa-c85e85b620f1",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_db32069030d1f2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1557a-0d9a-73a3-98aa-c85e85b620f1",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
