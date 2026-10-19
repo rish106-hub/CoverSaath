@@ -10,6 +10,18 @@ export const DOCUMENT_KINDS = Object.freeze([
   ['endorsement', 'Endorsement'],
 ]);
 
+// A filename is only a hint. The user can correct every suggestion before upload.
+export function suggestDocumentKind(filename) {
+  if (typeof filename !== 'string') return null;
+  const name = filename.toLowerCase().replace(/[_-]+/g, ' ');
+  const matches = [
+    ['policy_wording', /\b(wording|terms and conditions)\b/],
+    ['policy_schedule', /\b(schedule)\b/],
+    ['endorsement', /\b(endorsement)\b/],
+  ].filter(([, pattern]) => pattern.test(name));
+  return matches.length === 1 ? matches[0][0] : null;
+}
+
 export const ERROR_MESSAGES = Object.freeze({
   INVALID_REQUEST: 'The upload request was not valid. Check the document type and try again.',
   IDEMPOTENCY_KEY_REQUIRED: 'The upload could not be tracked safely. Remove the file and add it again.',
