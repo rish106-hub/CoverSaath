@@ -111,6 +111,8 @@ export const criticalTriggers = Object.freeze([
   'proposed_parameters_scope_insert', 'proposed_parameters_active_document_insert',
   'proposed_parameters_initial_state_insert', 'proposed_parameters_no_update', 'proposed_parameters_no_delete',
   'policy_structuring_erase_on_document_erasure',
+  'source_pages_blocks_insert', 'source_pages_blocks_immutable', 'source_pages_blocks_erase_with_text',
+  'source_pages_blocks_erase_on_document_erasure',
 ]);
 
 export const criticalIndexes = Object.freeze([
@@ -136,7 +138,7 @@ export const requiredColumns = Object.freeze({
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],
   ocr_jobs: ['contract_version', 'authorization_json', 'result_json', 'result_digest', 'updated_at'],
-  source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json'],
+  source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json', 'blocks_json'],
   coverage_parameter_records: ['registry_version', 'parameter_key', 'subject_id', 'policy_id', 'applicable'],
   coverage_parameter_resolutions: ['resolution_state', 'transition_authority'],
   coverage_parameter_observations: ['redacted_at', 'redaction_reason_code'],

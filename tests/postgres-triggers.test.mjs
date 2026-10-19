@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { criticalTriggers } from '../src/backend/database/database.js';
+import { buildStoredBlocks, serializeStoredBlocks } from '../src/modules/document-intake/index.js';
 import { postgresTestOptions, useTestDatabase } from './support/postgres.mjs';
 import {
   assertTriggerRejects as rejects, at, earlier, hex, insert, later, one, proves, provenTriggers, seedObservation,
@@ -862,6 +863,41 @@ test('policy structuring runs and proposals stay scoped, append only and erase w
   await pool.query("UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = $1", [a.document]);
   await proposal('pp-active-again');
   proves('proposed_parameters_active_document_insert');
+});
+
+test('stored OCR blocks need page text and a live document, are immutable and erase with text or document', postgresTestOptions(), async t => {
+  const { pool, a } = await worlds(t);
+  const blocks = page => serializeStoredBlocks(page, buildStoredBlocks([{ text: `text ${page}`, tag: 'paragraph', readingOrder: 1 }], `text ${page}`));
+  const page = (id, number, extra = {}) => insert(pool, 'source_pages', {
+    id, document_upload_id: a.document, ocr_job_id: a.ocr, page_number: number, source_version: 'version-blocks',
+    extracted_text: `text ${number}`, blocks_json: blocks(number), ...extra,
+  });
+  const insertMessage = 'source page blocks require page text and a live document';
+  await rejects(page('pb-no-text', 10, { extracted_text: null }), insertMessage);
+  await page('pb-1', 11);
+  await page('pb-2', 12);
+  await page('pb-v1', 13, { blocks_json: null });
+  await page('pb-v1-no-text', 14, { extracted_text: null, blocks_json: null });
+  proves('source_pages_blocks_insert');
+
+  const immutable = 'source page blocks are immutable; only erasure may clear them';
+  await rejects(pool.query("UPDATE source_pages SET blocks_json = $1 WHERE id = 'pb-1'", [blocks(12)]), immutable);
+  await rejects(pool.query("UPDATE source_pages SET blocks_json = $1 WHERE id = 'pb-v1'", [blocks(13)]), immutable);
+  await pool.query("UPDATE source_pages SET blocks_json = blocks_json WHERE id = 'pb-1'");
+  proves('source_pages_blocks_immutable');
+
+  await pool.query("UPDATE source_pages SET extracted_text = NULL WHERE id = 'pb-1'");
+  assert.equal((await one(pool, "SELECT blocks_json FROM source_pages WHERE id = 'pb-1'")).blocks_json, null);
+  assert.notEqual((await one(pool, "SELECT blocks_json FROM source_pages WHERE id = 'pb-2'")).blocks_json, null, 'other pages untouched');
+  await rejects(pool.query("UPDATE source_pages SET blocks_json = $1 WHERE id = 'pb-1'", [blocks(11)]), immutable);
+  proves('source_pages_blocks_erase_with_text');
+
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['quarantined', a.document]);
+  assert.notEqual((await one(pool, "SELECT blocks_json FROM source_pages WHERE id = 'pb-2'")).blocks_json, null, 'quarantine is not erasure');
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['deletion_requested', a.document]);
+  assert.equal((await one(pool, "SELECT count(*)::int AS n FROM source_pages WHERE blocks_json IS NOT NULL")).n, 0);
+  await rejects(page('pb-erased', 15), insertMessage);
+  proves('source_pages_blocks_erase_on_document_erasure');
 });
 
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {

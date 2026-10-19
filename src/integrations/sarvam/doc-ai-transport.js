@@ -239,6 +239,7 @@ export function createSarvamDocAiTransport({
             pageNumber: originalPage,
             text,
             layoutTags: ordered.map(block => block.layout_tag ?? null),
+            blocks: ordered.map(sarvamBlockShape),
             extractionStatus: text.trim() ? 'extracted' : 'failed',
             confidenceBasisPoints: null,
             providerPageRef: `${segment.jobId}:page:${providerPage.page_num}`,
@@ -249,7 +250,7 @@ export function createSarvamDocAiTransport({
         throw fail('OCR_PROVIDER_PAGE_MISMATCH', 'Sarvam pages are missing or reordered.');
       }
       return {
-        schemaVersion: 'knowvia.ocr.v1',
+        schemaVersion: SARVAM_OCR_OUTPUT_VERSION,
         document: { id: expected.documentId, sourceVersion: expected.sourceVersion, contentSha256: expected.contentSha256 },
         provider: { name: 'sarvam', jobRef: encodeRef(manifest) },
         pages,
@@ -257,6 +258,13 @@ export function createSarvamDocAiTransport({
       };
     },
   });
+}
+
+// Normalised block shape for knowvia.ocr.v2: text, layout tag and reading order only. Block ids,
+// coordinates, bounding boxes and confidences are not kept. document-intake validates and stores it.
+export const SARVAM_OCR_OUTPUT_VERSION = 'knowvia.ocr.v2';
+export function sarvamBlockShape(block) {
+  return { text: block.text, tag: block.layout_tag ?? null, readingOrder: block.reading_order };
 }
 
 function validBlocks(blocks) {
