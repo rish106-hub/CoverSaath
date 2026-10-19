@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { join } from 'node:path';
 import { openDatabase, runMigrations, validateSchema } from '../src/backend/database/index.js';
 

@@ -186,6 +186,7 @@ pre { max-width:100%; overflow:auto; font-size:.75rem; }
 }
 @media (max-width:480px) { .brand small{display:none}.layer-tabs,.state-list,.data-grid{grid-template-columns:1fr}.layer-tab span{display:none}.panel{padding:18px}.actions .button{width:100%} }
 .upload-panel { display:grid; gap:14px; margin-top:20px; }
+.upload-drop-zone { border:1px dashed var(--line); border-radius:var(--radius-control); padding:14px; }
 .upload-list { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
 .upload-item { display:grid; gap:8px; padding:12px 14px; background:var(--surface-subtle); border:1px solid var(--line); border-radius:var(--radius-control); }
 .upload-error { border-color:var(--danger); background:var(--danger-soft); }
