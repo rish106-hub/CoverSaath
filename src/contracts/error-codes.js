@@ -31,6 +31,7 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   FIELD_ACCESS_REQUIRED: entry(403, 'authorization', false),
   MODEL_PERMISSION_REQUIRED: entry(403, 'authorization', false),
   CASE_NOT_FOUND: entry(404, 'not_found', false),
+  HOUSEHOLD_NOT_FOUND: entry(404, 'not_found', false),
   CONSENT_NOT_FOUND: entry(404, 'not_found', false),
   JOB_NOT_FOUND: entry(404, 'not_found', false),
   TASK_NOT_FOUND: entry(404, 'not_found', false),
@@ -55,6 +56,8 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   // Document intake (Block 1): upload route, upload service, document repository and the
   // document-intake module errors those surfaces return. ADR 0005.
   DOCUMENT_NOT_FOUND: entry(404, 'not_found', false),
+  DOCUMENT_DELETE_FORBIDDEN: entry(403, 'authorization', false),
+  DOCUMENT_DELETE_CONFLICT: entry(409, 'conflict', false),
   DOCUMENT_STORAGE_NOT_CONFIGURED: entry(503, 'configuration', false),
   DOCUMENT_UPDATE_NOT_SUPPORTED: entry(null, 'contract', false),
   UPLOAD_CAPACITY_REACHED: entry(429, 'capacity', true),
@@ -78,6 +81,10 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   PDF_PAGE_LIMIT: entry(422, 'request', false),
   PDF_RESOURCE_LIMIT: entry(422, 'request', false),
   PDF_UNSUPPORTED_ENCODING: entry(422, 'request', false),
+  // Sandboxed PDF inspection (ADR 0005 amendment). Every one rejects the upload; none is clean.
+  PDF_INSPECTION_FAILED: entry(422, 'request', false),
+  PDF_INSPECTION_BUSY: entry(429, 'capacity', true),
+  PDF_INSPECTION_UNAVAILABLE: entry(503, 'configuration', true),
   // Scanner and storage codes seen by the document worker (never returned to clients).
   SCANNER_UNAVAILABLE: entry(null, 'task_failure', true),
   SCANNER_ERROR: entry(null, 'task_failure', true),
@@ -86,6 +93,7 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   STORAGE_OBJECT_MISSING: entry(null, 'task_failure', false),
   STORAGE_UNAVAILABLE: entry(null, 'task_failure', true),
   INVALID_STORAGE_KEY: entry(null, 'contract', false),
+  DOCUMENT_DELETED: entry(null, 'terminal_reason', false),
   // Audit reason codes written when the scan worker rejects a stored document.
   MALWARE_DETECTED: entry(null, 'terminal_reason', false),
   STORAGE_INTEGRITY_FAILED: entry(null, 'terminal_reason', false),

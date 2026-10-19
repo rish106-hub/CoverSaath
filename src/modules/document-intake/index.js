@@ -7,6 +7,7 @@ export { createOcrService } from './ocr-service.js';
 export { createClamdScanner } from './clamd-scanner.js';
 export { createDocumentScanWorker } from './scan-worker.js';
 export { PDF_INSPECTION_LIMITS, inspectPdf } from './pdf-inspection.js';
+export { PDF_SANDBOX_LIMITS, createSandboxedPdfInspector } from './sandboxed-pdf-inspection.js';
 export { OCR_JOB_STATES, OCR_LIMITS, OCR_OUTPUT_VERSION, assertOcrProvider, assertOcrRepository, validateOcrOutput } from './ocr-contracts.js';
 export { sanitizeFilename, sniffMimeType, validateDocumentFile } from './file-validation.js';
 export {
