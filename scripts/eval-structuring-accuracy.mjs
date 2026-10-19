@@ -8,8 +8,8 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { getPolicyParameterRegistry, POLICY_PARAMETER_REGISTRY_VERSION } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { CRITICAL_FIELD_KEYS, readingMatches, scoreCriticalFields } from '../src/modules/policy-structuring/index.js';
+import { getPolicyParameterRegistry, POLICY_PARAMETER_REGISTRY_VERSION } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { CRITICAL_FIELD_KEYS, readingMatches, scoreCriticalFields } from '../src/features/policy-structuring/index.js';
 
 const OUT = resolve('.local/eval');
 const files = process.argv.slice(2);

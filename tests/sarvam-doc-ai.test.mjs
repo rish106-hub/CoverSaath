@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSarvamDocAiTransport, createSarvamOcrProvider } from '../src/integrations/index.js';
-import { validateOcrOutput } from '../src/modules/document-intake/index.js';
+import { validateOcrOutput } from '../src/features/input/index.js';
 
 const jsonResponse = (value, status = 200) => ({
   ok: status >= 200 && status < 300,

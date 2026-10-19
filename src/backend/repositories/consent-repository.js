@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PolicyStructuringRepository } from './policy-structuring-repository.js';
-import { GEMINI_MODEL_RECIPIENT } from '../../modules/ai-analysis/privacy-evidence-gate.js';
+import { GEMINI_MODEL_RECIPIENT } from '../../features/ai-analysis/privacy-evidence-gate.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 

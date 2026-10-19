@@ -1,7 +1,7 @@
 // Retry, timeout, lease and idempotency contracts as they behave TODAY in
 // src/backend/repositories/workflow-repository.js, src/backend/services/coverage-analysis-port.js,
-// src/modules/coverage-analysis/persistent-service.js, src/modules/coverage-analysis/runtime.js,
-// src/modules/ai-analysis/live-coverage-runtime.js and src/server/routes/v1-backend-routes.js.
+// src/features/coverage-analysis/persistent-service.js, src/features/coverage-analysis/runtime.js,
+// src/features/ai-analysis/live-coverage-runtime.js and src/server/routes/v1-backend-routes.js.
 // These constants document behaviour; they do not drive it yet. tests/p1a-execution-policy.test.mjs
 // proves each one against the running code, so a PostgreSQL adapter can be held to the same rules.
 //

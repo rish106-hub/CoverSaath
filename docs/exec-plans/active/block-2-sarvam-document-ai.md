@@ -26,7 +26,7 @@ complete `knowvia.ocr.v1` pages. Keep all decisions deterministic and local.
 ## Owned paths
 
 - `src/integrations/sarvam/**`
-- `src/modules/document-intake/**`
+- `src/features/input/**`
 - OCR and consent repository methods used by this slice.
 - OCR routes and server composition.
 - Focused tests and operator documentation.

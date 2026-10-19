@@ -505,7 +505,7 @@ purchase, affordability-plan behaviour, measured demand or paid pilot. Ignorance
 
 ### Where are the sub-agents' own opinions?
 
-Each pair's independent audit is preserved beside its transcript in [the customer research file](../../research/02-customer-tests.md). It distinguishes the persona's conditional reaction, the interviewer's critique and the main agent's decision. The result is not a single rewritten consensus paragraph. Refusal cases and generation errors remain visible.
+Each pair's independent audit was preserved beside its transcript in the historical customer research file. That file is available in Git history but is no longer part of the active repository tree. It distinguishes the persona's conditional reaction, the interviewer's critique and the main agent's decision. The result is not a single rewritten consensus paragraph. Refusal cases and generation errors remain visible.
 
 ### What changed because the interviewers contradicted the personas?
 
@@ -519,7 +519,7 @@ Households will not supply their existing policy documents, the reconstruction s
 
 One manual buying case end to end: reconstruct real cover, verify the operator, run a cold drill, name
 the gap, collect voluntary income and loan inputs only if needed, produce the Household Health Card, then
-buy, retain or defer. The staged implementation is in [the architecture](../../research/03-architecture.md).
+buy, retain or defer. Current implementation boundaries are in [the system architecture](../docs/architecture/system.md).
 
 ## Final pre-submission check
 

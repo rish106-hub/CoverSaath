@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
-import { createGeminiCoverageRegistryFactory } from '../src/modules/ai-analysis/index.js';
-import { GEMINI_MODEL_RECIPIENT } from '../src/modules/ai-analysis/live-coverage-runtime.js';
-import { COVERAGE_ANALYSIS_WORKFLOW, createPersistentCoverageAnalysisService } from '../src/modules/coverage-analysis/index.js';
+import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/index.js';
+import { GEMINI_MODEL_RECIPIENT } from '../src/features/ai-analysis/live-coverage-runtime.js';
+import { COVERAGE_ANALYSIS_WORKFLOW, createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import { auditActions, liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
 // Synthetic probe values that must never leave the process once consent is gone.

@@ -2,7 +2,7 @@
 
 - Status: Proposed
 - Date: 2026-10-19
-- Scope: new `src/modules/policy-structuring/`; reads `knowvia.ocr.v1` pages; writes parameter observations and a proposed-parameter store
+- Scope: new `src/features/policy-structuring/`; reads `knowvia.ocr.v1` pages; writes parameter observations and a proposed-parameter store
 - Plan: [policy-document-structuring.xml](../exec-plans/active/policy-document-structuring.xml)
 
 ## Context
@@ -11,9 +11,9 @@ Sarvam Document AI (Block 2) returns every page of a policy PDF with tables inta
 health policy schedule used for the parse eval (20 pages), Sarvam captured the Schedule of Benefits, premium and discount
 breakdown, loadings, ICD annexure, Customer Information Sheet and declaration page.
 
-The only consumer is `src/modules/ai-analysis/eval-extractor.js`: 18 hand-written regex fields, used by the
+The only consumer is `src/features/ai-analysis/eval-extractor.js`: 18 hand-written regex fields, used by the
 eval script and nothing at runtime. About 10% of the document is kept. The 138-key registry in
-`src/modules/coverage-analysis/policy-parameter-registry.js` (sections A to K) is never filled from a PDF.
+`src/features/coverage-analysis/policy-parameter-registry.js` (sections A to K) is never filled from a PDF.
 Anything outside the 18 fields is dropped, and cross-section conflicts (for example PED waiting period
 "3 Years" in the Schedule of Benefits versus "36 / 24 / 12 months" in the Customer Information Sheet) are
 invisible.
@@ -98,7 +98,7 @@ Decision:
   `source_pages.output_contract_version` stay `knowvia.ocr.v1` because they describe the page text contract,
   which is unchanged. Changing them would drop every new page from coverage-analysis source selection (which
   filters on v1) and break OCR job de-duplication (keyed on contract version), causing paid re-runs.
-- **Validation**: `src/modules/document-intake/ocr-blocks.js`. On write, provider blocks must rebuild the page
+- **Validation**: `src/features/input/ocr-blocks.js`. On write, provider blocks must rebuild the page
   text exactly (missing, extra or reordered blocks fail), tags must be a known Sarvam section type, reading order
   must be finite and non-decreasing, and text, block, row and stored sizes are bounded. The repository re-validates
   before insert and on every read (indices must equal positions, rows must match the table text, no extra fields).
@@ -125,7 +125,7 @@ Status: accepted.
 - **Model gateway only.** Extraction and reconciliation are model-gateway tasks (`policy_structuring_extract`,
   `policy_structuring_reconcile`) registered in the responsibility matrix and `ai-authority.js` as `propose`
   tasks of the `policy-structuring` pipeline. Their instructions and output schemas live once in
-  `src/modules/ai-analysis/structuring-contract.js`. The gateway enforces the input cap, a per-call budget
+  `src/features/ai-analysis/structuring-contract.js`. The gateway enforces the input cap, a per-call budget
   reservation against a per-run budget and the project budget (shared with live analysis), a timeout, no
   retries, and an output shape check. The runner re-checks the document-specific Gemini grant before every
   dispatch; a refused check releases the reservation. `reservation_exceeded` and `budget_refused` stop every

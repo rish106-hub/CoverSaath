@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { RUNTIME_AI_TASK_KEYS, createGeminiCoverageRegistryFactory } from '../src/modules/ai-analysis/index.js';
-import { GEMINI_MODEL_RECIPIENT, resolveCanonicalParameterPolicy } from '../src/modules/ai-analysis/live-coverage-runtime.js';
-import { COVERAGE_ANALYSIS_WORKFLOW } from '../src/modules/coverage-analysis/index.js';
-import { sanitizeEvidenceForModel } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+import { RUNTIME_AI_TASK_KEYS, createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/index.js';
+import { GEMINI_MODEL_RECIPIENT, resolveCanonicalParameterPolicy } from '../src/features/ai-analysis/live-coverage-runtime.js';
+import { COVERAGE_ANALYSIS_WORKFLOW } from '../src/features/coverage-analysis/index.js';
+import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { auditActions, liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
 function liveRegistryFactory({ modelRequests = [], loadedModels = [], ...factoryOptions } = {}) {

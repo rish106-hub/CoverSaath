@@ -14,14 +14,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
-import { FIELD_NAMES, extractFields } from '../src/modules/ai-analysis/eval-extractor.js';
-import { createGeminiCaller } from '../src/modules/ai-analysis/field-adjudicator.js';
-import { GEMINI_MODEL_RECIPIENT } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
-import { getPolicyParameterDefinition } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
+import { FIELD_NAMES, extractFields } from '../src/features/ai-analysis/eval-extractor.js';
+import { createGeminiCaller } from '../src/features/ai-analysis/field-adjudicator.js';
+import { GEMINI_MODEL_RECIPIENT } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { getPolicyParameterDefinition } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import {
   POLICY_STRUCTURING_VERSION, STRUCTURING_LIMITS, documentGrantCheck, gateChunks, isConflict, scoreStructuring,
   sectionDocument, structurePolicyDocument,
-} from '../src/modules/policy-structuring/index.js';
+} from '../src/features/policy-structuring/index.js';
 
 const OUT = resolve('.local/eval');
 const REGISTRY = 'policy-parameters/v1';

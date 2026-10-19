@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { GEMINI_MODEL_RECIPIENT, opaqueSourceId } from '../../modules/ai-analysis/privacy-evidence-gate.js';
-import { modelObservationCandidates } from '../../modules/coverage-analysis/model-observations.js';
+import { GEMINI_MODEL_RECIPIENT, opaqueSourceId } from '../../features/ai-analysis/privacy-evidence-gate.js';
+import { modelObservationCandidates } from '../../features/coverage-analysis/model-observations.js';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const textDigest = value => createHash('sha256').update(value, 'utf8').digest('hex');

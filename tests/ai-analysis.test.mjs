@@ -9,7 +9,7 @@ import {
   createMemoryBudget,
   createModelGateway,
   validateTaskOutput,
-} from '../src/modules/ai-analysis/index.js';
+} from '../src/features/ai-analysis/index.js';
 
 const source = (overrides = {}) => ({
   id: 'policy:v1:p3',

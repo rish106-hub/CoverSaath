@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { degrees, PDFDocument } from 'pdf-lib';
-import { createSandboxedPdfSegmenter } from '../src/modules/document-intake/index.js';
+import { createSandboxedPdfSegmenter } from '../src/features/input/index.js';
 
 async function syntheticPdf(pageCount) {
   const document = await PDFDocument.create();

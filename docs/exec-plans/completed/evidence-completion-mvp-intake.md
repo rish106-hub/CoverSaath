@@ -224,17 +224,17 @@ CERT dispatch used: requirements/CERT agent; graph and affected modules above; G
 
 ### Planned affected files
 
-- `src/modules/coverage-analysis/policy-decomposition.js`
-- `src/modules/coverage-analysis/source-input.js`
-- `src/modules/coverage-analysis/task-registry.js`
-- `src/modules/coverage-analysis/workflow-definition.js`
-- New registry and parameter-status modules under `src/modules/coverage-analysis/`
+- `src/features/coverage-analysis/policy-decomposition.js`
+- `src/features/coverage-analysis/source-input.js`
+- `src/features/coverage-analysis/task-registry.js`
+- `src/features/coverage-analysis/workflow-definition.js`
+- New registry and parameter-status modules under `src/features/coverage-analysis/`
 - `src/backend/services/coverage-analysis-port.js`
 - `src/backend/repositories/consent-repository.js`
 - New parameter repository under `src/backend/repositories/`
 - New expand-only migration under `src/backend/database/migrations/`
-- `src/modules/ai-analysis/live-coverage-runtime.js`
-- `src/modules/ai-analysis/schemas.js`
+- `src/features/ai-analysis/live-coverage-runtime.js`
+- `src/features/ai-analysis/schemas.js`
 - Targeted tests for runtime, OCR, database, backend API, and live AI
 
 ### Verification evidence before implementation

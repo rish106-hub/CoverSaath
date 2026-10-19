@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createDocumentIntakeService } from '../../modules/document-intake/index.js';
+import { createDocumentIntakeService } from '../../features/input/index.js';
 
 // Block 1 upload orchestration. Identity always comes from the authenticated principal and the
 // household from the case row, never from the request. Bytes are validated and inspected before

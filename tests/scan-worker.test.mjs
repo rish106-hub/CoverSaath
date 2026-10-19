@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDocumentScanWorker } from '../src/modules/document-intake/scan-worker.js';
+import { createDocumentScanWorker } from '../src/features/input/scan-worker.js';
 
 function fakeTimers() {
   const timers = [];

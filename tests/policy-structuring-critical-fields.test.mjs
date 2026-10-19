@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readingMatches, scoreCriticalFields } from '../src/modules/policy-structuring/index.js';
+import { readingMatches, scoreCriticalFields } from '../src/features/policy-structuring/index.js';
 
 // Synthetic golden and review result only.
 const golden = {

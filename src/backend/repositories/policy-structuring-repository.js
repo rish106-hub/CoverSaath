@@ -4,7 +4,7 @@ import { CoverageParameterRepository } from './coverage-parameter-repository.js'
 import {
   getPolicyParameterDefinition,
   getPolicyParameterRegistry,
-} from '../../modules/coverage-analysis/policy-parameter-registry.js';
+} from '../../features/coverage-analysis/policy-parameter-registry.js';
 
 // Storage for policy document structuring (ADR 0006, SQLite migration 011, PostgreSQL 007).
 // Models propose, deterministic code decides: this repository only records decisions already

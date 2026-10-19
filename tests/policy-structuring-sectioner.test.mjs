@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sectionDocument, STRUCTURING_DROPPED_TAGS } from '../src/modules/policy-structuring/sectioner.js';
+import { sectionDocument, STRUCTURING_DROPPED_TAGS } from '../src/features/policy-structuring/sectioner.js';
 
 // Synthetic only: fictional insurer, members and numbers.
 const table = rows => `<table>${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}</table>`;

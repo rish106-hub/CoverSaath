@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { validateExtractedItems } from '../src/modules/policy-structuring/validator.js';
-import { decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from '../src/modules/policy-structuring/reconciler.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { validateExtractedItems } from '../src/features/policy-structuring/validator.js';
+import { decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from '../src/features/policy-structuring/reconciler.js';
 
 // Synthetic only: fictional insurer and numbers. Items go through the real validator.
 const chunks = [
@@ -112,7 +112,7 @@ test('a subject the model invents is not a printed subject, so a contradiction i
 });
 
 test('per-subject variation is reported as a variation and never counted as a conflict', async () => {
-  const { buildCoverageReport, scoreStructuring } = await import('../src/modules/policy-structuring/coverage-report.js');
+  const { buildCoverageReport, scoreStructuring } = await import('../src/features/policy-structuring/coverage-report.js');
   const conflicts = deterministicConflicts(groupItems(accepted, []));
   const report = buildCoverageReport({ sectioned: { chunks: [] }, extraction: {}, reconciliation: { conflicts } });
   assert.deepEqual([report.conflicts.total, report.variations.perSubject], [2, 1]);

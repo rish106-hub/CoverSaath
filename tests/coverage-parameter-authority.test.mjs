@@ -13,8 +13,8 @@ import {
   resolvesParameterValue,
   transitionParameterRecord,
   createParameterRecord,
-} from '../src/modules/coverage-analysis/parameter-records.js';
-import { getPolicyParameterRegistry } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
+} from '../src/features/coverage-analysis/parameter-records.js';
+import { getPolicyParameterRegistry } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { observationInput, parameterAt as at, parameterReviewerId, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 
 const v1 = 'policy-parameters/v1';

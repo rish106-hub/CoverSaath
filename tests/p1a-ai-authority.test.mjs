@@ -10,21 +10,21 @@ import {
   RUNTIME_AI_TASK_KEYS,
   RUNTIME_RESPONSIBILITIES,
   assertModelTask,
-} from '../src/modules/ai-analysis/responsibility-matrix.js';
+} from '../src/features/ai-analysis/responsibility-matrix.js';
 import {
   OBSERVATION_RESOLUTION_RULES,
   PARAMETER_RESOLUTION_STATES,
   assertModelMayReplaceResolution,
   assertResolutionTransition,
   deriveResolutionAuthority,
-} from '../src/modules/coverage-analysis/parameter-records.js';
-import { MODEL_OBSERVATION_TASK_KEYS } from '../src/modules/coverage-analysis/model-observations.js';
-import { COVERAGE_ANALYSIS_WORKFLOW } from '../src/modules/coverage-analysis/workflow-definition.js';
+} from '../src/features/coverage-analysis/parameter-records.js';
+import { MODEL_OBSERVATION_TASK_KEYS } from '../src/features/coverage-analysis/model-observations.js';
+import { COVERAGE_ANALYSIS_WORKFLOW } from '../src/features/coverage-analysis/workflow-definition.js';
 import {
   EVIDENCE_STATES,
   createTaskOutputEnvelope,
   validateTaskOutputEnvelope,
-} from '../src/modules/coverage-analysis/agent-contracts.js';
+} from '../src/features/coverage-analysis/agent-contracts.js';
 
 const sorted = values => [...values].sort();
 const plain = value => JSON.parse(JSON.stringify(value));
