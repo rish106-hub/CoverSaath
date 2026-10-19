@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 const parse = value => value == null ? null : JSON.parse(value);
+const SAFE_PRE_DISPATCH_RETRY_CODES = new Set([
+  'PROVIDER_NOT_CONFIGURED',
+  'OCR_PROVIDER_DISABLED',
+  'OCR_SEGMENTATION_UNAVAILABLE',
+]);
 
 function mapJob(row) {
   if (!row) return null;
@@ -25,11 +30,42 @@ function mapJob(row) {
 }
 
 export class OcrRepository {
-  constructor(database) {
+  constructor(database, { audit = null } = {}) {
     this.database = database;
+    this.audit = audit;
   }
 
-  getReadyDocument(documentId, at) {
+  appendLifecycleAudit(job, previousStatus, { pageCount = null } = {}) {
+    if (!this.audit || (previousStatus !== null && previousStatus === job.status)) return;
+    const document = this.database.prepare(`SELECT household_id, case_id
+      FROM document_uploads WHERE id = ?`).get(job.documentUploadId);
+    if (!document) return;
+    const actorId = job.authorization?.requestedByAdultId ?? 'local-backend';
+    const action = previousStatus === null ? 'ocr.job_created'
+      : job.status === 'succeeded' ? 'ocr.job_succeeded'
+        : job.status === 'failed' ? 'ocr.job_failed'
+          : job.status === 'cancelled' ? 'ocr.job_cancelled'
+            : 'ocr.job_status_changed';
+    this.audit.append({
+      householdId: document.household_id,
+      caseId: document.case_id,
+      actorType: job.authorization?.requestedByAdultId ? 'adult_user' : 'system',
+      actorId,
+      action,
+      resourceType: 'ocr_job',
+      resourceId: job.id,
+      payload: {
+        provider: job.provider,
+        previousStatus,
+        status: job.status,
+        errorCode: job.errorCode,
+        contractVersion: job.contractVersion,
+        ...(pageCount === null ? {} : { pageCount }),
+      },
+    });
+  }
+
+  getReadyDocument(documentId, at, disclosure = null) {
     const row = this.database.prepare(`SELECT
         document.id AS document_id, document.consent_grant_id, document.uploaded_by_adult_id,
         document.source_version, document.content_sha256, document.mime_type, document.byte_size,
@@ -52,6 +88,28 @@ export class OcrRepository {
             AND scope.data_category = 'insurance_document'
         )`).get(documentId, at);
     if (!row) return null;
+    let providerConsentGrantId = null;
+    if (disclosure) {
+      const consent = this.database.prepare(`SELECT consent.id
+        FROM consent_grants consent
+        JOIN consent_scopes scope ON scope.consent_grant_id = consent.id
+        JOIN document_uploads document ON document.id = ?
+        WHERE consent.id = ?
+          AND consent.household_id = document.household_id
+          AND consent.subject_adult_id = document.uploaded_by_adult_id
+          AND consent.granted_to_actor = ?
+          AND consent.purpose = 'document_processing'
+          AND consent.revoked_at IS NULL
+          AND (consent.expires_at IS NULL OR julianday(consent.expires_at) > julianday(?))
+          AND scope.resource_type = 'document'
+          AND scope.resource_id = document.id
+          AND scope.action = 'derive'
+          AND scope.data_category = 'insurance_document'
+          AND scope.recipient = ?
+        LIMIT 1`).get(documentId, disclosure.consentGrantId, disclosure.recipient, at, disclosure.recipient);
+      if (!consent || disclosure.requestedByAdultId !== row.uploaded_by_adult_id) return null;
+      providerConsentGrantId = consent.id;
+    }
     return Object.freeze({
       documentId: row.document_id,
       consentGrantId: row.consent_grant_id,
@@ -61,7 +119,46 @@ export class OcrRepository {
       mimeType: row.mime_type,
       byteSize: row.byte_size,
       storageReference: row.storage_path,
+      providerConsentGrantId,
     });
+  }
+
+  createOrGetJob(value, { retryFailed = false } = {}) {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const existing = mapJob(this.database.prepare(`SELECT * FROM ocr_jobs
+        WHERE document_upload_id = ? AND provider = ? AND contract_version = ?
+          AND status IN ('queued', 'submitted', 'processing', 'succeeded')
+        ORDER BY requested_at, id LIMIT 1`).get(value.documentUploadId, value.provider, value.contractVersion));
+      if (existing) {
+        this.database.exec('COMMIT');
+        return { created: false, job: existing };
+      }
+      const failed = mapJob(this.database.prepare(`SELECT * FROM ocr_jobs
+        WHERE document_upload_id = ? AND provider = ? AND contract_version = ? AND status = 'failed'
+        ORDER BY requested_at DESC, id DESC LIMIT 1`).get(
+        value.documentUploadId, value.provider, value.contractVersion,
+      ));
+      const safeToRetry = failed && !failed.providerJobRef && SAFE_PRE_DISPATCH_RETRY_CODES.has(failed.errorCode);
+      if (failed && (!retryFailed || !safeToRetry)) {
+        this.database.exec('COMMIT');
+        return { created: false, job: failed, retryBlocked: retryFailed };
+      }
+      this.database.prepare(`INSERT INTO ocr_jobs
+        (id, document_upload_id, provider, provider_job_ref, status, attempt_count,
+         contract_version, authorization_json, requested_at, updated_at)
+        VALUES (?, ?, ?, NULL, ?, 1, ?, ?, ?, ?)`).run(
+        value.id, value.documentUploadId, value.provider, value.status, value.contractVersion,
+        JSON.stringify(value.authorization), value.requestedAt, value.updatedAt,
+      );
+      const created = this.getJob(value.id);
+      this.appendLifecycleAudit(created, null);
+      this.database.exec('COMMIT');
+      return { created: true, job: created, retryOf: failed?.id ?? null };
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   createJob(value) {
@@ -80,22 +177,30 @@ export class OcrRepository {
   }
 
   updateJob(jobId, changes) {
-    const current = this.getJob(jobId);
-    if (!current) return null;
-    // Cancellation is terminal. A provider response that returns after document erasure must not
-    // restart the job or persist provider output.
-    if (current.status === 'cancelled') return current;
-    const next = { ...current, ...changes };
-    const updated = this.database.prepare(`UPDATE ocr_jobs SET
-      provider_job_ref = ?, status = ?, contract_version = ?, result_json = ?, result_digest = ?,
-      error_code = ?, error_message = ?, started_at = ?, completed_at = ?, updated_at = ?
-      WHERE id = ? AND status <> 'cancelled'`).run(
-      next.providerJobRef, next.status, next.contractVersion,
-      next.result == null ? null : JSON.stringify(next.result), next.resultDigest,
-      next.errorCode, next.errorMessage, next.startedAt, next.completedAt, next.updatedAt, jobId,
-    );
-    if (updated.changes !== 1) return this.getJob(jobId);
-    return this.getJob(jobId);
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const current = this.getJob(jobId);
+      if (!current) { this.database.exec('COMMIT'); return null; }
+      // Cancellation is terminal. A provider response that returns after document erasure must not
+      // restart the job or persist provider output.
+      if (current.status === 'cancelled') { this.database.exec('COMMIT'); return current; }
+      const next = { ...current, ...changes };
+      const updated = this.database.prepare(`UPDATE ocr_jobs SET
+        provider_job_ref = ?, status = ?, contract_version = ?, result_json = ?, result_digest = ?,
+        error_code = ?, error_message = ?, started_at = ?, completed_at = ?, updated_at = ?
+        WHERE id = ? AND status <> 'cancelled'`).run(
+        next.providerJobRef, next.status, next.contractVersion,
+        next.result == null ? null : JSON.stringify(next.result), next.resultDigest,
+        next.errorCode, next.errorMessage, next.startedAt, next.completedAt, next.updatedAt, jobId,
+      );
+      const result = this.getJob(jobId);
+      this.appendLifecycleAudit(result, current.status);
+      this.database.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   recordCancellationReference(jobId, providerJobRef) {
@@ -106,9 +211,13 @@ export class OcrRepository {
     return this.getJob(jobId);
   }
 
-  completeCancellation(jobId) {
-    this.database.prepare(`UPDATE ocr_jobs SET provider_job_ref = NULL, error_code = NULL,
-      error_message = NULL WHERE id = ? AND status = 'cancelled'`).run(jobId);
+  completeCancellation(jobId, { remoteCancellation = true } = {}) {
+    this.database.prepare(`UPDATE ocr_jobs SET
+      provider_job_ref = CASE WHEN ? THEN NULL ELSE provider_job_ref END,
+      error_code = CASE WHEN ? THEN NULL ELSE 'OCR_PROVIDER_CANCELLATION_UNSUPPORTED' END,
+      error_message = NULL WHERE id = ? AND status = 'cancelled'`).run(
+      remoteCancellation ? 1 : 0, remoteCancellation ? 1 : 0, jobId,
+    );
     return this.getJob(jobId);
   }
 
@@ -156,12 +265,16 @@ export class OcrRepository {
       const updated = this.database.prepare(`UPDATE ocr_jobs SET
         provider_job_ref = ?, status = ?, contract_version = ?, result_json = ?, result_digest = ?,
         error_code = ?, error_message = ?, started_at = ?, completed_at = ?, updated_at = ?
-        WHERE id = ? AND status IN ('queued', 'submitted', 'processing')`).run(
+        WHERE id = ? AND (
+          status IN ('queued', 'submitted', 'processing')
+          OR (status = 'failed' AND error_code = 'OCR_PERSISTENCE_FAILED')
+        )`).run(
         next.providerJobRef, next.status, next.contractVersion,
         next.result == null ? null : JSON.stringify(next.result), next.resultDigest,
         next.errorCode, next.errorMessage, next.startedAt, next.completedAt, next.updatedAt, jobId,
       );
       if (updated.changes !== 1) throw new Error('OCR job changed before completion.');
+      this.appendLifecycleAudit(this.getJob(jobId), current.status, { pageCount: pages.length });
       this.database.exec('COMMIT');
       return this.getJob(jobId);
     } catch (error) {

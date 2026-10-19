@@ -1,4 +1,4 @@
-export { createSarvamOcrProvider } from './sarvam/index.js';
+export { SARVAM_DOCUMENT_AI, createSarvamDocAiTransport, createSarvamOcrProvider } from './sarvam/index.js';
 export { createGnaniVoiceProvider } from './gnani/index.js';
 export { createPineLabsPaymentProvider } from './pine-labs/index.js';
 export { createEmailProvider } from './email/index.js';

@@ -1,5 +1,32 @@
 # Latest iteration
 
+## Block 2 Sarvam Document AI implementation (2026-10-19)
+
+- Added a modern Sarvam `/doc-ai/v1` digitise transport behind `SARVAM_OCR_ENABLED`, which defaults off.
+- Clean PDFs are split in a permission-restricted child into batches of at most 10 pages. Tests cover
+  1, 10, 11, 47 and 100 pages and verify exact original-page order.
+- Live OCR requires a separate, document-specific consent grant for recipient and actor `sarvam`.
+  Consent is re-checked before page persistence. Revocation erases derived pages without deleting the upload.
+- Added authenticated OCR start and refresh routes. Duplicate starts return the existing active or completed job.
+  Polling defaults to a two-second minimum and a 15-minute deadline. Durable jobs resume after restart.
+- Provider POST calls are never retried. Explicit job retry is limited to failures proven to occur before
+  dispatch. Consent is re-checked immediately before every segment POST.
+- Sarvam HTTP 403 is classified as a neutral provider refusal because current documentation uses it for both
+  invalid credentials and other forbidden requests. HTTP 402 remains the separate credits or entitlement failure.
+- Provider results that hit a transient local transaction failure retain their provider reference and can be
+  reconciled by refresh without another billable submission. OCR lifecycle audits contain no job ID or text.
+- Raw provider payloads are not stored. Partial, missing, duplicate or reordered results fail closed. Required
+  terminal usage counters must also report every segment page processed successfully with zero failed pages.
+- Local end-to-end proof uses a mocked Sarvam HTTP boundary. A real Sarvam call, accuracy corpus, billed-cost
+  check, account rate-limit check and retention confirmation are still unverified.
+- Current `main` is not green on GitHub. CI run `39209055663` fails the pre-existing PostgreSQL/SQLite
+  `julianday` parity case for `2026-01-01T24:01`. CodeQL run `39226432972` completes analysis but GitHub
+  rejects the SARIF upload because CodeQL default setup and the advanced workflow are both enabled. These
+  failures are outside this Sarvam slice and are not evidence against the local Sarvam checks.
+- Sarvam's public docs expose no cancellation or deletion endpoint. Local invalidation is implemented and
+  unresolved remote cancellation is recorded. This is not proof of provider-side deletion.
+- Active plan: [block-2-sarvam-document-ai.md](../exec-plans/active/block-2-sarvam-document-ai.md).
+
 ## Block 1 audit work in progress (2026-10-19)
 
 - Based on `fd2a105`. The upload panel supports per-file document types, editable filename-based suggestions and drag-and-drop. These suggestions do not inspect document contents or link policies.

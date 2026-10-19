@@ -9,7 +9,9 @@ import {
   createClamdScanner,
   createDocumentScanWorker,
   createEncryptedLocalByteStorage,
+  createOcrService,
   createSandboxedPdfInspector,
+  createSandboxedPdfSegmenter,
 } from '../modules/document-intake/index.js';
 import {
   createEmailProvider,
@@ -28,6 +30,7 @@ export function createApiServer({
   backendServices,
   analysisLiveModelDriver,
   documentScanner,
+  sarvamFetch,
 } = {}) {
   const config = readServerConfig(env);
   // Built at startup so an invalid encryption key or scanner setting fails before listening.
@@ -47,6 +50,7 @@ export function createApiServer({
       },
     })
     : null;
+  const pdfSegmenter = documentStorage ? createSandboxedPdfSegmenter() : null;
   const rateLimiter = createRateLimiter({ limit: config.rateLimitPerMinute });
   // The live path always re-checks current document consent from the database
   // immediately before every provider call and always runs the privacy gate.
@@ -66,6 +70,7 @@ export function createApiServer({
   let database = injectedDatabase ?? null;
   let services = backendServices ?? null;
   let documentUploads = null;
+  let ocrService = null;
   const getBackend = () => {
     database ||= openDatabase({ path: databasePath ?? env.DATABASE_PATH ?? '.local/knowvia.sqlite' });
     services ||= createBackendServices(database, {
@@ -83,7 +88,7 @@ export function createApiServer({
         if (!integration || typeof integration.cancelJob !== 'function') {
           throw Object.assign(new Error('OCR cancellation provider is unavailable.'), { code: 'OCR_PROVIDER_NOT_CONFIGURED' });
         }
-        await integration.cancelJob({
+        return integration.cancelJob({
           jobRef,
           requestId,
           authorization: { authorized: true, purpose: 'document_erasure' },
@@ -98,10 +103,24 @@ export function createApiServer({
     return { database, services, documentUploads };
   };
   const integrations = {
-    sarvam: createSarvamOcrProvider({ env }),
+    sarvam: createSarvamOcrProvider({ env, segmenter: pdfSegmenter, fetchImpl: sarvamFetch }),
     gnani: createGnaniVoiceProvider({ env }),
     pineLabs: createPineLabsPaymentProvider({ env }),
     email: createEmailProvider({ env }),
+  };
+  const getOcrService = () => {
+    if (!documentStorage) {
+      throw Object.assign(new Error('Document storage is not configured.'), { code: 'DOCUMENT_STORAGE_NOT_CONFIGURED', statusCode: 503 });
+    }
+    ocrService ||= createOcrService({
+      repository: getBackend().services.ocr,
+      provider: integrations.sarvam,
+      byteReader: (storageReference, documentId) => documentStorage.read({ documentId, storageKey: storageReference }),
+      mode: 'live',
+      pollIntervalMs: env.SARVAM_OCR_POLL_INTERVAL_MS === undefined ? 2_000 : Number(env.SARVAM_OCR_POLL_INTERVAL_MS),
+      jobDeadlineMs: env.SARVAM_OCR_JOB_DEADLINE_MS === undefined ? 15 * 60_000 : Number(env.SARVAM_OCR_JOB_DEADLINE_MS),
+    });
+    return ocrService;
   };
   const server = http.createServer(async (req, res) => {
     prepareJsonResponse(res);
@@ -113,7 +132,7 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory, getOcrService });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');

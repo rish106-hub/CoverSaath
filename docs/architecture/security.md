@@ -19,7 +19,8 @@ Status: describes controls present in the repository at the commit that added th
 - Browser to API: only `127.0.0.1:8787`, directly or through the Vite proxy on `127.0.0.1:5173`. Every `/api/v1` route except `/health`, `/live`, `/ready` and household bootstrap requires a bearer session. `/ready` returns only `{ status, checks }` (booleans) unless the caller is loopback (see below).
 - API to database: in-process SQLite; no database network surface. PostgreSQL is test-only until S3.2.
 - API to model provider: Google Gemini only, through the model gateway. This is the one outbound path with household-derived content.
-- Integrations (Sarvam, Gnani, Pine Labs, email): no network call is implemented.
+- Integrations: Sarvam has a feature-flagged modern Document AI transport. It requires an exact provider
+  consent grant and defaults off. Gnani, Pine Labs and email remain fail-closed without verified transports.
 - OCR text, documents and model output: untrusted evidence, never instructions (`AGENTS.md`, `src/modules/ai-analysis/prompts.js:7`). The model has no tools (`ai-sdk-runner.js`, `tools: {}`).
 - Document upload: `POST /api/v1/cases/{caseId}/documents` (raw `application/pdf`, ADR 0005). Uploaded PDFs are untrusted input until inspected and scanned.
 - Not present: public hosting, webhook receiver, admin UI, outbound email.
@@ -50,6 +51,8 @@ Status: describes controls present in the repository at the commit that added th
 | Upload authorization: session-derived uploader; case household check before any body byte is read; current `document_processing` grant from the uploader with document `collect` scope in the case household; foreign document ids answer exactly like missing ones; list and status reads require the source-pack field grant. The UI asks for this grant with an explicit action (document `collect` plus case `source_pack_metadata` read for the uploader only) and never reuses the coverage grant; its wording is draft pending legal review | `v1-backend-routes.js` (documents routes), `document-upload-service.js`, `workspace-controller.js` (`grantDocumentConsent`) |
 | Upload validation before storage: 415 for any type but `application/pdf`; declared length and streamed bytes capped at 15 MiB; magic bytes, MIME and extension agreement; bounded PDF inspection rejects encrypted PDFs, JavaScript, Launch, embedded files, XFA, RichMedia, over 500 pages and deflate bombs in object streams; per-case and per-household pending caps (429) | `shared/http/request.js` (`readBinaryBody`), `pdf-inspection.js`, `document-upload-service.js` |
 | Upload integrity: row, counts-only audit event and idempotency record in one transaction; same key and bytes replay, changed bytes 409; bytes removed if the insert fails; storage keys must be 64 hex characters before any filesystem access | `document-repository.js`, `document-intake-service.js`, `encrypted-local-storage.js` |
+| Sarvam dispatch: exact document-specific recipient consent is checked before every PDF segment POST and again before atomic page persistence; POST is never retried after uncertain dispatch; failed jobs are retryable only for a narrow pre-dispatch allowlist; polling and overall job time are bounded | `ocr-service.js`, `ocr-repository.js`, `doc-ai-transport.js` |
+| OCR lifecycle audit: creation, status changes, failure and success are appended inside the corresponding SQLite job transaction. Payloads contain bounded state metadata and page counts, never provider job identifiers or recognized text. A persistence failure retains the provider reference for GET-only reconciliation without another POST. | `ocr-repository.js`, `ocr-service.js`, `tests/document-upload-api.test.mjs` |
 | Quarantine and malware scanning: uploads stay `quarantined`/`pending` until a ClamAV clamd scan marks them clean; `DOCUMENT_SCAN_MODE` defaults to `disabled` (nothing activates); infected or tampered bytes are deleted and the document is `rejected`; guarded transitions never resurrect a rejected or deleted document; the worker also deletes bytes of documents whose deletion was requested (revocation) | `clamd-scanner.js`, `scan-worker.js`, `document-repository.js`, ADR 0005 |
 | Database invariants: household cross-references, consent-required outbox, append-only audit and observations, immutable provenance (with one redaction update) and registry pins | migrations 001-009; `criticalTriggers` in `database.js:77` |
 | Database schema hardening: append-only and immutable facts, pins and audit relations reject deletion; PostgreSQL also rejects `TRUNCATE`, fixes project function `search_path`, validates compatible `C` ordering and redacts migration driver detail | SQLite migration 007; PostgreSQL migrations 002-003; `postgres/validate-schema.js`; `postgres/migrate.js` |
@@ -85,7 +88,12 @@ Status: describes controls present in the repository at the commit that added th
 - Single-document deletion is available through the authenticated API and upload UI. It is separate from the broader consent-revocation erasure path.
 - The PDF inspection is a bounded heuristic, not a full parser; malware scanning is the required second layer. clamd must use the settings in [the ClamAV runbook](../runbooks/clamav.md) or over-limit files are reported clean.
 - Upload capacity counts and inserts are not atomic, so the per-case and per-household caps can be exceeded slightly under concurrency.
-- The OCR service is still not wired to a route.
+- The authenticated OCR start and refresh routes require an owned active document and a current,
+  exact `sarvam` disclosure grant. The provider feature flag is off by default.
+- OCR progress depends on an authenticated client refresh call. Durable jobs resume after restart, but there
+  is no background polling worker yet. Polling defaults to a two-second minimum and a 15-minute job deadline.
+- Sarvam's public Document AI docs expose no cancellation or deletion endpoint. Local revocation blocks
+  persistence and erases derived pages, but remote deletion is not proved. The provider reference is retained.
 - No observability: no structured logs, metrics, tracing or alerting; no incident process. Audit events are written but the hash chain is never verified.
 - No dedicated least-privilege PostgreSQL runtime role exists yet. PostgreSQL remains test-only until S3.2.
 - No managed secrets or KMS; keys come from environment variables.

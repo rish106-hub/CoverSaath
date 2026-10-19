@@ -51,9 +51,10 @@ gaps and questions, not a regulated product recommendation.
 The classifier returns a route and named uncertainty dimensions. It deliberately returns no risk score
 and no probability of claim approval. The structured graph preserves `UNKNOWN` as different from `false`.
 
-HRMS connectivity is on hold. The planned intake path is direct document upload by the user. Protected
-storage and OCR lifecycle modules exist, but no public upload route or verified live OCR transport is enabled.
-Current product journeys therefore use structured synthetic evidence.
+HRMS connectivity is on hold. The intake path is direct document upload by the user. Authenticated upload
+and OCR lifecycle routes exist. The verified Sarvam transport is implemented but off by default, and no
+real Sarvam account call has been run. Current provider journey proof therefore uses synthetic documents
+and a mocked HTTP boundary.
 
 ## Local backend and database
 
@@ -296,35 +297,56 @@ digest, extraction state, optional provider confidence and a stable provenance l
 explicit. Every result is unverified evidence and requires human review.
 
 Fixture OCR finishes synchronously, reports zero provider calls and proves lifecycle, validation and
-provenance only. It does not measure OCR accuracy. Live Sarvam mode requires all of these:
+provenance only. It does not measure OCR accuracy. Live Sarvam Document AI uses the modern async
+`/doc-ai/v1` digitise, status and JSON results endpoints. It requires all of these:
 
 1. Current document-specific processing authorization.
 2. Active encrypted document with a clean malware result.
 3. Server-side credentials.
-4. An explicitly injected and separately verified Sarvam transport contract.
+4. `SARVAM_OCR_ENABLED=true` and a server-only `SARVAM_API_KEY`.
 5. Structured output validation before persistence.
+
+PDFs are split in a permission-restricted child process into batches of at most 10 pages. The default
+document limit is 100 pages. Original page numbers are restored before immutable `source_pages` rows
+are written. Requests use bounded timeouts, two safe GET retries and at most two concurrent polling
+calls. Refresh calls poll no more than once every two seconds and jobs fail locally after 15 minutes by
+default. Digitise POST requests are not retried after an ambiguous network failure. A failed job can be
+retried only when the stored error proves that provider dispatch did not start.
+
+If atomic page persistence fails after Sarvam completes, the job retains its existing provider reference
+with `OCR_PERSISTENCE_FAILED`. A later refresh re-fetches that completed result and retries only the local
+transaction. It never creates another Digitise job. OCR lifecycle audit events contain status, provider,
+contract version, error code and page count only. They exclude provider job IDs and recognized text.
+
+Sarvam's current public Document AI documentation does not expose a cancellation or deletion endpoint.
+Revocation and deletion therefore invalidate local jobs and prevent late results from being saved. A
+provider job reference is retained when remote cancellation is unavailable. This is a known cleanup
+limit, not a claim that Sarvam deleted its copy.
 
 Validated live OCR pages feed the coverage-analysis source pack directly. Fixture analysis stays separate;
 the live path never falls back to synthetic data when a source pack is absent.
 
-Raw provider responses are not persisted. Invalid source identity, schema, page data, lifecycle state or
-authorization fails closed. A live corpus evaluation remains mandatory before any OCR-quality claim.
+Raw provider responses are not persisted. Invalid source identity, schema, page data, partial completion,
+lifecycle state or authorization fails closed. A live corpus evaluation remains mandatory before any
+OCR-quality claim. Current automated proof uses a mocked provider, not a real Sarvam account.
+
+The opt-in `npm run test:sarvam-live` check sends one synthetic page to the configured Sarvam account and
+may incur provider charges. Run it only with explicit approval. It reports counts and timing, never the key,
+provider job identifier or recognized document text.
 
 ## Integration order
 
-1. Add authenticated upload routes around existing encrypted storage, consent and malware gates.
-2. Verify Sarvam's official endpoint and payload contract, then inject the live transport and run a representative corpus evaluation.
+1. Run a representative consented corpus evaluation against a real Sarvam account and record accuracy, latency and cost.
+2. Confirm Sarvam retention and deletion terms with the provider before production use.
 3. Add Gnani transcription and approved read-back. Telephony, WhatsApp and human transfer need separate verification.
 4. Add approved institutional email with exact recipient and content approval plus reply provenance.
 5. Add licensed-partner and merchant-approved Pine Labs sandbox checkout, signed webhooks, reconciliation and separate issuance tracking.
 
 Use server-only settings. Never put keys in frontend variables or chat.
-The server loads `.env.local` at startup. Available placeholders are `SARVAM_API_KEY`,
+The server loads `.env.local` at startup. Available provider settings include `SARVAM_OCR_ENABLED`, `SARVAM_API_KEY`,
+`SARVAM_OCR_POLL_INTERVAL_MS`, `SARVAM_OCR_JOB_DEADLINE_MS`,
 `GNANI_API_KEY_ID`, `PINE_LABS_CLIENT_ID`, `PINE_LABS_CLIENT_SECRET`, `EMAIL_API_KEY` and
-`EMAIL_FROM`. Keys alone do not enable any provider call. The code reports configured credentials as
-`configured_not_verified` and still refuses the action because provider endpoints, request contracts,
-webhook verification and account capabilities have not been confirmed. Missing configuration reports
-`not_configured`. Both states make no network request.
+`EMAIL_FROM`. A Sarvam key alone does not enable OCR. Other connector keys still do not enable calls.
 
 HRMS has no active key or connector. Users will upload documents manually when the secure upload path
 exists. No Delhivery workflow is added without a physical-document need.
@@ -333,5 +355,5 @@ exists. No Delhivery workflow is added without a physical-document need.
 
 Run synthetic buying, renewal and planned-care cases first. Before real records or live models, complete
 identity, upload, malware, storage-key, live-provider and operating safeguards. Current fixture/provider
-spend is ₹0. No Sarvam, Gnani, Pine Labs or email request was made. Keep refusals, conflicts, unknowns,
+spend in repository verification is ₹0. No real Sarvam, Gnani, Pine Labs or email request was made. Keep refusals, conflicts, unknowns,
 withheld fields and no-purchase outcomes visible.

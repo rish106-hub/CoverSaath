@@ -5,6 +5,7 @@ import { documentDto } from '../../backend/services/index.js';
 import { validateSchema } from '../../backend/database/index.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../../modules/coverage-analysis/index.js';
+import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
 import { createPersistentCoverageAnalysisService } from '../../modules/coverage-analysis/index.js';
 import {
   READ_FIELDS, analysisJobDto, analysisTaskDto, auditSummaryDto, caseSummaryDto,
@@ -89,7 +90,8 @@ export function errorResponse(error) {
     && error.syscall === undefined
     && typeof error.errno !== 'number';
   const code = deliberate ? error.code : 'BACKEND_REQUEST_FAILED';
-  const status = error.statusCode || (deliberate && error.status) || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
+  const status = error.statusCode || (deliberate && error.status) || statusByCode[code]
+    || ANALYSIS_ERROR_CODES[code]?.httpStatus || (/constraint/i.test(error.message) ? 409 : 400);
   const message = deliberate ? error.message : 'The request could not be completed.';
   return { status, body: { error: { code, message } } };
 }
@@ -163,7 +165,35 @@ function documentNotFound() {
   return error;
 }
 
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads }) {
+function ocrJobDto(job) {
+  return {
+    id: job.id,
+    documentId: job.documentUploadId,
+    provider: job.provider,
+    status: job.status,
+    errorCode: job.errorCode,
+    requestedAt: job.requestedAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    pageCount: Array.isArray(job.result?.pages) ? job.result.pages.length : null,
+    outputContractVersion: job.contractVersion,
+  };
+}
+
+function requireOwnedDocument({ services, documentUploads, principal, documentId, write = false }) {
+  const record = documentUploads?.getDocument(documentId);
+  if (!record?.caseId) throw documentNotFound();
+  try {
+    const caseRecord = services.access.requireCase(principal, record.caseId, { write });
+    if (caseRecord.household_id !== record.householdId) throw documentNotFound();
+    return record;
+  } catch (error) {
+    if (['CASE_NOT_FOUND', 'HOUSEHOLD_NOT_FOUND'].includes(error.code)) throw documentNotFound();
+    throw error;
+  }
+}
+
+export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -240,6 +270,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const grant = services.consents.grant({
         householdId,
         subjectAdultId,
+        grantedToActor: body.grantedToActor === undefined ? 'knowvia-local' : requiredString(body.grantedToActor, 'grantedToActor'),
         purpose: requiredString(body.purpose, 'purpose'),
         noticeVersion: body.noticeVersion ?? 'v1',
         evidenceMethod: body.evidenceMethod ?? 'typed',
@@ -352,6 +383,40 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       return { status: 200, body: documentUploads.listForCase(caseRecord) };
     }
     const documentMatch = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)$/);
+    const documentOcrMatch = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/ocr-jobs$/);
+    if (req.method === 'POST' && documentOcrMatch) {
+      const record = requireOwnedDocument({ services, documentUploads, principal, documentId: documentOcrMatch[1], write: true });
+      const body = await readBody(req);
+      const job = await getOcrService().start({
+        documentId: record.id,
+        retryFailed: body.retryFailed === true,
+        authorization: {
+          authorized: true,
+          consentGrantId: requiredString(body.consentGrantId, 'consentGrantId'),
+          requestedByAdultId: principal.adultId,
+          purpose: 'document_processing',
+          recipient: 'sarvam',
+          settings: { language: body.language ?? 'en-IN', contentType: body.contentType ?? 'mixed' },
+        },
+      });
+      return { status: ['succeeded', 'failed', 'cancelled'].includes(job.status) ? 200 : 202, body: { job: ocrJobDto(job) } };
+    }
+    const ocrRefreshMatch = url.pathname.match(/^\/api\/v1\/ocr-jobs\/([^/]+)\/refresh$/);
+    if (req.method === 'POST' && ocrRefreshMatch) {
+      const service = getOcrService();
+      const existing = await service.getJob(ocrRefreshMatch[1]);
+      if (!existing) throw Object.assign(new Error('OCR job not found.'), { code: 'OCR_JOB_NOT_FOUND', statusCode: 404 });
+      requireOwnedDocument({ services, documentUploads, principal, documentId: existing.documentUploadId, write: true });
+      const body = await readBody(req);
+      const job = await service.refresh(existing.id, { authorization: {
+        authorized: true,
+        consentGrantId: requiredString(body.consentGrantId, 'consentGrantId'),
+        requestedByAdultId: principal.adultId,
+        purpose: 'document_processing',
+        recipient: 'sarvam',
+      } });
+      return { status: 200, body: { job: ocrJobDto(job) } };
+    }
     if (req.method === 'DELETE' && documentMatch) {
       // Missing and foreign-household ids are deliberately indistinguishable. Deletion does not
       // require current processing consent: a person must still be able to erase stored data.
