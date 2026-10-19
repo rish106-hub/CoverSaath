@@ -14,7 +14,7 @@ export function createBackendServices(database, options = {}) {
   const workflows = new WorkflowRepository(database, shared);
   const auth = new AuthRepository(database, shared);
   const ocr = new OcrRepository(database, shared);
-  const documents = new DocumentRepository(database, shared);
+  const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
   const access = new TenantAccessService(database, { auth, households, consents, env: options.env ?? {} });
 
   return {

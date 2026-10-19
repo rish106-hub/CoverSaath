@@ -82,7 +82,7 @@ Status: describes controls present in the repository at the commit that added th
 - No identity provider or MFA. Bootstrap token plus self-issued bearer sessions only (`README.md`).
 - PDF inspection runs in the API process, not a sandbox; it is bounded and dependency-free but is still parsing untrusted bytes in a process that can reach the database (ADR 0005).
 - Malware scanning was exercised against a real local clamd (ClamAV 1.5.4, runbook settings) by the opt-in `tests/clamd-integration.test.mjs` and one manual upload run. ClamAV's EICAR signature matches only at offset 0, so the blocked path cannot be driven end to end through the PDF upload route; it is covered at scanner level (real clamd) and through the API with a fake clamd. With `DOCUMENT_SCAN_MODE=disabled` no upload ever reaches OCR.
-- No user-facing single-document delete route; deletion happens through consent revocation or a malware hit.
+- Single-document deletion is available through the authenticated API and upload UI. It is separate from the broader consent-revocation erasure path.
 - The PDF inspection is a bounded heuristic, not a full parser; malware scanning is the required second layer. clamd must use the settings in [the ClamAV runbook](../runbooks/clamav.md) or over-limit files are reported clean.
 - Upload capacity counts and inserts are not atomic, so the per-case and per-household caps can be exceeded slightly under concurrency.
 - The OCR service is still not wired to a route.

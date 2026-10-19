@@ -91,6 +91,7 @@ export function createDocumentUploadService({
   storage,
   inspectFile = null,
   scanner = null,
+  cancelOcrJob = null,
   clock = () => new Date(),
   random = Math.random,
   limits = { maxDocumentsPerCase: 50, maxPendingPerHousehold: 20 },
@@ -212,8 +213,24 @@ export function createDocumentUploadService({
       return { caseId: caseRecord.id, documents: repository.listForCase(caseRecord.id, caseRecord.household_id).map(documentDto) };
     },
 
+    listForDeletion(caseRecord, { actorAdultId, roles = [] }) {
+      const managesHousehold = roles.some(role => ['owner', 'operator', 'backup_operator'].includes(role));
+      return {
+        caseId: caseRecord.id,
+        documents: repository.listForCase(caseRecord.id, caseRecord.household_id)
+          .filter(document => managesHousehold || document.uploadedByAdultId === actorAdultId)
+          .map(documentDto),
+      };
+    },
+
     getDocument(documentId) {
       return repository.getDocument(documentId);
+    },
+
+    requestDeletion({ documentId, actorAdultId }) {
+      const result = repository.requestDeletion(documentId, { actorAdultId });
+      if (result?.state === 'pending') onStored(documentId);
+      return result;
     },
 
     listWorkDocumentIds(limit) {
@@ -232,6 +249,30 @@ export function createDocumentUploadService({
         return new Date(clock().getTime() + delay).toISOString();
       };
       if (record.lifecycleState === 'deletion_requested') {
+        const cancellations = repository.listPendingOcrCancellations(documentId);
+        if (cancellations.length > 0) {
+          if (typeof cancelOcrJob !== 'function') {
+            repository.deferDeletion(documentId, { nextScanAt: nextDue() });
+            return 'deferred';
+          }
+          for (const cancellation of cancellations) {
+            try {
+              await cancelOcrJob({
+                provider: cancellation.provider,
+                jobRef: cancellation.providerJobRef,
+                requestId: cancellation.id,
+                documentId,
+              });
+            } catch {
+              repository.deferDeletion(documentId, { nextScanAt: nextDue() });
+              return 'deferred';
+            }
+            if (!repository.completeOcrCancellation(cancellation.id)) {
+              repository.deferDeletion(documentId, { nextScanAt: nextDue() });
+              return 'deferred';
+            }
+          }
+        }
         // A storage reference outside the key scheme (a pre-intake fixture row) has no bytes here.
         if (/^[0-9a-f]{64}$/.test(record.storageKey)) {
           try {

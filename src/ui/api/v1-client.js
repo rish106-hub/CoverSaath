@@ -50,7 +50,9 @@ export function createV1Client({ fetchImpl = fetch, xhrFactory = () => new XMLHt
     job(runId) { return request(`/jobs/${encodeURIComponent(runId)}`); },
     sourcePack(caseId) { return request(`/cases/${encodeURIComponent(caseId)}/source-pack`); },
     listCaseDocuments(caseId) { return request(`/cases/${encodeURIComponent(caseId)}/documents`); },
+    listDocumentsForDeletion(caseId) { return request(`/cases/${encodeURIComponent(caseId)}/documents/deletion-inventory`); },
     getDocument(id) { return request(`/documents/${encodeURIComponent(id)}`); },
+    deleteDocument(id) { return request(`/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }); },
     // Raw binary body (never Base64 or multipart). XHR is used for upload progress.
     // Reuse the same idempotencyKey when retrying the same file.
     uploadDocument({ caseId, file, documentKind, consentGrantId, idempotencyKey, onProgress, signal }) {

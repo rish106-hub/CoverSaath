@@ -181,7 +181,7 @@ Verify current provider rates and billing conversion before any live run.
 
 ## Run
 
-Requires Node 22.16 or later.
+Requires Node 25 or later. CI and the planned staging runtime use Node 26 so the PDF inspection child can deny network access.
 
 ```sh
 npm install
@@ -217,9 +217,13 @@ The build produces frontend assets only. It does not deploy the API or configure
 - Explicit fixture execution with zero provider calls and no OCR-accuracy claim.
 - Fail-closed Sarvam, Gnani, Pine Labs and email boundaries.
 
-No real document upload endpoint is exposed. The OCR service can process only an already authorised,
+The authenticated document-intake API accepts bounded PDFs into encrypted quarantine, runs structural
+inspection in a permission-restricted child process, and can release clean documents to the Block 2 handoff
+only after a configured clamd scan. Single-document deletion removes encrypted bytes and derived document
+data while retaining a non-sensitive tombstone. The OCR service can process only an already authorised,
 active, protected document with a clean scan and current document-processing consent. Live Sarvam use also
-requires a separately verified transport implementation. Do not enter real personal records.
+requires a separately verified transport implementation. Use synthetic documents only until staging privacy,
+operations and legal gates are complete.
 
 ## Architecture
 

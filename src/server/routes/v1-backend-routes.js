@@ -315,6 +315,25 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       return { status: 200, body: sourcePackDto(caseRecord.id, sources, workflows) };
     }
     const documentsMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/documents$/);
+    const deletionInventoryMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/documents\/deletion-inventory$/);
+    if (req.method === 'GET' && deletionInventoryMatch) {
+      // Erasure discovery is household-authorised but not consent-gated. Otherwise an expired or
+      // revoked processing grant could remove the only UI path to delete the stored document.
+      const caseRecord = requireDocumentCase(services, principal, deletionInventoryMatch[1]);
+      services.access.requireHousehold(principal, caseRecord.household_id);
+      const roles = services.households.listActiveRoles(caseRecord.household_id, principal.adultId).map(item => item.role);
+      const documents = documentUploads.listForDeletion(caseRecord, {
+        actorAdultId: principal.adultId, roles,
+      }).documents.map(document => ({
+        id: document.id,
+        documentKind: document.documentKind,
+        byteSize: document.byteSize,
+        status: document.status,
+        statusLabel: document.statusLabel,
+        uploadedAt: document.uploadedAt,
+      }));
+      return { status: 200, body: { caseId: caseRecord.id, documents } };
+    }
     if (req.method === 'POST' && documentsMatch) {
       // Authorise and check configuration before reading a single body byte.
       const caseRecord = requireDocumentCase(services, principal, documentsMatch[1], { write: true });
@@ -333,6 +352,28 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       return { status: 200, body: documentUploads.listForCase(caseRecord) };
     }
     const documentMatch = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)$/);
+    if (req.method === 'DELETE' && documentMatch) {
+      // Missing and foreign-household ids are deliberately indistinguishable. Deletion does not
+      // require current processing consent: a person must still be able to erase stored data.
+      const record = documentUploads?.getDocument(documentMatch[1]);
+      if (!record?.caseId) throw documentNotFound();
+      try {
+        services.access.requireHousehold(principal, record.householdId);
+      } catch (error) {
+        if (error.code === 'HOUSEHOLD_NOT_FOUND') throw documentNotFound();
+        throw error;
+      }
+      const roles = services.households.listActiveRoles(record.householdId, principal.adultId).map(item => item.role);
+      const allowedRole = roles.some(role => ['owner', 'operator', 'backup_operator'].includes(role));
+      if (record.uploadedByAdultId !== principal.adultId && !allowedRole) {
+        throw Object.assign(new Error('You do not have permission to delete this document.'), {
+          code: 'DOCUMENT_DELETE_FORBIDDEN', statusCode: 403,
+        });
+      }
+      const result = documentUploads.requestDeletion({ documentId: record.id, actorAdultId: principal.adultId });
+      if (!result) throw documentNotFound();
+      return { status: result.state === 'deleted' ? 200 : 202, body: { document: documentDto(result.document) } };
+    }
     if (req.method === 'GET' && documentMatch) {
       // A missing document and another household's document get the same response.
       const record = documentUploads?.getDocument(documentMatch[1]);

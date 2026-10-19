@@ -27,7 +27,7 @@ Record presence and version in the intake. Do not install a CLI without recordin
 
 | Tool | Use | Required from |
 |---|---|---|
-| Node.js (>= 22.16) and npm | runtime, tests, build | Phase 0 |
+| Node.js (>= 25) and npm | runtime, tests, build, PDF child network denial | Phase 0 |
 | gh | pull requests, repository settings | Phase 1 |
 | Homebrew PostgreSQL or Podman | local PostgreSQL | Phase 1 |
 | psql | PostgreSQL checks | Phase 1 |

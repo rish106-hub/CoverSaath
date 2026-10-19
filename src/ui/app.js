@@ -50,13 +50,17 @@ function emergencyBanner() {
 function setupPanel() {
   const bootstrap = el('form', { onSubmit:async event => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    // SyntheticEvent-style currentTarget access is not stable across an await.
+    // Keep the concrete form reference before the request so the success cleanup
+    // does not throw after the workspace has already been created.
+    const form = event.currentTarget;
+    const data = new FormData(form);
     await controller.bootstrap({
       bootstrapToken: data.get('bootstrapToken'),
       displayName: data.get('displayName'),
       ownerName: data.get('ownerName'),
     });
-    event.currentTarget.elements.bootstrapToken.value = '';
+    form.elements.bootstrapToken.value = '';
   } },
   el('h2', {}, 'Create a local persistent workspace'),
   hint('Administrator setup only. The bootstrap secret is sent to the local API once, is never stored by the UI, and must be replaced by a real identity provider before deployment.'),
