@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   OCR_BLOCK_LIMITS, parseStoredBlocks, serializeStoredBlocks, validateOcrOutput,
-} from '../src/modules/document-intake/index.js';
-import { sectionDocument, sectionStoredDocument } from '../src/modules/policy-structuring/sectioner.js';
+} from '../src/features/input/index.js';
+import { sectionDocument, sectionStoredDocument } from '../src/features/policy-structuring/sectioner.js';
 import { postgresTestOptions, useTestDatabase } from './support/postgres.mjs';
 import { assertConstraintRejects, hex, insert, seedWorld } from './support/postgres-fixtures.mjs';
 import { BLOCKS_DOCUMENT, IMAGE_DESCRIPTION, inMemoryBlockPages, rawSarvamResult, sarvamTransport } from './support/sarvam-blocks-fixture.mjs';

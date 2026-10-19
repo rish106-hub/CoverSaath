@@ -316,7 +316,7 @@ Keep it out of `.github/workflows/` until the owner approves the Azure and GitHu
 - Auth: GitHub OIDC to an Entra app registration with a federated credential for `repo:rish106-hub/CoverSaath:environment:staging`. No client secret, no publish profile.
 - Role: a custom role scoped to the web app only, allowing `Microsoft.Web/sites/read`, `Microsoft.Web/sites/publish/action` and `Microsoft.Web/sites/restart/action`, and not `Microsoft.Web/sites/config/list/action` (the pipeline must not read app settings). Built-in `Website Contributor` would also let it read and change app settings.
 - GitHub environment `staging` with the owner as required reviewer.
-- Build once: `npm ci`, `npm run check`, `npm run eval:safety`, `npm ci --omit=dev` into a zip with `dist/`, `src/`, `node_modules/`, `package.json`. Upload the zip as a workflow artifact named with the commit SHA, kept 30 days.
+- Validate once: `npm ci`, `npm run check`, `npm run eval:safety`, then `npm ci --omit=dev` into a zip with `src/`, `node_modules/`, `package.json` and `package-lock.json`. Upload the zip as a workflow artifact named with the commit SHA, kept 30 days.
 - Deploy: `azure/login` with OIDC, then `az webapp deploy --type zip`. Pin every action to a full commit SHA, like `ci.yml`.
 - Verify: poll `/api/v1/ready` until `200`, fail the job otherwise.
 - Rollback: without deployment slots (below the Standard tier), rollback is a re-run of the workflow with input `artifact_run_id` pointing at the last good run; it downloads that run's zip and deploys it. Migrations are expand-only (ADR 0004), so an older build runs against a newer schema. With a Standard plan, switch to a `staging` slot plus swap instead.

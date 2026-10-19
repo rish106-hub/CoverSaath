@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { structurePolicyDocument } from '../src/modules/policy-structuring/index.js';
+import { structurePolicyDocument } from '../src/features/policy-structuring/index.js';
 import { TOKENIZED_PROBES } from './support/privacy-probes.mjs';
 
 // W2 outgoing-payload harness. structurePolicyDocument runs with an injected fake provider that captures

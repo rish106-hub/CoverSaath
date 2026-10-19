@@ -4,7 +4,6 @@
 .env.*
 !.env.example
 private/
-research/private/
 docs/evidence/
 *.key
 *.pem
@@ -13,17 +12,11 @@ dist/
 .insforge/
 coverage/
 .local/
-Knowvia Coversat System Flow.png
 .claude/prompts/block-1-input-slice.xml
 docs/exec-plans/active/handoff-codex.md
 docs/exec-plans/active/production-hardening.xml
 
-# Social and marketing exports, old brand files and build archives stay local, not in the repository.
-docs/assets/linkedin-banner-*
-docs/assets/*-linkedin-post-*
-docs/assets/*-linkedin-product-map-*
-docs/assets/codex-image-*
-docs/assets/waymark-*
+# Build archives stay local, not in the repository.
 *.zip
 # Local databases and eval output, wherever they are written.
 *.sqlite

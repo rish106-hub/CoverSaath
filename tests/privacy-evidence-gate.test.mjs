@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGeminiCoverageRegistryFactory } from '../src/modules/ai-analysis/live-coverage-runtime.js';
+import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/live-coverage-runtime.js';
 import {
   PRIVACY_EVIDENCE_GATE_VERSION,
   sanitizeEvidenceForModel,
   sanitizeEvidenceTextForStorage,
-} from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+} from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { RESTRICTED_PROBES, TOKENIZED_PROBES } from './support/privacy-probes.mjs';
 
 const policy = (overrides = {}) => ({

@@ -1,8 +1,8 @@
-import { FIELD_NAMES, extractFields } from '../../modules/ai-analysis/eval-extractor.js';
-import { getPolicyParameterDefinition, POLICY_PARAMETER_REGISTRY_VERSION } from '../../modules/coverage-analysis/policy-parameter-registry.js';
+import { FIELD_NAMES, extractFields } from '../../features/ai-analysis/eval-extractor.js';
+import { getPolicyParameterDefinition, POLICY_PARAMETER_REGISTRY_VERSION } from '../../features/coverage-analysis/policy-parameter-registry.js';
 import {
   POLICY_STRUCTURING_VERSION, documentGrantCheck, isConflict, structurePolicyDocument, structuringEnabled,
-} from '../../modules/policy-structuring/index.js';
+} from '../../features/policy-structuring/index.js';
 
 // Runs whole-document policy structuring (ADR 0006) for one stored, OCR'd document inside the application:
 // stored Sarvam blocks in, privacy gate, gateway-backed Gemini calls, deterministic validation, one commit.

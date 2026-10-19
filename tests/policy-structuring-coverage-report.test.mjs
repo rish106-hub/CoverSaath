@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { sectionDocument } from '../src/modules/policy-structuring/sectioner.js';
-import { extractChunks } from '../src/modules/policy-structuring/extractor.js';
-import { decideStates, reconcile } from '../src/modules/policy-structuring/reconciler.js';
-import { buildCoverageReport, scoreStructuring } from '../src/modules/policy-structuring/coverage-report.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { sectionDocument } from '../src/features/policy-structuring/sectioner.js';
+import { extractChunks } from '../src/features/policy-structuring/extractor.js';
+import { decideStates, reconcile } from '../src/features/policy-structuring/reconciler.js';
+import { buildCoverageReport, scoreStructuring } from '../src/features/policy-structuring/coverage-report.js';
 
 // Synthetic only: fictional insurer, members and numbers; the provider is a fake.
 const table = rows => `<table>${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}</table>`;

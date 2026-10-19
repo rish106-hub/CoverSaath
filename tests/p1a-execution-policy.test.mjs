@@ -11,8 +11,8 @@ import {
   COVERAGE_ANALYSIS_WORKFLOW,
   createCoverageAnalysisRuntime,
   createPersistentCoverageAnalysisService,
-} from '../src/modules/coverage-analysis/index.js';
-import { POLICY_PARAMETER_REGISTRY_VERSION } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
+} from '../src/features/coverage-analysis/index.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import {
   FIXTURE_RUNTIME_LIMITS,
   IDEMPOTENCY_KEY_LENGTH,
@@ -236,10 +236,10 @@ test('P1-A policy: persistent worker and fixture runtime bounds match the servic
   const service = createPersistentCoverageAnalysisService({ port });
   for (const value of [maxTasksPerSettle.min - 1, maxTasksPerSettle.max + 1]) await assert.rejects(service.runUntilSettled('run-x', { maxTasks: value }), /between 1 and 100/);
   assert.equal(await service.runUntilSettled('run-x', { maxTasks: maxTasksPerSettle.max }), null);
-  const persistent = readFileSync(new URL('../src/modules/coverage-analysis/persistent-service.js', import.meta.url), 'utf8');
+  const persistent = readFileSync(new URL('../src/features/coverage-analysis/persistent-service.js', import.meta.url), 'utf8');
   assert.match(persistent, /maxConcurrency = 4,/);
   assert.match(persistent, /\{ maxTasks = 30 \}/);
-  const runtime = readFileSync(new URL('../src/modules/coverage-analysis/runtime.js', import.meta.url), 'utf8');
+  const runtime = readFileSync(new URL('../src/features/coverage-analysis/runtime.js', import.meta.url), 'utf8');
   assert.match(runtime, new RegExp(`task\\.attempts < ${FIXTURE_RUNTIME_LIMITS.maxAttempts} \\? 'pending' : 'blocked'`));
   assert.match(runtime, new RegExp(`\\{ maxTicks = ${FIXTURE_RUNTIME_LIMITS.maxTicks.default} \\}`));
   const store = { createRun: async run => run, loadRun: async () => null, replaceRun: async run => run };
@@ -248,10 +248,10 @@ test('P1-A policy: persistent worker and fixture runtime bounds match the servic
 });
 
 test('P1-A policy: model call timeout and retry limits match the live runtime and gateway', () => {
-  const live = readFileSync(new URL('../src/modules/ai-analysis/live-coverage-runtime.js', import.meta.url), 'utf8');
+  const live = readFileSync(new URL('../src/features/ai-analysis/live-coverage-runtime.js', import.meta.url), 'utf8');
   assert.match(live, /LLM_TIMEOUT_MS \?\? 30_000, 'LLM_TIMEOUT_MS', \{ max: 60_000, integer: true \}/);
   assert.match(live, /maxRetries: 0/);
-  const gateway = readFileSync(new URL('../src/modules/ai-analysis/model-gateway.js', import.meta.url), 'utf8');
+  const gateway = readFileSync(new URL('../src/features/ai-analysis/model-gateway.js', import.meta.url), 'utf8');
   assert.match(gateway, /timeoutMs: 30_000, maxRetries: 0/);
   assert.deepEqual(MODEL_CALL_POLICY, { defaultTimeoutMs: 30_000, maxTimeoutMs: 60_000, maxRetries: 0 });
   // A model call may run as long as one task lease. Recorded as a risk in ADR 0001.

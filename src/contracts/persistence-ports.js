@@ -112,7 +112,7 @@ export const AUDIT_REPOSITORY_PORT_METHODS = Object.freeze(['append']);
 
 /**
  * In-memory/fixture run store used by createCoverageAnalysisRuntime
- * (same list as assertCoverageAnalysisPort in src/modules/coverage-analysis/contracts.js).
+ * (same list as assertCoverageAnalysisPort in src/features/coverage-analysis/contracts.js).
  * @typedef {object} FixtureRunStorePort
  * @property {(run: object) => Awaitable<object>} createRun
  * @property {(runId: string) => Awaitable<object|null>} loadRun

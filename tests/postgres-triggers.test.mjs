@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { criticalTriggers } from '../src/backend/database/database.js';
-import { buildStoredBlocks, serializeStoredBlocks } from '../src/modules/document-intake/index.js';
+import { buildStoredBlocks, serializeStoredBlocks } from '../src/features/input/index.js';
 import { postgresTestOptions, useTestDatabase } from './support/postgres.mjs';
 import {
   assertTriggerRejects as rejects, at, earlier, hex, insert, later, one, proves, provenTriggers, seedObservation,

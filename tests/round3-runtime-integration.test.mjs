@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { openDatabase } from '../src/backend/database/index.js';
 import { OcrRepository } from '../src/backend/repositories/index.js';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
-import { createGeminiCoverageRegistryFactory } from '../src/modules/ai-analysis/index.js';
-import { opaqueSourceId } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
-import { COVERAGE_ANALYSIS_WORKFLOW, createPersistentCoverageAnalysisService } from '../src/modules/coverage-analysis/index.js';
-import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterRegistry } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
+import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/index.js';
+import { opaqueSourceId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { COVERAGE_ANALYSIS_WORKFLOW, createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterRegistry } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { auditActions, liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 import { seedParameterWorld } from './support/parameter-fixtures.mjs';
 

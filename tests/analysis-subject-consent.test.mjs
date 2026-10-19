@@ -7,9 +7,9 @@ import { join } from 'node:path';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
-import { createGeminiCoverageRegistryFactory } from '../src/modules/ai-analysis/index.js';
-import { GEMINI_MODEL_RECIPIENT } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
-import { createPersistentCoverageAnalysisService } from '../src/modules/coverage-analysis/index.js';
+import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/index.js';
+import { GEMINI_MODEL_RECIPIENT } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import { createApiServer } from '../src/server/server.js';
 import { liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 

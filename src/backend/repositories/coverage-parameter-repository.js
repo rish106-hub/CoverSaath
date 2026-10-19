@@ -4,7 +4,7 @@ import {
   POLICY_PARAMETER_REGISTRY_VERSION,
   getPolicyParameterDefinition,
   getPolicyParameterRegistry,
-} from '../../modules/coverage-analysis/policy-parameter-registry.js';
+} from '../../features/coverage-analysis/policy-parameter-registry.js';
 import {
   PARAMETER_ACQUISITION_STATES,
   PARAMETER_OBSERVATION_METHODS,
@@ -15,7 +15,7 @@ import {
   assertResolutionTransition,
   deriveResolutionAuthority,
   resolvesParameterValue,
-} from '../../modules/coverage-analysis/parameter-records.js';
+} from '../../features/coverage-analysis/parameter-records.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 const identifierPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;

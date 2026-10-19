@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { createSarvamOcrProvider } from '../src/integrations/index.js';
-import { createSandboxedPdfSegmenter } from '../src/modules/document-intake/index.js';
+import { createSandboxedPdfSegmenter } from '../src/features/input/index.js';
 
 const liveEnabled = process.env.RUN_SARVAM_LIVE === '1';
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));

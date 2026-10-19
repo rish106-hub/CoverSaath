@@ -7,8 +7,8 @@ import {
 import {
   OCR_BLOCKS_VERSION, OCR_BLOCK_LIMITS, OCR_MODEL_DESCRIPTION_TAGS, buildStoredBlocks, createFixtureOcrProvider,
   createOcrService, parseStoredBlocks, serializeStoredBlocks, validateOcrOutput,
-} from '../src/modules/document-intake/index.js';
-import { STRUCTURING_DROPPED_TAGS, sectionDocument, sectionStoredDocument } from '../src/modules/policy-structuring/sectioner.js';
+} from '../src/features/input/index.js';
+import { STRUCTURING_DROPPED_TAGS, sectionDocument, sectionStoredDocument } from '../src/features/policy-structuring/sectioner.js';
 import {
   BLOCKS_DOCUMENT, IMAGE_DESCRIPTION, inMemoryBlockPages, rawSarvamResult, sarvamShapedFixtureProvider, sarvamTransport,
 } from './support/sarvam-blocks-fixture.mjs';

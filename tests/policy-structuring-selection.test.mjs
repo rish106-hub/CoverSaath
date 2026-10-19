@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { validateExtractedItems } from '../src/modules/policy-structuring/validator.js';
-import { decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from '../src/modules/policy-structuring/reconciler.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { validateExtractedItems } from '../src/features/policy-structuring/validator.js';
+import { decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from '../src/features/policy-structuring/reconciler.js';
 
 // W2 close-out: auto-selection (model_selected_from_conflict) only for a deterministic contradiction of
 // comparable readings of the same subject; per-subject variation only for insured members. Synthetic only.

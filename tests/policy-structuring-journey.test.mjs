@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
-import { POLICY_STRUCTURING_VERSION, documentGrantCheck, structurePolicyDocument } from '../src/modules/policy-structuring/index.js';
+import { POLICY_STRUCTURING_VERSION, documentGrantCheck, structurePolicyDocument } from '../src/features/policy-structuring/index.js';
 import { parameterAt as at, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 
 // Fake-caller journey (plan acceptance 2): block pages in, real sectioner, privacy gate, extractor,

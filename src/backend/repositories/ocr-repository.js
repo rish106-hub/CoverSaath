@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { parseStoredBlocks, serializeStoredBlocks } from '../../modules/document-intake/ocr-blocks.js';
+import { parseStoredBlocks, serializeStoredBlocks } from '../../features/input/ocr-blocks.js';
 
 const parse = value => value == null ? null : JSON.parse(value);
 const coded = (code, message, statusCode) => Object.assign(new Error(message), { code, statusCode });

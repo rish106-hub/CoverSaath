@@ -6,7 +6,7 @@ import {
   createFixtureOcrProvider,
   createOcrService,
   validateOcrOutput,
-} from '../src/modules/document-intake/index.js';
+} from '../src/features/input/index.js';
 import { createSarvamOcrProvider } from '../src/integrations/index.js';
 
 const AT = '2026-09-18T12:00:00.000Z';

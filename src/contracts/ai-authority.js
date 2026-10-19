@@ -1,8 +1,8 @@
 // AI authority matrix: one frozen table of what a model may and may not decide in the
 // coverage-analysis workflow. It is a literal on purpose: tests/p1a-ai-authority.test.mjs
-// proves it agrees with src/modules/ai-analysis/responsibility-matrix.js (task ownership),
-// src/modules/coverage-analysis/parameter-records.js (OBSERVATION_RESOLUTION_RULES and the
-// model resolution guards) and src/modules/coverage-analysis/agent-contracts.js (envelope
+// proves it agrees with src/features/ai-analysis/responsibility-matrix.js (task ownership),
+// src/features/coverage-analysis/parameter-records.js (OBSERVATION_RESOLUTION_RULES and the
+// model resolution guards) and src/features/coverage-analysis/agent-contracts.js (envelope
 // evidence states). If any of those change, this table and the test must change together.
 //
 // Principle: a model may propose. Deterministic code (or a human reviewer through

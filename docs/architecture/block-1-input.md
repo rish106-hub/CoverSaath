@@ -8,8 +8,8 @@ The proposal's technology list (FastAPI, Celery, Redis, S3 or R2, Supabase or Cl
 
 | # | Box | Repository mapping | Status |
 |---|---|---|---|
-| 1 | User input | Tables `households`, `adult_users`, `household_members`, `consent_grants`, `service_cases`. Upload panel in `src/ui/`. | Implemented in this slice (panel). |
-| 2 | Client validation | Plain JavaScript checks in the upload panel (type, size, name). The server re-checks everything. | Implemented in this slice. No Zod, React or Uppy. |
+| 1 | User input | Authenticated `/api/v1` routes backed by `households`, `adult_users`, `household_members`, `consent_grants` and `service_cases`. | Implemented as an API. No UI is active. |
+| 2 | Client validation | Deferred to a later UI. The server validates every input independently. | No active client implementation. |
 | 3 | AuthN and AuthZ | `api_sessions`, household ownership in `tenant-access-service.js`, per-adult consent. The uploader comes from the session. | Implemented. A managed identity provider is Phase 2. |
 | 4 | Upload orchestration | Bytes go through the API (Architecture A) into the byte-storage port. One request per file. No signed URLs, no `upload_sessions`. | Implemented as a temporary decision. Signed-URL direct upload is planned. |
 | 5 | Object storage | AES-256-GCM local store (document id as AAD) under `DOCUMENT_STORAGE_PATH`, key from `DOCUMENT_ENCRYPTION_KEY_BASE64`. Quarantine is a database state, not a bucket. | Implemented locally. Azure Blob is planned, owner decision open. |
@@ -23,8 +23,8 @@ The proposal's technology list (FastAPI, Celery, Redis, S3 or R2, Supabase or Cl
 
 | Milestone | Proposal scope | Status |
 |---|---|---|
-| 1 Trustworthy upload | Boxes 1-5 and basic 7. Done when five PDFs survive a refresh, in the right household, and another user cannot see them. | Implemented in this slice (upload route, list routes, UI panel). |
-| 2 Secure acceptance | Box 6 and rest of 7. Server checks, structure inspection, malware scan, quarantine to trusted. | Implemented locally. 2b uses a Node 25+ child process whose permission model denies network, file writes, child processes and workers. It is not an OS sandbox: there are no seccomp, namespaces or rlimits. Single-document deletion is available through the authenticated API and upload UI. |
+| 1 Trustworthy upload | Boxes 1-5 and basic 7. Done when five PDFs survive a restart, in the right household, and another user cannot see them. | Implemented through upload and list routes. |
+| 2 Secure acceptance | Box 6 and rest of 7. Server checks, structure inspection, malware scan, quarantine to trusted. | Implemented locally. 2b uses a Node 25+ child process whose permission model denies network, file writes, child processes and workers. It is not an OS sandbox: there are no seccomp, namespaces or rlimits. Single-document deletion is available through the authenticated API. |
 | 3 Independent processing | Boxes 8-9. Queue, worker, classification, retries, stuck-job recovery. | Planned. The existing task queue (`workflow_tasks`, leases) is the intended base. S3.2 adds `SKIP LOCKED`. |
 | 4 Parsing interface | Box 10. Versioned handoff, job identity, structured errors. | Planned. Uses `knowvia.ocr.v1`. |
 
@@ -35,10 +35,9 @@ The proposal's technology list (FastAPI, Celery, Redis, S3 or R2, Supabase or Cl
 - The 15 MiB cap is enforced while streaming. Magic bytes, MIME and extension must agree.
 - `pdf-inspection.js` (bounded, pure Node) rejects encrypted PDFs (`PDF_PASSWORD_REQUIRED`), active content (`/JavaScript`, `/JS`, `/Launch`, embedded files, XFA, RichMedia and similar), more than 500 pages, and deflate bombs in object streams.
 - Bytes are stored AES-256-GCM encrypted. The row, audit event and idempotency record are written in one transaction. The new document is `quarantined` with malware status `pending`.
-- `GET /api/v1/cases/{caseId}/documents` and `GET /api/v1/documents/{id}` return user-facing statuses: `received_pending_checks`, `accepted`, `rejected`, `deletion_pending`, `deleted`. The UI never says "processed" after upload.
+- `GET /api/v1/cases/{caseId}/documents` and `GET /api/v1/documents/{id}` return bounded statuses: `received_pending_checks`, `accepted`, `rejected`, `deletion_pending`, `deleted`.
 - `clamd-scanner.js` speaks clamd INSTREAM over TCP. `scan-worker.js` retries. `DOCUMENT_SCAN_MODE` is `clamd` or `disabled`. The default is `disabled`: documents stay quarantined (fail closed).
 - Clean result: document becomes `active`. This is the Block 2 handoff condition. Malware found: bytes are removed and the document is deleted.
-- Upload panel with client validation in `src/ui/`.
 
 ## Decided against for now
 
@@ -109,7 +108,7 @@ User-facing status: `received_pending_checks` (quarantined, pending), `accepted`
 | Item | Contract |
 |---|---|
 | Entry point | `OcrRepository.getReadyDocument(documentId, at)` in `src/backend/repositories/ocr-repository.js` |
-| Version | `knowvia.ocr.v1` (`src/modules/document-intake/ocr-contracts.js`) |
+| Version | `knowvia.ocr.v1` (`src/features/input/ocr-contracts.js`) |
 | Document state | `lifecycle_state = active` |
 | Scan state | `malware_status = clean` (set only by a real scan) |
 | Storage | Encrypted local store, AES-256-GCM, document id as AAD |

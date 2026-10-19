@@ -9,9 +9,9 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
-import { createGeminiCoverageRegistryFactory } from '../src/modules/ai-analysis/index.js';
-import { COVERAGE_ANALYSIS_WORKFLOW, createPersistentCoverageAnalysisService } from '../src/modules/coverage-analysis/index.js';
-import { createCoverageAnalysisSourceInput } from '../src/modules/coverage-analysis/source-input.js';
+import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/index.js';
+import { COVERAGE_ANALYSIS_WORKFLOW, createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
+import { createCoverageAnalysisSourceInput } from '../src/features/coverage-analysis/source-input.js';
 import { auditActions, liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 import { seedParameterWorld } from './support/parameter-fixtures.mjs';
 

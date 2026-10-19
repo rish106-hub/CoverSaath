@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { extractChunks, reconcile, validateExtractedItems } from '../src/modules/policy-structuring/index.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { extractChunks, reconcile, validateExtractedItems } from '../src/features/policy-structuring/index.js';
 
 // Fixes from the independent W2-W4 review. Synthetic data only.
 

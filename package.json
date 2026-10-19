@@ -7,18 +7,14 @@
     "node": ">=25.0.0"
   },
   "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "dev:api": "node --env-file-if-exists=.env.local --watch src/server/server.js",
+    "dev": "node --env-file-if-exists=.env.local --watch src/server/server.js",
     "db:init": "node --env-file-if-exists=.env.local scripts/database.mjs",
     "eval:safety": "node scripts/run-safety-evals.mjs",
-    "build": "vite build",
+    "build": "node --check src/server/server.js",
     "test": "node --test tests/*.test.mjs tests/evals/*.test.mjs",
     "test:sarvam-live": "RUN_SARVAM_LIVE=1 node --env-file=.env --test tests/sarvam-live.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check": "npm run check:architecture && npm test && npm run build"
-  },
-  "devDependencies": {
-    "vite": "8.3.4"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.94",

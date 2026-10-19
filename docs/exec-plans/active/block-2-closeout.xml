@@ -31,9 +31,9 @@
     <read>docs/iterations/LATEST.md (sections: Whole-document policy structuring; Block 2 Sarvam Document AI)</read>
     <read>docs/adr/0003-ai-authority.md, docs/adr/0004-*.md (PostgreSQL), docs/adr/0006-policy-document-structuring.md</read>
     <read>docs/exec-plans/active/policy-document-structuring.xml, block-2-sarvam-document-ai.md, sarvam-gemini-parse-validation.xml</read>
-    <read>src/modules/policy-structuring/index.js (structurePolicyDocument, gateChunks, documentGrantCheck, structuringEnabled)</read>
-    <read>src/modules/ai-analysis/model-gateway.js and privacy-evidence-gate.js</read>
-    <read>src/modules/document-intake/ocr-service.js, ocr-contracts.js (OCR_OUTPUT_VERSION knowvia.ocr.v1)</read>
+    <read>src/features/policy-structuring/index.js (structurePolicyDocument, gateChunks, documentGrantCheck, structuringEnabled)</read>
+    <read>src/features/ai-analysis/model-gateway.js and privacy-evidence-gate.js</read>
+    <read>src/features/input/ocr-service.js, ocr-contracts.js (OCR_OUTPUT_VERSION knowvia.ocr.v1)</read>
     <read>src/integrations/sarvam/doc-ai-transport.js (normalised page and block shape)</read>
     <read>src/backend/repositories/ocr-repository.js, policy-structuring-repository.js, consent-repository.js</read>
     <read>src/server/routes/v1-backend-routes.js (OCR start and refresh routes, the pattern to mirror)</read>
@@ -131,8 +131,8 @@
         <task>Independent read-only review (Opus) of gate v4, the second-round conflict changes and the consent path.</task>
       </work>
       <owned_paths>
-        <path>src/modules/ai-analysis/privacy-evidence-gate.js</path>
-        <path>src/modules/policy-structuring/reconciler.js, validator.js, index.js</path>
+        <path>src/features/ai-analysis/privacy-evidence-gate.js</path>
+        <path>src/features/policy-structuring/reconciler.js, validator.js, index.js</path>
         <path>tests/privacy-gate-*.test.mjs, tests/policy-structuring-*.test.mjs, tests/support/privacy-probes.mjs</path>
         <path>A new tests/outgoing-payload-*.test.mjs</path>
       </owned_paths>
@@ -162,10 +162,10 @@
       </work>
       <owned_paths>
         <path>src/integrations/sarvam/doc-ai-transport.js (shape export only)</path>
-        <path>src/modules/document-intake/ocr-contracts.js, ocr-service.js</path>
+        <path>src/features/input/ocr-contracts.js, ocr-service.js</path>
         <path>src/backend/repositories/ocr-repository.js, consent-repository.js (erasure)</path>
         <path>src/backend/database/migrations/012_*.sql, src/backend/database/postgres/migrations/009_*.sql</path>
-        <path>src/modules/policy-structuring/sectioner.js (read from stored blocks)</path>
+        <path>src/features/policy-structuring/sectioner.js (read from stored blocks)</path>
         <path>docs/adr/0006-policy-document-structuring.md (addendum)</path>
       </owned_paths>
       <success>
@@ -193,8 +193,8 @@
         <task>One real household case run through the local app (D3), no .local/eval scripts in the path. Record counts, run IDs and timings only.</task>
       </work>
       <owned_paths>
-        <path>src/modules/ai-analysis/model-gateway.js, schemas.js</path>
-        <path>src/modules/policy-structuring/ (service wiring only)</path>
+        <path>src/features/ai-analysis/model-gateway.js, schemas.js</path>
+        <path>src/features/policy-structuring/ (service wiring only)</path>
         <path>src/backend/repositories/policy-structuring-repository.js</path>
         <path>src/server/routes/v1-backend-routes.js, src/server/create-server.js, src/server/config.js</path>
         <path>tests/policy-structuring-journey.test.mjs and a new route-level journey test</path>
@@ -224,7 +224,7 @@
         <task>Commit an eval script and scoring code with synthetic fixtures; commit counts-only results. Real values and text stay under .local/.</task>
       </work>
       <owned_paths>
-        <path>scripts/ (one eval runner using the runtime path), src/modules/policy-structuring/coverage-report.js (scoring)</path>
+        <path>scripts/ (one eval runner using the runtime path), src/features/policy-structuring/coverage-report.js (scoring)</path>
         <path>tests/ (scoring unit tests on synthetic data)</path>
         <path>.local/eval/ (real corpus and golden, never committed)</path>
       </owned_paths>

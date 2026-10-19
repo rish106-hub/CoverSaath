@@ -1,12 +1,12 @@
 import { readBody } from '../http/request.js';
 import { isLoopbackRequest, readBinaryBody } from '../../shared/http/index.js';
-import { MAX_DOCUMENT_BYTES } from '../../modules/document-intake/index.js';
+import { MAX_DOCUMENT_BYTES } from '../../features/input/index.js';
 import { documentDto } from '../../backend/services/index.js';
 import { validateSchema } from '../../backend/database/index.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
-import { COVERAGE_ANALYSIS_WORKFLOW } from '../../modules/coverage-analysis/index.js';
+import { COVERAGE_ANALYSIS_WORKFLOW } from '../../features/coverage-analysis/index.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
-import { createPersistentCoverageAnalysisService } from '../../modules/coverage-analysis/index.js';
+import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
 import {
   READ_FIELDS, analysisJobDto, analysisTaskDto, auditSummaryDto, caseSummaryDto,
   createReadResponsePolicy, sourcePackDto,

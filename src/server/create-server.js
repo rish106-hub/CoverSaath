@@ -12,7 +12,7 @@ import {
   createOcrService,
   createSandboxedPdfInspector,
   createSandboxedPdfSegmenter,
-} from '../modules/document-intake/index.js';
+} from '../features/input/index.js';
 import {
   createEmailProvider,
   createGnaniVoiceProvider,
@@ -21,7 +21,7 @@ import {
 } from '../integrations/index.js';
 import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
 import { readServerConfig } from './config.js';
-import { createGeminiCoverageRegistryFactory, createSharedProjectBudget, createStructuringModelCallFactory } from '../modules/ai-analysis/index.js';
+import { createGeminiCoverageRegistryFactory, createSharedProjectBudget, createStructuringModelCallFactory } from '../features/ai-analysis/index.js';
 
 export function createApiServer({
   env = process.env,

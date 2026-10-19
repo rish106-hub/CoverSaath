@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeEvidenceForModel, sanitizeEvidenceTextForStorage } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+import { sanitizeEvidenceForModel, sanitizeEvidenceTextForStorage } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { N1_WHITESPACE_PROBES, N2_VARIANT_PROBES } from './support/privacy-probes.mjs';
 
 // W2 close-out: the two known gate gaps. Tab-separated tables fail closed (refused as restricted, never

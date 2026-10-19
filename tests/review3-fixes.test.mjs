@@ -4,9 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
-import { createGeminiCoverageRegistryFactory, createMemoryBudget, createModelGateway } from '../src/modules/ai-analysis/index.js';
-import { sanitizeEvidenceForModel } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
-import { createPersistentCoverageAnalysisService } from '../src/modules/coverage-analysis/index.js';
+import { createGeminiCoverageRegistryFactory, createMemoryBudget, createModelGateway } from '../src/features/ai-analysis/index.js';
+import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import { liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
 const gatewayInput = () => ({

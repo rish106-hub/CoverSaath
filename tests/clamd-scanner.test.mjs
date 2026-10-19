@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import net from 'node:net';
-import { createClamdScanner } from '../src/modules/document-intake/clamd-scanner.js';
+import { createClamdScanner } from '../src/features/input/clamd-scanner.js';
 
 // Fake clamd: parses real INSTREAM framing and records received bytes.
 async function startFakeClamd({ reply = 'stream: OK', onStream, silent = false, closeEarly = false } = {}) {

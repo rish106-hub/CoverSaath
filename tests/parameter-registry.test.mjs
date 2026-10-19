@@ -6,7 +6,7 @@ import {
   getPolicyParameterDefinition,
   getPolicyParameterRegistry,
   validatePolicyParameterRegistry,
-} from '../src/modules/coverage-analysis/policy-parameter-registry.js';
+} from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import {
   PARAMETER_ACQUISITION_STATES,
   PARAMETER_RESOLUTION_STATES,
@@ -15,7 +15,7 @@ import {
   createParameterRecord,
   transitionParameterRecord,
   validateParameterRecord,
-} from '../src/modules/coverage-analysis/parameter-records.js';
+} from '../src/features/coverage-analysis/parameter-records.js';
 
 const now = '2026-10-09T10:00:00.000Z';
 const observation = (id, value) => ({
