@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { PolicyStructuringRepository } from './policy-structuring-repository.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 
@@ -10,11 +11,15 @@ const RUN_SCAN_BATCH_SIZE = 100;
 const MAX_ERASURE_RUNS = 5_000;
 
 export class ConsentRepository {
-  constructor(database, { clock = () => new Date(), audit, coverageParameters = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null } = {}) {
     this.database = database;
     this.clock = clock;
     this.audit = audit;
     this.coverageParameters = coverageParameters;
+    // Structuring proposals and runs are derived data: erasure always has a path, so a missing
+    // injection never leaves proposals behind (the repository needs only the database to erase).
+    this.policyStructuring = policyStructuring
+      ?? (database?.prepare && database?.exec ? new PolicyStructuringRepository(database, { clock, ...(audit ? { audit } : {}), ...(coverageParameters ? { coverageParameters } : {}) }) : null);
   }
 
   grant({ id: grantId = id('consent'), householdId, subjectAdultId, grantedToActor = 'knowvia-local', purpose, noticeVersion = 'v1', evidenceMethod = 'typed', expiresAt = null, scopes = [] }) {
@@ -297,6 +302,7 @@ export class ConsentRepository {
     }
 
     let runs = 0;
+    const erasedRunIds = [];
     let tasks = 0;
     let pages = 0;
     let graphs = 0;
@@ -333,6 +339,7 @@ export class ConsentRepository {
       ].some(entry => documents.has(entry?.documentId));
       if (!wholeRun && !referencesDocument) continue;
       runs += 1;
+      erasedRunIds.push(row.id);
       if (Array.isArray(input?.sourcePages)) {
         let changed = 0;
         const sourcePages = input.sourcePages.map(page => {
@@ -364,6 +371,18 @@ export class ConsentRepository {
         // Fail closed: values would outlive the consent and no database trigger covers runs.
         throw Object.assign(new Error('Parameter observation erasure is not configured.'), { code: 'ERASURE_NOT_CONFIGURED', statusCode: 503 });
       }
+    }
+    // Structuring output (proposals, structuring runs and the observations they wrote) of the
+    // affected documents and runs is erased in the same transaction. Counts-only audit inside.
+    let structuring = { proposals: 0, observations: 0, runs: 0 };
+    if (documents.size > 0 || erasedRunIds.length > 0) {
+      if (!this.policyStructuring) {
+        throw Object.assign(new Error('Policy structuring erasure is not configured.'), { code: 'ERASURE_NOT_CONFIGURED', statusCode: 503 });
+      }
+      structuring = this.policyStructuring.eraseDerived({
+        householdId, documentIds: [...documents], workflowRunIds: erasedRunIds, reasonCode: redactionReason,
+        caseId, resourceType, resourceId, actorType, actorId, at,
+      });
     }
     if (runs > 0) {
       const graphCounts = graphs || graphNodes || graphEdges ? { graphs, graphNodes, graphEdges } : {};
@@ -416,6 +435,9 @@ export class ConsentRepository {
         payload: { reason, facts, documents: documents.size },
       });
     }
-    return Object.freeze({ runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers });
+    return Object.freeze({
+      runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers,
+      structuringProposals: structuring.proposals, structuringRuns: structuring.runs,
+    });
   }
 }

@@ -8,3 +8,4 @@ export { AuthRepository } from './auth-repository.js';
 export { OcrRepository } from './ocr-repository.js';
 export { CoverageParameterRepository } from './coverage-parameter-repository.js';
 export { DocumentRepository } from './document-repository.js';
+export { PolicyStructuringRepository } from './policy-structuring-repository.js';
