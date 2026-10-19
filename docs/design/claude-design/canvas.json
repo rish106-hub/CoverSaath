@@ -1,0 +1,214 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Components.dc.html": {
+      "h": 2600,
+      "page": "system",
+      "title": "Components and states",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Extra-States.dc.html": {
+      "h": 1000,
+      "page": "onboarding",
+      "title": "Extra states: errors, code entry, empty matrix, post-signup question, mobile menu",
+      "w": 2470,
+      "x": 0,
+      "y": 1984
+    },
+    "Foundations.dc.html": {
+      "h": 2300,
+      "page": "system",
+      "title": "Foundations: colour, type, space",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Landing-Mobile.dc.html": {
+      "h": 8000,
+      "is_interactive": true,
+      "page": "landing",
+      "title": "Landing page, mobile 390",
+      "w": 390,
+      "x": 1520,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 8000,
+      "is_interactive": true,
+      "page": "landing",
+      "title": "Landing page, desktop 1440",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Motion.dc.html": {
+      "h": 1200,
+      "page": "system",
+      "title": "Motion: hero reading sequence",
+      "w": 1440,
+      "x": 0,
+      "y": 2420
+    },
+    "O1-Start.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "onboarding",
+      "title": "O1 Start",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "O2-Event.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "onboarding",
+      "title": "O2 What is coming up",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "O3-People.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "onboarding",
+      "title": "O3 People",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "O4-Sharing.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "onboarding",
+      "title": "O4 Sharing",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "O5-Upload.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "onboarding",
+      "title": "O5 Add a policy",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "O6-Reading.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "page": "onboarding",
+      "title": "O6 Reading",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "O7-Matrix-Desktop.dc.html": {
+      "h": 900,
+      "page": "onboarding",
+      "title": "O7 First matrix, desktop",
+      "w": 1440,
+      "x": 0,
+      "y": 964
+    },
+    "O7-Matrix-Mobile.dc.html": {
+      "h": 1300,
+      "page": "onboarding",
+      "title": "O7 First matrix, mobile",
+      "w": 390,
+      "x": 2820,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-13T12:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "page": "landing",
+    "view": "canvas"
+  },
+  "notes": {
+    "landingNote": {
+      "fill": "teal",
+      "page": "landing",
+      "size": 24,
+      "text": "Copy, sources and rationale: docs/design/04-ia-and-copy-deck.md. Every number has an evidence ID. Quotes and story figures need a consent re-check before launch. Legal text slots are marked [LEGAL REVIEW]. Use the Tweaks panel to see each form state, the permission viewer and the mobile menu. Supporter logos (Lightspeed, Insurance Samadhan) are the official marks from their websites, tinted Tide: confirm permission and the words 'Supported by' before launch. Industry numbers are sourced on each card (LocalCircles 7 Mar 2026, Lok Sabha reply Feb 2025, National Health Accounts 2022-23).",
+      "w": 360,
+      "x": 2000,
+      "y": 0
+    },
+    "landingTitle": {
+      "kind": "title1",
+      "maxW": 1910,
+      "page": "landing",
+      "text": "Landing page",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "onboardingNote": {
+      "fill": "orange",
+      "page": "onboarding",
+      "size": 24,
+      "text": "Onboarding is the designed future flow. The live landing page only collects early-list emails until Knowvia opens. Example values are illustrative. Press Play on O1 to click through.",
+      "w": 360,
+      "x": 1520,
+      "y": 964
+    },
+    "onboardingTitle": {
+      "kind": "title1",
+      "maxW": 3210,
+      "page": "onboarding",
+      "text": "Onboarding (future state, after launch)",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "systemTitle": {
+      "kind": "title1",
+      "maxW": 2960,
+      "page": "system",
+      "text": "Design system",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Landing-Mobile.dc.html",
+    "O1-Start.dc.html",
+    "O2-Event.dc.html",
+    "O3-People.dc.html",
+    "O4-Sharing.dc.html",
+    "O5-Upload.dc.html",
+    "O6-Reading.dc.html",
+    "O7-Matrix-Mobile.dc.html",
+    "O7-Matrix-Desktop.dc.html",
+    "Extra-States.dc.html",
+    "Foundations.dc.html",
+    "Components.dc.html",
+    "Motion.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "landing",
+      "name": "Landing page"
+    },
+    {
+      "id": "onboarding",
+      "name": "Onboarding"
+    },
+    {
+      "id": "system",
+      "name": "Design system"
+    }
+  ],
+  "title": "Knowvia landing and onboarding"
+}

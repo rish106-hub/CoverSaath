@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Knowvia components and states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;1,6..72,400&amp;family=Source+Sans+3:wght@400;600;700&amp;display=swap">
+<style>
+body{margin:0}
+:focus-visible{outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B !important}
+@keyframes kvLoad{to{background-position:-200% 0}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none !important;animation:none !important}}
+</style>
+</helmet>
+<div style="width:1440px;min-height:2600px;box-sizing:border-box;background:#F3F7F6;font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#1A3034;padding:80px 120px;display:flex;flex-direction:column;gap:64px">
+
+<div style="display:flex;flex-direction:column;gap:12px">
+<h1 style="margin:0;font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-weight:400;font-size:56px;line-height:1.05;letter-spacing:-0.015em;color:#163F42">Components and states</h1>
+<p style="margin:0;font-size:19px;line-height:1.6;max-width:68ch">Anatomy and sizes: docs/design/05-design-system-spec.md. Each state is drawn as it appears; hover and focus are shown statically here.</p>
+</div>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+<h2 style="margin:0;font-size:22px;font-weight:600;color:#163F42">Primary button</h2>
+<div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span style="display:inline-flex;align-items:center;height:52px;padding:0 28px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600">Join the early list</span><span style="font-size:15px;color:#55696D">Default</span></div>
+<div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span style="display:inline-flex;align-items:center;height:52px;padding:0 28px;border-radius:999px;background:#125A55;color:#FFFFFF;font-size:17px;font-weight:600">Join the early list</span><span style="font-size:15px;color:#55696D">Hover, 180ms</span></div>
+<div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span style="display:inline-flex;align-items:center;height:52px;padding:0 28px;border-radius:999px;background:#125A55;color:#FFFFFF;font-size:17px;font-weight:600;transform:translateY(1px)">Join the early list</span><span style="font-size:15px;color:#55696D">Press, 1px, 120ms</span></div>
+<div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span style="display:inline-flex;align-items:center;height:52px;padding:0 28px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600;outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B">Join the early list</span><span style="font-size:15px;color:#55696D">Focus</span></div>
+<div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start;width:220px"><span style="display:inline-flex;align-items:center;height:52px;padding:0 28px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600">Joining</span><div aria-hidden="true" class="kv-m" style="width:100%;height:3px;border-radius:3px;background:linear-gradient(90deg,#E6EFEC,#176F69,#E6EFEC);background-size:200% 100%;animation:kvLoad 1.2s linear infinite"></div><span style="font-size:15px;color:#55696D">Busy</span></div>
+<div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start"><span style="display:inline-flex;align-items:center;height:52px;padding:0 26px;border-radius:999px;border:2px solid #176F69;color:#176F69;font-size:17px;font-weight:600">Talk to us about a pilot</span><span style="font-size:15px;color:#55696D">Outline, partner block only</span></div>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+<h2 style="margin:0;font-size:22px;font-weight:600;color:#163F42">Email field and form states</h2>
+<div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:24px">
+<div style="background:#FFFFFF;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<span style="font-size:15px;color:#55696D;margin-bottom:8px">Default</span>
+<span style="font-size:15px;font-weight:600">Email</span>
+<span style="height:52px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF"></span>
+<span style="font-size:15px;color:#55696D">Knowvia is not open yet. We will email you when it is.</span>
+</div>
+<div style="background:#FFFFFF;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<span style="font-size:15px;color:#55696D;margin-bottom:8px">Focus</span>
+<span style="font-size:15px;font-weight:600">Email</span>
+<span style="height:52px;border:1px solid #7B918E;border-radius:10px;background:#FFFFFF;outline:2px solid #163F42;outline-offset:2px;box-shadow:0 0 0 5px #E0A02B;display:flex;align-items:center;padding:0 16px;font-size:17px">you@exam</span>
+<span style="font-size:15px;color:#55696D">Knowvia is not open yet. We will email you when it is.</span>
+</div>
+<div style="background:#FFFFFF;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<span style="font-size:15px;color:#55696D;margin-bottom:8px">Invalid</span>
+<span style="font-size:15px;font-weight:600">Email</span>
+<span style="height:52px;border:2px solid #A74335;border-radius:10px;background:#FFFFFF;display:flex;align-items:center;padding:0 16px;font-size:17px">meera.k@</span>
+<span style="font-size:16px;font-weight:600;color:#A74335">Enter an email address like name@example.com.</span>
+</div>
+<div style="background:#FFFFFF;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<span style="font-size:15px;color:#55696D;margin-bottom:8px">Success</span>
+<span style="font-size:22px;font-weight:600;color:#163F42">You are on the list.</span>
+<span style="font-size:17px;line-height:1.6">We will email you@example.in when Knowvia opens. While you wait, find your policy schedule and your employer's benefits booklet.</span>
+</div>
+<div style="background:#FFFFFF;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:8px">
+<span style="font-size:15px;color:#55696D;margin-bottom:8px">Already on the list: back end only, never shown</span>
+<span style="font-size:17px;line-height:1.6">The page shows the same success state, so nobody can test whether an address joined. Any note goes in the email.</span>
+</div>
+<div style="background:#FFFFFF;border-radius:16px;padding:24px;display:flex;flex-direction:column;gap:10px">
+<span style="font-size:15px;color:#55696D;margin-bottom:6px">Network error</span>
+<span style="font-size:16px;font-weight:600;color:#A74335">We could not add you. Check your connection and try again.</span>
+<span style="align-self:flex-start;display:inline-flex;align-items:center;height:52px;padding:0 28px;border-radius:999px;background:#176F69;color:#FFFFFF;font-size:17px;font-weight:600">Try again</span>
+</div>
+</div>
+</section>
+
+<section style="display:flex;gap:48px;flex-wrap:wrap">
+<div style="flex:1 1 520px;display:flex;flex-direction:column;gap:20px">
+<h2 style="margin:0;font-size:22px;font-weight:600;color:#163F42">Question, closed and open</h2>
+<div style="background:#FFFFFF;border-radius:16px;padding:8px 24px">
+<div style="border-bottom:1px solid #CFDCDA;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px"><span style="font-size:22px;font-weight:600;color:#163F42">Is Knowvia an insurance company?</span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#163F42" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform:rotate(180deg)"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+<p style="margin:16px 0 24px;font-size:19px;line-height:1.6">No. Knowvia does not sell or underwrite insurance, and it does not decide claims. It reads the policies you already have and shows what they say.</p>
+<div style="border-top:1px solid #CFDCDA;min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:24px"><span style="font-size:22px;font-weight:600;color:#163F42">Will you sell me a policy?</span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#163F42" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+</div>
+</div>
+<div style="flex:1 1 520px;display:flex;flex-direction:column;gap:20px">
+<h2 style="margin:0;font-size:22px;font-weight:600;color:#163F42">Permission panel, two viewers</h2>
+<div style="display:flex;gap:16px">
+<div style="flex:1 1 0;background:#FFFFFF;border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:8px">
+<span style="font-size:15px;font-weight:600;color:#55696D">What you see</span>
+<span style="font-size:16px">₹5,00,000 floater</span><span style="font-size:16px">Policy number, TPA, hospital desk contact</span><span style="font-size:16px">Declared conditions, as on your proposal form</span>
+</div>
+<div style="flex:1 1 0;background:#FFFFFF;border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:8px">
+<span style="font-size:15px;font-weight:600;color:#55696D">What your brother sees</span>
+<span style="font-size:16px">₹5,00,000 floater</span><span style="font-size:16px">Policy number, TPA, hospital desk contact</span><span style="font-size:16px;color:#55696D;display:flex;align-items:center;gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>Not shared</span>
+</div>
+</div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Switching viewer cross-fades only the values (180ms). Hidden values show a lock and "Not shared", never a blur.</p>
+</div>
+</section>
+
+<section style="display:flex;gap:48px;flex-wrap:wrap">
+<div style="flex:1 1 520px;display:flex;flex-direction:column;gap:20px">
+<h2 style="margin:0;font-size:22px;font-weight:600;color:#163F42">Story block and source line</h2>
+<div style="background:#FFFFFF;border-radius:16px;padding:32px;display:flex;flex-direction:column;gap:12px">
+<span style="font-family:Newsreader,'Iowan Old Style',Georgia,serif;font-size:56px;line-height:1;color:#163F42">17 days</span>
+<span style="font-size:19px;line-height:1.6">The window to keep cover after leaving a job. No one sent a reminder. It closed.</span>
+<span style="font-size:15px;color:#55696D">N., 33, Pune. Recorded conversation, September 2026.</span>
+</div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">Figure first, story second, source directly under it. Never a rounded or averaged number.</p>
+</div>
+<div style="flex:1 1 520px;display:flex;flex-direction:column;gap:20px">
+<h2 style="margin:0;font-size:22px;font-weight:600;color:#163F42">Comparison row</h2>
+<div style="background:#FFFFFF;border-radius:16px;padding:24px 32px;display:flex;flex-wrap:wrap;gap:8px 24px">
+<span style="flex:0 0 140px;font-size:17px;font-weight:600;color:#163F42">Cash</span>
+<span style="flex:1 1 200px;font-size:19px;line-height:1.6;color:#55696D">You look for an ATM while the admission waits.</span>
+<span style="flex:1 1 200px;font-size:19px;line-height:1.6;border-left:3px solid #176F69;padding-left:17px">You know how much cash to keep ready, and why.</span>
+</div>
+<p style="margin:0;font-size:15px;line-height:1.45;color:#55696D">The old way in Slate, the Knowvia way in Ink with a Harbour line. One divider between rows, never borders on every side.</p>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+<h2 style="margin:0;font-size:22px;font-weight:600;color:#163F42">Onboarding controls</h2>
+<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+<div style="width:340px;display:flex;flex-direction:column;gap:10px">
+<span style="width:100%;box-sizing:border-box;min-height:56px;display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:10px;background:#E3F0EE;border:2px solid #176F69;color:#163F42;font-size:17px;font-weight:600">A renewal<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 12.5 10 17 19 7"></polyline></svg></span>
+<span style="width:100%;box-sizing:border-box;min-height:56px;display:flex;align-items:center;padding:12px 16px;border-radius:10px;background:#FFFFFF;border:1px solid #7B918E;font-size:17px">Planned treatment</span>
+<span style="font-size:15px;color:#55696D">Option row, selected and default</span>
+</div>
+<div style="width:340px;border:2px dashed #7B918E;border-radius:16px;background:#FFFFFF;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:16px">
+<span style="font-size:17px;font-weight:600;color:#163F42">Drop a PDF or photo here, or choose a file</span>
+<span style="font-size:15px;color:#55696D">PDF, JPG or PNG, up to 15 MB each</span>
+</div>
+<div style="width:340px;border:2px solid #176F69;border-radius:16px;background:#E3F0EE;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:16px">
+<span style="font-size:17px;font-weight:600;color:#163F42">Drop to add</span>
+<span style="font-size:15px;color:#163F42">Upload zone, file dragged over</span>
+</div>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2600}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
