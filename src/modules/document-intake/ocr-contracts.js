@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 import { DocumentIntakeError } from './contracts.js';
+import { OCR_BLOCKS_VERSION, normalizeOutputBlocks } from './ocr-blocks.js';
 
+// Page text contract. Jobs and source_pages.output_contract_version keep it: v2 adds stored blocks
+// (source_pages.blocks_json) without changing page text, and callers select pages by this version.
 export const OCR_OUTPUT_VERSION = 'knowvia.ocr.v1';
+export const OCR_ACCEPTED_OUTPUT_VERSIONS = Object.freeze([OCR_OUTPUT_VERSION, OCR_BLOCKS_VERSION]);
 export const OCR_JOB_STATES = Object.freeze(['queued', 'submitted', 'processing', 'succeeded', 'failed', 'cancelled']);
 export const OCR_LIMITS = Object.freeze({
   maxPages: 500,
@@ -29,9 +33,10 @@ function nullableConfidence(value) {
 }
 
 export function validateOcrOutput(value, expected = {}) {
-  if (!plainObject(value) || value.schemaVersion !== OCR_OUTPUT_VERSION) {
-    throw new DocumentIntakeError('OCR_SCHEMA_INVALID', `OCR output must use ${OCR_OUTPUT_VERSION}.`);
+  if (!plainObject(value) || !OCR_ACCEPTED_OUTPUT_VERSIONS.includes(value.schemaVersion)) {
+    throw new DocumentIntakeError('OCR_SCHEMA_INVALID', `OCR output must use ${OCR_ACCEPTED_OUTPUT_VERSIONS.join(' or ')}.`);
   }
+  const withBlocks = value.schemaVersion === OCR_BLOCKS_VERSION;
   if (!plainObject(value.document) || !plainObject(value.provider) || !Array.isArray(value.pages)) {
     throw new DocumentIntakeError('OCR_SCHEMA_INVALID', 'OCR output requires document, provider and pages.');
   }
@@ -61,6 +66,11 @@ export function validateOcrOutput(value, expected = {}) {
       throw new DocumentIntakeError('OCR_SCHEMA_INVALID', 'Each page must be extracted with text or explicitly failed.');
     }
     const text = page.text;
+    if (!withBlocks && page.blocks != null) {
+      throw new DocumentIntakeError('OCR_SCHEMA_INVALID', `pages[${index}].blocks require ${OCR_BLOCKS_VERSION}.`);
+    }
+    // v1 pages have no stored blocks; readers report them as blocks_unavailable.
+    const blocks = withBlocks ? normalizeOutputBlocks(page.blocks, text, page.pageNumber, `pages[${index}]`) : null;
     return Object.freeze({
       pageNumber: page.pageNumber,
       text,
@@ -68,6 +78,7 @@ export function validateOcrOutput(value, expected = {}) {
       extractionStatus,
       confidenceBasisPoints: nullableConfidence(page.confidenceBasisPoints),
       providerPageRef: page.providerPageRef == null ? null : boundedString(page.providerPageRef, 'providerPageRef', 256),
+      blocks,
       provenance: Object.freeze({
         documentId,
         sourceVersion,
@@ -83,7 +94,7 @@ export function validateOcrOutput(value, expected = {}) {
     throw new DocumentIntakeError('OCR_SCHEMA_INVALID', 'OCR warnings must be a bounded string array.');
   }
   return Object.freeze({
-    schemaVersion: OCR_OUTPUT_VERSION,
+    schemaVersion: value.schemaVersion,
     document: Object.freeze({ id: documentId, sourceVersion, contentSha256 }),
     provider: Object.freeze({
       name: boundedString(value.provider.name, 'provider.name', 100),

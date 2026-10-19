@@ -216,9 +216,10 @@ export class ConsentRepository {
         actorId: revokedByAdultId,
         at,
       });
+      // Stored OCR blocks are page text in another shape and are erased with it.
       const redactPages = this.database.prepare(`UPDATE source_pages SET extracted_text = NULL, extraction_status = 'failed',
           confidence_basis_points = NULL, page_sha256 = ?, text_sha256 = NULL,
-          provider_page_ref = NULL, provenance_json = NULL, source_version = 'revoked:' || id
+          provider_page_ref = NULL, provenance_json = NULL, blocks_json = NULL, source_version = 'revoked:' || id
         WHERE document_upload_id = ?`);
       const requestDocumentDeletion = this.database.prepare(`UPDATE document_uploads
         SET lifecycle_state = 'deletion_requested', next_scan_at = NULL

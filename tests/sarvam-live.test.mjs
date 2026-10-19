@@ -66,7 +66,7 @@ test('opt-in live Sarvam Digitise returns and normalizes one synthetic source pa
   assert.equal(result?.status, 'succeeded', 'Sarvam live job did not succeed before the test deadline.');
 
   const normalized = provider.normalizeResult(result.result, source);
-  assert.equal(normalized.schemaVersion, 'knowvia.ocr.v1');
+  assert.equal(normalized.schemaVersion, 'knowvia.ocr.v2');
   assert.equal(normalized.document.id, source.documentId);
   assert.equal(normalized.document.sourceVersion, source.sourceVersion);
   assert.equal(normalized.document.contentSha256, source.contentSha256);

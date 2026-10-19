@@ -75,6 +75,7 @@ test('migration 005 applies once on a fresh database and is not re-applied', t =
     '006_parameter_observation_guards.sql', '007_append_only_delete_guards.sql',
     '008_document_intake_scheduling.sql', '009_evidence_fact_redaction.sql',
     '010_evidence_fact_redaction_hardening.sql', '011_policy_structuring.sql',
+    '012_source_page_blocks.sql',
   ]);
   assert.deepEqual(
     database.prepare('SELECT version FROM coverage_parameter_registry_versions').all().map(row => row.version),

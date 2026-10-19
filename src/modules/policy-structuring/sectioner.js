@@ -25,6 +25,10 @@ function validate(pages, maxChunkChars) {
     for (const block of page.blocks) {
       if (!block || typeof block !== 'object' || typeof block.text !== 'string') invalid('Each block needs string text.');
       if (block.tag != null && typeof block.tag !== 'string') invalid('Block tag must be a string or null.');
+      if (block.rows !== undefined && (!Array.isArray(block.rows)
+        || block.rows.some(row => !Array.isArray(row) || row.some(cell => typeof cell !== 'string')))) {
+        invalid('Table rows must be arrays of string cells.');
+      }
     }
   }
 }
@@ -46,8 +50,9 @@ function pack(lines, max) {
 
 const partId = (base, index) => (index === 0 ? base : `${base}-part${index + 1}`);
 
-function tableText(text) {
-  const rows = tableRows(text).map(row => row.join(' | ')).filter(row => row.replace(/[\s|]/g, ''));
+// Stored blocks (knowvia.ocr.v2) carry their table rows, parsed from the same text at write time.
+function tableText({ text, rows: storedRows }) {
+  const rows = (storedRows ?? tableRows(text)).map(row => row.join(' | ')).filter(row => row.replace(/[\s|]/g, ''));
   return rows.length ? rows : text.replace(/<[^>]+>/g, ' ').split('\n').map(line => line.trim()).filter(Boolean);
 }
 
@@ -67,7 +72,7 @@ export function sectionDocument(pages, { maxChunkChars = 4000 } = {}) {
       const tag = block.tag ?? null;
       if (tag && Object.hasOwn(STRUCTURING_DROPPED_TAGS, tag)) { dropped.push({ page, blockIndex, tag, reason: STRUCTURING_DROPPED_TAGS[tag] }); continue; }
       if (tag === 'table') {
-        const rows = tableText(block.text);
+        const rows = tableText(block);
         if (!rows.length) { dropped.push({ page, blockIndex, tag, reason: 'empty' }); continue; }
         flush();
         // Each part of a split table repeats the first row, so its header reaches the privacy gate with it.
@@ -97,4 +102,17 @@ export function sectionDocument(pages, { maxChunkChars = 4000 } = {}) {
     chunks: Object.freeze(chunks.map(chunk => Object.freeze({ ...chunk, blockIndexes: Object.freeze(chunk.blockIndexes) }))),
     dropped: Object.freeze(dropped.map(Object.freeze)),
   });
+}
+
+/**
+ * Sections pages read back from storage (OcrRepository.getDocumentBlockPages). Fails closed when any
+ * page was stored without blocks: page text alone is never sectioned as if it were complete.
+ */
+export function sectionStoredDocument(stored, options) {
+  if (!stored || typeof stored !== 'object' || !Array.isArray(stored.pages)) invalid('Stored pages are required.');
+  const unavailable = stored.pages.filter(page => page?.status !== 'stored' || !Array.isArray(page.blocks)).map(page => page?.page ?? null);
+  if (unavailable.length) {
+    throw Object.assign(new Error('Some pages have no stored blocks.'), { code: 'STRUCTURING_BLOCKS_UNAVAILABLE', pages: unavailable });
+  }
+  return sectionDocument(stored.pages.map(({ page, blocks }) => ({ page, blocks })), options);
 }
