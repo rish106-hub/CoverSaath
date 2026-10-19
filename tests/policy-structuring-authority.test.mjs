@@ -48,7 +48,7 @@ function open(t) {
   return { database, services };
 }
 
-const grantCheck = (services, documentId = document) => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId });
+const grantCheck = (services, documentId = document) => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId, householdId: 'household-parameters' });
 const commitWith = (services, consentCheck) => async ({ decisions, proposals }) => services.policyStructuring.commitStructuring({
   householdId: household, workflowRunId: run, documentId: document, sourceVersion: 'version-1',
   pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion: 'policy-parameters/v1', recordedBy: 'policy-structuring',

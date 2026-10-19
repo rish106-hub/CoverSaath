@@ -118,7 +118,7 @@ function acceptModelConflict(candidate, sent) {
   return { group, selectedQuote: selected && allowed.has(selected) ? selected : null, ungroundedSelection: Boolean(selected) && !allowed.has(selected) };
 }
 
-export async function reconcile({ accepted = [], proposals = [], call, consentCheck, limits = {} } = {}) {
+export async function reconcile({ accepted = [], proposals = [], call, consentCheck, limits = {}, budgetStopped = false } = {}) {
   const caps = { ...RECONCILER_LIMITS, ...limits };
   const groups = groupItems(accepted, proposals);
   const conflicts = deterministicConflicts(groups);
@@ -127,6 +127,11 @@ export async function reconcile({ accepted = [], proposals = [], call, consentCh
   for (const group of candidates.slice(caps.maxGroups)) out.skipped.push({ groupId: group.groupId, reason: 'group_cap' });
   const sendable = candidates.slice(0, caps.maxGroups);
   if (!sendable.length) return out;
+  // Extraction hit a budget stop: deterministic conflicts stand, no further paid call is made.
+  if (budgetStopped) {
+    out.skipped.push({ groupId: null, reason: 'budget_stop' });
+    return out;
+  }
   if (typeof call !== 'function' || typeof consentCheck !== 'function') fail('STRUCTURING_INPUT_INVALID', 'A provider call and consent check are required.');
   const sent = new Map(sendable.map(group => [group.groupId, { ...group, quotes: quotesOf(group, caps.maxQuotesPerGroup) }]));
   const payload = { groups: [...sent.values()].map(group => ({

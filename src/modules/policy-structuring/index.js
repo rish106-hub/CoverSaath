@@ -12,7 +12,7 @@ export { STRUCTURING_DROPPED_TAGS, sectionDocument, sectionStoredDocument } from
 export { normalizeValue, validateExtractedItems } from './validator.js';
 export { EXTRACTOR_VERSION, STRUCTURING_LIMITS, extractChunks, registryCatalog } from './extractor.js';
 export { RECONCILER_VERSION, SHORT_VALUE_CHARS, decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from './reconciler.js';
-export { buildCoverageReport, scoreStructuring } from './coverage-report.js';
+export { CRITICAL_FIELD_KEYS, buildCoverageReport, readingMatches, scoreCriticalFields, scoreStructuring } from './coverage-report.js';
 
 export const POLICY_STRUCTURING_VERSION = 'policy-structuring/v2';
 const GATE_MAX_BYTES = 16_000;
@@ -24,10 +24,13 @@ export const structuringEnabled = (env = process.env) => env.POLICY_STRUCTURING_
 // Document-specific Gemini grant (ADR 0006): an active grant whose scope names this exact document for
 // `derive` by the Gemini recipient. A scope without a document id does not count. `consents` is the
 // ConsentRepository (requireActive and get); the check is synchronous so it can run inside a commit.
-export function documentGrantCheck({ consents, grantId, subjectAdultId, documentId }) {
+export function documentGrantCheck({ consents, grantId, subjectAdultId, documentId, householdId }) {
   const scope = { resourceType: 'document', action: 'derive', dataCategory: 'insurance_document', recipient: GEMINI_MODEL_RECIPIENT };
+  if (typeof householdId !== 'string' || !householdId) fail('STRUCTURING_CONFIG', 'The document household is required.');
   return () => {
     consents.requireActive(grantId, { subjectAdultId, resourceId: documentId, ...scope });
+    // The grant must belong to the document's household, so its revocation erases this document's output.
+    if (consents.get(grantId)?.household_id !== householdId) fail('CONSENT_SCOPE_REQUIRED', 'A document-specific Gemini grant is required.');
     const named = consents.get(grantId)?.scopes.some(entry => entry.resource_type === scope.resourceType && entry.resource_id === documentId
       && entry.action === scope.action && entry.data_category === scope.dataCategory && entry.recipient === scope.recipient);
     if (!named) fail('CONSENT_SCOPE_REQUIRED', 'A document-specific Gemini grant is required.');
@@ -83,7 +86,7 @@ export async function structurePolicyDocument({
   for (const [chunkId, reason] of Object.entries(gated.skipped)) extraction.chunkOutcomes[chunkId] = { status: 'skipped', reason };
   const caps = { ...STRUCTURING_LIMITS, ...limits };
   const reconciliation = await reconcile({
-    accepted: extraction.accepted, proposals: extraction.proposals, call, consentCheck,
+    accepted: extraction.accepted, proposals: extraction.proposals, call, consentCheck, budgetStopped: extraction.budgetStopped,
     limits: { maxInputTokens: Math.max(0, caps.maxInputTokensPerDocument - extraction.usage.inputTokens) },
   });
   const decisions = decideStates({ accepted: extraction.accepted, conflicts: reconciliation.conflicts });

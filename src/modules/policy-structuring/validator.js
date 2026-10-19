@@ -189,8 +189,11 @@ function checkItem(item, chunk, registry, reservedKeys) {
   // nothing printed is lost and no model wording is stored as a value.
   const typeOf = candidate => (target.definition ? target.definition.valueType : inferValueType(candidate));
   const grounded = valueInQuote(valueText, normalizeValue(typeOf(valueText), valueText), typeOf(valueText), quote);
-  const storedText = grounded ? valueText : quote;
-  note.valueSource = grounded ? 'value' : 'quote';
+  // Only a value printed verbatim inside its quote is stored as written; a value that merely normalises
+  // equal (extra words around a duration, say) is stored as the quote, so no model wording is kept.
+  const verbatim = grounded && quote.includes(valueText);
+  const storedText = verbatim ? valueText : quote;
+  note.valueSource = verbatim ? 'value' : 'quote';
   const valueType = typeOf(storedText);
   const normalized = normalizeValue(valueType, storedText);
   if (target.definition) {
