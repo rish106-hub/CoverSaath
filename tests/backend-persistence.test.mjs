@@ -127,6 +127,52 @@ test('revocation invalidates only work derived from the revoked grant', t => {
   assert.equal(context.services.workflows.getRun(second.id).status, 'queued');
 });
 
+test('revoking a provider disclosure grant cancels and erases its OCR without deleting the upload', t => {
+  const context = harness(t);
+  const { adult, household } = seed(context);
+  const collection = context.services.consents.grant({
+    id: 'consent-collection', householdId: household.id, subjectAdultId: adult.id, purpose: 'document_processing',
+    scopes: [{ resourceType: 'document', action: 'collect', dataCategory: 'insurance_document' }],
+  });
+  const at = '2026-09-17T12:00:00.000Z';
+  context.database.prepare(`INSERT INTO document_uploads
+    (id, household_id, uploaded_by_adult_id, consent_grant_id, document_kind,
+     original_filename, storage_path, content_sha256, mime_type, byte_size, malware_status,
+     encryption_status, lifecycle_state, uploaded_at, logical_document_id, source_version)
+    VALUES ('document-provider-revoke', ?, ?, ?, 'policy_schedule', 'synthetic.pdf',
+      'fixture/document-provider-revoke', ?, 'application/pdf', 128, 'clean',
+      'fixture_only', 'active', ?, 'logical-provider-revoke', '1')`)
+    .run(household.id, adult.id, collection.id, 'a'.repeat(64), at);
+  const disclosure = context.services.consents.grant({
+    id: 'consent-sarvam-revoke', householdId: household.id, subjectAdultId: adult.id,
+    grantedToActor: 'sarvam', purpose: 'document_processing',
+    scopes: [{ resourceType: 'document', resourceId: 'document-provider-revoke', action: 'derive', dataCategory: 'insurance_document', recipient: 'sarvam' }],
+  });
+  context.database.prepare(`INSERT INTO ocr_jobs
+    (id, document_upload_id, provider, provider_job_ref, status, attempt_count, requested_at,
+     started_at, contract_version, authorization_json, updated_at)
+    VALUES ('ocr-provider-revoke', 'document-provider-revoke', 'sarvam', 'remote-job', 'processing', 1, ?, ?,
+      'knowvia.ocr.v1', ?, ?)`)
+    .run(at, at, JSON.stringify({ consentGrantId: disclosure.id }), at);
+  context.database.prepare(`INSERT INTO source_pages
+    (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
+     extracted_text, extraction_status, created_at, output_contract_version, text_sha256)
+    VALUES ('page-provider-revoke', 'document-provider-revoke', 'ocr-provider-revoke', 1, '1', ?,
+      'sensitive OCR text', 'extracted', ?, 'knowvia.ocr.v1', ?)`)
+    .run('b'.repeat(64), at, 'c'.repeat(64));
+
+  context.services.consents.revoke({ grantId: disclosure.id, revokedByAdultId: adult.id });
+
+  assert.deepEqual({ ...context.database.prepare(`SELECT status, error_code, provider_job_ref
+    FROM ocr_jobs WHERE id = 'ocr-provider-revoke'`).get() }, {
+    status: 'cancelled', error_code: 'CONSENT_REVOKED', provider_job_ref: 'remote-job',
+  });
+  assert.equal(context.database.prepare(`SELECT extracted_text FROM source_pages
+    WHERE id = 'page-provider-revoke'`).get().extracted_text, null);
+  assert.equal(context.database.prepare(`SELECT lifecycle_state FROM document_uploads
+    WHERE id = 'document-provider-revoke'`).get().lifecycle_state, 'active');
+});
+
 test('field access is exact to subject, viewer and field and fails closed after revocation', t => {
   const context = harness(t);
   const { adult, household } = seed(context);

@@ -3,7 +3,12 @@ import { DocumentIntakeError } from './contracts.js';
 
 export const OCR_OUTPUT_VERSION = 'knowvia.ocr.v1';
 export const OCR_JOB_STATES = Object.freeze(['queued', 'submitted', 'processing', 'succeeded', 'failed', 'cancelled']);
-export const OCR_LIMITS = Object.freeze({ maxPages: 500, maxTextCharactersPerPage: 200_000, maxWarnings: 100 });
+export const OCR_LIMITS = Object.freeze({
+  maxPages: 500,
+  maxTextCharactersPerPage: 200_000,
+  maxWarnings: 100,
+  maxProviderJobRefCharacters: 16_384,
+});
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const plainObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -62,7 +67,7 @@ export function validateOcrOutput(value, expected = {}) {
       textSha256: sha256(text),
       extractionStatus,
       confidenceBasisPoints: nullableConfidence(page.confidenceBasisPoints),
-      providerPageRef: page.providerPageRef == null ? null : boundedString(page.providerPageRef, 'providerPageRef', 200),
+      providerPageRef: page.providerPageRef == null ? null : boundedString(page.providerPageRef, 'providerPageRef', 256),
       provenance: Object.freeze({
         documentId,
         sourceVersion,
@@ -82,7 +87,9 @@ export function validateOcrOutput(value, expected = {}) {
     document: Object.freeze({ id: documentId, sourceVersion, contentSha256 }),
     provider: Object.freeze({
       name: boundedString(value.provider.name, 'provider.name', 100),
-      jobRef: value.provider.jobRef == null ? null : boundedString(value.provider.jobRef, 'provider.jobRef', 200),
+      jobRef: value.provider.jobRef == null ? null : boundedString(
+        value.provider.jobRef, 'provider.jobRef', OCR_LIMITS.maxProviderJobRefCharacters,
+      ),
     }),
     pages: Object.freeze(pages),
     warnings: Object.freeze([...warnings]),
@@ -108,7 +115,7 @@ export function assertOcrProvider(provider, mode) {
 
 export function assertOcrRepository(repository) {
   const methods = [
-    'getReadyDocument', 'createJob', 'getJob', 'updateJob', 'completeJob',
+    'getReadyDocument', 'createJob', 'createOrGetJob', 'getJob', 'updateJob', 'completeJob',
     'recordCancellationReference', 'completeCancellation',
   ];
   if (!repository || methods.some(method => typeof repository[method] !== 'function')) {

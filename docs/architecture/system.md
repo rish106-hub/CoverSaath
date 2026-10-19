@@ -24,11 +24,11 @@ Pipeline block map and Block 1 design: [pipeline-blocks.md](pipeline-blocks.md),
 | `backend/state/` | Case state machine (`case-state-machine.js`). |
 | `modules/coverage-analysis/` | Workflow definition (v6), task registry, envelopes, parameter registry (`policy-parameters/v1`), persistent service and fixture runtime. |
 | `modules/ai-analysis/` | Model eligibility matrix, prompts, output schemas, privacy evidence gate, model gateway, Gemini runtime. |
-| `modules/document-intake/` | File validation, AES-256-GCM local byte storage, OCR contracts and service, in-memory fixtures. Not reachable from any route. |
+| `modules/document-intake/` | File validation, AES-256-GCM local byte storage, sandboxed PDF inspection and splitting, OCR contracts and service, in-memory fixtures. Upload and OCR lifecycle routes compose these modules. |
 | `modules/insurance-rules/` | Deterministic policy, continuity, cash-exposure and route rules. |
 | `agents/` | Domain specialists the fixture task registry calls: profile, group health, personal health, decision. `coverage-orchestrator.js` (`buildCoverageGraph`) has no runtime caller since the legacy engine was removed; only its own test uses it. |
 | `contracts/` | Frozen cross-module contracts: task shapes, workflow graph and checksum, execution policy, error codes, API schemas, persistence ports, AI authority. |
-| `integrations/` | Sarvam OCR, Gnani voice, Pine Labs payment and email boundaries. All fail closed (`provider-boundary.js`); no provider network call is implemented. |
+| `integrations/` | Sarvam modern Document AI transport plus fail-closed Gnani voice, Pine Labs payment and email boundaries. Sarvam remains off unless explicitly enabled. |
 | `evaluation/` | Offline safety evaluator and reference dataset (`npm run eval:safety`). |
 | `ui/` | Browser workspace: `api/` client, `state/` controller, `components/`, `app.js`. |
 

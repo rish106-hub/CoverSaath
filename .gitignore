@@ -13,3 +13,7 @@ dist/
 .insforge/
 coverage/
 .local/
+Knowvia Coversat System Flow.png
+.claude/prompts/block-1-input-slice.xml
+docs/exec-plans/active/handoff-codex.md
+docs/exec-plans/active/production-hardening.xml

@@ -13,6 +13,7 @@
     "eval:safety": "node scripts/run-safety-evals.mjs",
     "build": "vite build",
     "test": "node --test tests/*.test.mjs tests/evals/*.test.mjs",
+    "test:sarvam-live": "RUN_SARVAM_LIVE=1 node --env-file=.env --test tests/sarvam-live.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs",
     "check": "npm run check:architecture && npm test && npm run build"
   },
@@ -22,6 +23,7 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.94",
     "ai": "^7.0.138",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.23.1"
   }
 }

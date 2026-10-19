@@ -1,0 +1,28 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "api-journey",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "KNOWVIA_BOOTSTRAP_TOKEN=48cd3bb1552389d2a9b5cc39557280e3e7b5a65bf9f04ff5",
+        "DOCUMENT_ENCRYPTION_KEY_BASE64=QAfv4cKqyc2t2qkZMuVjm5k0HcsG9G59bLpE0l5DM7Q=",
+        "DATABASE_PATH=/private/tmp/claude-502/-Users-rishavdewan-Developer-Product-experiments-CoverSaath/b7ba5b91-6e7f-489e-b54a-d02f152b251e/scratchpad/journey/journey.sqlite",
+        "DOCUMENT_STORAGE_PATH=/private/tmp/claude-502/-Users-rishavdewan-Developer-Product-experiments-CoverSaath/b7ba5b91-6e7f-489e-b54a-d02f152b251e/scratchpad/journey/documents",
+        "DOCUMENT_WORKER_SWEEP_MS=500",
+        "node",
+        "src/server/server.js"
+      ],
+      "port": 8787
+    }
+  ]
+}

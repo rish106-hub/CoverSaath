@@ -39,7 +39,9 @@ function fixtureChild(name, source, { env } = {}) {
     const envAssignments = Object.entries(env)
       .map(([key, value]) => `process.env[${JSON.stringify(key)}] = ${JSON.stringify(String(value))};`)
       .join('\n');
-    writeFileSync(wrapperPath, `${envAssignments}\nimport ${JSON.stringify(path)};\n`);
+    // Keep the fixture in one permitted file. A static import would run before
+    // these assignments, while a dynamic import would need a second read grant.
+    writeFileSync(wrapperPath, `${envAssignments}\n${source}\n`);
     return wrapperPath;
   }
   return path;

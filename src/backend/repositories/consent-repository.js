@@ -156,10 +156,14 @@ export class ConsentRepository {
       // Revocation deletes source documents collected under this grant. A document merely named
       // by a later derive/read scope remains owned by its uploader; the consent-authorised runs
       // are still erased below through consentGrantId.
-      const documents = this.database.prepare(`SELECT id FROM document_uploads
+      const collectedDocuments = this.database.prepare(`SELECT id FROM document_uploads
         WHERE consent_grant_id = ? ORDER BY id`).all(grantId);
-      const cancelOcr = this.database.prepare(`UPDATE ocr_jobs SET
-          status = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN 'cancelled' ELSE status END,
+      const derivedDocuments = this.database.prepare(`SELECT DISTINCT document_upload_id AS id FROM ocr_jobs
+        WHERE json_extract(authorization_json, '$.consentGrantId') = ? ORDER BY document_upload_id`).all(grantId);
+      const affectedDocuments = [...new Map(
+        [...collectedDocuments, ...derivedDocuments].map(document => [document.id, document]),
+      ).values()];
+      const cancelOcrSet = `status = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN 'cancelled' ELSE status END,
           completed_at = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN ? ELSE completed_at END,
           error_code = CASE
             WHEN status IN ('submitted', 'processing') OR (status = 'queued' AND started_at IS NOT NULL)
@@ -174,14 +178,20 @@ export class ConsentRepository {
               THEN provider_job_ref
             ELSE NULL
           END,
-          error_message = NULL, authorization_json = NULL, result_json = NULL, result_digest = NULL, updated_at = ?
+          error_message = NULL, authorization_json = NULL, result_json = NULL, result_digest = NULL, updated_at = ?`;
+      const cancelOcrByDocument = this.database.prepare(`UPDATE ocr_jobs SET
+          ${cancelOcrSet}
         WHERE document_upload_id = ?`);
-      for (const { id: documentId } of documents) cancelOcr.run(at, at, documentId);
+      const cancelOcrByAuthorization = this.database.prepare(`UPDATE ocr_jobs SET
+          ${cancelOcrSet}
+        WHERE json_extract(authorization_json, '$.consentGrantId') = ?`);
+      for (const { id: documentId } of collectedDocuments) cancelOcrByDocument.run(at, at, documentId);
+      cancelOcrByAuthorization.run(at, at, grantId);
       // Observation values derived from the revoked documents are erased and the
       // erasure is audited (counts only) before the lifecycle change below, which
       // would otherwise redact them silently through the database safety net.
       if (this.coverageParameters) {
-        for (const { id: documentId } of documents) {
+        for (const { id: documentId } of affectedDocuments) {
           this.coverageParameters.redactObservationsForDocument({
             documentId, reasonCode: 'consent_revoked', actorType: 'adult_user', actorId: revokedByAdultId, at,
           });
@@ -192,7 +202,7 @@ export class ConsentRepository {
       // transaction. Counts only are audited.
       this.eraseDerivedRunData({
         householdId: grant.household_id,
-        documentIds: documents.map(document => document.id),
+        documentIds: affectedDocuments.map(document => document.id),
         consentGrantId: grantId,
         reason: ERASURE_MARKER,
         resourceType: 'consent_grant',
@@ -208,8 +218,10 @@ export class ConsentRepository {
       const requestDocumentDeletion = this.database.prepare(`UPDATE document_uploads
         SET lifecycle_state = 'deletion_requested', next_scan_at = NULL
         WHERE id = ? AND lifecycle_state IN ('active', 'quarantined')`);
-      for (const { id: documentId } of documents) {
+      for (const { id: documentId } of affectedDocuments) {
         redactPages.run('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', documentId);
+      }
+      for (const { id: documentId } of collectedDocuments) {
         requestDocumentDeletion.run(documentId);
       }
       this.database.prepare(`UPDATE workflow_tasks

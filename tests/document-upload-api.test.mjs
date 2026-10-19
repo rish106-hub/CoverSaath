@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { openDatabase } from '../src/backend/database/index.js';
 import { OcrRepository } from '../src/backend/repositories/index.js';
@@ -39,8 +40,8 @@ function environment(directory, extra = {}) {
   };
 }
 
-async function start({ database, env, documentScanner }) {
-  const server = createApiServer({ database, env, documentScanner });
+async function start({ database, env, documentScanner, sarvamFetch }) {
+  const server = createApiServer({ database, env, documentScanner, sarvamFetch });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (path, { method = 'GET', body, token, headers = {} } = {}) => {
@@ -72,6 +73,12 @@ async function start({ database, env, documentScanner }) {
     return { status: response.status, data: await response.json() };
   };
   return { server, call, upload, stop: () => new Promise(resolve => server.close(resolve)) };
+}
+
+async function multiPagePdf(pageCount) {
+  const document = await PDFDocument.create();
+  for (let page = 1; page <= pageCount; page += 1) document.addPage([300 + page, 400 + page]);
+  return Buffer.from(await document.save({ useObjectStreams: false }));
 }
 
 async function household(app, name) {
@@ -131,6 +138,12 @@ async function eventually(check, { timeoutMs = 3000 } = {}) {
 }
 
 const cleanScanner = () => ({ mode: 'clamd', scans: 0, async scan() { this.scans += 1; return { status: 'clean' }; }, async ping() { return true; } });
+const providerJson = (value, status = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  headers: { get: () => null },
+  async text() { return JSON.stringify(value); },
+});
 const customClamdHost = process.env.CLAMD_CUSTOM_TEST_HOST;
 const customClamdPort = process.env.CLAMD_CUSTOM_TEST_PORT || '3311';
 const customClamdSkip = customClamdHost ? false : 'set CLAMD_CUSTOM_TEST_HOST to run against isolated test clamd';
@@ -517,6 +530,121 @@ test('a clean scan activates the document for the Block 2 handoff; without a sca
   const still = await app2.call(`/api/v1/documents/${pending.data.document.id}`, { token: owner2.token });
   assert.equal(still.data.status, 'received_pending_checks');
   assert.equal(new OcrRepository(database2).getReadyDocument(pending.data.document.id, new Date().toISOString()), null);
+});
+
+test('Block 1 to Block 2 journey splits 11 pages, uses Sarvam consent and persists ordered safe output', async t => {
+  const h = harness(t, {
+    SARVAM_OCR_ENABLED: 'true', SARVAM_API_KEY: 'test-only',
+    SARVAM_OCR_RETRY_DELAY_MS: '0',
+    SARVAM_OCR_POLL_INTERVAL_MS: '0',
+  });
+  const database = openDatabase({ path: h.databasePath });
+  let submissions = 0;
+  const sarvamFetch = async (url, options = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname.endsWith('/digitise')) {
+      submissions += 1;
+      assert.equal(options.headers['api-subscription-key'], 'test-only');
+      assert.equal(options.body.get('language'), 'hi-IN');
+      assert.equal(options.body.get('output_format'), 'json');
+      assert.equal(options.body.get('content_type'), 'mixed');
+      return providerJson({ job_id: `e2e-job-${submissions}`, status: 'pending' }, 201);
+    }
+    const jobId = parsed.pathname.split('/').at(-2);
+    if (parsed.pathname.endsWith('/status')) return providerJson({ job_id: jobId, status: 'completed' });
+    if (parsed.pathname.endsWith('/results')) {
+      const count = jobId === 'e2e-job-1' ? 10 : 1;
+      return providerJson({
+        type: 'digitise', job_id: jobId, status: 'completed',
+        usage: { pages_total: count, pages_processed: count, pages_succeeded: count, pages_failed: 0, provider_secret: 'do-not-store' },
+        documents: [{ pages: Array.from({ length: count }, (_, index) => ({ page_number: index + 1, content: `Page ${index + 1} from ${jobId}` })) }],
+      });
+    }
+    throw new Error(`Unexpected provider request: ${url}`);
+  };
+  const app = await start({ database, env: h.env, documentScanner: cleanScanner(), sarvamFetch });
+  t.after(async () => { await app.stop(); database.close(); });
+  const owner = await household(app, 'OCR journey');
+  const uploaded = await app.upload({ ...owner, bytes: await multiPagePdf(11), filename: 'synthetic-11-page.pdf' });
+  assert.equal(uploaded.status, 201, JSON.stringify(uploaded.data));
+  const documentId = uploaded.data.document.id;
+  await eventually(() => database.prepare(`SELECT 1 FROM document_uploads
+    WHERE id = ? AND lifecycle_state = 'active' AND malware_status = 'clean'`).get(documentId));
+  const disclosure = await app.call('/api/v1/consents', {
+    method: 'POST', token: owner.token,
+    body: {
+      householdId: owner.householdId, subjectAdultId: owner.adultId,
+      grantedToActor: 'sarvam', purpose: 'document_processing',
+      scopes: [{
+        resourceType: 'document', resourceId: documentId, action: 'derive',
+        dataCategory: 'insurance_document', recipient: 'sarvam',
+      }],
+    },
+  });
+  assert.equal(disclosure.status, 201, JSON.stringify(disclosure.data));
+  const started = await app.call(`/api/v1/documents/${documentId}/ocr-jobs`, {
+    method: 'POST', token: owner.token,
+    body: { consentGrantId: disclosure.data.id, language: 'hi-IN', contentType: 'mixed' },
+  });
+  assert.equal(started.status, 202, JSON.stringify(started.data));
+  assert.equal(started.data.job.status, 'submitted');
+  assert.equal(submissions, 2);
+  const refreshed = await app.call(`/api/v1/ocr-jobs/${started.data.job.id}/refresh`, {
+    method: 'POST', token: owner.token, body: { consentGrantId: disclosure.data.id },
+  });
+  assert.equal(refreshed.status, 200, JSON.stringify(refreshed.data));
+  assert.equal(refreshed.data.job.status, 'succeeded');
+  assert.equal(refreshed.data.job.pageCount, 11);
+  assert.deepEqual(database.prepare(`SELECT page_number FROM source_pages
+    WHERE document_upload_id = ? ORDER BY page_number`).all(documentId).map(row => row.page_number),
+  Array.from({ length: 11 }, (_, index) => index + 1));
+  assert.equal(JSON.stringify(database.prepare('SELECT * FROM ocr_jobs WHERE id = ?').get(started.data.job.id)).includes('do-not-store'), false);
+  const ocrAudit = database.prepare(`SELECT action, event_payload_json FROM audit_events
+    WHERE resource_type = 'ocr_job' AND resource_id = ? ORDER BY id`).all(started.data.job.id);
+  assert.deepEqual(ocrAudit.map(event => event.action), [
+    'ocr.job_created', 'ocr.job_status_changed', 'ocr.job_succeeded',
+  ]);
+  assert.equal(JSON.stringify(ocrAudit).includes('do-not-store'), false);
+  assert.equal(JSON.stringify(ocrAudit).includes('e2e-job-'), false);
+  assert.equal(JSON.stringify(ocrAudit).includes('Page 1 from'), false);
+
+  const repeated = await app.call(`/api/v1/documents/${documentId}/ocr-jobs`, {
+    method: 'POST', token: owner.token,
+    body: { consentGrantId: disclosure.data.id, language: 'hi-IN', contentType: 'mixed' },
+  });
+  assert.equal(repeated.status, 200);
+  assert.equal(repeated.data.job.id, started.data.job.id);
+  assert.equal(submissions, 2);
+});
+
+test('disabling Sarvam never blocks local document deletion when remote cancellation is unavailable', async t => {
+  const h = harness(t, { SARVAM_OCR_ENABLED: 'false' });
+  const database = openDatabase({ path: h.databasePath });
+  const app = await start({ database, env: h.env, documentScanner: cleanScanner() });
+  t.after(async () => { await app.stop(); database.close(); });
+  const owner = await household(app, 'Disabled OCR deletion');
+  const uploaded = await app.upload({ ...owner, bytes: await multiPagePdf(1) });
+  const documentId = uploaded.data.document.id;
+  await eventually(() => database.prepare(`SELECT 1 FROM document_uploads
+    WHERE id = ? AND lifecycle_state = 'active'`).get(documentId));
+  const at = new Date().toISOString();
+  database.prepare(`INSERT INTO ocr_jobs
+    (id, document_upload_id, provider, provider_job_ref, status, attempt_count, contract_version,
+     authorization_json, requested_at, started_at, updated_at)
+    VALUES ('ocr-disabled-delete', ?, 'sarvam', 'retained-provider-job', 'submitted', 1,
+      'knowvia.ocr.v1', '{}', ?, ?, ?)`)
+    .run(documentId, at, at, at);
+
+  const requested = await app.call(`/api/v1/documents/${documentId}`, { method: 'DELETE', token: owner.token });
+  assert.equal(requested.status, 202);
+  await eventually(() => database.prepare(`SELECT 1 FROM document_uploads
+    WHERE id = ? AND lifecycle_state = 'deleted'`).get(documentId));
+  assert.deepEqual({ ...database.prepare(`SELECT status, provider_job_ref, error_code
+    FROM ocr_jobs WHERE id = 'ocr-disabled-delete'`).get() }, {
+    status: 'cancelled', provider_job_ref: 'retained-provider-job',
+    error_code: 'OCR_PROVIDER_CANCELLATION_UNSUPPORTED',
+  });
+  assert.equal(h.storedFiles().length, 0);
 });
 
 test('a malware hit rejects the document and deletes its bytes; revocation deletes bytes too', async t => {

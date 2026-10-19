@@ -34,9 +34,11 @@ Consent, privacy and household ownership cross every block. They are not a block
 - Owning paths: `src/modules/document-intake/ocr-contracts.js`, `ocr-service.js`, `fixture-ocr-provider.js`; `src/backend/repositories/ocr-repository.js`; `src/integrations/sarvam/`; `src/modules/coverage-analysis/policy-decomposition.js` (sections A-J) and `policy-parameter-registry.js` (129 keys).
 - Input seam: `OcrRepository.getReadyDocument`, version `knowvia.ocr.v1`.
 - Output seam: `source_pages` rows with `output_contract_version = 'knowvia.ocr.v1'`, read by `src/backend/services/coverage-analysis-port.js`. OCR pages are immutable once complete.
-- Status: fixture stub. Live Sarvam is disabled until its contract, credentials and verified transport exist (`src/integrations/` fails closed).
-- Stub to real: implement the Sarvam transport inside `src/integrations/sarvam/` behind `provider-boundary.js`, then swap the fixture provider.
-- Owning phase: not yet scheduled (planned).
+- Status: local Block 1 to Block 2 journey is implemented and tested against a mocked modern Sarvam
+  `/doc-ai/v1` boundary. The live feature flag is off by default. No real provider call or OCR quality claim exists.
+- Provider boundary: permission-restricted 10-page PDF splitting, explicit language, JSON output, bounded
+  polling, exact page remapping and fail-closed partial-result handling.
+- Owning phase: Block 2 implementation. Real-account corpus evaluation and retention confirmation remain open.
 
 ## Block 3: Decision catalogue
 

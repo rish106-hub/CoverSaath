@@ -257,17 +257,20 @@ export function createDocumentUploadService({
           }
           for (const cancellation of cancellations) {
             try {
-              await cancelOcrJob({
+              const outcome = await cancelOcrJob({
                 provider: cancellation.provider,
                 jobRef: cancellation.providerJobRef,
                 requestId: cancellation.id,
                 documentId,
               });
+              cancellation.remoteCancellation = outcome?.remoteCancellation !== false;
             } catch {
               repository.deferDeletion(documentId, { nextScanAt: nextDue() });
               return 'deferred';
             }
-            if (!repository.completeOcrCancellation(cancellation.id)) {
+            if (!repository.completeOcrCancellation(cancellation.id, {
+              remoteCancellation: cancellation.remoteCancellation,
+            })) {
               repository.deferDeletion(documentId, { nextScanAt: nextDue() });
               return 'deferred';
             }

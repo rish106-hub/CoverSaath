@@ -221,10 +221,14 @@ export class DocumentRepository {
       ORDER BY id`).all(documentId);
   }
 
-  completeOcrCancellation(jobId) {
-    return this.database.prepare(`UPDATE ocr_jobs SET provider_job_ref = NULL, error_code = NULL,
+  completeOcrCancellation(jobId, { remoteCancellation = true } = {}) {
+    return this.database.prepare(`UPDATE ocr_jobs SET
+      provider_job_ref = CASE WHEN ? THEN NULL ELSE provider_job_ref END,
+      error_code = CASE WHEN ? THEN NULL ELSE 'OCR_PROVIDER_CANCELLATION_UNSUPPORTED' END,
       error_message = NULL WHERE id = ? AND status = 'cancelled'
-        AND error_code IN ('DOCUMENT_DELETED', 'CONSENT_REVOKED')`).run(jobId).changes === 1;
+        AND error_code IN ('DOCUMENT_DELETED', 'CONSENT_REVOKED')`).run(
+      remoteCancellation ? 1 : 0, remoteCancellation ? 1 : 0, jobId,
+    ).changes === 1;
   }
 
   markScanClean(documentId, { engine = null } = {}) {
