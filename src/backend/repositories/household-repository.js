@@ -75,6 +75,15 @@ export class HouseholdRepository {
       .get(householdId, adultUserId, this.clock().toISOString(), this.clock().toISOString()) ?? null;
   }
 
+  listActiveRoles(householdId, adultUserId) {
+    const at = this.clock().toISOString();
+    return this.database.prepare(`SELECT * FROM household_roles
+      WHERE household_id = ? AND adult_user_id = ? AND status = 'active'
+        AND (starts_at IS NULL OR julianday(starts_at) <= julianday(?))
+        AND (ends_at IS NULL OR julianday(ends_at) > julianday(?))
+      ORDER BY role, id`).all(householdId, adultUserId, at, at);
+  }
+
   requireAccess(householdId, adultUserId, { write = false } = {}) {
     const household = this.getHousehold(householdId);
     const role = household && this.getActiveRole(householdId, adultUserId);

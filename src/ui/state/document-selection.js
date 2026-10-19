@@ -32,6 +32,9 @@ export const ERROR_MESSAGES = Object.freeze({
   PDF_UNSUPPORTED_ENCODING: 'This PDF uses an encoding we cannot read. Re-save it as a standard PDF.',
   UPLOAD_CAPACITY_REACHED: 'Uploads are busy right now. Try again in a few minutes.',
   DOCUMENT_STORAGE_NOT_CONFIGURED: 'Document storage is not available yet. Nothing was saved.',
+  DOCUMENT_DELETE_FORBIDDEN: 'Only the uploader or a household operator can delete this document.',
+  DOCUMENT_DELETE_CONFLICT: 'The document changed while deletion was requested. Refresh and try again.',
+  DOCUMENT_NOT_FOUND: 'This document is no longer available.',
   AUTHENTICATION_REQUIRED: 'Your session has ended. Reconnect your workspace and try again.',
 });
 

@@ -248,3 +248,28 @@ test('commit-time erasure redacts facts with its reason and stays inside the hou
   assertErased(evidence.get('fact-stale'), 'commit-time');
   assert.equal(database.prepare("SELECT count(*) AS count FROM audit_events WHERE action = 'evidence.facts_erased'").get().count, 1);
 });
+
+test('consent revocation erases policy fields and membership links derived from its document', t => {
+  const { database, consents } = open(t);
+  database.prepare(`INSERT INTO policies
+    (id, household_id, policy_kind, policy_number_masked, policy_version, starts_on, ends_on,
+     source_document_id, verification_state, created_at, updated_at)
+    VALUES ('policy-revoked-document', ?, 'personal', '****9999', 'secret-version',
+      '2026-01-01', '2026-12-31', 'document-parameters', 'document_backed', ?, ?)`)
+    .run(household, at, at);
+  database.prepare(`INSERT INTO policy_members
+    (policy_id, household_member_id, membership_state, member_reference_masked, source_page_id, created_at)
+    VALUES ('policy-revoked-document', 'member-parameters', 'document_backed',
+      'sensitive-member-reference', 'page-parameters', ?)`)
+    .run(at);
+
+  consents.revoke({ grantId: 'consent-parameters', revokedByAdultId: 'adult-parameters', reason: 'fixture' });
+
+  const policy = database.prepare(`SELECT policy_kind, policy_number_masked, policy_version,
+    starts_on, ends_on, verification_state FROM policies WHERE id = 'policy-revoked-document'`).get();
+  assert.deepEqual({ ...policy }, {
+    policy_kind: 'unknown', policy_number_masked: null, policy_version: null,
+    starts_on: null, ends_on: null, verification_state: 'unverified',
+  });
+  assert.equal(database.prepare("SELECT count(*) AS count FROM policy_members WHERE policy_id = 'policy-revoked-document'").get().count, 0);
+});

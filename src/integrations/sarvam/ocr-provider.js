@@ -34,17 +34,19 @@ export function createSarvamOcrProvider({ env = process.env, transport = null } 
       const base = boundary.health();
       return { ...base, contractVerified: Boolean(configured && transportVerified), status: configured && transportVerified ? 'configured_transport_verified' : base.status };
     },
-    async createJob({ authorization, document, bytes } = {}) {
+    async createJob({ authorization, document, bytes, requestId } = {}) {
       authorized(authorization);
-      return transport.createJob({ authorization, document, bytes });
+      // requestId is the durable client identity. A verified transport must use it for
+      // idempotent submission and cancellation reconciliation when no provider ref returns.
+      return transport.createJob({ authorization, document, bytes, requestId });
     },
     async getJob({ authorization, jobRef } = {}) {
       authorized(authorization);
       return transport.getJob({ authorization, jobRef });
     },
-    async cancelJob({ authorization, jobRef } = {}) {
+    async cancelJob({ authorization, jobRef, requestId } = {}) {
       authorized(authorization);
-      return transport.cancelJob({ authorization, jobRef });
+      return transport.cancelJob({ authorization, jobRef, requestId });
     },
     normalizeResult(raw, expected) {
       if (!transportVerified) return boundary.refuse({ authorizationRequired: false });

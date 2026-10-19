@@ -24,7 +24,7 @@ The proposal's technology list (FastAPI, Celery, Redis, S3 or R2, Supabase or Cl
 | Milestone | Proposal scope | Status |
 |---|---|---|
 | 1 Trustworthy upload | Boxes 1-5 and basic 7. Done when five PDFs survive a refresh, in the right household, and another user cannot see them. | Implemented in this slice (upload route, list routes, UI panel). |
-| 2 Secure acceptance | Box 6 and rest of 7. Server checks, structure inspection, malware scan, quarantine to trusted. | Mostly implemented. 2b (inspection in a separate restricted process) is implemented as a Node child process with the permission model; no seccomp, namespaces or rlimits, and no network denial on Node 22 to 24. Gap: single-document user deletion. |
+| 2 Secure acceptance | Box 6 and rest of 7. Server checks, structure inspection, malware scan, quarantine to trusted. | Implemented locally. 2b uses a Node 25+ child process whose permission model denies network, file writes, child processes and workers. It is not an OS sandbox: there are no seccomp, namespaces or rlimits. Single-document deletion is available through the authenticated API and upload UI. |
 | 3 Independent processing | Boxes 8-9. Queue, worker, classification, retries, stuck-job recovery. | Planned. The existing task queue (`workflow_tasks`, leases) is the intended base. S3.2 adds `SKIP LOCKED`. |
 | 4 Parsing interface | Box 10. Versioned handoff, job identity, structured errors. | Planned. Uses `knowvia.ocr.v1`. |
 
@@ -54,7 +54,6 @@ The proposal's technology list (FastAPI, Celery, Redis, S3 or R2, Supabase or Cl
 ## Gaps and planned work
 
 - A stronger PDF inspection boundary than the Node permission model (container with seccomp or a separate qpdf service) once a deployment target exists. Milestone 2b itself is done (ADR 0005 Amendment 1).
-- A single-document user deletion route. Today deletion happens through consent revocation (which marks `deletion_requested`) and malware removal.
 - `insurance_products`, `policy_documents` and `upload_sessions` tables, and automatic policy linking.
 - `employer_benefit_booklet` is in `DOCUMENT_KINDS` but not in the `document_uploads.document_kind` CHECK. Adding it needs a table rebuild migration on both engines. Deferred. The route does not accept it.
 - Classification beyond the user-supplied kind.
@@ -94,7 +93,7 @@ User-facing status: `received_pending_checks` (quarantined, pending), `accepted`
 | 300-page file | Allowed (limit 500 pages); over-limit rejection is covered |
 | Two users, identical files | Yes: stored separately with separate ownership |
 | Consent revocation | Yes: revocation marks the upload `deletion_requested` and the worker deletes the bytes |
-| Deletion during processing | Partly: guarded transitions never resurrect a rejected or deleted document. No user delete route yet. |
+| Deletion during processing | Yes locally: the authenticated delete route makes a durable `deletion_requested` transition, prioritises erasure work, and guarded transitions never resurrect a rejected or deleted document. |
 | Browser refresh / server restart | Yes: the list survives a server restart (test and a manual run against the real server) |
 | Storage failing, database insert failing | Yes: bytes removed when the insert fails; no row or idempotency record when storage fails |
 | Worker crash, same job runs twice | Yes: attempts and next due time live on the row; transitions are conditional so a second result is ignored; revocation during an in-flight scan never activates the document |

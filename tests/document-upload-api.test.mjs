@@ -103,6 +103,15 @@ async function household(app, name) {
   return { token, householdId, adultId, caseId, grantId: grant.data.id };
 }
 
+async function householdActor(database, householdId, role, name) {
+  const { createBackendServices } = await import('../src/backend/services/index.js');
+  const services = createBackendServices(database);
+  const adult = services.households.createAdult({ displayName: `${name} synthetic adult` });
+  services.households.addMember({ householdId, adultUserId: adult.id, displayName: `${name} synthetic adult` });
+  services.households.addRole({ householdId, adultUserId: adult.id, role });
+  return { adultId: adult.id, token: services.auth.issueSession({ adultUserId: adult.id }).token };
+}
+
 function harness(t, extraEnv = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-upload-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -122,6 +131,9 @@ async function eventually(check, { timeoutMs = 3000 } = {}) {
 }
 
 const cleanScanner = () => ({ mode: 'clamd', scans: 0, async scan() { this.scans += 1; return { status: 'clean' }; }, async ping() { return true; } });
+const customClamdHost = process.env.CLAMD_CUSTOM_TEST_HOST;
+const customClamdPort = process.env.CLAMD_CUSTOM_TEST_PORT || '3311';
+const customClamdSkip = customClamdHost ? false : 'set CLAMD_CUSTOM_TEST_HOST to run against isolated test clamd';
 
 test('Block 1 journey: five uploads persist across restart and stay inside the household', async t => {
   const h = harness(t);
@@ -187,6 +199,199 @@ test('Block 1 journey: five uploads persist across restart and stay inside the h
   const crossGrant = await app.upload({ ...owner, grantId: other.grantId, bytes: syntheticPdf('cross-grant') });
   assert.equal(crossGrant.status, 403);
   assert.equal(database.prepare('SELECT count(*) AS count FROM document_uploads').get().count, 5);
+});
+
+test('single-document deletion enforces household roles, hides foreign ids and is idempotent', async t => {
+  const h = harness(t);
+  const database = openDatabase({ path: h.databasePath });
+  const app = await start({ database, env: h.env, documentScanner: cleanScanner() });
+  t.after(async () => { await app.stop(); database.close(); });
+  const owner = await household(app, 'Deletion');
+  const other = await household(app, 'Deletion other');
+  const member = await householdActor(database, owner.householdId, 'member', 'Member');
+  const operator = await householdActor(database, owner.householdId, 'operator', 'Operator');
+  const backupMember = await householdActor(database, owner.householdId, 'member', 'Backup member');
+  const viewerUploader = await householdActor(database, owner.householdId, 'member', 'Viewer uploader');
+  const viewerGrant = await app.call('/api/v1/consents', {
+    method: 'POST', token: viewerUploader.token,
+    body: {
+      householdId: owner.householdId, subjectAdultId: viewerUploader.adultId, purpose: 'document_processing',
+      scopes: [
+        { resourceType: 'document', action: 'collect', dataCategory: 'insurance_document' },
+        { resourceType: 'case', resourceId: owner.caseId, action: 'read', dataCategory: 'source_pack_metadata', recipient: viewerUploader.adultId },
+      ],
+    },
+  });
+  assert.equal(viewerGrant.status, 201);
+
+  const memberTarget = await app.upload({ ...owner, bytes: syntheticPdf('member-target') });
+  const operatorTarget = await app.upload({ ...owner, bytes: syntheticPdf('operator-target') });
+  const backupTarget = await app.upload({ ...owner, bytes: syntheticPdf('backup-target') });
+  const viewerTarget = await app.upload({
+    token: viewerUploader.token, caseId: owner.caseId, grantId: viewerGrant.data.id,
+    bytes: syntheticPdf('viewer-uploader-target'),
+  });
+  const memberId = memberTarget.data.document.id;
+  const operatorId = operatorTarget.data.document.id;
+  const backupId = backupTarget.data.document.id;
+  const viewerId = viewerTarget.data.document.id;
+  await eventually(() => [memberId, operatorId, backupId, viewerId].every(id =>
+    database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(id).lifecycle_state === 'active'));
+  // The uploader later becomes a read-only viewer. Erasure remains their right.
+  database.prepare("UPDATE household_roles SET status = 'revoked' WHERE household_id = ? AND adult_user_id = ? AND role = 'member'")
+    .run(owner.householdId, viewerUploader.adultId);
+  const { createBackendServices } = await import('../src/backend/services/index.js');
+  const roleServices = createBackendServices(database);
+  roleServices.households.addRole({ householdId: owner.householdId, adultUserId: viewerUploader.adultId, role: 'viewer' });
+  roleServices.households.addRole({ householdId: owner.householdId, adultUserId: backupMember.adultId, role: 'backup_operator' });
+  const at = new Date().toISOString();
+  database.prepare(`INSERT INTO ocr_jobs
+    (id, document_upload_id, provider, status, attempt_count, requested_at, completed_at,
+     authorization_json, result_json, result_digest, updated_at)
+    VALUES ('ocr-delete', ?, 'fixture', 'succeeded', 1, ?, ?, '{"allowed":true}',
+      '{"text":"synthetic sensitive text"}', ?, ?)`).run(memberId, at, at, 'a'.repeat(64), at);
+  database.prepare(`INSERT INTO source_pages
+    (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256, extracted_text,
+     extraction_status, confidence_basis_points, created_at, text_sha256, provider_page_ref, provenance_json)
+    VALUES ('page-delete', ?, 'ocr-delete', 1, '1', ?, 'synthetic sensitive text', 'extracted',
+      9000, ?, ?, 'provider-page', '{"source":"fixture"}')`).run(memberId, 'b'.repeat(64), at, 'c'.repeat(64));
+  database.prepare(`INSERT INTO workflow_runs
+    (id, case_id, workflow_name, workflow_version, execution_mode, status, input_digest, input_json,
+     consent_grant_id, created_at)
+    VALUES ('run-delete', ?, 'coverage-reconstruction', 'v2', 'fixture', 'completed', ?, ?, ?, ?)`)
+    .run(owner.caseId, 'd'.repeat(64), JSON.stringify({
+      authorizedSources: [{ documentId: memberId }],
+      sourcePages: [{ documentId: memberId, sourceId: 'page-delete', version: '1', page: 1, text: 'synthetic sensitive text' }],
+    }), owner.grantId, at);
+  database.prepare(`INSERT INTO workflow_tasks
+    (id, workflow_run_id, agent_name, task_kind, status, output_json, output_digest, created_at)
+    VALUES ('task-delete', 'run-delete', 'fixture-agent', 'fixture-task', 'completed',
+      '{"value":"synthetic sensitive output"}', ?, ?)`).run('e'.repeat(64), at);
+  const ownerMemberId = database.prepare('SELECT id FROM household_members WHERE household_id = ? AND adult_user_id = ?')
+    .get(owner.householdId, owner.adultId).id;
+  database.prepare(`INSERT INTO policies
+    (id, household_id, policy_kind, policy_number_masked, policy_version, starts_on, ends_on,
+     source_document_id, verification_state, created_at, updated_at)
+    VALUES ('policy-delete', ?, 'personal', '****1234', 'sensitive-version', '2026-01-01', '2026-12-31',
+      ?, 'document_backed', ?, ?)`).run(owner.householdId, memberId, at, at);
+  database.prepare(`INSERT INTO policy_members
+    (policy_id, household_member_id, membership_state, member_reference_masked, source_page_id, created_at)
+    VALUES ('policy-delete', ?, 'document_backed', 'member-secret', 'page-delete', ?)`)
+    .run(ownerMemberId, at);
+  database.prepare(`INSERT INTO coverage_graph_snapshots
+    (id, household_id, case_id, version, status, graph_json, generated_by_run_id, created_at)
+    VALUES ('graph-delete', ?, ?, 1, 'released', '{"sensitive":"graph payload"}', 'run-delete', ?)`)
+    .run(owner.householdId, owner.caseId, at);
+  database.prepare(`INSERT INTO coverage_graph_nodes
+    (id, snapshot_id, node_type, entity_ref, label, epistemic_state, created_at)
+    VALUES ('node-delete-a', 'graph-delete', 'policy', 'policy-delete', 'Sensitive policy label', 'known', ?),
+      ('node-delete-b', 'graph-delete', 'protection', 'benefit-secret', 'Sensitive benefit label', 'known', ?)`)
+    .run(at, at);
+  database.prepare(`INSERT INTO coverage_graph_edges
+    (id, snapshot_id, from_node_id, to_node_id, relationship, created_at)
+    VALUES ('edge-delete', 'graph-delete', 'node-delete-a', 'node-delete-b', 'sensitive relationship', ?)`)
+    .run(at);
+
+  const missing = await app.call(`/api/v1/documents/${randomUUID()}`, { method: 'DELETE', token: other.token });
+  const foreign = await app.call(`/api/v1/documents/${memberId}`, { method: 'DELETE', token: other.token });
+  assert.equal(foreign.status, 404);
+  assert.deepEqual(foreign.data, missing.data);
+  assert.equal(foreign.data.error.code, 'DOCUMENT_NOT_FOUND');
+
+  const denied = await app.call(`/api/v1/documents/${memberId}`, { method: 'DELETE', token: member.token });
+  assert.equal(denied.status, 403);
+  assert.equal(denied.data.error.code, 'DOCUMENT_DELETE_FORBIDDEN');
+  assert.equal(database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(memberId).lifecycle_state, 'active');
+  const unrelatedGrant = await app.call('/api/v1/consents', {
+    method: 'POST', token: member.token,
+    body: {
+      householdId: owner.householdId, subjectAdultId: member.adultId, purpose: 'document_processing',
+      scopes: [{ resourceType: 'document', resourceId: memberId, action: 'derive', dataCategory: 'insurance_document' }],
+    },
+  });
+  assert.equal(unrelatedGrant.status, 201);
+  const unrelatedRevocation = await app.call(`/api/v1/consents/${unrelatedGrant.data.id}/revoke`, {
+    method: 'POST', token: member.token, body: { reason: 'synthetic unrelated scope' },
+  });
+  assert.equal(unrelatedRevocation.status, 200);
+  assert.equal(database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(memberId).lifecycle_state,
+    'active', 'revoking a later scope cannot bypass uploader-or-operator deletion authorization');
+  const memberInventory = await app.call(`/api/v1/cases/${owner.caseId}/documents/deletion-inventory`, { token: member.token });
+  assert.equal(memberInventory.status, 200);
+  assert.deepEqual(memberInventory.data.documents, [], 'a member cannot enumerate another uploader\'s documents');
+
+  const operated = await app.call(`/api/v1/documents/${operatorId}`, { method: 'DELETE', token: operator.token });
+  assert.equal(operated.status, 202);
+  assert.equal(operated.data.document.status, 'deletion_pending');
+  const backupOperated = await app.call(`/api/v1/documents/${backupId}`, { method: 'DELETE', token: backupMember.token });
+  assert.equal(backupOperated.status, 202, 'backup_operator wins even when the adult also has a member role');
+  const viewerDeleted = await app.call(`/api/v1/documents/${viewerId}`, { method: 'DELETE', token: viewerUploader.token });
+  assert.equal(viewerDeleted.status, 202, 'the original uploader can erase after becoming a viewer');
+
+  // Erasure remains available after processing consent expires.
+  database.prepare("UPDATE consent_grants SET expires_at = '2000-01-01T00:00:00.000Z' WHERE id = ?").run(owner.grantId);
+  const deletionInventory = await app.call(`/api/v1/cases/${owner.caseId}/documents/deletion-inventory`, { token: owner.token });
+  assert.equal(deletionInventory.status, 200);
+  assert.ok(deletionInventory.data.documents.some(document => document.id === memberId));
+  for (const document of deletionInventory.data.documents) {
+    assert.deepEqual(Object.keys(document).sort(), ['byteSize', 'documentKind', 'id', 'status', 'statusLabel', 'uploadedAt']);
+  }
+  const requested = await app.call(`/api/v1/documents/${memberId}`, { method: 'DELETE', token: owner.token });
+  assert.equal(requested.status, 202);
+  assert.equal(requested.data.document.status, 'deletion_pending');
+  await eventually(() => database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(memberId).lifecycle_state === 'deleted');
+  const erasedOcr = database.prepare("SELECT status, authorization_json, result_json, result_digest FROM ocr_jobs WHERE id = 'ocr-delete'").get();
+  assert.deepEqual({ ...erasedOcr }, { status: 'succeeded', authorization_json: null, result_json: null, result_digest: null });
+  const erasedPage = database.prepare("SELECT extracted_text, confidence_basis_points, text_sha256, provider_page_ref, provenance_json FROM source_pages WHERE id = 'page-delete'").get();
+  assert.deepEqual({ ...erasedPage }, { extracted_text: null, confidence_basis_points: null, text_sha256: null, provider_page_ref: null, provenance_json: null });
+  const erasedInput = JSON.parse(database.prepare("SELECT input_json FROM workflow_runs WHERE id = 'run-delete'").get().input_json);
+  assert.deepEqual(erasedInput.sourcePages, [{ documentId: memberId, sourceId: 'page-delete', version: '1', page: 1, redacted: 'document_erasure' }]);
+  const erasedTask = database.prepare("SELECT status, terminal_reason, output_json, output_digest FROM workflow_tasks WHERE id = 'task-delete'").get();
+  assert.deepEqual({ ...erasedTask }, { status: 'revoked', terminal_reason: 'DOCUMENT_DELETED', output_json: null, output_digest: null });
+  const erasedPolicy = database.prepare(`SELECT policy_kind, policy_number_masked, policy_version, starts_on,
+    ends_on, verification_state FROM policies WHERE id = 'policy-delete'`).get();
+  assert.deepEqual({ ...erasedPolicy }, {
+    policy_kind: 'unknown', policy_number_masked: null, policy_version: null, starts_on: null,
+    ends_on: null, verification_state: 'unverified',
+  });
+  assert.equal(database.prepare("SELECT count(*) AS count FROM policy_members WHERE policy_id = 'policy-delete'").get().count, 0);
+  assert.deepEqual({ ...database.prepare("SELECT status, graph_json FROM coverage_graph_snapshots WHERE id = 'graph-delete'").get() },
+    { status: 'superseded', graph_json: '{}' });
+  assert.equal(database.prepare("SELECT count(*) AS count FROM coverage_graph_nodes WHERE snapshot_id = 'graph-delete'").get().count, 0);
+  assert.equal(database.prepare("SELECT count(*) AS count FROM coverage_graph_edges WHERE snapshot_id = 'graph-delete'").get().count, 0);
+  const repeated = await app.call(`/api/v1/documents/${memberId}`, { method: 'DELETE', token: owner.token });
+  assert.equal(repeated.status, 200);
+  assert.equal(repeated.data.document.status, 'deleted');
+
+  await eventually(() => [operatorId, backupId, viewerId].every(id =>
+    database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(id).lifecycle_state === 'deleted'));
+  assert.equal(h.storedFiles().length, 0);
+  const audits = database.prepare("SELECT event_payload_json FROM audit_events WHERE action = 'document.deletion_requested'").all();
+  assert.equal(audits.length, 4);
+  for (const audit of audits) assert.doesNotMatch(audit.event_payload_json, /\.pdf|[0-9a-f]{64}|storage|filename/i);
+});
+
+test('deletion is durably queued while storage is unconfigured and resumes after recovery', async t => {
+  const h = harness(t);
+  const database = openDatabase({ path: h.databasePath });
+  let app = await start({ database, env: h.env });
+  t.after(async () => { if (app.server.listening) await app.stop(); database.close(); });
+  const owner = await household(app, 'Storage recovery');
+  const uploaded = await app.upload({ ...owner, bytes: syntheticPdf('storage-recovery') });
+  const id = uploaded.data.document.id;
+  assert.equal(h.storedFiles().length, 1);
+
+  await app.stop();
+  app = await start({ database, env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken } });
+  const requested = await app.call(`/api/v1/documents/${id}`, { method: 'DELETE', token: owner.token });
+  assert.equal(requested.status, 202);
+  assert.equal(database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(id).lifecycle_state, 'deletion_requested');
+  assert.equal(h.storedFiles().length, 1, 'ciphertext remains until storage configuration recovers');
+
+  await app.stop();
+  app = await start({ database, env: h.env });
+  await eventually(() => database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(id).lifecycle_state === 'deleted');
+  assert.equal(h.storedFiles().length, 0);
 });
 
 test('server-side validation rejects unsafe or invalid uploads before storing anything', async t => {
@@ -351,6 +556,24 @@ test('a malware hit rejects the document and deletes its bytes; revocation delet
   assert.equal(h2.storedFiles().length, 0);
 });
 
+test('real clamd blocks a valid synthetic PDF through the authenticated upload API', { skip: customClamdSkip }, async t => {
+  const h = harness(t, {
+    DOCUMENT_SCAN_MODE: 'clamd', CLAMD_HOST: customClamdHost, CLAMD_PORT: customClamdPort,
+  });
+  const database = openDatabase({ path: h.databasePath });
+  const app = await start({ database, env: h.env });
+  t.after(async () => { await app.stop(); database.close(); });
+  const owner = await household(app, 'Real scanner');
+  const marker = 'COVERSAATH_CUSTOM_CLAMD_TEST_20261018';
+  const uploaded = await app.upload({ ...owner, bytes: syntheticPdf(marker), filename: 'synthetic-scanner-test.pdf' });
+  assert.equal(uploaded.status, 201);
+  const id = uploaded.data.document.id;
+  await eventually(() => database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(id).lifecycle_state === 'deleted', { timeoutMs: 10_000 });
+  assert.equal(h.storedFiles().length, 0);
+  const event = database.prepare("SELECT event_payload_json FROM audit_events WHERE action = 'document.scan_blocked' AND resource_id = ?").get(id);
+  assert.match(event.event_payload_json, /CoverSaath-Custom-PDF-Test/i);
+});
+
 test('upload capacity and missing storage configuration fail closed', async t => {
   const h = harness(t, { MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD: '2' });
   const database = openDatabase({ path: h.databasePath });
@@ -478,7 +701,7 @@ test('a failed insert removes stored bytes and a failed store writes no row', as
 
 // --- Review round 1 regressions -------------------------------------------------------------
 
-async function serviceHarness(t, { scanner = null, now = Date.now() } = {}) {
+async function serviceHarness(t, { scanner = null, cancelOcrJob = null, now = Date.now() } = {}) {
   const { createBackendServices, createDocumentUploadService } = await import('../src/backend/services/index.js');
   const { createEncryptedLocalByteStorage } = await import('../src/modules/document-intake/index.js');
   const h = harness(t);
@@ -490,7 +713,8 @@ async function serviceHarness(t, { scanner = null, now = Date.now() } = {}) {
   const clock = { value: now };
   const storage = createEncryptedLocalByteStorage({ baseDirectory: join(h.directory, 'service-docs'), key: randomBytes(32) });
   const uploads = createDocumentUploadService({
-    services, repository: services.documents, storage, scanner, clock: () => new Date(clock.value), random: () => 1,
+    services, repository: services.documents, storage, scanner, cancelOcrJob,
+    clock: () => new Date(clock.value), random: () => 1,
     limits: { maxDocumentsPerCase: 500, maxPendingPerHousehold: 500 },
   });
   const caseRecord = database.prepare('SELECT * FROM service_cases WHERE id = ?').get(owner.caseId);
@@ -539,6 +763,54 @@ test('revocation during an in-flight scan never activates the document', async t
   assert.equal(s.database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(id).lifecycle_state, 'deletion_requested');
   assert.equal(await s.uploads.processDocument(id), 'deleted');
   assert.equal(new OcrRepository(s.database).getReadyDocument(id, new Date().toISOString()), null);
+});
+
+test('deletion durably cancels submitted OCR before removing bytes and clears provider metadata', async t => {
+  const cancellations = [];
+  let cancellationFails = true;
+  const s = await serviceHarness(t, {
+    scanner: cleanScanner(),
+    cancelOcrJob: async cancellation => {
+      cancellations.push(cancellation);
+      if (cancellationFails) throw new Error('synthetic provider outage');
+    },
+  });
+  const id = (await s.put('ocr-cancellation')).body.document.id;
+  assert.equal(await s.uploads.processDocument(id), 'clean');
+  const at = new Date(s.clock.value).toISOString();
+  s.database.prepare(`INSERT INTO ocr_jobs
+    (id, document_upload_id, provider, provider_job_ref, status, attempt_count, contract_version, started_at,
+     authorization_json, result_json, result_digest, error_message, requested_at, updated_at)
+    VALUES ('ocr-cancel-on-delete', ?, 'sarvam', NULL, 'queued', 1,
+      'knowvia.ocr.v1', ?, '{"authorized":true}', '{"sensitive":"payload"}', ?,
+      'provider content-bearing failure', ?, ?)`).run(id, at, 'a'.repeat(64), at, at);
+
+  s.uploads.requestDeletion({ documentId: id, actorAdultId: s.owner.adultId });
+  assert.equal(s.database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(id).lifecycle_state, 'deletion_requested');
+  assert.equal(await s.uploads.processDocument(id), 'deferred');
+  assert.equal(readdirSync(s.serviceDir).filter(name => name.endsWith('.csd')).length, 1,
+    'bytes remain until the provider reconciles the durable client request identity');
+  assert.deepEqual(cancellations, [{
+    provider: 'sarvam', jobRef: null, requestId: 'ocr-cancel-on-delete', documentId: id,
+  }]);
+  s.services.ocr.recordCancellationReference('ocr-cancel-on-delete', 'remote-job-sensitive-ref');
+  assert.equal(await s.uploads.processDocument(id), 'deferred');
+  assert.equal(s.database.prepare("SELECT provider_job_ref FROM ocr_jobs WHERE id = 'ocr-cancel-on-delete'").get().provider_job_ref,
+    'remote-job-sensitive-ref', 'the durable cancellation reference survives a provider outage');
+  cancellationFails = false;
+  s.clock.value += 2 * 60 * 60 * 1000;
+  assert.equal(await s.uploads.processDocument(id), 'deleted');
+  assert.deepEqual(cancellations, [
+    { provider: 'sarvam', jobRef: null, requestId: 'ocr-cancel-on-delete', documentId: id },
+    { provider: 'sarvam', jobRef: 'remote-job-sensitive-ref', requestId: 'ocr-cancel-on-delete', documentId: id },
+    { provider: 'sarvam', jobRef: 'remote-job-sensitive-ref', requestId: 'ocr-cancel-on-delete', documentId: id },
+  ]);
+  const erased = s.database.prepare(`SELECT status, provider_job_ref, authorization_json, result_json,
+    result_digest, error_code, error_message FROM ocr_jobs WHERE id = 'ocr-cancel-on-delete'`).get();
+  assert.deepEqual({ ...erased }, {
+    status: 'cancelled', provider_job_ref: null, authorization_json: null, result_json: null,
+    result_digest: null, error_code: null, error_message: null,
+  });
 });
 
 test('a scanner outage defers scans on the row and they complete after recovery', async t => {
