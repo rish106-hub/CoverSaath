@@ -1,5 +1,12 @@
 # Latest iteration
 
+## Block 1 audit work in progress (2026-10-19)
+
+- Based on `fd2a105`. The upload panel supports per-file document types, editable filename-based suggestions and drag-and-drop. These suggestions do not inspect document contents or link policies.
+- File-backed test fixtures use the allowed `.local` directory without changing the production database path restriction. The PostgreSQL date-parity regression remains open.
+- No checks or tests were run for these changes, at the owner's request. This is not evidence that the changes work or that Block 1 is complete.
+- Azure staging, private scanning, PostgreSQL runtime migration, backup and restore, broader document compatibility, policy linking and production readiness remain open.
+
 ## Objective
 
 Phase 0 of the production plan of action: close the unfinished evidence-completion work and establish a verified baseline. Intake and corrections: [p0-baseline-intake.md](../exec-plans/completed/p0-baseline-intake.md). Original slice intake: [evidence-completion-mvp-intake.md](../exec-plans/completed/evidence-completion-mvp-intake.md).

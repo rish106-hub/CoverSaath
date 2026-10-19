@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtempSync, readdirSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { openDatabase } from '../src/backend/database/index.js';
 import { OcrRepository } from '../src/backend/repositories/index.js';
 import { createApiServer } from '../src/server/server.js';
