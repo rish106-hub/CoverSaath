@@ -112,11 +112,12 @@ async function databaseExists(admin, name) {
 async function buildTemplate(admin, digest, directory) {
   const finalName = `${TEMPLATE_PREFIX}${digest}`;
   const stale = await admin.query('SELECT datname FROM pg_database WHERE datname LIKE $1', [`${BUILD_PREFIX}${digest}\\_%`]);
-  for (const { datname } of stale.rows) {
-    if (!isSafeHarnessDatabaseName(datname, digest)) {
-      throw new Error(`Refusing to drop unexpected database name: ${String(datname)}`);
+  if (stale.rowCount > 0) {
+    const staleBuildName = `${BUILD_PREFIX}${digest}_${process.pid}`;
+    if (!isSafeHarnessDatabaseName(staleBuildName, digest)) {
+      throw new Error(`Refusing to drop unexpected database name: ${String(staleBuildName)}`);
     }
-    await admin.query(`DROP DATABASE IF EXISTS ${quote(datname)} WITH (FORCE)`);
+    await admin.query(`DROP DATABASE IF EXISTS ${quote(staleBuildName)} WITH (FORCE)`);
   }
   const buildName = `${BUILD_PREFIX}${digest}_${process.pid}`;
   await admin.query(`CREATE DATABASE ${quote(buildName)} TEMPLATE template0 ENCODING 'UTF8' LOCALE 'C'`);
