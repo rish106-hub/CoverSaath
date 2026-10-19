@@ -1,0 +1,45 @@
+src/modules/ai-analysis/privacy-evidence-gate.js
+  s_0cc44eccc0b942::t_affc24d606e152 11-13
+  s_0cc44eccc0b942::t_5f0f716225e235 1137
+  s_0cc44eccc0b942::t_0228e44aef5b12 116,123,130-131,136-137
+  s_0cc44eccc0b942::t_ac07440a7739e2 122
+  s_0cc44eccc0b942::t_0092fc835211b1 857-860,863,865-866,869-875
+  s_0cc44eccc0b942::t_1323adff1af388 887-888
+  s_0cc44eccc0b942::t_bc0e1bbb83ecd4 117-121,124-129,132-135
+tests/policy-structuring-reconciler.test.mjs
+  s_0cc44eccc0b942::t_e2949b9eb06b4f 49-50
+src/modules/policy-structuring/validator.js
+  s_0cc44eccc0b942::t_842128dd831b64 155-161,183-186
+tests/privacy-gate-split-tables.test.mjs
+  s_0cc44eccc0b942::t_984edd9b4f0d9b 24
+  s_0cc44eccc0b942::t_8bc44dcafd1348 46-48
+  s_0cc44eccc0b942::t_039696d9b470f7 1-23,25-45,49-73
+tests/policy-structuring-selection.test.mjs
+  s_0cc44eccc0b942::t_2e38ab5546301e 1-76,78-166
+  s_0cc44eccc0b942::t_31c169d682abb7 77
+src/modules/policy-structuring/reconciler.js
+  s_0cc44eccc0b942::t_1a39a7847b6233 3-5,205-206
+  s_0cc44eccc0b942::t_f9f02c86c08924 32-47
+  s_0cc44eccc0b942::t_84334f40527cb4 74,78,83-86,175-183,190-193,204,207-208
+tests/outgoing-payload-structuring.test.mjs
+  s_0cc44eccc0b942::t_ecc2674a096b15 122
+  s_0cc44eccc0b942::t_39effe539104b8 1-121,123-152
+tests/policy-structuring-authority.test.mjs
+  s_0cc44eccc0b942::t_a79656b8b09544 1-173
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4cc38da45823b3c32890811ba70adc1dccb5e768",
+  "prompts": {},
+  "sessions": {
+    "s_0cc44eccc0b942": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ae4081c9-5326-403e-a828-7e5343c11629",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
