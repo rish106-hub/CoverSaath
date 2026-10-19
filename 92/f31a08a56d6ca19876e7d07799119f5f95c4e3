@@ -1,0 +1,29 @@
+src/backend/repositories/policy-structuring-repository.js
+  s_0cc44eccc0b942::t_0bfe19397e35f5 247-252,259
+src/modules/policy-structuring/index.js
+  s_0cc44eccc0b942::t_0bfe19397e35f5 98
+src/server/routes/v1-backend-routes.js
+  s_0cc44eccc0b942::t_e1447a9b0a21e8 399-401
+docs/adr/0006-policy-document-structuring.md
+  s_0cc44eccc0b942::t_9289ed1e47e543 120-154
+tests/policy-structuring-api.test.mjs
+  s_0cc44eccc0b942::t_0bfe19397e35f5 251
+docs/runbooks/policy-structuring.md
+  s_0cc44eccc0b942::t_9289ed1e47e543 1-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "92f31a08a56d6ca19876e7d07799119f5f95c4e3",
+  "prompts": {},
+  "sessions": {
+    "s_0cc44eccc0b942": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ae4081c9-5326-403e-a828-7e5343c11629",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
