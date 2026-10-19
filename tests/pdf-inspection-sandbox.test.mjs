@@ -31,9 +31,17 @@ const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const fixtureDir = realpathSync(mkdtempSync(join(tmpdir(), 'pdf-sandbox-test-')));
 test.after(() => rmSync(fixtureDir, { recursive: true, force: true }));
 
-function fixtureChild(name, source) {
+function fixtureChild(name, source, { env } = {}) {
   const path = join(fixtureDir, `${name}.mjs`);
   writeFileSync(path, source);
+  if (env && Object.keys(env).length > 0) {
+    const wrapperPath = join(fixtureDir, `${name}.wrapper.mjs`);
+    const envAssignments = Object.entries(env)
+      .map(([key, value]) => `process.env[${JSON.stringify(key)}] = ${JSON.stringify(String(value))};`)
+      .join('\n');
+    writeFileSync(wrapperPath, `${envAssignments}\nimport ${JSON.stringify(path)};\n`);
+    return wrapperPath;
+  }
   return path;
 }
 
@@ -293,7 +301,8 @@ test('sandboxed inspector: concurrency is bounded, a full queue is refused with 
   const validJsonB64 = Buffer.from(VALID_JSON, 'utf8').toString('base64');
   const slow = fixtureChild(
     'slow',
-    `setTimeout(() => process.stdout.write(Buffer.from(${JSON.stringify(validJsonB64)}, 'base64').toString('utf8')), 150);`,
+    "setTimeout(() => process.stdout.write(Buffer.from(process.env.VALID_JSON_B64 ?? '', 'base64').toString('utf8')), 150);",
+    { env: { VALID_JSON_B64: validJsonB64 } },
   );
   const runner = createPdfSandboxRunner({ entry: slow, readPaths: [slow], limits: { maxConcurrent: 2, maxQueued: 10 } });
   let peak = 0;
