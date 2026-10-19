@@ -290,7 +290,11 @@ test('sandboxed inspector: spawn errors and an inactive sandbox are retryable an
 });
 
 test('sandboxed inspector: concurrency is bounded, a full queue is refused with a retryable code, close fails closed', async () => {
-  const slow = fixtureChild('slow', `setTimeout(() => process.stdout.write(${JSON.stringify(VALID_JSON)}), 150);`);
+  const validJsonB64 = Buffer.from(VALID_JSON, 'utf8').toString('base64');
+  const slow = fixtureChild(
+    'slow',
+    `setTimeout(() => process.stdout.write(Buffer.from(${JSON.stringify(validJsonB64)}, 'base64').toString('utf8')), 150);`,
+  );
   const runner = createPdfSandboxRunner({ entry: slow, readPaths: [slow], limits: { maxConcurrent: 2, maxQueued: 10 } });
   let peak = 0;
   const sampler = setInterval(() => { peak = Math.max(peak, runner.stats().active); }, 5);
