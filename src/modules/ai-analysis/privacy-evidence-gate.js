@@ -6,7 +6,10 @@ import { createHash } from 'node:crypto';
 // v3: inline whitespace runs collapsed before scanning, caller-supplied known
 // identifiers redacted before pattern scanning, member-table rows and name
 // lists, wider label variants, and policy-wording guards against over-redaction.
-export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v3';
+// v4: pipe tables read by header and row label (identity and member health
+// columns, ICD tables), headers carried over page breaks, and table rows fail
+// closed on ID-shaped cells and whole-cell dates.
+export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v4';
 export const EVIDENCE_DATA_CLASSES = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
 // The consent-scope recipient that names the live model provider. A document's
 // derive scope must name this exact recipient before its evidence may be sent
@@ -428,7 +431,7 @@ const ID_LABELS = [
 const HEALTH_LABELS = [
   'diagnosis', 'diagnoses', 'provisional\\s+diagnosis', 'final\\s+diagnosis', 'medical\\s+conditions?', 'known\\s+conditions?',
   'existing\\s+conditions?', 'declared\\s+(?:pre-?existing\\s+)?(?:conditions?|diseases?|illness(?:es)?)', 'ailments?',
-  'chief\\s+complaint', 'medical\\s+history', 'past\\s+history', 'icd(?:-?10)?(?:\\s+code)?',
+  'chief\\s+complaint', 'medical\\s+history', 'past\\s+history', 'icd(?:-?10)?(?:\\s+code)?', 'health\\s+conditions?',
 ].join('|');
 const HEALTH_PHRASES = ['diagnosed\\s+with', 'suffering\\s+from', 'being\\s+treated\\s+for'].join('|');
 
@@ -703,8 +706,153 @@ function redactNameList(line, swap) {
   return `${line.slice(0, start)}${items}${line.slice(end)}`;
 }
 
+// Pipe tables (OCR layout output): a header cell names what its column holds,
+// and a row-label cell names the value after it ("Aadhaar Number | XXXX9101").
+// A header carries forward over non-table lines (page breaks, blank lines) until
+// the next header. Every table row also fails closed: an ID-shaped cell or a
+// whole-cell date outside policy-period wording is minimised with or without a
+// header. Health columns count only in member tables (a person, member or
+// identity column) or ICD tables, so "Pre-existing disease | 36 months" is kept.
+const NOT_PERSONAL_CONTACT = /\b(?:hospital|customer care|customer service|toll free|company|branch|insurer|office|registered|corporate|grievance|helpline|call cent(?:re|er)|network)\b/;
+const TABLE_COLUMN_KINDS = Object.freeze([
+  ['DOB', 'DIRECT_IDENTIFIER_DATE_OF_BIRTH', /\b(?:date of birth|d ?o ?b|birth ?date)\b/],
+  ['GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID', /\b(?:aadhaa?r|adhaar|passport|voter(?: id)?|driving licen[cs]e|abha)\b|^pan(?: (?:no|number|card))?$/],
+  ['IDENTIFIER', 'DIRECT_IDENTIFIER_LABELED_VALUE', /\b(?:mem(?:ber(?:ship)?)? (?:id|no|number)|customer (?:id|no|number)|client id|employee (?:id|code|no|number)|uhid|mrn|ckyc|policy (?:no|number)|certificate (?:no|number)|proposal (?:no|number)|card (?:no|number)|(?:bank )?account (?:no|number)|ifsc)\b/],
+  ['PHONE', 'DIRECT_IDENTIFIER_PHONE', /\b(?:mobile|phone|telephone|contact (?:no|number))\b/],
+  ['EMAIL', 'DIRECT_IDENTIFIER_EMAIL', /\be ?mail\b/],
+  ['ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS', /\baddress\b/],
+  ['NAME', 'DIRECT_IDENTIFIER_PERSON_NAME', /^(?:name|member|insured|insd name|(?:insured|covered) (?:person|member)s?)$|\b(?:insured|insd|member|nominee|appointee|proposer|policy ?holder|patient|person|employee|beneficiary|customer|claimant|spouse|father|mother|guardian)\b.*\bname\b|\bname of (?:the )?(?:insured|member|nominee|appointee|proposer|policy ?holder|patient|person|employee|beneficiary|claimant)/],
+  ['HEALTH', 'SENSITIVE_HEALTH_CONDITION', /\b(?:icd|diagnos[ie]s|health conditions?|medical conditions?|medical history|chief complaint|loading reason|special conditions?|exclusion wa[iv]{2}er|ailments?)\b/],
+  ['HEALTH_WORDING', 'SENSITIVE_HEALTH_CONDITION', /\bpre ?existing (?:diseases?|conditions?)\b/],
+]);
+const MEMBER_COLUMN = /\b(?:insured person|member|relationship)\b/;
+const ICD_HEADER = /\bicd\b/;
+const ICD_CODE = /^[A-Z]\d{2}(?:\.\d{1,4})?[A-Z]?$/;
+const EMPTY_CELL = /^(?:|-+|–|—|na|n\/a|nil|none)$/i;
+const TABLE_TOKEN = new RegExp(PLACEHOLDER_SOURCE);
+const TABLE_SEPARATORS = /[│┃¦]/g;
+// Member, customer and card numbers: letters and five or more digits, no spaces.
+// IRDAI product UINs (letters, five digits, V and six digits) are policy facts.
+const ID_SHAPE = /^(?=(?:[^\d]*\d){5})(?=.*[A-Za-z])[A-Za-z0-9/-]{8,32}$/;
+const PRODUCT_UIN = /^[A-Za-z]{5,10}\d{5}V\d{6}$/;
+const WHOLE_DATE = new RegExp(`^${ROW_DATE}$`, 'iu');
+const HEALTH_KIND = { kind: 'HEALTH', reason: 'SENSITIVE_HEALTH_CONDITION' };
+
+const cellLabel = cell => cell.toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/['’]s\b/g, '').replace(/[^\p{L}\p{N} ]+/gu, ' ')
+  .replace(/\s+/g, ' ').trim().replace(/ \d{1,2}$/, '');
+
+// A cell holding a placeholder or a digit (other than a trailing ordinal or a
+// bracketed hint) is a value, never a label: "<DOB_1>" is not a DOB header.
+function columnKind(cell) {
+  if (TABLE_TOKEN.test(cell)) return null;
+  const label = cellLabel(cell);
+  if (!label || label.length > 80 || /\d/.test(label) || label.split(' ').length > 8) return null;
+  const found = TABLE_COLUMN_KINDS.find(([, , pattern]) => pattern.test(label));
+  if (!found) return null;
+  if (['PHONE', 'EMAIL', 'ADDRESS'].includes(found[0]) && NOT_PERSONAL_CONTACT.test(label)) return null;
+  return { kind: found[0], reason: found[1], icd: ICD_HEADER.test(label), member: MEMBER_COLUMN.test(label) };
+}
+
+// Cells between the edge pipes of "| a | b |"; the edges are kept for re-joining.
+function splitCells(line) {
+  const cells = line.replace(TABLE_SEPARATORS, '|').split('|');
+  const lead = cells.length > 1 && !cells[0].trim() ? 1 : 0;
+  const trail = cells.length - lead > 1 && !cells[cells.length - 1].trim() ? 1 : 0;
+  return { head: cells.slice(0, lead), data: cells.slice(lead, cells.length - trail), tail: cells.slice(cells.length - trail) };
+}
+const joinCells = ({ head, data, tail }) => [...head, ...data, ...tail].join('|');
+const valueCell = cell => !EMPTY_CELL.test(cell.trim()) && !TABLE_TOKEN.test(cell);
+
+function swapCell(cell, column, swap) {
+  if (!valueCell(cell)) return cell;
+  const value = cell.trim();
+  const start = cell.indexOf(value);
+  return `${cell.slice(0, start)}${swap(column.kind, column.reason, value)}${cell.slice(start + value.length)}`;
+}
+
+// A header row: two or more labelled cells (or one ICD cell), at least half the
+// cells labelled while another header is active, and no data among the others.
+function tableHeader(cells, active) {
+  const columns = cells.map(columnKind);
+  const labelled = columns.filter(Boolean);
+  const dataCell = cells.some((cell, index) => !columns[index] && (/\d/.test(cell) || TABLE_TOKEN.test(cell)));
+  if (dataCell || !(labelled.length >= 2 || labelled.some(column => column.icd))) return null;
+  // "Diagnosis | value | Insured | value": strictly alternating label and value cells are label/value pairs.
+  if (cells.length >= 4 && cells.length % 2 === 0 && columns.every((column, index) => (index % 2 === 0) === Boolean(column))) return null;
+  if (active && labelled.length * 2 < cells.filter(cell => cell.trim()).length) return null;
+  const icd = labelled.some(column => column.icd);
+  const memberTable = labelled.some(column => column.member || ['NAME', 'IDENTIFIER', 'DOB', 'GOV_ID'].includes(column.kind));
+  const kinds = columns.map(column => {
+    if (icd) return HEALTH_KIND;
+    if (column?.kind === 'HEALTH' || column?.kind === 'HEALTH_WORDING') return memberTable ? HEALTH_KIND : null;
+    return column?.kind === 'NAME' || column?.kind === 'IDENTIFIER' || column?.kind === 'DOB' || column?.kind === 'GOV_ID'
+      || column?.kind === 'PHONE' || column?.kind === 'EMAIL' || column?.kind === 'ADDRESS' ? column : null;
+  });
+  return { kinds, icd };
+}
+
+// A row-label cell minimises the next value cell, and further cells while they
+// keep the same shape (dates after a DOB label, IDs after an ID label). The run
+// stops at any label cell. Generic pre-existing-disease wording is not a label.
+function sameShape(kind, cell) {
+  const value = cell.trim();
+  if (kind === 'DOB') return WHOLE_DATE.test(value);
+  if (kind === 'IDENTIFIER' || kind === 'GOV_ID') return ID_SHAPE.test(value) || /^[Xx*•\d]{8,}$/.test(value);
+  if (kind === 'NAME') return /^\p{Lu}[\p{L}.'’ -]{1,60}$/u.test(value) && !/\d/.test(value);
+  return false;
+}
+
+function redactLabelledCells(cells, swap) {
+  let current = null;
+  let taken = 0;
+  return cells.map(cell => {
+    const column = columnKind(cell);
+    if (column) { current = column.kind === 'HEALTH_WORDING' ? null : column; taken = 0; return cell; }
+    if (!current || !valueCell(cell)) return cell;
+    if (taken > 0 && !sameShape(current.kind, cell)) { current = null; return cell; }
+    taken += 1;
+    return swapCell(cell, current, swap);
+  });
+}
+
+// Fail closed on every table row: ID-shaped cells and whole-cell dates.
+function redactRowShapes(cells, swap) {
+  return cells.map((cell, index) => {
+    if (!valueCell(cell)) return cell;
+    const value = cell.trim();
+    if (ID_SHAPE.test(value) && !PRODUCT_UIN.test(value)) return swapCell(cell, { kind: 'IDENTIFIER', reason: 'DIRECT_IDENTIFIER_LABELED_VALUE' }, swap);
+    if (WHOLE_DATE.test(value)) {
+      const before = cells.slice(Math.max(0, index - 1), index).join(' ');
+      if (PERIOD_BEFORE.test(before.trim())) return cell;
+      return swapCell(cell, { kind: 'DOB', reason: 'DIRECT_IDENTIFIER_DATE_OF_BIRTH' }, swap);
+    }
+    return cell;
+  });
+}
+
+function redactPipeTables(text, swap) {
+  let header = null;
+  return text.split('\n').map(line => {
+    if (!/[|│┃¦]/.test(line)) return line;
+    const row = splitCells(line);
+    const found = tableHeader(row.data, header);
+    if (found) { header = found; return joinCells(row); }
+    // An ICD table ends at the first row without an ICD code in its first cell.
+    if (header?.icd && !ICD_CODE.test(row.data[0]?.trim() ?? '')) header = null;
+    let data = row.data;
+    if (header) {
+      // A row longer than its header cannot be aligned: every cell is minimised.
+      data = data.length > header.kinds.length
+        ? data.map(cell => swapCell(cell, { kind: 'VALUE', reason: 'DIRECT_IDENTIFIER_LABELED_VALUE' }, swap))
+        : data.map((cell, index) => (header.kinds[index] ? swapCell(cell, header.kinds[index], swap) : cell));
+    }
+    data = redactRowShapes(redactLabelledCells(data, swap), swap);
+    return joinCells({ ...row, data });
+  }).join('\n');
+}
+
 function redactLineStructures(text, swap) {
-  return text.split('\n').map(line => redactMemberRow(redactNameList(line, swap), swap)).join('\n');
+  return redactPipeTables(text, swap).split('\n').map(line => redactMemberRow(redactNameList(line, swap), swap)).join('\n');
 }
 
 // ---------------------------------------------------------------------------

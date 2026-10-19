@@ -88,7 +88,9 @@ test('chunk cap splits text groups and oversize tables on row boundaries', () =>
     assert.ok(part.text.length <= 300);
     for (const line of part.text.split('\n')) assert.match(line, /^(Procedure \| Sub-limit|Synthetic procedure \d+ \| Rs\. \d+,000)$/);
   }
-  assert.equal(tableParts.flatMap(part => part.text.split('\n')).length, rows.length);
+  // Every part repeats the header row so the privacy gate sees it; each data row lands exactly once.
+  assert.ok(tableParts.every(part => part.text.startsWith('Procedure | Sub-limit\n')));
+  assert.equal(tableParts.flatMap(part => part.text.split('\n').slice(1)).length, rows.length - 1);
   const textChunks = chunks.filter(chunk => chunk.kind === 'text');
   assert.ok(textChunks.length > 1);
   assert.ok(textChunks.every(chunk => chunk.text.length <= 300));
