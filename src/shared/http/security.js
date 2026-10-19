@@ -11,6 +11,24 @@ export function assertLocalRequest(req) {
   if (req.headers['sec-fetch-site'] === 'cross-site') throw failure(403, 'Cross-site access is blocked.');
 }
 
+const loopbackAddress = /^(?:127\.\d{1,3}\.\d{1,3}\.\d{1,3}|::1|::ffff:127\.\d{1,3}\.\d{1,3}\.\d{1,3})$/;
+
+const forwardingHeaders = ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-real-ip', 'x-client-ip', 'x-original-host'];
+
+// True only when the TCP peer is a loopback address, no proxy forwarding header is present
+// and the local request guard passes. Headers alone never qualify: a same-host proxy can
+// rewrite Host to 127.0.0.1, so any sign of forwarding means the real caller is elsewhere.
+export function isLoopbackRequest(req) {
+  if (!loopbackAddress.test(req.socket?.remoteAddress ?? '')) return false;
+  if (forwardingHeaders.some(name => req.headers[name] !== undefined)) return false;
+  try {
+    assertLocalRequest(req);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function createRateLimiter({ limit = 600, windowMs = 60_000, clock = () => Date.now() } = {}) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 100_000) throw new TypeError('Rate limit must be an integer between 1 and 100000.');
   if (!Number.isInteger(windowMs) || windowMs < 1_000 || windowMs > 3_600_000) throw new TypeError('Rate-limit window must be between 1000 and 3600000 ms.');

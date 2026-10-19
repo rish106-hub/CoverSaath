@@ -1,4 +1,7 @@
 import { readBody } from '../http/request.js';
+import { isLoopbackRequest, readBinaryBody } from '../../shared/http/index.js';
+import { MAX_DOCUMENT_BYTES } from '../../modules/document-intake/index.js';
+import { documentDto } from '../../backend/services/index.js';
 import { validateSchema } from '../../backend/database/index.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../../modules/coverage-analysis/index.js';
@@ -66,7 +69,7 @@ function idempotencyKey(req) {
   return key;
 }
 
-function errorResponse(error) {
+export function errorResponse(error) {
   const statusByCode = {
     CONSENT_REQUIRED: 403,
     CONSENT_SCOPE_REQUIRED: 403,
@@ -76,9 +79,19 @@ function errorResponse(error) {
     IDEMPOTENCY_CONFLICT: 409,
     CASE_NOT_READY_FOR_ANALYSIS: 409,
   };
-  const code = error.code || 'BACKEND_REQUEST_FAILED';
-  const status = error.statusCode || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
-  return { status, body: { error: { code, message: error.message } } };
+  // Only application codes carry deliberate, client-safe messages: UPPER_SNAKE with at least one
+  // underscore, not a Node/driver ERR_* code, and not an operating-system error (ENOENT,
+  // ECONNREFUSED, ...), which carries syscall/errno. Uncoded, runtime, driver and system errors
+  // are internal: their text, SQL, paths and values never leave the server.
+  const deliberate = typeof error.code === 'string'
+    && /^[A-Z][A-Z0-9]*_[A-Z0-9_]{1,78}$/.test(error.code)
+    && !error.code.startsWith('ERR_')
+    && error.syscall === undefined
+    && typeof error.errno !== 'number';
+  const code = deliberate ? error.code : 'BACKEND_REQUEST_FAILED';
+  const status = error.statusCode || (deliberate && error.status) || statusByCode[code] || (/constraint/i.test(error.message) ? 409 : 400);
+  const message = deliberate ? error.message : 'The request could not be completed.';
+  return { status, body: { error: { code, message } } };
 }
 
 function job(database, runId) {
@@ -131,7 +144,26 @@ function createAnalysisRun({ req, database, services, caseId, body, config, live
   });
 }
 
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory }) {
+// Document routes answer a missing case and another household's case identically.
+function requireDocumentCase(services, principal, caseId, options) {
+  try {
+    return services.access.requireCase(principal, caseId, options);
+  } catch (error) {
+    if (['CASE_NOT_FOUND', 'HOUSEHOLD_NOT_FOUND'].includes(error.code)) {
+      throw Object.assign(new Error('Case not found.'), { code: 'CASE_NOT_FOUND', statusCode: 404 });
+    }
+    throw error;
+  }
+}
+
+function documentNotFound() {
+  const error = new Error('Document not found.');
+  error.code = 'DOCUMENT_NOT_FOUND';
+  error.statusCode = 404;
+  return error;
+}
+
+export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -143,12 +175,13 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     if (req.method === 'GET' && url.pathname === '/api/v1/ready') {
       const schema = validateSchema(database);
       const ready = schema.valid && services.access.bootstrapConfigured;
-      return { status: ready ? 200 : 503, body: {
+      const body = {
         status: ready ? 'ready' : 'not_ready',
         checks: { database: schema.valid, authentication: services.access.bootstrapConfigured },
-        database: schema,
-        externalProviderCalls: false,
-      } };
+      };
+      // Schema detail (missing tables, triggers, migration count) is for local operators only.
+      if (isLoopbackRequest(req)) Object.assign(body, { database: schema, externalProviderCalls: false });
+      return { status: ready ? 200 : 503, body };
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/households') {
       services.access.requireBootstrap(req.headers.authorization);
@@ -281,6 +314,81 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         FROM workflow_runs WHERE case_id = ? ORDER BY created_at, id`).all(caseRecord.id);
       return { status: 200, body: sourcePackDto(caseRecord.id, sources, workflows) };
     }
+    const documentsMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/documents$/);
+    const deletionInventoryMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/documents\/deletion-inventory$/);
+    if (req.method === 'GET' && deletionInventoryMatch) {
+      // Erasure discovery is household-authorised but not consent-gated. Otherwise an expired or
+      // revoked processing grant could remove the only UI path to delete the stored document.
+      const caseRecord = requireDocumentCase(services, principal, deletionInventoryMatch[1]);
+      services.access.requireHousehold(principal, caseRecord.household_id);
+      const roles = services.households.listActiveRoles(caseRecord.household_id, principal.adultId).map(item => item.role);
+      const documents = documentUploads.listForDeletion(caseRecord, {
+        actorAdultId: principal.adultId, roles,
+      }).documents.map(document => ({
+        id: document.id,
+        documentKind: document.documentKind,
+        byteSize: document.byteSize,
+        status: document.status,
+        statusLabel: document.statusLabel,
+        uploadedAt: document.uploadedAt,
+      }));
+      return { status: 200, body: { caseId: caseRecord.id, documents } };
+    }
+    if (req.method === 'POST' && documentsMatch) {
+      // Authorise and check configuration before reading a single body byte.
+      const caseRecord = requireDocumentCase(services, principal, documentsMatch[1], { write: true });
+      if (!documentUploads?.configured) {
+        const error = new Error('Document storage is not configured.');
+        error.code = 'DOCUMENT_STORAGE_NOT_CONFIGURED';
+        error.statusCode = 503;
+        throw error;
+      }
+      const bytes = await readBinaryBody(req, { contentType: 'application/pdf', limitBytes: MAX_DOCUMENT_BYTES });
+      return await documentUploads.upload({ principal, caseRecord, headers: req.headers, bytes });
+    }
+    if (req.method === 'GET' && documentsMatch) {
+      const caseRecord = requireDocumentCase(services, principal, documentsMatch[1]);
+      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      return { status: 200, body: documentUploads.listForCase(caseRecord) };
+    }
+    const documentMatch = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)$/);
+    if (req.method === 'DELETE' && documentMatch) {
+      // Missing and foreign-household ids are deliberately indistinguishable. Deletion does not
+      // require current processing consent: a person must still be able to erase stored data.
+      const record = documentUploads?.getDocument(documentMatch[1]);
+      if (!record?.caseId) throw documentNotFound();
+      try {
+        services.access.requireHousehold(principal, record.householdId);
+      } catch (error) {
+        if (error.code === 'HOUSEHOLD_NOT_FOUND') throw documentNotFound();
+        throw error;
+      }
+      const roles = services.households.listActiveRoles(record.householdId, principal.adultId).map(item => item.role);
+      const allowedRole = roles.some(role => ['owner', 'operator', 'backup_operator'].includes(role));
+      if (record.uploadedByAdultId !== principal.adultId && !allowedRole) {
+        throw Object.assign(new Error('You do not have permission to delete this document.'), {
+          code: 'DOCUMENT_DELETE_FORBIDDEN', statusCode: 403,
+        });
+      }
+      const result = documentUploads.requestDeletion({ documentId: record.id, actorAdultId: principal.adultId });
+      if (!result) throw documentNotFound();
+      return { status: result.state === 'deleted' ? 200 : 202, body: { document: documentDto(result.document) } };
+    }
+    if (req.method === 'GET' && documentMatch) {
+      // A missing document and another household's document get the same response.
+      const record = documentUploads?.getDocument(documentMatch[1]);
+      if (!record?.caseId) throw documentNotFound();
+      let caseRecord;
+      try {
+        caseRecord = services.access.requireCase(principal, record.caseId);
+      } catch (error) {
+        if (['CASE_NOT_FOUND', 'HOUSEHOLD_NOT_FOUND'].includes(error.code)) throw documentNotFound();
+        throw error;
+      }
+      if (caseRecord.household_id !== record.householdId) throw documentNotFound();
+      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      return { status: 200, body: documentDto(record) };
+    }
     const transitionMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/transitions$/);
     if (req.method === 'POST' && transitionMatch) {
       const body = await readBody(req);
@@ -299,7 +407,8 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     const runMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/analysis-runs$/);
     if (req.method === 'POST' && runMatch) {
       services.access.requireCase(principal, runMatch[1], { write: true });
-      return createAnalysisRun({ req, database, services, caseId: runMatch[1], body: await readBody(req), config, liveRegistryFactory });
+      // Awaited inside the try so asynchronous service errors map through errorResponse.
+      return await createAnalysisRun({ req, database, services, caseId: runMatch[1], body: await readBody(req), config, liveRegistryFactory });
     }
     const auditMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/audit-events$/);
     if (req.method === 'GET' && auditMatch) {

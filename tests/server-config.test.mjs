@@ -10,9 +10,17 @@ test('server configuration has explicit bounded defaults', () => {
     maxCases: 100,
     maxRunsPerCase: 10,
     rateLimitPerMinute: 600,
-    enableLegacyDemoApi: false,
     budgetUsd: undefined,
     projectBudgetUsd: undefined,
+    documents: {
+      storagePath: '.local/documents',
+      encryptionKeyBase64: null,
+      scanMode: 'disabled',
+      clamd: null,
+      maxDocumentsPerCase: 50,
+      maxPendingPerHousehold: 20,
+      workerSweepMs: 30_000,
+    },
   });
 });
 
@@ -23,7 +31,12 @@ test('server capacity and rate settings are bounded before listening', () => {
     ['MAX_ACTIVE_SESSIONS', 'no'],
     ['MAX_ACTIVE_CASES', '-1'],
     ['MAX_RUNS_PER_CASE', '101'],
-    ['ENABLE_LEGACY_DEMO_API', 'yes'],
+    ['ORCHESTRATION_RUN_BUDGET_USD', 'NaN'],
+    ['ORCHESTRATION_PROJECT_BUDGET_USD', '0'],
+    ['DOCUMENT_SCAN_MODE', 'structural_only'],
+    ['MAX_DOCUMENTS_PER_CASE', '0'],
+    ['MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD', '1001'],
+    ['DOCUMENT_WORKER_SWEEP_MS', '0'],
   ]) {
     assert.throws(() => createApiServer({ env: { [name]: value } }), new RegExp(`Invalid ${name}`));
   }
