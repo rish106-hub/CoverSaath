@@ -226,19 +226,22 @@ export function createSarvamDocAiTransport({
         if (providerPages.length !== segment.originalPages.length) throw fail('OCR_PROVIDER_PAGE_MISMATCH', 'Sarvam returned an incomplete page set.');
         const seen = new Set();
         for (const providerPage of providerPages) {
-          if (!plainObject(providerPage) || !Number.isInteger(providerPage.page_number)
-            || providerPage.page_number < 1 || providerPage.page_number > segment.originalPages.length
-            || seen.has(providerPage.page_number) || typeof providerPage.content !== 'string') {
+          if (!plainObject(providerPage) || !Number.isInteger(providerPage.page_num)
+            || providerPage.page_num < 1 || providerPage.page_num > segment.originalPages.length
+            || seen.has(providerPage.page_num) || !validBlocks(providerPage.blocks)) {
             throw fail('OCR_PROVIDER_PAGE_MISMATCH', 'Sarvam page mapping is invalid.');
           }
-          seen.add(providerPage.page_number);
-          const originalPage = segment.originalPages[providerPage.page_number - 1];
+          seen.add(providerPage.page_num);
+          const ordered = [...providerPage.blocks].sort((left, right) => left.reading_order - right.reading_order);
+          const text = ordered.map(block => block.text).join('\n');
+          const originalPage = segment.originalPages[providerPage.page_num - 1];
           pages.push({
             pageNumber: originalPage,
-            text: providerPage.content,
-            extractionStatus: providerPage.content.trim() ? 'extracted' : 'failed',
+            text,
+            layoutTags: ordered.map(block => block.layout_tag ?? null),
+            extractionStatus: text.trim() ? 'extracted' : 'failed',
             confidenceBasisPoints: null,
-            providerPageRef: `${segment.jobId}:page:${providerPage.page_number}`,
+            providerPageRef: `${segment.jobId}:page:${providerPage.page_num}`,
           });
         }
       }
@@ -254,6 +257,11 @@ export function createSarvamDocAiTransport({
       };
     },
   });
+}
+
+function validBlocks(blocks) {
+  return Array.isArray(blocks) && blocks.every(block => plainObject(block) && typeof block.text === 'string'
+    && Number.isFinite(block.reading_order));
 }
 
 export const SARVAM_DOCUMENT_AI = Object.freeze({
