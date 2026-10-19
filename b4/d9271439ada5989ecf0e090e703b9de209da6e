@@ -1,0 +1,28 @@
+tests/postgres-julianday.test.mjs
+  s_0cc44eccc0b942::t_ba85ba0a8a8b27 19-20,29-43,51
+tests/postgres-runner.test.mjs
+  s_0cc44eccc0b942::t_ba85ba0a8a8b27 15
+  s_0cc44eccc0b942::t_5d10959954b5aa 43
+src/backend/database/postgres/migrations/008_julianday_hour_24.sql
+  s_0cc44eccc0b942::t_4425098fe3c877 1-109
+tests/postgres-catalog-parity.test.mjs
+  s_0cc44eccc0b942::t_ba85ba0a8a8b27 210
+docs/exec-plans/active/block-2-closeout.xml
+  s_0cc44eccc0b942::t_7b6d10d89f3db2 1-338
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b4d9271439ada5989ecf0e090e703b9de209da6e",
+  "prompts": {},
+  "sessions": {
+    "s_0cc44eccc0b942": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ae4081c9-5326-403e-a828-7e5343c11629",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
