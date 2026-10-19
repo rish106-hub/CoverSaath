@@ -46,6 +46,13 @@ if (!API_KEY || !MODEL) {
   }
 }
 
+function validateModelName(model) {
+  // Allow typical Gemini model IDs (e.g. gemini-2.5-flash-exp)
+  // and block path/query/control characters.
+  const MODEL_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
+  return typeof model === 'string' && MODEL_PATTERN.test(model);
+}
+
 async function smokeTest() {
   console.log('🔬 Google Gemini API Smoke Test');
   console.log('==============================\n');
@@ -67,6 +74,12 @@ async function smokeTest() {
     MODEL = 'gemini-2.5-flash-exp';
   }
 
+  if (!validateModelName(MODEL)) {
+    console.error('❌ Invalid LLM_MODEL format.');
+    console.error('   Allowed characters: letters, numbers, ".", "_", "-" (max 128 chars)');
+    process.exit(1);
+  }
+
   console.log('✅ API Key found (masked):', API_KEY.slice(0, 8) + '...' + API_KEY.slice(-4));
   console.log('🤖 Model:', MODEL);
   console.log('');
@@ -79,7 +92,9 @@ async function smokeTest() {
 
     // Test with a simple generateContent request
     const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-    const response = await fetch(`${API_BASE}/${MODEL}:generateContent?key=${API_KEY}`, {
+    const requestUrl = new URL(`${API_BASE}/${MODEL}:generateContent`);
+    requestUrl.searchParams.set('key', API_KEY);
+    const response = await fetch(requestUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
