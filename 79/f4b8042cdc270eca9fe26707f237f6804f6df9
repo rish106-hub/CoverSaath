@@ -1,0 +1,70 @@
+docs/iterations/LATEST.md
+  s_ec15030af0be91::t_67cda31a3152ea 17-19
+  s_ec15030af0be91::t_778d6492fe3b78 16
+  s_ec15030af0be91::t_2520a683ec7441 20
+src/backend/repositories/policy-structuring-repository.js
+  s_ec15030af0be91::t_cd5d9c3721b424 138-146,151
+  s_ec15030af0be91::t_9df337036803ca 373
+  s_ec15030af0be91::t_10ee9415edd1fc 407
+  s_ec15030af0be91::t_506e9284fee41d 24
+  s_ec15030af0be91::t_5583a559e26358 389-391
+tests/policy-structuring-sectioner.test.mjs
+  s_ec15030af0be91::t_a459b70396490d 91-93
+src/modules/policy-structuring/coverage-report.js
+  s_ec15030af0be91::t_c0f7073c0ee2f2 81
+  s_ec15030af0be91::t_f3d63248e07e11 42-45
+  s_ec15030af0be91::t_0851a949ea76c4 3-4
+  s_ec15030af0be91::t_ff30bca6c39d0b 63-64
+src/modules/policy-structuring/index.js
+  s_ec15030af0be91::t_bbe61ab247e9ea 14
+tests/privacy-gate-tables.test.mjs
+  s_ec15030af0be91::t_16cba88c699c4f 71-97
+  s_ec15030af0be91::t_a7c626bba7ab71 57-59,61-67
+  s_ec15030af0be91::t_7a4a29988baec7 68-69
+  s_ec15030af0be91::t_db88a4461f36ac 1-56,60,70
+scripts/structure-policy.mjs
+  s_ec15030af0be91::t_270bdb968d65f2 22
+  s_ec15030af0be91::t_9f040e2322a426 135,137-140
+  s_ec15030af0be91::t_99de9efffec001 118
+docs/adr/0006-policy-document-structuring.md
+  s_ec15030af0be91::t_ebdd856026af70 34-41
+src/modules/policy-structuring/sectioner.js
+  s_ec15030af0be91::t_9bc9da9d9946d6 73-77
+src/modules/ai-analysis/privacy-evidence-gate.js
+  s_ec15030af0be91::t_ccb622766e945a 780-781
+  s_ec15030af0be91::t_ad4abbea344d56 710-716,719-720,724-726,728,730,733-739,741,744-745,747,749,751-753,756-763,773-775,782,784-789,791-802,807,810-829,837-850
+  s_ec15030af0be91::t_043e663b3b0dd9 836
+  s_ec15030af0be91::t_47afd30e2e6bee 434
+  s_ec15030af0be91::t_5181c469780ba2 9-11
+  s_ec15030af0be91::t_1065f64b9ddb1f 709,717-718,721-723,727,729,731-732,740,743,746,748,750,754-755,764-772,776-779,783,790,803-806,808-809,830-835,851-853,855
+  s_ec15030af0be91::t_0bc61c03feb27c 742
+  s_ec15030af0be91::t_62f71f602fff9a 12
+src/modules/policy-structuring/reconciler.js
+  s_ec15030af0be91::t_cedcffb4e397e0 173
+  s_ec15030af0be91::t_d6cb0cc72f796d 1-4,9,13,15-18,24,31,49-51,67-76,79,87-89,94-97,102-103,105,108-109,145-146,148-154,159,161-163,171-172,174-177,179-180
+  s_ec15030af0be91::t_85b149d7490110 52-66,85-86
+src/modules/policy-structuring/validator.js
+  s_ec15030af0be91::t_9c6f67eb0873a6 176-179
+tests/policy-structuring-validator.test.mjs
+  s_ec15030af0be91::t_250fb7c81b5608 23,32,83,87
+tests/policy-structuring-reconciler.test.mjs
+  s_ec15030af0be91::t_78111c0c96d47b 5,69-121
+tests/privacy-gate-r4.test.mjs
+  s_ec15030af0be91::t_e6c9c3c2ec04bc 44-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "79f4b8042cdc270eca9fe26707f237f6804f6df9",
+  "prompts": {},
+  "sessions": {
+    "s_ec15030af0be91": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7e724dd4-fc68-4744-bafc-59bed30210ea",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
