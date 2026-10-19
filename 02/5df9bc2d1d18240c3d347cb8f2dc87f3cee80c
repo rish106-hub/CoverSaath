@@ -1,0 +1,45 @@
+tests/ready-detail.test.mjs
+  s_9d89416023ef69::t_54ae485be92ab2 5
+tests/database-schema.test.mjs
+  s_9d89416023ef69::t_54ae485be92ab2 4
+tests/backend-persistence.test.mjs
+  s_9d89416023ef69::t_54ae485be92ab2 5
+tests/backend-api.test.mjs
+  s_9d89416023ef69::t_54ae485be92ab2 5
+tests/support/temp-root.mjs
+  s_9d89416023ef69::t_54ae485be92ab2 1-9
+tests/p1a-analysis-run-api.test.mjs
+  s_9d89416023ef69::t_54ae485be92ab2 8
+tests/analysis-subject-consent.test.mjs
+  s_9d89416023ef69::t_54ae485be92ab2 7
+src/ui/components/document-upload.js
+  s_9d89416023ef69::t_86af017e7ea752 2,71,74,136-149,177-179,319-325
+  s_9d89416023ef69::t_10e4fe02c857e8 56-62,65,92,98,114,116,126,128
+tests/support/live-analysis-scenario.mjs
+  s_9d89416023ef69::t_54ae485be92ab2 5
+src/ui/styles.css
+  s_9d89416023ef69::t_86af017e7ea752 189
+docs/iterations/LATEST.md
+  s_9d89416023ef69::t_234f374f94ca9d 3-9
+tests/document-upload-api.test.mjs
+  s_9d89416023ef69::t_54ae485be92ab2 6
+src/ui/state/document-selection.js
+  s_9d89416023ef69::t_10e4fe02c857e8 16
+  s_9d89416023ef69::t_86af017e7ea752 13-15,17-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "025df9bc2d1d18240c3d347cb8f2dc87f3cee80c",
+  "prompts": {},
+  "sessions": {
+    "s_9d89416023ef69": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14ed0-f0d1-7513-b46b-cd43bbf8db17",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
