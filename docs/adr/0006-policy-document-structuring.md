@@ -117,3 +117,38 @@ call). The tag list comes from Sarvam's published section types; an unlisted tag
 and needs a code change. Page text still contains image descriptions, as before this addendum. `photograph`,
 `chart` and `diagram` blocks keep their text because the sectioner does not drop them; whether that text is
 model-written is unverified against real Sarvam output.
+
+## Addendum (2026-10-19): structuring in the application runtime (Block 2 close-out W4)
+
+Status: accepted.
+
+- **Model gateway only.** Extraction and reconciliation are model-gateway tasks (`policy_structuring_extract`,
+  `policy_structuring_reconcile`) registered in the responsibility matrix and `ai-authority.js` as `propose`
+  tasks of the `policy-structuring` pipeline. Their instructions and output schemas live once in
+  `src/modules/ai-analysis/structuring-contract.js`. The gateway enforces the input cap, a per-call budget
+  reservation against a per-run budget and the project budget (shared with live analysis), a timeout, no
+  retries, and an output shape check. The runner re-checks the document-specific Gemini grant before every
+  dispatch; a refused check releases the reservation. `reservation_exceeded` and `budget_refused` stop every
+  further paid call for the document. The direct Gemini caller remains only in the opt-in eval script.
+- **Grant binding.** The Gemini grant must name this document, recipient `google-gemini`, belong to the
+  document's household and be held by the requesting adult. Grant creation refuses a document scope outside the
+  grant's household.
+- **Runtime.** `POST /api/v1/documents/:id/structuring-runs` (`workflowRunId`, `consentGrantId`) starts a run on
+  stored OCR blocks in this process; `GET ...?workflowRunId=` returns the human-reviewable result: every key with
+  state, readings (value, subject, page, block, verbatim quote), contradictions, variations, model selections,
+  missing keys, proposals and skipped chunks with reasons. In-progress state is in memory: an uncommitted run is
+  lost on restart and is started again. A committed run of the current pipeline version is replayed, never paid
+  twice; an erased or older-version run can be run again. Counts, skipped chunks, rejection reasons, calls,
+  tokens and cost are stored with the run (`counts_json`, bounded, counts and codes only).
+- **Revocation.** Revoking a grant that disclosed a document to Gemini erases that document's structuring output
+  (runs, proposals and the observations they wrote) under the document's own household. The document and its
+  OCR pages stay, because they rest on the upload and Sarvam grants.
+- **Values.** A value is stored as the model wrote it only when it is printed verbatim in its quote; otherwise
+  the quote is stored.
+- **OCR content type.** The OCR route defaults Sarvam `content_type` to `printed` (every uploadable kind is a
+  printed insurer document). On the real sample, `mixed` returned one untagged block per page and lost tables
+  and layout tags; `printed` returned the tagged blocks.
+
+Limits: one real policy measured. Gemini retention on the paid tier is "a limited period" for abuse monitoring
+(period unstated); the free tier may use content for training and human review, so live use requires a billed
+project. Consent wording for the Gemini step is not final and needs legal review.

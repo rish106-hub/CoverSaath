@@ -248,6 +248,7 @@ test('W4: an uploaded policy is structured through the app and returns a human-r
   assert.equal(review.structuringRun.counts.coverage.chunks.unaccounted, 0);
   assert.ok(Array.isArray(review.skippedChunks));
   assert.ok(review.structuringRun.counts.coverage.calls >= 2);
+  assert.equal(typeof review.structuringRun.counts.coverage.rejectedReasons, 'object');
 
   // Every provider request went through the gateway prompt contract, and the household name never left.
   assert.ok(app.requests.length >= 2);

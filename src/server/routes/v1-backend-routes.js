@@ -396,7 +396,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
           requestedByAdultId: principal.adultId,
           purpose: 'document_processing',
           recipient: 'sarvam',
-          settings: { language: body.language ?? 'en-IN', contentType: body.contentType ?? 'mixed' },
+          // Every uploadable kind is a printed insurer document. Measured on a real policy (2026-10-19):
+          // `printed` returned Sarvam's tagged blocks and tables; `mixed` returned one untagged block per page.
+          settings: { language: body.language ?? 'en-IN', contentType: body.contentType ?? 'printed' },
         },
       });
       return { status: ['succeeded', 'failed', 'cancelled'].includes(job.status) ? 200 : 202, body: { job: ocrJobDto(job) } };

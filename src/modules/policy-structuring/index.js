@@ -95,7 +95,7 @@ export async function structurePolicyDocument({
     await consentCheck();
     const before = buildCoverageReport({ sectioned, extraction, reconciliation });
     const coverage = {
-      chunks: before.chunks, calls: before.calls, usage: before.usage,
+      chunks: before.chunks, calls: before.calls, usage: before.usage, rejectedReasons: before.items.rejectedReasons,
       skippedChunks: before.perChunk.filter(entry => entry.outcome === 'skipped').map(entry => ({ page: entry.page, reason: entry.reason })),
     };
     committed = await commit({ decisions, proposals: extraction.proposals, coverage });

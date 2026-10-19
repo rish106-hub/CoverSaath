@@ -244,12 +244,19 @@ function validateCoverage(coverage) {
     if (!Number.isInteger(entry.page) || entry.page < 1 || entry.page > 10_000) throw invalid(`coverage.skippedChunks[${index}].page is invalid.`);
     return { page: entry.page, reason: entry.reason };
   });
+  const reasons = coverage.rejectedReasons ?? {};
+  if (!isPlainObject(reasons) || Object.keys(reasons).length > 20) throw invalid('coverage.rejectedReasons is invalid.');
+  const rejectedReasons = Object.fromEntries(Object.entries(reasons).map(([reason, value]) => {
+    if (!reasonPattern.test(reason)) throw invalid('coverage.rejectedReasons is invalid.');
+    return [reason, count(value, `coverage.rejectedReasons.${reason}`)];
+  }));
   const costUsd = coverage.costUsd ?? 0;
   if (!Number.isFinite(costUsd) || costUsd < 0 || costUsd > 1_000) throw invalid('coverage.costUsd is invalid.');
   return {
     chunks,
     skippedChunks,
     skippedTruncated: skipped.length > MAX_SKIPPED_CHUNKS,
+    rejectedReasons,
     calls: count(coverage.calls, 'coverage.calls'),
     usage: { inputTokens: count(coverage.usage.inputTokens, 'coverage.usage.inputTokens'), outputTokens: count(coverage.usage.outputTokens, 'coverage.usage.outputTokens') },
     costUsd: Math.round(costUsd * 1e6) / 1e6,
