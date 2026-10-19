@@ -8,7 +8,9 @@ import { createHash } from 'node:crypto';
 // lists, wider label variants, and policy-wording guards against over-redaction.
 // v4: pipe tables read by header and row label (identity and member health
 // columns, ICD tables), headers carried over page breaks, and table rows fail
-// closed on ID-shaped cells and whole-cell dates.
+// closed on ID-shaped cells and whole-cell dates. Headers split over two rows are
+// read as one header; tab-separated tables (two or more tab rows) are refused as
+// restricted, because collapsing tabs loses the cell boundaries a header needs.
 export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v4';
 export const EVIDENCE_DATA_CLASSES = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
 // The consent-scope recipient that names the live model provider. A document's
@@ -109,6 +111,28 @@ const INLINE_WHITESPACE_RUN = /[^\S\n]+/g;
 function normalizeText(value) {
   return value.normalize('NFKC').replace(FORMAT_CHARACTERS, '').replace(NON_ASCII_DIGIT, asciiDigit)
     .replace(LINE_BREAK, '\n').replace(INLINE_WHITESPACE_RUN, ' ');
+}
+
+// A tab-separated table is two or more lines that each hold two or more
+// tab-separated cells, with a header-like cell (any column kind a pipe header
+// would read) or an ID-shaped or whole-date cell among them. Inline whitespace
+// is collapsed before scanning, so its cells and header could not be read; such
+// text fails closed instead of being scanned as prose. A single tab row, and a
+// tab used as spacing in prose, keep the line rules (N1, N2 probes).
+const TAB_ROW = /\S[^\S\n]*\t[^\S\n]*\S/;
+
+function tabTableCell(raw) {
+  const cell = normalizeText(raw).trim();
+  if (!cell) return false;
+  return Boolean(columnKind(cell)) || (ID_SHAPE.test(cell) && !PRODUCT_UIN.test(cell)) || WHOLE_DATE.test(cell);
+}
+
+function rejectTabTables(value) {
+  const lines = value.normalize('NFKC').replace(FORMAT_CHARACTERS, '').replace(LINE_BREAK, '\n').split('\n');
+  const rows = lines.filter(line => TAB_ROW.test(line));
+  if (rows.length >= 2 && rows.some(row => row.split('\t').some(tabTableCell))) {
+    fail('RESTRICTED_EVIDENCE', 'Restricted evidence cannot be sent to a model.');
+  }
 }
 
 function truncateUtf8(value, maxBytes) {
@@ -830,12 +854,25 @@ function redactRowShapes(cells, swap) {
   });
 }
 
+// A row of label text only (no digit, no placeholder) may be the first half of
+// a header printed over two rows ("Member | Date of" over "ID | Birth").
+const labelOnlyRow = cells => cells.every(cell => !/\d/.test(cell) && !TABLE_TOKEN.test(cell));
+
 function redactPipeTables(text, swap) {
   let header = null;
+  let previous = null;
   return text.split('\n').map(line => {
+    const prior = previous;
+    previous = null;
     if (!/[|│┃¦]/.test(line)) return line;
     const row = splitCells(line);
-    const found = tableHeader(row.data, header);
+    // Header split over two rows: the cells are joined pairwise and read as one header. The
+    // second row is still redacted under the header active before it, then the joined header
+    // applies to the rows after it.
+    const split = prior && labelOnlyRow(row.data) && prior.length === row.data.length
+      ? tableHeader(row.data.map((cell, index) => `${prior[index].trim()} ${cell.trim()}`), null) : null;
+    previous = labelOnlyRow(row.data) ? row.data : null;
+    const found = split ? null : tableHeader(row.data, header);
     if (found) { header = found; return joinCells(row); }
     // An ICD table ends at the first row without an ICD code in its first cell.
     if (header?.icd && !ICD_CODE.test(row.data[0]?.trim() ?? '')) header = null;
@@ -847,6 +884,8 @@ function redactPipeTables(text, swap) {
         : data.map((cell, index) => (header.kinds[index] ? swapCell(cell, header.kinds[index], swap) : cell));
     }
     data = redactRowShapes(redactLabelledCells(data, swap), swap);
+    // The joined header only adds columns: a column the active header already minimises stays minimised.
+    if (split) header = { kinds: split.kinds.map((kind, index) => kind ?? header?.kinds[index] ?? null), icd: split.icd || Boolean(header?.icd) };
     return joinCells({ ...row, data });
   }).join('\n');
 }
@@ -1095,6 +1134,7 @@ function redactSegment(segment, state, reasons) {
 }
 
 function redactText(value, state) {
+  rejectTabTables(value);
   const prepared = prepareText(value);
   rejectRestrictedText(prepared.text);
   const reasons = new Set(prepared.capped ? ['TEXT_TRUNCATED'] : []);
