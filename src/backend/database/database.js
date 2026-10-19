@@ -70,6 +70,7 @@ export const expectedTables = Object.freeze([
   'coverage_parameter_registry_pins', 'coverage_parameter_records',
   'coverage_parameter_acquisitions', 'coverage_parameter_observations',
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
+  'policy_structuring_runs', 'proposed_parameters',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -105,6 +106,11 @@ export const criticalTriggers = Object.freeze([
   'coverage_parameter_registry_versions_no_delete', 'coverage_parameter_observation_rules_immutable',
   'coverage_parameter_observation_rules_no_delete',
   'coverage_parameter_observations_active_document_insert', 'coverage_parameter_observations_human_review_insert',
+  'policy_structuring_runs_scope_insert', 'policy_structuring_runs_active_document_insert',
+  'policy_structuring_runs_erased_insert', 'policy_structuring_runs_no_update', 'policy_structuring_runs_no_delete',
+  'proposed_parameters_scope_insert', 'proposed_parameters_active_document_insert',
+  'proposed_parameters_initial_state_insert', 'proposed_parameters_no_update', 'proposed_parameters_no_delete',
+  'policy_structuring_erase_on_document_erasure',
 ]);
 
 export const criticalIndexes = Object.freeze([
@@ -120,6 +126,8 @@ export const criticalIndexes = Object.freeze([
   'coverage_parameter_observations_parameter_idx', 'coverage_parameter_observations_document_idx',
   'document_uploads_household_content_live_uidx', 'document_uploads_household_logical_version_uidx',
   'document_uploads_work_idx',
+  'policy_structuring_runs_live_identity_uidx', 'policy_structuring_runs_document_idx',
+  'proposed_parameters_document_idx', 'proposed_parameters_run_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
@@ -133,6 +141,8 @@ export const requiredColumns = Object.freeze({
   coverage_parameter_resolutions: ['resolution_state', 'transition_authority'],
   coverage_parameter_observations: ['redacted_at', 'redaction_reason_code'],
   coverage_parameter_observation_rules: ['extraction_method', 'resolution_state', 'transition_authority', 'requires_accepted'],
+  policy_structuring_runs: ['erased_at', 'erasure_reason_code', 'counts_json'],
+  proposed_parameters: ['redacted_at', 'redaction_reason_code', 'status'],
 });
 
 export function validateSchema(database) {
