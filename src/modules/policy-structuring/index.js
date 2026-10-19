@@ -8,13 +8,13 @@ import { STRUCTURING_LIMITS, extractChunks } from './extractor.js';
 import { decideStates, reconcile } from './reconciler.js';
 import { buildCoverageReport } from './coverage-report.js';
 
-export { STRUCTURING_DROPPED_TAGS, sectionDocument } from './sectioner.js';
+export { STRUCTURING_DROPPED_TAGS, sectionDocument, sectionStoredDocument } from './sectioner.js';
 export { normalizeValue, validateExtractedItems } from './validator.js';
 export { EXTRACTOR_VERSION, STRUCTURING_LIMITS, extractChunks, registryCatalog } from './extractor.js';
 export { RECONCILER_VERSION, SHORT_VALUE_CHARS, decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from './reconciler.js';
 export { buildCoverageReport, scoreStructuring } from './coverage-report.js';
 
-export const POLICY_STRUCTURING_VERSION = 'policy-structuring/v1';
+export const POLICY_STRUCTURING_VERSION = 'policy-structuring/v2';
 const GATE_MAX_BYTES = 16_000;
 
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
@@ -64,7 +64,8 @@ export function gateChunks(chunks, { knownIdentifiers, sanitize = sanitizeEviden
 /**
  * pages: [{ page, blocks: [{ text, tag }] }]. consentCheck: async, throws when the document-specific
  * Gemini grant is no longer current; called before the run, before every model call and before commit.
- * commit: optional async ({ decisions, proposals }) => counts; it must re-check consent inside its own
+ * commit: optional async ({ decisions, proposals, coverage }) => counts; coverage is counts-only (chunk outcomes,
+ * skipped pages and reasons, calls, tokens); it must re-check consent inside its own
  * transaction (PolicyStructuringRepository.commitStructuring does).
  */
 export async function structurePolicyDocument({
@@ -89,7 +90,12 @@ export async function structurePolicyDocument({
   let committed = null;
   if (commit) {
     await consentCheck();
-    committed = await commit({ decisions, proposals: extraction.proposals });
+    const before = buildCoverageReport({ sectioned, extraction, reconciliation });
+    const coverage = {
+      chunks: before.chunks, calls: before.calls, usage: before.usage,
+      skippedChunks: before.perChunk.filter(entry => entry.outcome === 'skipped').map(entry => ({ page: entry.page, reason: entry.reason })),
+    };
+    committed = await commit({ decisions, proposals: extraction.proposals, coverage });
   }
   return {
     version: POLICY_STRUCTURING_VERSION,

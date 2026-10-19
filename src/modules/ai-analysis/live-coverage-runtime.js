@@ -24,13 +24,13 @@ function fail(code, message) {
   throw Object.assign(new Error(message), { code, statusCode: 503 });
 }
 
-function positive(value, name, { max = Infinity, integer = false } = {}) {
+export function positive(value, name, { max = Infinity, integer = false } = {}) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0 || parsed > max || (integer && !Number.isInteger(parsed))) fail('LIVE_AI_CONFIG_INVALID', `${name} must be configured within its safety bound.`);
   return parsed;
 }
 
-function readConfig(env) {
+export function readConfig(env) {
   if (!['google', 'gemini'].includes(env.LLM_PROVIDER)) fail('LIVE_AI_CONFIG_INVALID', 'Persistent live analysis requires LLM_PROVIDER=google.');
   const apiKey = env.GOOGLE_GENERATIVE_AI_API_KEY ?? env.GEMINI_API_KEY;
   if (typeof apiKey !== 'string' || !apiKey.trim()) fail('LIVE_AI_CONFIG_INVALID', 'A server-only Gemini API key is required.');
@@ -53,7 +53,7 @@ function readConfig(env) {
   return Object.freeze(config);
 }
 
-function createBudgetScope(maxUsd) {
+export function createBudgetScope(maxUsd) {
   let reservedUsd = 0;
   let spentUsd = 0;
   let sequence = 0;
@@ -74,7 +74,7 @@ function createBudgetScope(maxUsd) {
   };
 }
 
-function createRunBudget(runMaxUsd, project) {
+export function createRunBudget(runMaxUsd, project) {
   const run = createBudgetScope(runMaxUsd);
   return Object.freeze({
     async reserve(amount, metadata) {

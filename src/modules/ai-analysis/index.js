@@ -5,6 +5,10 @@ export { createMemoryBudget, createModelGateway } from './model-gateway.js';
 export { createAiSdkRunner } from './ai-sdk-runner.js';
 export { createAiEnhancedTaskRegistry, createAiTaskExecutors, RUNTIME_TO_AI_TASK } from './runtime-adapter.js';
 export { LIVE_REQUEST_BUILDERS, LIVE_RESULT_ADAPTERS, createGeminiCoverageRegistryFactory } from './live-coverage-runtime.js';
+export { STRUCTURING_GATEWAY_LIMITS, createStructuringModelCallFactory } from './structuring-runtime.js';
+export {
+  EXTRACTION_SCHEMA, RECONCILE_SCHEMA, STRUCTURING_EXTRACT_TASK, STRUCTURING_INSTRUCTIONS, STRUCTURING_RECONCILE_TASK,
+} from './structuring-contract.js';
 export {
   PRIVACY_EVIDENCE_GATE_VERSION,
   sanitizeEvidenceForModel,

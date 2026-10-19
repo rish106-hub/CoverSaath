@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { PolicyStructuringRepository } from './policy-structuring-repository.js';
+import { GEMINI_MODEL_RECIPIENT } from '../../modules/ai-analysis/privacy-evidence-gate.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 
 const ERASURE_MARKER = 'consent_revoked';
+const GEMINI_RECIPIENT = GEMINI_MODEL_RECIPIENT;
 // Erasure reasons recorded on observations, evidence facts and persisted source-page excerpts.
 // Anything else is recorded as consent_revoked so an arbitrary caller value cannot become stored state.
 const OBSERVATION_ERASURE_REASONS = new Set(['consent_revoked', 'document_erasure', 'source_consent_not_current']);
@@ -168,6 +170,15 @@ export class ConsentRepository {
       const affectedDocuments = [...new Map(
         [...collectedDocuments, ...derivedDocuments].map(document => [document.id, document]),
       ).values()];
+      // Documents this grant disclosed to a model (a document scope naming the model recipient). Their
+      // model-derived data (observations, structuring runs and proposals, run excerpts) is erased below;
+      // the document and its OCR pages stay, because they rest on other grants.
+      const modelDisclosedDocuments = this.database.prepare(`SELECT DISTINCT resource_id AS id FROM consent_scopes
+        WHERE consent_grant_id = ? AND resource_type = 'document' AND resource_id IS NOT NULL AND recipient = ?
+        ORDER BY resource_id`).all(grantId, GEMINI_RECIPIENT);
+      const modelDerivedDocuments = [...new Map(
+        [...affectedDocuments, ...modelDisclosedDocuments].map(document => [document.id, document]),
+      ).values()];
       const cancelOcrSet = `status = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN 'cancelled' ELSE status END,
           completed_at = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN ? ELSE completed_at END,
           error_code = CASE
@@ -196,7 +207,7 @@ export class ConsentRepository {
       // erasure is audited (counts only) before the lifecycle change below, which
       // would otherwise redact them silently through the database safety net.
       if (this.coverageParameters) {
-        for (const { id: documentId } of affectedDocuments) {
+        for (const { id: documentId } of modelDerivedDocuments) {
           this.coverageParameters.redactObservationsForDocument({
             documentId, reasonCode: 'consent_revoked', actorType: 'adult_user', actorId: revokedByAdultId, at,
           });
@@ -207,7 +218,7 @@ export class ConsentRepository {
       // transaction. Counts only are audited.
       this.eraseDerivedRunData({
         householdId: grant.household_id,
-        documentIds: affectedDocuments.map(document => document.id),
+        documentIds: modelDerivedDocuments.map(document => document.id),
         consentGrantId: grantId,
         reason: ERASURE_MARKER,
         resourceType: 'consent_grant',

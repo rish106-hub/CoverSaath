@@ -47,6 +47,10 @@ export const AI_AUTHORITY_MATRIX = freezeAll({
     personal_cover_extraction: { authority: 'propose', workflowTaskKeys: ['personal'], recordsParameterObservations: true },
     evidence_synthesis: { authority: 'propose', workflowTaskKeys: ['primary'], recordsParameterObservations: false },
     question_drafting: { authority: 'propose', workflowTaskKeys: ['questions'], recordsParameterObservations: false },
+    // Document pipeline tasks (ADR 0006): not workflow tasks. Their readings are stored by
+    // PolicyStructuringRepository.commitStructuring, never above extracted_unverified or conflicting.
+    policy_structuring_extract: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-structuring', recordsParameterObservations: true },
+    policy_structuring_reconcile: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-structuring', recordsParameterObservations: false },
   },
 
   // Owner of every coverage-analysis workflow task (responsibility-matrix.js RUNTIME_RESPONSIBILITIES).

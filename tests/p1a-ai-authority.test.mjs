@@ -41,6 +41,10 @@ test('P1-A authority: task ownership agrees with the responsibility matrix and t
     const users = Object.entries(RUNTIME_RESPONSIBILITIES).filter(([, value]) => value.modelTask === modelTask).map(([key]) => key);
     assert.deepEqual(sorted(row.workflowTaskKeys), sorted(users), modelTask);
     assert.equal(row.authority, 'propose');
+    if (row.pipeline === 'policy-structuring') {
+      assert.deepEqual(row.workflowTaskKeys, [], modelTask);
+      continue;
+    }
     assert.equal(row.recordsParameterObservations, row.workflowTaskKeys.some(key => MODEL_OBSERVATION_TASK_KEYS.includes(key)), modelTask);
   }
   assert.deepEqual(sorted(Object.values(AI_AUTHORITY_MATRIX.modelTasks).flatMap(row => row.workflowTaskKeys)), sorted(RUNTIME_AI_TASK_KEYS));

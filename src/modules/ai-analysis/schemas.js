@@ -1,4 +1,5 @@
 import { assertModelTask } from './responsibility-matrix.js';
+import { STRUCTURING_EXTRACT_TASK, STRUCTURING_OUTPUT_SCHEMAS, isStructuringTask } from './structuring-contract.js';
 
 const SOURCE_STATES = Object.freeze(['known', 'unknown', 'conflict']);
 const FACT_STATES = Object.freeze(['known', 'unknown', 'conflict']);
@@ -205,8 +206,34 @@ function rejectUnsupportedClaims(task, output, input) {
   if (findings.length > 0) fail('unsupported_claim', 'Output contains unsupported insurance certainty.');
 }
 
+// Policy structuring (ADR 0006): the payload is privacy-gated chunk text (extract) or validated readings
+// (reconcile), built by code. Output is checked for shape here; the policy-structuring validator then
+// decides item by item (verbatim quote, registry key, page and block), so a bad item is rejected there.
+const STRUCTURING_PAYLOAD_KEYS = Object.freeze({
+  [STRUCTURING_EXTRACT_TASK]: ['chunks', 'registry'],
+  policy_structuring_reconcile: ['groups'],
+});
+const STRUCTURING_OUTPUT_LISTS = Object.freeze({ [STRUCTURING_EXTRACT_TASK]: 'items', policy_structuring_reconcile: 'conflicts' });
+const MAX_STRUCTURING_OUTPUT_ENTRIES = 2_000;
+
+function validateStructuringInput(task, input) {
+  exactObject(input, ['payload'], 'Structuring task input');
+  exactObject(input.payload, STRUCTURING_PAYLOAD_KEYS[task], 'Structuring payload');
+  for (const key of STRUCTURING_PAYLOAD_KEYS[task]) boundedArray(input.payload[key], task === STRUCTURING_EXTRACT_TASK && key === 'registry' ? 0 : 1, 500, key);
+  return { input: structuredClone(input), sourceIds: new Set() };
+}
+
+function validateStructuringOutput(task, output) {
+  const list = STRUCTURING_OUTPUT_LISTS[task];
+  if (!output || typeof output !== 'object' || Array.isArray(output)) fail('invalid_schema', 'Structuring output must be an object.');
+  boundedArray(output[list], 0, MAX_STRUCTURING_OUTPUT_ENTRIES, list);
+  if (output[list].some(entry => !entry || typeof entry !== 'object' || Array.isArray(entry))) fail('invalid_schema', `${list} entries must be objects.`);
+  return structuredClone(output);
+}
+
 export function validateTaskInput(task, input) {
   assertModelTask(task);
+  if (isStructuringTask(task)) return validateStructuringInput(task, input);
   exactObject(input, ['context', 'sources', 'upstream'], 'AI task input');
   exactObject(input.context, ['caseId', 'subjectId', 'purpose', 'requestedFields'], 'AI task context');
   text(input.context.caseId, 160, 'caseId');
@@ -289,6 +316,10 @@ function validateQuestions(output, sourceIds, unknownSourceIds) {
 }
 
 export function validateTaskOutput(task, output, input) {
+  if (isStructuringTask(task)) {
+    validateTaskInput(task, input);
+    return validateStructuringOutput(task, output);
+  }
   const { sourceIds } = validateTaskInput(task, input);
   const unknownSourceIds = input.sources.filter(source => source.status !== 'known').map(source => source.id);
   if (task.endsWith('_extraction')) validateFacts(output, sourceIds, input.context.requestedFields);
@@ -322,6 +353,7 @@ const extractionSchema = {
 };
 
 export const TASK_OUTPUT_SCHEMAS = Object.freeze({
+  ...STRUCTURING_OUTPUT_SCHEMAS,
   profile_extraction: extractionSchema,
   group_cover_extraction: extractionSchema,
   personal_cover_extraction: extractionSchema,
