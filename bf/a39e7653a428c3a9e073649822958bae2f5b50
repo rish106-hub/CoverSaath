@@ -1,0 +1,72 @@
+src/modules/document-intake/ocr-blocks.js
+  s_0cc44eccc0b942::t_af4aed2eccb8c0 1-91,103-149
+  s_0cc44eccc0b942::t_96e07042df0061 92-102
+src/backend/repositories/consent-repository.js
+  s_0cc44eccc0b942::t_437354068bbc67 219,222
+src/backend/repositories/ocr-repository.js
+  s_0cc44eccc0b942::t_39e23e4a156b1c 2,5,257-258,260-262,266,290-323
+  s_0cc44eccc0b942::t_d6e44d518b8da8 324
+src/backend/database/migrations/012_source_page_blocks.sql
+  s_0cc44eccc0b942::t_ea80f3a459bc53 1-48
+tests/postgres-catalog-parity.test.mjs
+  s_0cc44eccc0b942::t_3e078948bdd94b 210
+src/backend/database/postgres/migrations/009_source_page_blocks.sql
+  s_0cc44eccc0b942::t_c0c43ec9991237 1-67
+tests/support/sarvam-blocks-fixture.mjs
+  s_0cc44eccc0b942::t_94c2f57a7f8739 1-76
+tests/postgres-triggers.test.mjs
+  s_0cc44eccc0b942::t_2bd9d9400efb05 4,868-900
+  s_0cc44eccc0b942::t_90c9199321189a 901-902
+src/backend/database/database.js
+  s_0cc44eccc0b942::t_437354068bbc67 114-115,141
+src/modules/document-intake/ocr-contracts.js
+  s_0cc44eccc0b942::t_c6e7f00ec6a568 69
+  s_0cc44eccc0b942::t_96e07042df0061 3,73
+  s_0cc44eccc0b942::t_072d44207df047 5-6,8,36-37,39,70-72,81,97
+tests/evidence-completion-persistence.test.mjs
+  s_0cc44eccc0b942::t_d6fc923d20c94e 78
+src/modules/document-intake/fixture-ocr-provider.js
+  s_0cc44eccc0b942::t_b8a3dbf1779785 2,6-8,20,23
+tests/ocr-stored-blocks.test.mjs
+  s_0cc44eccc0b942::t_5399dc119adc7e 5-7,162-177
+  s_0cc44eccc0b942::t_4fe9550eac3b4c 1-4,8-122,124-161,178-286
+  s_0cc44eccc0b942::t_ce3e3fd6ab5b92 123
+src/modules/document-intake/index.js
+  s_0cc44eccc0b942::t_b8a3dbf1779785 12-18
+src/integrations/sarvam/doc-ai-transport.js
+  s_0cc44eccc0b942::t_b8a3dbf1779785 242,253,263-267
+  s_0cc44eccc0b942::t_a8a2ced304b5f3 268-269
+tests/database-schema.test.mjs
+  s_0cc44eccc0b942::t_3e078948bdd94b 35
+docs/adr/0006-policy-document-structuring.md
+  s_0cc44eccc0b942::t_927156954f0502 79-119
+src/modules/policy-structuring/sectioner.js
+  s_0cc44eccc0b942::t_5b56ec4c87d047 28-31,53-55,75,106-117
+  s_0cc44eccc0b942::t_d79ae812720b2a 118
+tests/sarvam-doc-ai.test.mjs
+  s_0cc44eccc0b942::t_0c39637a5ca177 322-327
+tests/database-integrity-v2.test.mjs
+  s_0cc44eccc0b942::t_d6fc923d20c94e 89
+tests/postgres-source-page-blocks.test.mjs
+  s_0cc44eccc0b942::t_e0d7728bb98359 1-50
+tests/postgres-runner.test.mjs
+  s_0cc44eccc0b942::t_3e078948bdd94b 15,43
+tests/sarvam-live.test.mjs
+  s_0cc44eccc0b942::t_0c39637a5ca177 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bfa39e7653a428c3a9e073649822958bae2f5b50",
+  "prompts": {},
+  "sessions": {
+    "s_0cc44eccc0b942": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ae4081c9-5326-403e-a828-7e5343c11629",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
