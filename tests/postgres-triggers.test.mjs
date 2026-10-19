@@ -770,6 +770,100 @@ test('evidence facts allow only the redaction update; document erasure redacts t
   proves('evidence_facts_erased_document_insert');
 });
 
+test('policy structuring runs and proposals stay scoped, append only and erase with their document', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const run = (id, extra = {}) => insert(pool, 'policy_structuring_runs', {
+    id, household_id: a.household, case_id: a.case, workflow_run_id: a.run, document_id: a.document, ...extra,
+  });
+  const runScope = 'policy structuring run must match its workflow case, household and document';
+  await rejects(run('sr-other-household', { household_id: b.household }), runScope);
+  await rejects(run('sr-other-document', { document_id: b.document }), runScope);
+  await rejects(run('sr-other-run', { workflow_run_id: b.run }), runScope);
+  await run('sr-1');
+  proves('policy_structuring_runs_scope_insert');
+  await rejects(run('sr-erased', { pipeline_version: 'policy-structuring/v2', erased_at: later, erasure_reason_code: 'consent_revoked' }),
+    'policy structuring runs cannot be inserted erased');
+  proves('policy_structuring_runs_erased_insert');
+  // The live identity is unique.
+  await assert.rejects(run('sr-duplicate'), error => error.code === '23505');
+
+  const proposal = (id, extra = {}) => insert(pool, 'proposed_parameters', {
+    id, structuring_run_id: 'sr-1', household_id: a.household, document_id: a.document, source_page_id: a.page, ...extra,
+  });
+  const proposalScope = 'proposed parameter must match its structuring run, household and document page';
+  await rejects(proposal('pp-household', { household_id: b.household }), proposalScope);
+  await rejects(proposal('pp-page', { source_page_id: b.page }), proposalScope);
+  await rejects(proposal('pp-page-number', { page: 3 }), proposalScope);
+  await proposal('pp-1');
+  await proposal('pp-2');
+  proves('proposed_parameters_scope_insert');
+  const initial = 'proposed parameters are inserted pending review and unredacted';
+  await rejects(proposal('pp-accepted', { status: 'accepted' }), initial);
+  await rejects(proposal('pp-redacted', { label: null, value_json: null, redacted_at: later, redaction_reason_code: 'consent_revoked' }), initial);
+  proves('proposed_parameters_initial_state_insert');
+
+  const appendOnly = 'proposed parameters are append only';
+  await rejects(pool.query("UPDATE proposed_parameters SET label = 'changed' WHERE id = 'pp-1'"), appendOnly);
+  await rejects(pool.query("UPDATE proposed_parameters SET proposed_key = 'other_key', status = 'accepted' WHERE id = 'pp-1'"), appendOnly);
+  await rejects(pool.query(`UPDATE proposed_parameters SET label = NULL, value_json = NULL, redacted_at = '${later}',
+    redaction_reason_code = 'consent_revoked', status = 'accepted' WHERE id = 'pp-1'`), appendOnly);
+  await pool.query("UPDATE proposed_parameters SET status = 'accepted' WHERE id = 'pp-1'");
+  await pool.query(`UPDATE proposed_parameters SET label = NULL, value_json = NULL, redacted_at = '${later}',
+    redaction_reason_code = 'consent_revoked' WHERE id = 'pp-1'`);
+  await rejects(pool.query("UPDATE proposed_parameters SET status = 'rejected' WHERE id = 'pp-1'"), appendOnly);
+  await rejects(pool.query("DELETE FROM proposed_parameters WHERE id = 'pp-2'"), appendOnly);
+  await rejects(pool.query('TRUNCATE proposed_parameters'), appendOnly);
+  proves('proposed_parameters_no_update', 'proposed_parameters_no_delete', 'proposed_parameters_no_truncate');
+
+  const runAppendOnly = 'policy structuring runs are append only';
+  await rejects(pool.query("UPDATE policy_structuring_runs SET counts_json = '{}' WHERE id = 'sr-1'"), runAppendOnly);
+  await rejects(pool.query(`UPDATE policy_structuring_runs SET erased_at = '${later}', erasure_reason_code = 'consent_revoked',
+    counts_json = '{}' WHERE id = 'sr-1'`), runAppendOnly);
+  await rejects(pool.query("DELETE FROM policy_structuring_runs WHERE id = 'sr-1'"), runAppendOnly);
+  await rejects(pool.query('TRUNCATE policy_structuring_runs CASCADE'), runAppendOnly);
+  // An erased identity frees the slot; an erased run takes no proposals.
+  await insert(pool, 'document_uploads', {
+    id: 'document-structure-live', household_id: a.household, case_id: a.case, uploaded_by_adult_id: a.adult,
+    consent_grant_id: a.consent, storage_path: 'fixture/structure-live',
+  });
+  await insert(pool, 'source_pages', { id: 'page-structure-live', document_upload_id: 'document-structure-live' });
+  await run('sr-live', { document_id: 'document-structure-live' });
+  await pool.query(`UPDATE policy_structuring_runs SET erased_at = '${later}', erasure_reason_code = 'consent_revoked' WHERE id = 'sr-live'`);
+  await rejects(pool.query(`UPDATE policy_structuring_runs SET erased_at = '${at}', erasure_reason_code = 'consent_revoked' WHERE id = 'sr-live'`), runAppendOnly);
+  proves('policy_structuring_runs_no_update', 'policy_structuring_runs_no_delete', 'policy_structuring_runs_no_truncate');
+  await rejects(proposal('pp-erased-run', {
+    structuring_run_id: 'sr-live', document_id: 'document-structure-live', source_page_id: 'page-structure-live',
+  }), proposalScope);
+  await run('sr-live-2', { document_id: 'document-structure-live' });
+
+  // Document erasure: proposals redacted, runs stamped erased; other documents untouched.
+  await proposal('pp-live', { structuring_run_id: 'sr-live-2', document_id: 'document-structure-live', source_page_id: 'page-structure-live' });
+  await pool.query("UPDATE document_uploads SET lifecycle_state = 'quarantined' WHERE id = 'document-structure-live'");
+  assert.equal((await one(pool, "SELECT redacted_at FROM proposed_parameters WHERE id = 'pp-live'")).redacted_at, null, 'quarantine is not erasure');
+  await pool.query("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-structure-live'");
+  const erasedProposal = await one(pool, "SELECT * FROM proposed_parameters WHERE id = 'pp-live'");
+  assert.equal(erasedProposal.label, null);
+  assert.equal(erasedProposal.value_json, null);
+  assert.equal(erasedProposal.redaction_reason_code, 'document_erasure');
+  assert.match(erasedProposal.redacted_at, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  const erasedRun = await one(pool, "SELECT erased_at, erasure_reason_code FROM policy_structuring_runs WHERE id = 'sr-live-2'");
+  assert.equal(erasedRun.erasure_reason_code, 'document_erasure');
+  assert.equal((await one(pool, "SELECT erasure_reason_code FROM policy_structuring_runs WHERE id = 'sr-live'")).erasure_reason_code,
+    'consent_revoked', 'an earlier erasure stamp is kept');
+  assert.equal((await one(pool, "SELECT redacted_at FROM proposed_parameters WHERE id = 'pp-2'")).redacted_at, null, 'other documents untouched');
+  proves('policy_structuring_erase_on_document_erasure');
+
+  // Inactive documents take neither runs nor proposals.
+  await rejects(run('sr-inactive', { document_id: 'document-structure-live', pipeline_version: 'policy-structuring/v3' }),
+    'policy structuring requires an active document');
+  proves('policy_structuring_runs_active_document_insert');
+  await pool.query("UPDATE document_uploads SET lifecycle_state = 'quarantined' WHERE id = $1", [a.document]);
+  await rejects(proposal('pp-inactive'), 'proposed parameters require an active document');
+  await pool.query("UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = $1", [a.document]);
+  await proposal('pp-active-again');
+  proves('proposed_parameters_active_document_insert');
+});
+
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const catalog = (await pool.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname")).rows.map(row => row.tgname);

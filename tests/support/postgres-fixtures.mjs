@@ -78,6 +78,14 @@ const defaults = {
     id, version: 'version-1', page: '2', extraction_method: 'document_extraction', review_status: 'not_reviewed',
     value_json: '{"amountMinor":500000}', source_digest: hex('c'), observed_at: at, recorded_by: 'extractor', created_at: at,
   }),
+  policy_structuring_runs: id => ({
+    id, source_version: 'version-1', pipeline_version: 'policy-structuring/v1', counts_json: '{"proposals":1}', created_at: at,
+  }),
+  proposed_parameters: id => ({
+    id, registry_version: 'policy-parameters/v1', proposed_key: 'synthetic_benefit', category: 'unassigned',
+    label: 'Synthetic benefit', value_json: '{"text":"Rs. 100","normalized":null,"subject":"policy","evidenceQuote":"Rs. 100"}',
+    page: 2, block_index: 0, status: 'pending_review', created_at: at,
+  }),
   coverage_parameter_resolutions: () => ({
     resolution_state: 'unknown', transition_authority: 'deterministic', updated_by: 'test', updated_at: at,
   }),
