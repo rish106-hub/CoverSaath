@@ -19,7 +19,7 @@ import { createGeminiCaller } from '../src/modules/ai-analysis/field-adjudicator
 import { GEMINI_MODEL_RECIPIENT } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
 import { getPolicyParameterDefinition } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
 import {
-  POLICY_STRUCTURING_VERSION, STRUCTURING_LIMITS, documentGrantCheck, gateChunks, scoreStructuring,
+  POLICY_STRUCTURING_VERSION, STRUCTURING_LIMITS, documentGrantCheck, gateChunks, isConflict, scoreStructuring,
   sectionDocument, structurePolicyDocument,
 } from '../src/modules/policy-structuring/index.js';
 
@@ -115,7 +115,7 @@ function reviewMarkdown({ result, capture, gated, stored, score, meta }) {
     `| Chunks | ${report.chunks.total}: ${report.chunks.stored} stored, ${report.chunks.proposed} proposed only, ${report.chunks.skipped} skipped, ${report.chunks.unaccounted} unaccounted |`,
     `| Blocks dropped before chunking | ${JSON.stringify(report.dropped)} |`,
     `| Items | ${report.items.accepted} registry, ${report.items.proposals} proposed, ${report.items.rejected} rejected ${JSON.stringify(report.items.rejectedReasons)} |`,
-    `| Conflicts | ${report.conflicts.total} |`,
+    `| Conflicts | ${report.conflicts.total} contradictions; ${report.variations.context} differing in context; ${report.variations.perSubject} per-subject variations; ${report.modelSelections} resolved by Gemini selection (unverified, for household confirmation) |`,
     `| Stored | ${stored.counts.observations} observations on ${stored.counts.parameters} parameters (${stored.counts.conflicting} conflicting, ${stored.counts.skippedKeys} keys skipped), ${stored.counts.proposals} proposals |`,
     score ? `| Score vs draft golden | key recall ${score.keyRecall?.toFixed(2)}, hallucinated quotes ${score.hallucinationRate.toFixed(3)}, conflict recall ${score.conflictRecall?.toFixed(2)}; missing ${score.missingKeys.join(', ') || 'none'} |` : '| Score | no golden-structuring.json |',
     '');
@@ -132,8 +132,12 @@ function reviewMarkdown({ result, capture, gated, stored, score, meta }) {
   }
   push('', '## Proposed parameters (pending review, not in the registry)', '', '| Proposed key | Category | Label | Value | Page |', '|---|---|---|---|---|');
   for (const proposal of stored.proposals) push(`| ${proposal.proposedKey} | ${proposal.category} | ${cell(proposal.label)} | ${shown(proposal.value)} | ${proposal.page} |`);
+  const where = entry => entry.itemRefs.map(ref => `p${ref.page}/b${ref.blockIndex}`).join(', ');
   push('', '## Conflicts (no winner picked)', '', '| Key | Reason | Sources | Locations |', '|---|---|---|---|');
-  for (const conflict of result.conflicts) push(`| ${conflict.target.key} | ${conflict.reasonCode} | ${conflict.sources.join(', ')} | ${conflict.itemRefs.map(ref => `p${ref.page}/b${ref.blockIndex}`).join(', ')} |`);
+  for (const conflict of result.conflicts.filter(isConflict)) push(`| ${conflict.target.key} | ${conflict.reasonCode} | ${conflict.sources.join(', ')} | ${where(conflict)} |`);
+  push('', '## Variations by subject (not conflicts)', '', 'Different values for distinct named subjects (members, benefits, options). Stored as extracted_unverified with reason per_subject_values.', '',
+    '| Key | Locations |', '|---|---|');
+  for (const variation of result.conflicts.filter(entry => !isConflict(entry))) push(`| ${variation.target.key} | ${where(variation)} |`);
   push('', '## Gemini reasoning per item', '', 'Confidence and rationale are model notes for review only. They never change state.', '',
     '| Page | Chunk | Target | Value | Confidence | Rationale | Quote |', '|---|---|---|---|---|---|---|');
   for (const item of [...result.extraction.accepted, ...result.extraction.proposals].sort((a, b) => a.page - b.page || a.blockIndex - b.blockIndex)) {

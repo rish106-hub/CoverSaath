@@ -31,6 +31,14 @@ Add a four-stage pipeline between OCR and storage. Models propose; deterministic
    Items that do not fit the registry go to the overflow bucket, never dropped.
 3. **Reconciler (Gemini, once per document).** Input: all validated items grouped by key. Output: groups
    that disagree, with the quotes on each side. Reuses the `conflicting` state; never picks a winner silently.
+   **Amended 2026-10-19 (owner decision):** when readings disagree, Gemini selects the reading that applies
+   (`selected_quote`). Code accepts the selection only when it is one of that group's own quotes. The
+   selected value is stored `extracted_unverified` with reason `model_selected_from_conflict`, every reading
+   is kept, and the household confirms the value before it is used. Without a grounded selection the key
+   stays `conflicting`. Different values for subjects printed in the document (members, benefits) are a
+   variation (`per_subject_values`) and are never resolved to one value. Differing readings that cannot be
+   compared (a clause beside a schedule value) are `context_differs`. Only contradictions are reported as
+   conflicts.
 4. **Validator and store (deterministic).**
    - `evidence_quote` must be a literal substring of the chunk supplied. Otherwise the item is rejected.
    - `registry_key` must exist in the registry version in force. `page` and `block_index` must exist.

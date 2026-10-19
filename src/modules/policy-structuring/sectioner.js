@@ -70,7 +70,11 @@ export function sectionDocument(pages, { maxChunkChars = 4000 } = {}) {
         const rows = tableText(block.text);
         if (!rows.length) { dropped.push({ page, blockIndex, tag, reason: 'empty' }); continue; }
         flush();
-        pushParts(blockIndex, 'table', pack(rows, maxChunkChars));
+        // Each part of a split table repeats the first row, so its header reaches the privacy gate with it.
+        const whole = pack(rows, maxChunkChars);
+        const header = rows[0];
+        const repeat = whole.length > 1 && rows.length > 1 && header.length * 2 < maxChunkChars;
+        pushParts(blockIndex, 'table', repeat ? pack(rows.slice(1), maxChunkChars - header.length - 1).map(part => `${header}\n${part}`) : whole);
         continue;
       }
       const text = block.text.trim();
