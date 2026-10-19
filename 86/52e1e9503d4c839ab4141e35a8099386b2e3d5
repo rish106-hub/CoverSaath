@@ -1,0 +1,367 @@
+docs/iterations/LATEST.md
+  s_9d89416023ef69::t_c4ea4ab1ef1a6c 1,3,5,7,9-15,17,19-21,23,26-31,33-159
+docs/design/11-iteration-history.md
+  s_9d89416023ef69::t_c4ea4ab1ef1a6c 1-11
+.env.example
+  s_9d89416023ef69::t_402b820c5417a5 17-24,35-42
+.github/dependabot.yml
+  s_9d89416023ef69::t_b135cbd8ed2306 1-29
+.github/workflows/ci.yml
+  s_9d89416023ef69::t_f8a5f3b5470116 1-95
+.github/workflows/codeql.yml
+  s_9d89416023ef69::t_14196335cb60d7 1-47
+.github/workflows/dependency-review.yml
+  s_9d89416023ef69::t_c86126a35d43ff 1-33
+.gitignore
+  s_9d89416023ef69::t_601019f4a062f4 8
+AGENTS.md
+  s_9d89416023ef69::t_8b4bfac114c8f3 1,4-71
+CLAUDE.md
+  s_9d89416023ef69::t_c8f31e19c557bb 1
+README.md
+  s_9d89416023ef69::t_35c0a0c7c373b1 110-111,144-146,157,184,208,220-223,225-226,277
+SECURITY.md
+  s_9d89416023ef69::t_20466224032b9c 1-31
+docs/adr/0001-workflow-v6-contracts.md
+  s_9d89416023ef69::t_27eb074bbaf3ba 1-74
+docs/adr/0002-persistence-port.md
+  s_9d89416023ef69::t_68600f298d7f5a 1-47
+docs/adr/0003-ai-authority.md
+  s_9d89416023ef69::t_4657cdd9c0542c 1-53
+docs/adr/0004-postgresql-runtime.md
+  s_9d89416023ef69::t_a8ed9cff27cbb3 1-31
+docs/adr/0005-document-intake-validation-and-scanning.md
+  s_9d89416023ef69::t_8e9ca9033146f3 1-62
+docs/agent-tooling.md
+  s_9d89416023ef69::t_8212850d12e6fa 1-99
+docs/architecture/block-1-input.md
+  s_9d89416023ef69::t_607fe06aded3a1 1-132
+docs/architecture/data.md
+  s_9d89416023ef69::t_48c13a3235757d 1-77
+docs/architecture/pipeline-blocks.md
+  s_9d89416023ef69::t_64cea0e770197f 1-104
+docs/architecture/security.md
+  s_9d89416023ef69::t_45d846b2f00ae2 1-98
+docs/architecture/system.md
+  s_9d89416023ef69::t_d41b94f260838e 1-88
+docs/exec-plans/active/evidence-facts-erasure.md
+  s_9d89416023ef69::t_900f54dccfd7ab 1-38
+docs/exec-plans/active/p1b-handoff.md
+  s_9d89416023ef69::t_43851eacc9de8f 1-150
+docs/exec-plans/active/p1b-postgres.md
+  s_9d89416023ef69::t_7a5adb35016be5 1-40
+docs/exec-plans/active/p1b-s32-async-runtime.md
+  s_9d89416023ef69::t_e28277a5f90a4b 1-113
+docs/exec-plans/completed/evidence-completion-mvp-intake.md
+  s_9d89416023ef69::t_6c8e14661c9d2e 1-272
+docs/exec-plans/completed/p0-baseline-intake.md
+  s_9d89416023ef69::t_5adf90ccd0c05e 1-67
+docs/runbooks/azure-staging.md
+  s_9d89416023ef69::t_4c0c7fb016fcde 1-359
+docs/runbooks/clamav.md
+  s_9d89416023ef69::t_aa9c5881f8a064 1-82
+docs/runbooks/local-database.md
+  s_9d89416023ef69::t_2792281a516689 1-92
+docs/runbooks/local-postgres.md
+  s_9d89416023ef69::t_d8e85b18fc18dd 1-111
+package-lock.json
+  s_9d89416023ef69::t_2eecb79a6d9e2b 11-13,16,19,23-25,28-29,40-42,45-46,56-58,68-70,73,87-89,97-99,114-116,131-133,148-150,165-167,182-184,199-201,206-208,219-221,226-228,239-241,246-248,259-261,266-268,279-281,286-288,299-301,306-308,319-321,336-338,353-355,398-400,403-405,734-736,752-840,862-864,882,884,890-928,930-932,936,946-960,964-966,973-981,1009-1011,1017-1018,1086-1094
+package.json
+  s_9d89416023ef69::t_8ca1390db56f1c 7,20,23-25
+scripts/check-architecture.mjs
+  s_9d89416023ef69::t_1fc4ce4e43e1a1 46,49,52
+src/backend/AGENTS.md
+  s_9d89416023ef69::t_cab8191fca9934 1-12
+src/backend/database/AGENTS.md
+  s_9d89416023ef69::t_5abe79ebd40b73 1-12
+src/backend/database/database.js
+  s_9d89416023ef69::t_224278a507dd09 3,61,69-72,75,77,87-89,95-107,110,119-122,125-127,132-135,177-187,190
+src/backend/database/migrations/005_evidence_completion_parameters.sql
+  s_9d89416023ef69::t_697bf9bb64308b 1-388
+src/backend/database/migrations/006_parameter_observation_guards.sql
+  s_9d89416023ef69::t_1e2bde46f041f1 1-35
+src/backend/database/migrations/007_append_only_delete_guards.sql
+  s_9d89416023ef69::t_ce15c389f3e615 1-15
+src/backend/database/migrations/008_document_intake_scheduling.sql
+  s_9d89416023ef69::t_d8c2e23d2f6da9 1-20
+src/backend/database/migrations/009_evidence_fact_redaction.sql
+  s_9d89416023ef69::t_28efacde0b68c7 1-80
+src/backend/database/migrations/010_evidence_fact_redaction_hardening.sql
+  s_9d89416023ef69::t_72fb2bda2e34e0 1-40
+src/backend/database/postgres/errors.js
+  s_9d89416023ef69::t_5647d107ecb076 1-9
+src/backend/database/postgres/index.js
+  s_9d89416023ef69::t_c5199ad19c36c9 1-6
+src/backend/database/postgres/migrate.js
+  s_9d89416023ef69::t_481e049eed659a 1-5,7-15,18-19,21-32,34-44,48-66,68,70,72-97,99-103,105-110,112-113
+src/backend/database/postgres/migrations/001_baseline_schema.sql
+  s_9d89416023ef69::t_7bd035dec4d713 1-837
+src/backend/database/postgres/migrations/002_baseline_triggers.sql
+  s_9d89416023ef69::t_230546440c6339 1-895
+src/backend/database/postgres/migrations/003_harden_invariants.sql
+  s_9d89416023ef69::t_d5c56d94791717 1-104
+src/backend/database/postgres/migrations/004_document_intake_scheduling.sql
+  s_9d89416023ef69::t_a277945cc3603d 1-17
+src/backend/database/postgres/migrations/005_evidence_fact_redaction.sql
+  s_9d89416023ef69::t_98fbc1f365cca9 1-98
+src/backend/database/postgres/migrations/006_evidence_fact_redaction_hardening.sql
+  s_9d89416023ef69::t_17da64258b8ec1 1-56
+src/backend/database/postgres/pool.js
+  s_9d89416023ef69::t_06143caef48100 1-79
+src/backend/database/postgres/validate-schema.js
+  s_9d89416023ef69::t_7ffc180cfd0d78 1-135
+src/backend/repositories/consent-repository.js
+  s_9d89416023ef69::t_4717e3f6957f9b 5-11,13,17,49-51,53-54,66-68,156-161,164-204,207-214,235-408
+src/backend/repositories/coverage-parameter-repository.js
+  s_9d89416023ef69::t_35ff595d0a125a 1-748
+src/backend/repositories/document-repository.js
+  s_9d89416023ef69::t_766006bf84ca06 1-374
+src/backend/repositories/household-repository.js
+  s_9d89416023ef69::t_71928593d82509 78-86
+src/backend/repositories/index.js
+  s_9d89416023ef69::t_bec3064cf2899c 9-10
+src/backend/repositories/ocr-repository.js
+  s_9d89416023ef69::t_a4c8094201839b 85-87,89,92,97,101-118,124-135
+src/backend/services/backend-services.js
+  s_9d89416023ef69::t_6e0b85b17b0aac 1,9-12,17,21
+src/backend/services/coverage-analysis-port.js
+  s_9d89416023ef69::t_dfb43b5f8563ac 2-3,6-9,15-110,114-210,218-274,276,290-380,382-422,437-438,440-442,444-445,448,451-471,487,491-526
+src/backend/services/document-upload-service.js
+  s_9d89416023ef69::t_becf335b110add 1-346
+src/backend/services/index.js
+  s_9d89416023ef69::t_0d96bc8e9c5e7c 4
+src/contracts/ai-authority.js
+  s_9d89416023ef69::t_92a680ee1bdc1d 1-127
+src/contracts/analysis-run-api.js
+  s_9d89416023ef69::t_514d212dab5826 1-125
+src/contracts/error-codes.js
+  s_9d89416023ef69::t_5fe0cbd8f071c2 1-137
+src/contracts/execution-policy.js
+  s_9d89416023ef69::t_650c2db9ed9d4a 1-139
+src/contracts/index.js
+  s_9d89416023ef69::t_629875ac942baf 1-8
+src/contracts/persistence-ports.js
+  s_9d89416023ef69::t_e87daff79f4871 1-166
+src/contracts/task-contracts.js
+  s_9d89416023ef69::t_76c98dee1997ae 1-125
+src/contracts/workflow-graph.js
+  s_9d89416023ef69::t_9870ceceb1fd34 1-98
+src/integrations/AGENTS.md
+  s_9d89416023ef69::t_d32eb91d8009aa 1-9
+src/integrations/sarvam/ocr-provider.js
+  s_9d89416023ef69::t_f52fcab20622ce 37,39-41,47,49
+src/modules/ai-analysis/AGENTS.md
+  s_9d89416023ef69::t_3a26b3774fec51 1-11
+src/modules/ai-analysis/index.js
+  s_9d89416023ef69::t_425aeef77a5b4a 8-12
+src/modules/ai-analysis/live-coverage-runtime.js
+  s_9d89416023ef69::t_aac68021723783 2,6,9-12,15-21,105-109,116-143,151-190,196,201-202,206,209-210,227-239,241-242,245-250,259-260,264,267,269-270,276-277,303-410,415-418,423-439,444-445
+src/modules/ai-analysis/model-gateway.js
+  s_9d89416023ef69::t_efc699d9d53afb 103-107
+src/modules/ai-analysis/privacy-evidence-gate.js
+  s_9d89416023ef69::t_93ed34e1c8e71d 1-1183
+src/modules/ai-analysis/schemas.js
+  s_9d89416023ef69::t_b7b97518898f2e 37-205,297
+src/modules/coverage-analysis/agent-contracts.js
+  s_9d89416023ef69::t_2b6751650534ab 2-7,11-15,167-184,190-191,194-196,199-201,210-212,216,220-222,242,245-246,248-251,253-256,269-271
+src/modules/coverage-analysis/contracts.js
+  s_9d89416023ef69::t_45e645ce25d53e 1,8-30
+src/modules/coverage-analysis/fixture-input.js
+  s_9d89416023ef69::t_14432598bc0dfd 3-6
+src/modules/coverage-analysis/index.js
+  s_9d89416023ef69::t_fb3b2a677cdb8c 1-7,12,14,23,25-40
+src/modules/coverage-analysis/model-observations.js
+  s_9d89416023ef69::t_74a1284ac4f4ac 1-49
+src/modules/coverage-analysis/parameter-records.js
+  s_9d89416023ef69::t_3d8c3847b31acb 1-223
+src/modules/coverage-analysis/persistent-service.js
+  s_9d89416023ef69::t_a279d528d99027 4-6,21,23,31-51,133-143,145-157,210,225-227,232,237,240-250,252-260
+src/modules/coverage-analysis/policy-decomposition.js
+  s_9d89416023ef69::t_7ed3fa5530b664 3-54,145-149,151,160-161,171-172
+src/modules/coverage-analysis/policy-parameter-registry.js
+  s_9d89416023ef69::t_302f65d8398b8d 1-293
+src/modules/coverage-analysis/source-input.js
+  s_9d89416023ef69::t_18d7396b32b835 1-7,10-252,254-274,276-287,289,291,293-294,299,301-327,329-331,334,338,341
+src/modules/coverage-analysis/task-registry.js
+  s_9d89416023ef69::t_bbba81336b9d75 5-6,19-20,47,61-65,74,85-115,117,125-133,149-150,180
+src/modules/coverage-analysis/workflow-definition.js
+  s_9d89416023ef69::t_cf8e67ca69be92 1-4,8-15,19,23,26-94,96-99
+src/modules/document-intake/clamd-scanner.js
+  s_9d89416023ef69::t_dc2c75e14d7692 1-127
+src/modules/document-intake/document-intake-service.js
+  s_9d89416023ef69::t_39828691956939 35-39,41,65-68,94,99
+src/modules/document-intake/encrypted-local-storage.js
+  s_9d89416023ef69::t_0c486eab5c938b 2,19-25,43-44,46-56,69-91
+src/modules/document-intake/index.js
+  s_9d89416023ef69::t_7f9b12d9bcd951 7-10
+src/modules/document-intake/ocr-contracts.js
+  s_9d89416023ef69::t_16730f386fcc08 98-100,110-113
+src/modules/document-intake/ocr-service.js
+  s_9d89416023ef69::t_0e110d5bdf224b 66-81,86,92-97,137-139
+src/modules/document-intake/pdf-inspection-child.mjs
+  s_9d89416023ef69::t_526482cb48406f 1-76
+src/modules/document-intake/pdf-inspection.js
+  s_9d89416023ef69::t_6712e7dd49dbb8 1-450
+src/modules/document-intake/sandboxed-pdf-inspection.js
+  s_9d89416023ef69::t_42957cdd294755 1-241
+src/modules/document-intake/scan-worker.js
+  s_9d89416023ef69::t_1a3777661e420a 1-137
+src/server/config.js
+  s_9d89416023ef69::t_d7121011ae9ade 15-42,52-53,56
+src/server/create-server.js
+  s_9d89416023ef69::t_bbb8a2b74a0d92 2-3,7-13,29-30,33-49,51-64,68,76-98,117-119,122,128-168
+src/server/routes/v1-backend-routes.js
+  s_9d89416023ef69::t_b6cca2e0c87c81 2-4,72,82-94,147-166,178,181-184,317-391,410-411
+src/shared/http/errors.js
+  s_9d89416023ef69::t_2f13b2a2bc7454 1
+src/shared/http/index.js
+  s_9d89416023ef69::t_567d21f78755e7 2-3
+src/shared/http/request.js
+  s_9d89416023ef69::t_f0e0027f4fc619 4,8,15,19-37
+src/shared/http/security.js
+  s_9d89416023ef69::t_f35382c3b87e6f 14-31
+src/ui/api/v1-client.js
+  s_9d89416023ef69::t_ac70ff5e51c889 2-6,9,52-87
+src/ui/app.js
+  s_9d89416023ef69::t_bcc64cb670323b 4,29-31,53-57,63,104-116,255
+src/ui/components/document-upload.js
+  s_9d89416023ef69::t_0c7e1c20a3c9d6 1-308
+src/ui/state/document-selection.js
+  s_9d89416023ef69::t_6982dacb7f7b4f 1-103
+src/ui/state/workspace-controller.js
+  s_9d89416023ef69::t_8894c832a88517 9,80,86-103
+src/ui/styles.css
+  s_9d89416023ef69::t_14a59d2720d783 188-198
+tests/analysis-subject-consent.test.mjs
+  s_9d89416023ef69::t_7e6c4e5464f7ea 1-208
+tests/backend-api.test.mjs
+  s_9d89416023ef69::t_f699b7bd14be53 70
+tests/certainty-filter.test.mjs
+  s_9d89416023ef69::t_763edbe7ad1fbb 1-116
+tests/clamd-integration.test.mjs
+  s_9d89416023ef69::t_75622fb4f312ad 1,3-34,36-40,42-45,47-54,56-61
+tests/clamd-scanner.test.mjs
+  s_9d89416023ef69::t_e5156637d71e7a 1-234
+tests/coverage-analysis-runtime.test.mjs
+  s_9d89416023ef69::t_4fa98364539f87 13,65,138-139,141,151,263-362
+tests/coverage-parameter-authority.test.mjs
+  s_9d89416023ef69::t_8c1105675e1f4c 1-447
+tests/coverage-source-consent.test.mjs
+  s_9d89416023ef69::t_a51c05f90b6dab 3-28,31-53,55-126,128-145,147-162,164-174
+tests/database-integrity-v2.test.mjs
+  s_9d89416023ef69::t_d924c42d28d881 82-87
+tests/database-schema.test.mjs
+  s_9d89416023ef69::t_2d2ffe0c2d2ebf 35,66
+tests/document-upload-api.test.mjs
+  s_9d89416023ef69::t_25e95690b585dc 1-1016
+tests/evals/safety-evaluator.test.mjs
+  s_9d89416023ef69::t_3ec816ced4097c 10-11,52-64,67-74
+tests/evidence-completion-persistence.test.mjs
+  s_9d89416023ef69::t_a1b99050ca478c 1-84
+tests/evidence-fact-redaction.test.mjs
+  s_9d89416023ef69::t_d6d5a4feff1b07 1-275
+tests/frontend-ui.test.mjs
+  s_9d89416023ef69::t_c467c4625bb84d 62-89
+tests/integrations.test.mjs
+  s_9d89416023ef69::t_b15122f285587b 10-13
+tests/known-identifier-e2e.test.mjs
+  s_9d89416023ef69::t_475cdf4b8e9622 1-95
+tests/legacy-routes-removed.test.mjs
+  s_9d89416023ef69::t_68a68dc68ea1c1 5-7,12,14-15,20-34
+tests/live-coverage-runtime.test.mjs
+  s_9d89416023ef69::t_8b956ccbc892f1 3-7,9,12-14,19-22,24,28,42-83,86-87,99-267
+tests/live-evidence-selection.test.mjs
+  s_9d89416023ef69::t_f7bbed493b210e 1-323
+tests/local-request-guard.test.mjs
+  s_9d89416023ef69::t_ab6b2fc68f4064 3,6-17,20-25,27-29,31-33,35-37,39-43
+tests/model-boundary-safety.test.mjs
+  s_9d89416023ef69::t_d04df0d5580fbd 1-6,8-18,21-38,41-44,46-106,108-147,149-216,218-237
+tests/model-evidence-state.test.mjs
+  s_9d89416023ef69::t_428efacb06ef07 1-159
+tests/mvp-closeout.test.mjs
+  s_9d89416023ef69::t_c2bccc08972370 1-375
+tests/ocr-pipeline.test.mjs
+  s_9d89416023ef69::t_56bbd5a249a12c 170-301
+tests/p1-error-redaction.test.mjs
+  s_9d89416023ef69::t_f8fc74a3fd178b 1-53
+tests/p1a-ai-authority.test.mjs
+  s_9d89416023ef69::t_ab3f6c64320ae4 1-140
+tests/p1a-analysis-run-api.test.mjs
+  s_9d89416023ef69::t_f0816c25b64600 1-142
+tests/p1a-error-codes.test.mjs
+  s_9d89416023ef69::t_cfe09ba943d639 1-108
+tests/p1a-execution-policy.test.mjs
+  s_9d89416023ef69::t_d9ea0e3eee78f0 1-259
+tests/p1a-persistence-ports.test.mjs
+  s_9d89416023ef69::t_75fe5fae7cc27c 1-134
+tests/p1a-workflow-contracts.test.mjs
+  s_9d89416023ef69::t_01dea6325e9130 1-283
+tests/parameter-registry.test.mjs
+  s_9d89416023ef69::t_905a7b7359a9e8 1-125
+tests/pdf-inspection-sandbox.test.mjs
+  s_9d89416023ef69::t_015a3b120fecdb 1-400
+tests/pdf-inspection.test.mjs
+  s_9d89416023ef69::t_b5daf8a17f96b5 1-326
+tests/postgres-catalog-parity.test.mjs
+  s_9d89416023ef69::t_4740d8effbf376 1-209
+tests/postgres-constraints.test.mjs
+  s_9d89416023ef69::t_66a47ecc84632c 1-204
+tests/postgres-julianday.test.mjs
+  s_9d89416023ef69::t_c59cff95c44369 1-62
+tests/postgres-pool.test.mjs
+  s_9d89416023ef69::t_1d85d11d08061b 1-70
+tests/postgres-runner.test.mjs
+  s_9d89416023ef69::t_b8d4528db4f432 1-261
+tests/postgres-triggers.test.mjs
+  s_9d89416023ef69::t_641bed7b4e3518 1-781
+tests/pre-dispatch-consent.test.mjs
+  s_9d89416023ef69::t_4f00d23affa150 1-298
+tests/privacy-evidence-gate.test.mjs
+  s_9d89416023ef69::t_5dbff6a72e78ca 1-277
+tests/privacy-gate-r2.test.mjs
+  s_9d89416023ef69::t_9a45186cdbbfb7 1-274
+tests/privacy-gate-r4.test.mjs
+  s_9d89416023ef69::t_0cf5018f0f8594 1-330
+tests/ready-detail.test.mjs
+  s_9d89416023ef69::t_009f70c083c452 1-108
+tests/review3-fixes.test.mjs
+  s_9d89416023ef69::t_f62e3ba73f6ae3 1-103
+tests/round3-runtime-integration.test.mjs
+  s_9d89416023ef69::t_c2a6abe2657d50 1-487
+tests/round4-runtime.test.mjs
+  s_9d89416023ef69::t_196aa6017a9f62 1-489
+tests/scan-worker.test.mjs
+  s_9d89416023ef69::t_989eb969bf660b 1-293
+tests/server-config.test.mjs
+  s_9d89416023ef69::t_709a3f921ab199 15-23,34-39
+tests/support/live-analysis-scenario.mjs
+  s_9d89416023ef69::t_5924f93e2b914e 1-179
+tests/support/parameter-fixtures.mjs
+  s_9d89416023ef69::t_97272f43436248 1-101
+tests/support/postgres-fixtures.mjs
+  s_9d89416023ef69::t_91d62d47a8a953 1-178
+tests/support/postgres.mjs
+  s_9d89416023ef69::t_f334f195b59138 1-232
+tests/support/privacy-probes.mjs
+  s_9d89416023ef69::t_7d3d0be8790b3a 1-159
+tests/ui-document-upload.test.mjs
+  s_9d89416023ef69::t_e6da3685d43a42 3-6,8-13,15-21,23-28,30-37,39-46,48-57,59-63,65-117,119-129,131-157
+working/working.md
+  s_9d89416023ef69::t_db9ca1a25160ee 233
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8652e1e9503d4c839ab4141e35a8099386b2e3d5",
+  "prompts": {},
+  "sessions": {
+    "s_9d89416023ef69": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14ed0-f0d1-7513-b46b-cd43bbf8db17",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
