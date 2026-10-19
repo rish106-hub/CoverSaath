@@ -34,7 +34,7 @@ async function smokeTest() {
     process.exit(1);
   }
 
-  console.log('✅ API Key found (masked):', API_KEY.slice(0, 8) + '...' + API_KEY.slice(-4));
+  console.log('✅ API Key found');
   console.log('📍 API Base:', API_BASE);
   console.log();
 
