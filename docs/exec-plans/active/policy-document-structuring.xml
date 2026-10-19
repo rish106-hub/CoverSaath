@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<implementation_prompt id="coversaath-policy-document-structuring" version="1.0" created="2026-10-19" status="planned">
+  <title>Whole-document policy structuring: Sarvam to Gemini to registry store</title>
+
+  <decision_record>docs/adr/0006-policy-document-structuring.md</decision_record>
+  <base_branch>codex/sarvam-block2</base_branch>
+
+  <persona>
+    Act as the implementation owner for a risk-sensitive AI extraction slice. Short PLAN, BUILD, FEEDBACK loops.
+    One vertical slice at a time, narrow checks after each. Evidence before claims. Terse reports.
+    Models propose, deterministic code decides. Never weaken a consent, tenant, audit or authority control to pass a test.
+  </persona>
+
+  <start_here>
+    <read>AGENTS.md</read>
+    <read>docs/adr/0003-ai-authority.md</read>
+    <read>docs/adr/0006-policy-document-structuring.md</read>
+    <read>docs/iterations/LATEST.md</read>
+    <read>src/modules/ai-analysis/eval-extractor.js (current 18-field regex extractor, eval only)</read>
+    <read>src/modules/ai-analysis/field-adjudicator.js (Gemini caller, verbatim-quote rule, consent grant check)</read>
+    <read>src/modules/coverage-analysis/parameter-records.js and policy-parameter-registry.js (138 keys, sections A to K)</read>
+    <read>scripts/eval-parse.mjs and src/integrations/sarvam/doc-ai-transport.js (normalized page shape)</read>
+    <note>Run repomap impact before editing shared files. Check for a closer AGENTS.md in each directory changed.</note>
+  </start_here>
+
+  <outcome>
+    A policy PDF digitised by Sarvam is split into meaningful chunks. Each chunk is mapped to a registry
+    parameter or parked as a proposed parameter. Cross-section conflicts are surfaced. Nothing is silently
+    dropped. Every stored value is extracted_unverified or conflicting.
+  </outcome>
+
+  <evidence>
+    <sample>
+      A real retail health policy schedule, 20 pages. Local only, never committed:
+      .local/eval/sarvam-raw.json, normalized.json, sarvam-view.md, golden.json.
+      Source PDF stays in the user's Downloads folder. Do not copy it into the repo.
+    </sample>
+    <sarvam_status>Sarvam captured all 20 pages with tables intact. Sarvam is not the gap.</sarvam_status>
+    <current_state>
+      Only eval-extractor.js consumes the pages: 18 regex fields, about 10% of the document, never run at runtime.
+      No path writes into the 138-key registry from a PDF.
+    </current_state>
+    <currently_lost>
+      <item pages="6-7">Schedule of Benefits: about 30 benefit rows plus notes a to h (air ambulance 5L, shared room 800/day max 4,800, unlimited restore, secure benefit 100%, infinite benefit, pre 60d, post 180d, preventive check-up 8,000 floater, aggregate deductible rules).</item>
+      <item pages="12-15">Exclusions: 15 coded standard (Excl04 to Excl18) and 17 specific (a to q).</item>
+      <item pages="4,9">Underwriting: loadings by member, declared pre-existing disease by member, ICD-10 code lists.</item>
+      <item pages="4-5">Premium: base, loading, every discount line, per member. Only the total is kept today.</item>
+      <item pages="3,8">Identity and admin: member IDs, customer ID, intermediary and code, nominee, first inception date, product UIN.</item>
+      <item pages="10-19">Customer Information Sheet: waiting periods, claim turnaround times, grievance chain, free look, moratorium, portability, renewal.</item>
+      <item pages="3-4">Add-on opted or not opted status per member.</item>
+    </currently_lost>
+    <known_conflicts>
+      <conflict id="C1">PED waiting period: Schedule of Benefits says 3 Years, CIS says 36 / 24 / 12 months.</conflict>
+      <conflict id="C2">Pre-hospitalisation: Schedule says 60 days, CIS says 30/60.</conflict>
+      <conflict id="C3">Policy number: e-card (page 8) has an extra zero versus every other page.</conflict>
+      <note>Declaration page 20 is blank and unsigned. Record it as present-and-unsigned, never as a consent.</note>
+      <note>Sarvam image blocks are model-written descriptions (an invented barcode essay, a signature read as a person's name). They are not document text and are dropped.</note>
+    </known_conflicts>
+  </evidence>
+
+  <design>
+    <stage n="1" name="sectioner" kind="deterministic">
+      Drop header, footer, page-number, image and image-caption blocks. Chunk by page, table and section title.
+      Keep page and block index. Tables become row-oriented text. Cap chunk size.
+    </stage>
+    <stage n="2" name="extractor" kind="gemini_per_chunk">
+      Input: chunk text plus registry key list with labels and value types. Output items: registry_key or proposed
+      (proposed_key, category, label), value, subject as printed, evidence_quote, page, block_index.
+      Items that do not fit go to the overflow bucket, never dropped.
+    </stage>
+    <stage n="3" name="reconciler" kind="gemini_per_document">
+      Input: validated items grouped by key. Output: groups that disagree with the quote on each side.
+      Reuses the conflicting state. Never picks a winner silently.
+    </stage>
+    <stage n="4" name="validator_and_store" kind="deterministic">
+      evidence_quote must be a literal substring of the chunk supplied. registry_key must exist in the registry version in force.
+      page and block_index must exist. Code normalises dates, money and durations.
+      Accepted items become observations (method document_extraction, state extracted_unverified or conflicting).
+      Overflow items go to proposed_parameters with status pending_review. The model never edits the registry.
+    </stage>
+    <consent>
+      Gemini receives Sarvam text chunks only, never PDF bytes. Document-specific grant with recipient gemini,
+      re-checked before each call and again before commit. Consent wording is not final: mark for legal review.
+    </consent>
+  </design>
+
+  <scope>
+    <in>
+      <path>src/modules/policy-structuring/ (sectioner.js, extractor.js, reconciler.js, validator.js, coverage-report.js, index.js)</path>
+      <path>Repository methods and migration for proposed_parameters (SQLite first, PostgreSQL parity test per ADR 0004)</path>
+      <path>Erasure hook for observations and proposed_parameters on consent revocation</path>
+      <path>Feature flag POLICY_STRUCTURING_ENABLED, default off</path>
+      <path>scripts/structure-policy.mjs (opt-in, reads .local/eval/normalized.json, prints coverage counts, no document text)</path>
+      <path>Reuse createGeminiCaller from field-adjudicator.js; move to a shared file only if a second caller needs it</path>
+      <path>Focused tests, docs/iterations/LATEST.md when durable state changes</path>
+    </in>
+    <out>
+      Coverage decision, eligibility, money or release logic changes. Promoting proposals into the registry (separate reviewed change).
+      Review UI. Sending PDF bytes to Gemini. Deployment. Accuracy or cost claims beyond measured runs. Final legal wording.
+    </out>
+  </scope>
+
+  <build_plan>
+    <step n="1" name="sectioner">
+      Pure function, no network. Tests: tags dropped, table rows kept, page and block index preserved, chunk cap,
+      deterministic output on the normalized.json shape (synthetic fixture, not the real content).
+    </step>
+    <step n="2" name="validator">
+      Pure function. Tests: quote not a substring rejected; unknown registry key rejected; bad page rejected;
+      model-supplied state proven/calculated/dynamic/not_permitted rejected; dates, money, durations normalised;
+      injection text inside a chunk cannot change the output schema.
+    </step>
+    <step n="3" name="extractor_and_reconciler">
+      Injected call function. Fake-caller tests: batching limits, per-document call and token cap, malformed JSON,
+      provider error, timeout, duplicate items, overflow routing, skipped chunks reported with reason.
+    </step>
+    <step n="4" name="storage_and_erasure">
+      Migration, repository methods, observations plus proposed_parameters. Tests: household ownership on every read
+      and write, revocation erases both stores, consent re-checked before commit, rerun is idempotent, rollback on mid-run failure.
+    </step>
+    <step n="5" name="coverage_report_and_eval">
+      Per chunk outcome: stored, proposed, or skipped with reason. Extend golden.json with expected keys from the
+      Schedule of Benefits, exclusions, premium and annexure. Metrics: key recall, hallucination rate (quotes not in source),
+      conflict recall for C1 to C3.
+    </step>
+    <step n="6" name="live_run" gated="owner approval, billable">
+      scripts/structure-policy.mjs --consent=gemini on the sample. Record calls, tokens, cost under .local/. Commit counts only.
+      If not run, say so in the report.
+    </step>
+  </build_plan>
+
+  <acceptance>
+    <check>Sectioner and validator unit tests pass, including every rejection path.</check>
+    <check>Fake-caller journey: sample-shaped pages in, observations and proposals stored, zero unaccounted non-boilerplate chunks.</check>
+    <check>Revocation test proves both stores emptied. Ownership test proves cross-household reads fail.</check>
+    <check>Live run shows recall on Schedule of Benefits, exclusions and premium tables and finds C1 to C3. Otherwise marked unverified.</check>
+    <check>npm run check, npm run eval:safety, git diff --check.</check>
+    <check>Independent read-only review, required for AI and migration changes.</check>
+  </acceptance>
+
+  <risks>
+    <risk name="invented values" control="verbatim-quote rule, registry-key allowlist, state ceiling extracted_unverified"/>
+    <risk name="prompt injection in policy text" control="chunk text is untrusted data, output schema enforced, no tool use"/>
+    <risk name="consent drift" control="document-specific gemini grant, re-check before each call and before commit"/>
+    <risk name="runaway cost" control="max calls and tokens per document, hard stop, report skipped chunks"/>
+    <risk name="personal data leakage" control="synthetic fixtures only, real sample stays in .local, logs carry counts not text"/>
+    <risk name="schema sprawl" control="overflow is a review queue, registry changes need a separate reviewed change"/>
+  </risks>
+
+  <data_handling>
+    Use synthetic data in tests and fixtures. Real sample content stays under .local/ (gitignored). No policy text,
+    names or numbers in code, logs, prompts checked in, fixtures or commits. Do not commit, push or deploy unless asked.
+  </data_handling>
+
+  <rollback>
+    Flag off. New tables are additive: drop proposed_parameters and delete observations tagged document_extraction
+    with the structuring source. No existing path changes.
+  </rollback>
+
+  <consultation>
+    If a design question blocks progress (chunking strategy, overflow category taxonomy, reconcile prompt shape),
+    consult Opus 5.5 (claude-opus-5-5) with the question and the relevant ADR section only. Never send sample document text.
+  </consultation>
+
+  <report_format>
+    Changes, evidence, checks run, unverified items, security and data impact, rollback, separate follow-ups.
+  </report_format>
+</implementation_prompt>
