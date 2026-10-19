@@ -1,5 +1,5 @@
 import {
-  DOCUMENT_KINDS, ERROR_MESSAGES, formatBytes, messageForErrorCode, selectionKey, statusLabel, validateSelection,
+  DOCUMENT_KINDS, ERROR_MESSAGES, formatBytes, messageForErrorCode, selectionKey, statusLabel, suggestDocumentKind, validateSelection,
 } from '../state/document-selection.js';
 
 export const POLL_INTERVAL_MS = 3000;
@@ -53,16 +53,25 @@ export function createDocumentUploadPanel({
     return Boolean(state.caseId && state.consentGrantId) && !state.uploading
       && state.items.some(item => item.state === 'ready' || item.state === 'error');
   }
-  function updateButtons() { uploadButton.disabled = !canUpload(); }
+  function updateButtons() {
+    uploadButton.disabled = !canUpload();
+    caseInput.disabled = state.uploading;
+    consentInput.disabled = state.uploading;
+    kindSelect.disabled = state.uploading;
+    fileInput.disabled = state.uploading;
+  }
 
   function addFiles(fileList) {
+    if (state.uploading) return;
     const results = validateSelection(Array.from(fileList ?? []), state.items.map(item => item.file));
     let added = 0;
     const problems = [];
     for (const result of results) {
       if (!result.ok) { problems.push(`${result.file.name}: ${result.errors[0].message}`); continue; }
+      const suggestedKind = suggestDocumentKind(result.file.name);
       state.items.push({
         id: nextId++, file: result.file, key: result.key, idempotencyKey: makeKey(), state: 'ready',
+        kind: suggestedKind ?? state.kind, suggestedKind: Boolean(suggestedKind),
         loaded: 0, total: result.file.size, error: '', document: null, flag: result.warnings[0]?.message ?? '',
       });
       added += 1;
@@ -80,13 +89,13 @@ export function createDocumentUploadPanel({
     renderQueue();
   }
 
-  async function uploadOne(item) {
+  async function uploadOne(item, context) {
     item.state = 'uploading'; item.error = ''; item.loaded = 0;
     renderQueue();
     try {
       // The same idempotencyKey is reused when this same file is retried.
       const result = await client.uploadDocument({
-        caseId: state.caseId, file: item.file, documentKind: state.kind, consentGrantId: state.consentGrantId,
+        caseId: context.caseId, file: item.file, documentKind: item.kind, consentGrantId: context.consentGrantId,
         idempotencyKey: item.idempotencyKey,
         onProgress(loaded, total) { item.loaded = loaded; item.total = total; paintProgress(item); },
       });
@@ -102,8 +111,9 @@ export function createDocumentUploadPanel({
 
   async function uploadAll() {
     if (!canUpload()) return;
+    const context = { caseId: state.caseId, consentGrantId: state.consentGrantId };
     state.uploading = true; updateButtons();
-    for (const item of state.items.filter(entry => entry.state === 'ready' || entry.state === 'error')) await uploadOne(item);
+    for (const item of state.items.filter(entry => entry.state === 'ready' || entry.state === 'error')) await uploadOne(item, context);
     state.uploading = false;
     state.items = state.items.filter(item => item.state !== 'done');
     renderQueue();
@@ -113,8 +123,9 @@ export function createDocumentUploadPanel({
   async function retryOne(id) {
     const item = state.items.find(entry => entry.id === id);
     if (!item || state.uploading || !state.caseId || !state.consentGrantId) return;
+    const context = { caseId: state.caseId, consentGrantId: state.consentGrantId };
     state.uploading = true; updateButtons();
-    await uploadOne(item);
+    await uploadOne(item, context);
     state.uploading = false;
     if (item.state === 'done') state.items = state.items.filter(entry => entry !== item);
     renderQueue();
@@ -122,6 +133,20 @@ export function createDocumentUploadPanel({
   }
 
   const progressRefs = new Map();
+  function kindChoice(item) {
+    const select = el('select', {
+      'aria-label':`Document type for ${item.file.name}`, disabled:state.uploading,
+      onChange:event => {
+        const kind = event.currentTarget.value;
+        if (kind !== item.kind && item.state === 'error') item.idempotencyKey = makeKey();
+        item.kind = kind;
+        item.suggestedKind = false;
+      },
+    }, DOCUMENT_KINDS.map(([value, label]) => el('option', { value }, label)));
+    select.value = item.kind;
+    return select;
+  }
+
   function paintProgress(item) {
     const bar = progressRefs.get(item.id);
     if (!bar) return;
@@ -149,7 +174,9 @@ export function createDocumentUploadPanel({
           el('strong', { class:'upload-name' }, item.file.name),
           el('small', {}, formatBytes(item.file.size)),
           el('span', { class:'upload-status' }, statusText),
-          item.flag ? el('small', { class:'hint' }, item.flag) : null),
+          item.flag ? el('small', { class:'hint' }, item.flag) : null,
+          item.suggestedKind ? el('small', { class:'hint' }, 'Type suggested from the filename. Please check it.') : null),
+        kindChoice(item),
         bar,
         el('div', { class:'upload-actions' },
           item.state === 'error' ? el('button', {
@@ -289,8 +316,13 @@ export function createDocumentUploadPanel({
     el('p', { class:'hint' }, 'PDF only, up to 15 MB each and 10 files at a time. Files are sent as received and are not read until security checks finish. Consent and privacy wording here is draft copy pending legal review.'),
     el('div', { class:'field' }, el('label', { for:'doc-case-id' }, 'Case ID'), caseInput),
     el('div', { class:'field' }, el('label', { for:'doc-consent-id' }, 'Consent grant ID'), consentInput),
-    el('div', { class:'field' }, el('label', { for:'doc-kind' }, 'Document type'), kindSelect),
-    el('div', { class:'field' }, el('label', { for:'doc-files' }, 'PDF files'), fileInput),
+    el('div', { class:'field' }, el('label', { for:'doc-kind' }, 'Default document type for new files'), kindSelect),
+    el('div', {
+      class:'field upload-drop-zone',
+      onDragOver:event => event.preventDefault(),
+      onDrop:event => { event.preventDefault(); addFiles(event.dataTransfer?.files); },
+    }, el('label', { for:'doc-files' }, 'Choose PDF files or drop them here'), fileInput,
+    el('small', { class:'hint' }, 'Check the document type for each file before uploading.')),
     notice,
     queueMount,
     el('div', { class:'actions' }, uploadButton),
