@@ -1,5 +1,7 @@
 // Counts-only coverage report: every chunk ends stored, proposed or skipped, and nothing from the document
 // (chunk text, values, quotes, labels) is copied in. Chunk ids and page numbers are positional, not content.
+// Accounting is not accuracy: a stored chunk can still miss facts, which only a golden comparison measures.
+import { isConflict } from './reconciler.js';
 
 const tally = (list, pick) => list.reduce((counts, entry) => {
   const key = pick(entry);
@@ -37,7 +39,10 @@ export function buildCoverageReport({ sectioned, extraction, reconciliation, com
     if (!result) { unaccounted += 1; continue; }
     perChunk.push({ id: chunk.id, page: chunk.page, ...result });
   }
-  const conflicts = reconciliation?.conflicts ?? [];
+  const all = reconciliation?.conflicts ?? [];
+  const conflicts = all.filter(isConflict);
+  const variations = all.filter(entry => (entry.kind ?? (entry.reasonCode === 'per_subject_values' ? 'variation' : null)) === 'variation');
+  const context = all.filter(entry => !isConflict(entry) && !variations.includes(entry));
   const skipped = perChunk.filter(entry => entry.outcome === 'skipped');
   return {
     chunks: {
@@ -55,6 +60,8 @@ export function buildCoverageReport({ sectioned, extraction, reconciliation, com
       deterministic: conflicts.filter(conflict => conflict.sources?.includes('deterministic')).length,
       reconciler: conflicts.filter(conflict => conflict.sources?.includes('reconciler')).length,
     },
+    variations: { perSubject: variations.length, context: context.length },
+    modelSelections: all.filter(entry => entry.selectedQuote).length,
     calls: count(extraction?.calls) + count(reconciliation?.calls),
     usage: {
       inputTokens: count(extraction?.usage?.inputTokens) + count(reconciliation?.usage?.inputTokens),
@@ -71,7 +78,7 @@ export function scoreStructuring(golden, result) {
   const expectedConflicts = golden?.structuring?.expectedConflicts ?? [];
   const accepted = result?.extraction?.accepted ?? [];
   const rejected = result?.extraction?.rejected ?? [];
-  const conflicts = result?.reconciliation?.conflicts ?? [];
+  const conflicts = (result?.reconciliation?.conflicts ?? []).filter(isConflict);
   const found = expected => accepted.some(item => item.parameterKey === expected.key && (expected.page == null || item.page === expected.page));
   const missingKeys = expectedKeys.filter(expected => !found(expected)).map(expected => expected.key);
   const foundConflicts = expectedConflicts.filter(expected => conflicts.some(conflict => conflict.target?.kind === 'registry' && conflict.target.key === expected.key)).map(expected => expected.id);

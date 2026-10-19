@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
 import { validateExtractedItems } from '../src/modules/policy-structuring/validator.js';
-import { decideStates, deterministicConflicts, groupItems, reconcile } from '../src/modules/policy-structuring/reconciler.js';
+import { decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from '../src/modules/policy-structuring/reconciler.js';
 
 // Synthetic only: fictional insurer and numbers. Items go through the real validator.
 const chunks = [
@@ -64,6 +64,59 @@ test('decideStates marks conflicting only with two or more observations', () => 
   const forced = [{ groupId: 'x', target: { kind: 'registry', key: 'f.initial_waiting_period' }, sources: ['reconciler'], reasonCode: 'reconciler_conflict' }];
   assert.equal(decideStates({ accepted: single, conflicts: forced })[0].state, 'extracted_unverified');
   assert.deepEqual(decisions[1].observations[0], { value: single[0].value, page: 5, blockIndex: 1, evidenceQuote: 'Initial wait 30 days.' });
+});
+
+test('a clause-length description beside a schedule value is context, not a conflict', () => {
+  const schedule = { id: 'p6-b3', page: 6, blockIndexes: [3], text: 'Organ Donor Expenses | Covered upto sum insured' };
+  const wording = { id: 'p11-b3', page: 11, blockIndexes: [3], text: "Organ Donor Expenses | Cost of the organ donor's hospitalisation for harvesting the donated organ where an Insured Person is the recipient" };
+  const items = [
+    ...validateExtractedItems([item(schedule, 'e.organ_donor', 'Covered upto sum insured', 'Covered upto sum insured', 'Organ Donor Expenses')], { chunk: schedule, registryVersion }).accepted,
+    ...validateExtractedItems([item(wording, 'e.organ_donor', "Cost of the organ donor's hospitalisation for harvesting the donated organ where an Insured Person is the recipient",
+      "Cost of the organ donor's hospitalisation for harvesting the donated organ where an Insured Person is the recipient", 'Organ Donor Expenses')], { chunk: wording, registryVersion }).accepted,
+  ];
+  assert.equal(items.length, 2);
+  const conflicts = deterministicConflicts(groupItems(items, []));
+  assert.deepEqual(conflicts.map(conflict => [conflict.kind, conflict.reasonCode]), [['context', 'context_differs']]);
+  assert.equal(conflicts.filter(isConflict).length, 0, 'context is not reported as a contradiction');
+  // Differing readings are never silently resolved: without a selection the key stays conflicting.
+  assert.deepEqual(decideStates({ accepted: items, conflicts }).map(decision => [decision.state, decision.reasonCode]), [['conflicting', 'context_differs']]);
+});
+
+test('a grounded Gemini selection resolves a conflict as unverified; ungrounded or variation selections do not', async () => {
+  const ped = accepted.filter(entry => entry.parameterKey === 'f.ped_waiting_period');
+  const pick = selected_quote => async () => ({ json: { conflicts: [{ group_id: 'registry:f.ped_waiting_period|policy', quotes: ['PED waiting period: 3 Years.', '36 / 24 / 12 months by plan'], selected_quote }] }, usage: {} });
+  const chosen = await reconcile({ accepted: ped, call: pick('PED waiting period: 3 Years.'), consentCheck: consent() });
+  const [decision] = decideStates({ accepted: ped, conflicts: chosen.conflicts });
+  assert.deepEqual([decision.state, decision.reasonCode, decision.selectedQuote, decision.observations.length],
+    ['extracted_unverified', 'model_selected_from_conflict', 'PED waiting period: 3 Years.', 2], 'every reading is kept beside the selection');
+
+  const invented = await reconcile({ accepted: ped, call: pick('PED waiting period: 1 Year.'), consentCheck: consent() });
+  assert.deepEqual(invented.skipped, [{ groupId: 'registry:f.ped_waiting_period|policy', reason: 'ungrounded_selection' }]);
+  assert.equal(decideStates({ accepted: ped, conflicts: invented.conflicts })[0].state, 'conflicting');
+
+  const members = accepted.filter(entry => entry.parameterKey === 'd.sum_insured');
+  const variation = deterministicConflicts(groupItems(members, [])).map(conflict => ({ ...conflict, selectedQuote: 'Member A: Rs. 3,00,000' }));
+  assert.deepEqual(decideStates({ accepted: members, conflicts: variation }).map(entry => [entry.state, entry.reasonCode]), [['conflicting', 'per_subject_values']], 'a per-member variation is never resolved to one value');
+});
+
+test('a subject the model invents is not a printed subject, so a contradiction is not hidden as a variation', () => {
+  const left = { id: 'p6-b1', page: 6, blockIndexes: [1], text: 'PED waiting 36 months' };
+  const right = { id: 'p16-b1', page: 16, blockIndexes: [1], text: 'PED waiting 48 months' };
+  const items = [
+    ...validateExtractedItems([item(left, 'f.ped_waiting_period', '36 months', 'PED waiting 36 months', 'Schedule')], { chunk: left, registryVersion }).accepted,
+    ...validateExtractedItems([item(right, 'f.ped_waiting_period', '48 months', 'PED waiting 48 months', 'Policy wording')], { chunk: right, registryVersion }).accepted,
+  ];
+  const conflicts = deterministicConflicts(groupItems(items, []));
+  assert.deepEqual(conflicts.map(conflict => [conflict.kind, conflict.reasonCode]), [['conflict', 'model_observations_conflict']]);
+});
+
+test('per-subject variation is reported as a variation and never counted as a conflict', async () => {
+  const { buildCoverageReport, scoreStructuring } = await import('../src/modules/policy-structuring/coverage-report.js');
+  const conflicts = deterministicConflicts(groupItems(accepted, []));
+  const report = buildCoverageReport({ sectioned: { chunks: [] }, extraction: {}, reconciliation: { conflicts } });
+  assert.deepEqual([report.conflicts.total, report.variations.perSubject], [2, 1]);
+  const golden = { structuring: { expectedConflicts: [{ id: 'X', key: 'd.sum_insured' }, { id: 'C1', key: 'f.ped_waiting_period' }] } };
+  assert.deepEqual(scoreStructuring(golden, { reconciliation: { conflicts } }).foundConflicts, ['C1'], 'a variation does not satisfy an expected conflict');
 });
 
 test('model conflict is accepted only with grounded quotes; ungrounded and unknown groups are skipped', async () => {
