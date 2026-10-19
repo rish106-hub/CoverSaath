@@ -6,7 +6,20 @@ const require = createRequire('/opt/node22/lib/node_modules/');
 const { chromium } = require('playwright');
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
-const [jobsFile, projDir, blobDir, outDir] = process.argv.slice(2);
+const [jobsFileArg, projDirArg, blobDirArg, outDirArg] = process.argv.slice(2);
+const SAFE_ROOT = path.resolve(process.cwd());
+const resolveWithinRoot = (p, name) => {
+  const resolved = path.resolve(p);
+  const relToRoot = path.relative(SAFE_ROOT, resolved);
+  if (relToRoot.startsWith('..') || path.isAbsolute(relToRoot)) {
+    throw new Error(`Invalid ${name}: path must be within ${SAFE_ROOT}`);
+  }
+  return resolved;
+};
+const jobsFile = resolveWithinRoot(jobsFileArg, 'jobsFile');
+const projDir = resolveWithinRoot(projDirArg, 'projDir');
+const blobDir = resolveWithinRoot(blobDirArg, 'blobDir');
+const outDir = resolveWithinRoot(outDirArg, 'outDir');
 const jobs = JSON.parse(fs.readFileSync(jobsFile, 'utf8'));
 const inpage = fs.readFileSync(path.join(HERE, 'inpage.js'), 'utf8');
 const work = path.join(outDir, 'work');
