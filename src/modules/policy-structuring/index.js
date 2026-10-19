@@ -11,7 +11,7 @@ import { buildCoverageReport } from './coverage-report.js';
 export { STRUCTURING_DROPPED_TAGS, sectionDocument } from './sectioner.js';
 export { normalizeValue, validateExtractedItems } from './validator.js';
 export { EXTRACTOR_VERSION, STRUCTURING_LIMITS, extractChunks, registryCatalog } from './extractor.js';
-export { RECONCILER_VERSION, decideStates, deterministicConflicts, groupItems, reconcile } from './reconciler.js';
+export { RECONCILER_VERSION, SHORT_VALUE_CHARS, decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from './reconciler.js';
 export { buildCoverageReport, scoreStructuring } from './coverage-report.js';
 
 export const POLICY_STRUCTURING_VERSION = 'policy-structuring/v1';

@@ -21,6 +21,7 @@ const PROPOSAL_CATEGORIES = new Set(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'
 const DECISION_STATES = new Set(['extracted_unverified', 'conflicting']);
 const DECISION_REASONS = new Set([
   'model_extracted_unverified', 'model_observations_conflict', 'reconciler_conflict', 'per_subject_values',
+  'context_differs', 'model_selected_from_conflict',
 ]);
 // Same rules as CoverageParameterRepository.recordModelExtraction.
 const MODEL_REPLACEABLE_STATES = new Set(['unknown', 'extracted_unverified', 'conflicting']);
@@ -134,10 +135,20 @@ function validateDecisions(decisions) {
     if (state === 'conflicting' && observations.length < 2) {
       throw decisionInvalid(`${name}: a conflicting decision needs at least two observations.`);
     }
+    // A model selection among differing readings (owner decision, ADR 0006) stays extracted_unverified and
+    // must name one of the decision's own quotes; every reading is still stored.
+    const { selectedQuote } = decision;
+    const selecting = reasonCode === 'model_selected_from_conflict';
+    if (selecting !== (selectedQuote !== undefined)) throw decisionInvalid(`${name}.selectedQuote must come with model_selected_from_conflict.`);
+    if (selecting && (state !== 'extracted_unverified' || observations.length < 2
+      || !observations.some(observation => isPlainObject(observation) && observation.evidenceQuote === selectedQuote))) {
+      throw decisionInvalid(`${name}.selectedQuote must name one of at least two observations.`);
+    }
     return Object.freeze({
       parameterKey,
       state,
       reasonCode,
+      selectedQuote: selecting ? selectedQuote : null,
       observations: observations.map((observation, observationIndex) => {
         const label = `${name}.observations[${observationIndex}]`;
         if (!isPlainObject(observation)) throw decisionInvalid(`${label} must be an object.`);
@@ -359,6 +370,7 @@ export class PolicyStructuringRepository {
         const prior = this.coverageParameters.listObservations(record.id, { limit: maximumObservations })
           .filter(observation => !observation.redactedAt && USABLE_REVIEW_STATUSES.has(observation.reviewStatus));
         let latestObservationId = null;
+        let selectedObservationId = null;
         for (const observation of decision.observations) {
           const page = pages.get(observation.page);
           latestObservationId = this.coverageParameters.appendObservation({
@@ -374,6 +386,9 @@ export class PolicyStructuringRepository {
             observedAt: at,
             recordedBy,
           }).id;
+          if (decision.selectedQuote !== null && selectedObservationId === null && observation.value.evidenceQuote === decision.selectedQuote) {
+            selectedObservationId = latestObservationId;
+          }
           observations += 1;
         }
         parameters += 1;
@@ -389,7 +404,7 @@ export class PolicyStructuringRepository {
           });
         } else {
           this.coverageParameters.setResolution({
-            parameterRecordId: record.id, state: 'extracted_unverified', observationId: latestObservationId,
+            parameterRecordId: record.id, state: 'extracted_unverified', observationId: selectedObservationId ?? latestObservationId,
             reasonCode: decision.reasonCode, updatedBy: recordedBy, at,
           });
         }

@@ -173,7 +173,10 @@ function checkItem(item, chunk, registry, reservedKeys) {
     confidence: ['high', 'medium', 'low'].includes(item.confidence) ? item.confidence : null,
     rationale: text(item.rationale).slice(0, VALIDATOR_LIMITS.maxRationaleChars) || null,
   };
-  const location = { evidenceQuote: quote, page: chunk.page, blockIndex: item.block_index, chunkId: chunk.id, note };
+  // A subject counts as named by the document only when it is printed in the chunk we sent; a model's own
+  // label ("Schedule", "Policy wording") cannot turn a contradiction into a per-subject variation.
+  const subjectInSource = subject !== 'policy' && chunk.text.toLowerCase().includes(subject.toLowerCase());
+  const location = { evidenceQuote: quote, page: chunk.page, blockIndex: item.block_index, chunkId: chunk.id, subjectInSource, note };
   // A value not found in its own quote is a model paraphrase: the verbatim quote is stored instead, so
   // nothing printed is lost and no model wording is stored as a value.
   const typeOf = candidate => (target.definition ? target.definition.valueType : inferValueType(candidate));
