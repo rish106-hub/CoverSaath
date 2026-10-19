@@ -1,0 +1,64 @@
+tests/policy-structuring-api.test.mjs
+  s_0cc44eccc0b942::t_62ee53dcfdde1c 70,73-78,81
+  s_0cc44eccc0b942::t_64108a149a4321 1-69,71-72,79-80,82-192,194,196,198-325
+  s_0cc44eccc0b942::t_4e19bb03e1653b 193,195,197
+src/modules/ai-analysis/live-coverage-runtime.js
+  s_0cc44eccc0b942::t_0eebf5c5ef4036 27,33,56,77
+src/modules/ai-analysis/structuring-contract.js
+  s_0cc44eccc0b942::t_60145294186d41 1-57
+src/backend/services/policy-structuring-service.js
+  s_0cc44eccc0b942::t_2bc1894b6c9c49 126
+  s_0cc44eccc0b942::t_bf7051bf70b878 1-125,127-168
+src/modules/policy-structuring/extractor.js
+  s_0cc44eccc0b942::t_5e99fcccd51c08 12
+  s_0cc44eccc0b942::t_2431505ce9450f 6-8,10-11,105
+src/modules/ai-analysis/responsibility-matrix.js
+  s_0cc44eccc0b942::t_bb3de49eb17515 7-8,71-72
+tests/p1a-ai-authority.test.mjs
+  s_0cc44eccc0b942::t_bb3de49eb17515 44-47
+src/modules/ai-analysis/prompts.js
+  s_0cc44eccc0b942::t_482650f903601e 3,17-25,32-37
+src/modules/ai-analysis/schemas.js
+  s_0cc44eccc0b942::t_482650f903601e 2,209-233,236,319-322,356
+src/server/create-server.js
+  s_0cc44eccc0b942::t_1c74d032989dac 7,24,69-86,153,206
+src/modules/ai-analysis/structuring-runtime.js
+  s_0cc44eccc0b942::t_a20905315b1085 1-76
+src/modules/ai-analysis/index.js
+  s_0cc44eccc0b942::t_0eebf5c5ef4036 8-11
+src/server/routes/v1-backend-routes.js
+  s_0cc44eccc0b942::t_1c74d032989dac 196,420-435,438-440
+  s_0cc44eccc0b942::t_b8d2305a20f1e5 436-437
+src/contracts/ai-authority.js
+  s_0cc44eccc0b942::t_bb3de49eb17515 50-53
+src/backend/repositories/policy-structuring-repository.js
+  s_0cc44eccc0b942::t_b5e954f8d78a44 47-50,230-258,326,340,345,354,453
+src/backend/services/index.js
+  s_0cc44eccc0b942::t_1c74d032989dac 5
+src/modules/policy-structuring/reconciler.js
+  s_0cc44eccc0b942::t_2431505ce9450f 9-11,13,144
+  s_0cc44eccc0b942::t_5e99fcccd51c08 15
+  s_0cc44eccc0b942::t_5217ace15f4ff2 16
+src/modules/policy-structuring/index.js
+  s_0cc44eccc0b942::t_9c13b1fa1a7cd6 11,67-68,93-98
+  s_0cc44eccc0b942::t_5e99fcccd51c08 17
+src/backend/repositories/consent-repository.js
+  s_0cc44eccc0b942::t_99e1e6cf0b5157 173-181,210,221
+  s_0cc44eccc0b942::t_fadaa5c60e0108 3,8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "15c27dd5fd05742a6b74db95a73aedb71e01d861",
+  "prompts": {},
+  "sessions": {
+    "s_0cc44eccc0b942": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ae4081c9-5326-403e-a828-7e5343c11629",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
