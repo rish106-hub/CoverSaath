@@ -2,7 +2,7 @@
 // driver is an in-process stub, and every identifier below is synthetic.
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { testTempRoot as tmpdir } from './temp-root.mjs';
 import { openDatabase } from '../../src/backend/database/index.js';
 import { createApiServer } from '../../src/server/server.js';
 
