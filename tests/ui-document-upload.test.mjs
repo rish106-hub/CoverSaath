@@ -128,3 +128,31 @@ test('JSON request errors keep the server error code so list failures get a spec
   const odd = createV1Client({ fetchImpl: async () => ({ ok: false, status: 500, json: async () => ({ error: { code: '<script>' } }) }) });
   await assert.rejects(odd.listCaseDocuments('case-1'), error => error.code === undefined);
 });
+
+test('deleteDocument sends DELETE with the session and returns pending or deleted state', async () => {
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url, options });
+    return { ok: true, status: 202, json: async () => ({ document: { id: 'doc/1', status: 'deletion_pending' } }) };
+  };
+  const client = createV1Client({ fetchImpl });
+  client.setSessionToken('session-token');
+  const result = await client.deleteDocument('doc/1');
+  assert.equal(result.document.status, 'deletion_pending');
+  assert.equal(calls[0].url, '/api/v1/documents/doc%2F1');
+  assert.equal(calls[0].options.method, 'DELETE');
+  assert.equal(calls[0].options.headers.Authorization, 'Bearer session-token');
+});
+
+test('deletion inventory is available through its consent-independent client path', async () => {
+  const calls = [];
+  const client = createV1Client({ fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    return { ok: true, status: 200, json: async () => ({ caseId: 'case/1', documents: [] }) };
+  } });
+  client.setSessionToken('session-token');
+  await client.listDocumentsForDeletion('case/1');
+  assert.equal(calls[0].url, '/api/v1/cases/case%2F1/documents/deletion-inventory');
+  assert.equal(calls[0].options.method, 'GET');
+  assert.equal(calls[0].options.headers.Authorization, 'Bearer session-token');
+});

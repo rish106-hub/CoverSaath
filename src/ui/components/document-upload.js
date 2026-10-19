@@ -23,6 +23,7 @@ export function createDocumentUploadPanel({
   const state = { caseId: '', consentGrantId: '', kind: 'policy_wording', items: [], documents: [], uploading: false };
   const touched = { caseId: false, consent: false };
   const polls = new Map(); // document id -> { startedAt, timer }
+  const deleting = new Set();
   let nextId = 1;
   let loadedContext = '';
   let listNoticeShown = false;
@@ -172,7 +173,31 @@ export function createDocumentUploadPanel({
           el('small', {}, `${formatBytes(doc.byteSize)}${doc.uploadedAt ? `, uploaded ${new Date(doc.uploadedAt).toLocaleString()}` : ''}`),
           el('span', { class:'upload-status' }, statusLabel(doc.status))),
         doc.status === 'received_pending_checks' && polls.get(doc.id)?.expired
-          ? el('small', { class:'hint' }, 'Checks are taking longer than usual. Refresh later to see the result.') : null))));
+          ? el('small', { class:'hint' }, 'Checks are taking longer than usual. Refresh later to see the result.') : null,
+        !['deletion_pending', 'deleted'].includes(doc.status) ? el('div', { class:'upload-actions' }, el('button', {
+          class:'button secondary', type:'button', disabled:deleting.has(doc.id),
+          'aria-label':`Delete ${kindLabel(doc.documentKind)}`,
+          onClick:() => { void deleteOne(doc.id); },
+        }, deleting.has(doc.id) ? 'Deleting...' : 'Delete')) : null))));
+  }
+
+  async function deleteOne(id) {
+    if (deleting.has(id)) return;
+    deleting.add(id);
+    renderDocuments();
+    try {
+      const result = await client.deleteDocument(id);
+      const index = state.documents.findIndex(entry => entry.id === id);
+      if (index >= 0) state.documents[index] = result.document;
+      announce(`${kindLabel(result.document.documentKind)}: ${statusLabel(result.document.status)}.`);
+      trackPending();
+    } catch (error) {
+      notice.textContent = messageForErrorCode(error?.code);
+      announce(notice.textContent);
+    } finally {
+      deleting.delete(id);
+      renderDocuments();
+    }
   }
 
   function stopPolling() {
@@ -186,10 +211,19 @@ export function createDocumentUploadPanel({
     poll.timer = setTimer(async () => {
       if (now() - poll.startedAt >= POLL_MAX_MS) { poll.expired = true; poll.timer = null; renderDocuments(); return; }
       try {
-        const doc = await client.getDocument(id);
+        const caseId = state.caseId;
+        const current = state.documents.find(entry => entry.id === id) ?? null;
+        let doc;
+        if (current?.status === 'deletion_pending') {
+          const inventory = await client.listDocumentsForDeletion(caseId);
+          doc = inventory.documents?.find(entry => entry.id === id) ?? { ...current, status: 'deleted' };
+        } else {
+          doc = await client.getDocument(id);
+        }
+        if (caseId !== state.caseId) return;
         const index = state.documents.findIndex(entry => entry.id === id);
         if (index >= 0) state.documents[index] = doc;
-        if (doc.status !== 'received_pending_checks') {
+        if (!['received_pending_checks', 'deletion_pending'].includes(doc.status)) {
           polls.delete(id);
           announce(`${kindLabel(doc.documentKind)}: ${statusLabel(doc.status)}.`);
           renderDocuments();
@@ -202,7 +236,7 @@ export function createDocumentUploadPanel({
 
   function trackPending() {
     for (const doc of state.documents) {
-      if (doc.status === 'received_pending_checks' && !polls.has(doc.id)) {
+      if (['received_pending_checks', 'deletion_pending'].includes(doc.status) && !polls.has(doc.id)) {
         polls.set(doc.id, { startedAt: now(), timer: null, expired: false });
         schedulePoll(doc.id);
       }
@@ -210,13 +244,22 @@ export function createDocumentUploadPanel({
   }
 
   async function refresh() {
-    // Listing needs the document consent's read scope; without a grant ID the request can only fail.
-    if (!state.caseId || !state.consentGrantId) { state.documents = []; stopPolling(); renderDocuments(); return; }
+    if (!state.caseId) { state.documents = []; stopPolling(); renderDocuments(); return; }
     const caseId = state.caseId;
     // Never show one case's documents under another case while the new list loads or fails.
     if (caseId !== listedCase) { state.documents = []; stopPolling(); renderDocuments(); listedCase = caseId; }
     try {
-      const result = await client.listCaseDocuments(caseId);
+      let result;
+      try {
+        result = state.consentGrantId
+          ? await client.listCaseDocuments(caseId)
+          : await client.listDocumentsForDeletion(caseId);
+      } catch (error) {
+        // The deletion inventory intentionally needs household access but not active processing
+        // consent, so erasure stays available after consent expiry or revocation.
+        if (!['FIELD_ACCESS_REQUIRED', 'CONSENT_REQUIRED', 'CONSENT_SCOPE_REQUIRED'].includes(error?.code)) throw error;
+        result = await client.listDocumentsForDeletion(caseId);
+      }
       if (caseId !== state.caseId) return;
       state.documents = result.documents ?? [];
       if (listNoticeShown) { notice.textContent = ''; listNoticeShown = false; }

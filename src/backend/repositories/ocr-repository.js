@@ -82,15 +82,33 @@ export class OcrRepository {
   updateJob(jobId, changes) {
     const current = this.getJob(jobId);
     if (!current) return null;
+    // Cancellation is terminal. A provider response that returns after document erasure must not
+    // restart the job or persist provider output.
+    if (current.status === 'cancelled') return current;
     const next = { ...current, ...changes };
-    this.database.prepare(`UPDATE ocr_jobs SET
+    const updated = this.database.prepare(`UPDATE ocr_jobs SET
       provider_job_ref = ?, status = ?, contract_version = ?, result_json = ?, result_digest = ?,
       error_code = ?, error_message = ?, started_at = ?, completed_at = ?, updated_at = ?
-      WHERE id = ?`).run(
+      WHERE id = ? AND status <> 'cancelled'`).run(
       next.providerJobRef, next.status, next.contractVersion,
       next.result == null ? null : JSON.stringify(next.result), next.resultDigest,
       next.errorCode, next.errorMessage, next.startedAt, next.completedAt, next.updatedAt, jobId,
     );
+    if (updated.changes !== 1) return this.getJob(jobId);
+    return this.getJob(jobId);
+  }
+
+  recordCancellationReference(jobId, providerJobRef) {
+    this.database.prepare(`UPDATE ocr_jobs SET provider_job_ref = ?
+      WHERE id = ? AND status = 'cancelled'
+        AND error_code IN ('DOCUMENT_DELETED', 'CONSENT_REVOKED')
+        AND provider_job_ref IS NULL`).run(providerJobRef, jobId);
+    return this.getJob(jobId);
+  }
+
+  completeCancellation(jobId) {
+    this.database.prepare(`UPDATE ocr_jobs SET provider_job_ref = NULL, error_code = NULL,
+      error_message = NULL WHERE id = ? AND status = 'cancelled'`).run(jobId);
     return this.getJob(jobId);
   }
 

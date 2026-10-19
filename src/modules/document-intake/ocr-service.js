@@ -63,17 +63,38 @@ export function createOcrService({ repository, provider, byteReader, mode = 'liv
       });
       try {
         const bytes = mode === 'live' ? await byteReader(document.documentId) : undefined;
-        const submission = await provider.createJob({ document, bytes, authorization: safeAuthorization });
+        // Mark the outbound boundary before calling the provider. A concurrent deletion can then
+        // distinguish an in-flight submission from a queued job that never left this process.
+        job = await repository.updateJob(job.id, { startedAt: requestedAt, updatedAt: requestedAt });
+        if (job?.status === 'cancelled') return job;
+        const submission = await provider.createJob({
+          document, bytes, authorization: safeAuthorization, requestId: job.id,
+        });
+        const cancelled = await repository.getJob(job.id);
+        if (cancelled?.status === 'cancelled') {
+          const returnedRef = submission?.jobRef ?? submission?.result?.provider?.jobRef ?? null;
+          if (returnedRef) await repository.recordCancellationReference(job.id, returnedRef);
+          await provider.cancelJob({
+            jobRef: returnedRef, requestId: job.id, authorization: safeAuthorization,
+          });
+          return repository.completeCancellation(job.id);
+        }
         if (submission?.status === 'succeeded') return persistSuccess(job, document, submission.result);
         if (!submission?.jobRef || !['submitted', 'processing'].includes(submission.status)) {
           throw new DocumentIntakeError('OCR_PROVIDER_RESPONSE_INVALID', 'OCR provider submission returned an unsupported lifecycle response.');
         }
-        return repository.updateJob(job.id, {
+        const updated = await repository.updateJob(job.id, {
           status: submission.status,
           providerJobRef: submission.jobRef,
           startedAt: requestedAt,
           updatedAt: requestedAt,
         });
+        if (updated?.status === 'cancelled') {
+          await repository.recordCancellationReference(job.id, submission.jobRef);
+          await provider.cancelJob({ jobRef: submission.jobRef, requestId: job.id, authorization: safeAuthorization });
+          return repository.completeCancellation(job.id);
+        }
+        return updated;
       } catch (error) {
         await repository.updateJob(job.id, {
           status: 'failed',
@@ -113,7 +134,9 @@ export function createOcrService({ repository, provider, byteReader, mode = 'liv
       const document = await repository.getReadyDocument(job.documentUploadId, now().toISOString());
       if (!document) throw new DocumentIntakeError('DOCUMENT_NOT_OCR_READY', 'OCR cancellation requires current document authorization.');
       const safeAuthorization = assertAuthorization(authorization, document);
-      if (job.providerJobRef) await provider.cancelJob({ jobRef: job.providerJobRef, authorization: safeAuthorization });
+      if (job.providerJobRef) await provider.cancelJob({
+        jobRef: job.providerJobRef, requestId: job.id, authorization: safeAuthorization,
+      });
       return repository.updateJob(job.id, { status: 'cancelled', completedAt: now().toISOString(), updatedAt: now().toISOString() });
     },
 
