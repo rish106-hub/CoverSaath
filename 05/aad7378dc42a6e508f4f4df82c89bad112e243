@@ -1,0 +1,52 @@
+.env.example
+  s_f77829440e5f2e::t_001ad06feb1b4b 30
+src/modules/ai-analysis/field-adjudicator.js
+  s_f77829440e5f2e::t_f5c7686f4d96c8 1-134
+tests/document-upload-api.test.mjs
+  s_f77829440e5f2e::t_634b4b8a6168da 560
+tests/sarvam-doc-ai.test.mjs
+  s_f77829440e5f2e::t_b6cdb531c3e4f8 25-32,37,217,231-233,245,260,277,303-343
+src/modules/ai-analysis/eval-scorer.js
+  s_f77829440e5f2e::t_f5c7686f4d96c8 1-57
+src/integrations/sarvam/doc-ai-transport.js
+  s_f77829440e5f2e::t_001ad06feb1b4b 229-231,234-237,240-242,244,262-264
+  s_f77829440e5f2e::t_5bc2b62e34145f 265-266
+docs/exec-plans/active/sarvam-gemini-parse-validation.xml
+  s_695ff646b4de79::t_4328510f80bdd4 1-141
+src/modules/ai-analysis/eval-extractor.js
+  s_f77829440e5f2e::t_3ef4e738ba404c 1-31,33-100,102-201,203-220,222-253
+  s_f77829440e5f2e::t_f8a7b141850d88 32,101,202,221
+tests/field-adjudicator.test.mjs
+  s_f77829440e5f2e::t_989cedb3543d0a 1-89
+tests/evals/parse-accuracy.test.mjs
+  s_f77829440e5f2e::t_7fb32ed14dde4f 1-54
+scripts/eval-parse.mjs
+  s_f77829440e5f2e::t_f5c7686f4d96c8 64,78,81-84,88,90
+  s_f77829440e5f2e::t_baee7f640e986e 15,63,74-77
+  s_f77829440e5f2e::t_36a664ab304cfc 1-14,16-62,66-73,79-80,85-87,89,91-97
+  s_f77829440e5f2e::t_c189553d6fea68 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "05aad7378dc42a6e508f4f4df82c89bad112e243",
+  "prompts": {},
+  "sessions": {
+    "s_695ff646b4de79": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "25f02535-b5e7-45cf-8108-1dd7fda16d35",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_f77829440e5f2e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "31c2738d-a43a-4c99-8fa9-2e9f2464f882",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
