@@ -1,6 +1,7 @@
 import './styles.css';
 import { createV1Client } from './api/v1-client.js';
 import { createWorkspaceController } from './state/workspace-controller.js';
+import { createDocumentUploadPanel } from './components/document-upload.js';
 import { createEvidenceStateKey, createRouteChooser, evidenceTone } from './components/household-workspace.js';
 
 function el(tag, attrs = {}, ...children) {
@@ -25,6 +26,9 @@ let activeLayer = 'decision';
 const controller = createWorkspaceController({ client, onChange(next) { view = next; render(); } });
 view = controller.snapshot();
 
+// Long-lived so selected files, progress and polling survive full re-renders.
+const documentPanel = createDocumentUploadPanel({ el, client });
+
 const tag = (label, tone = '') => el('span', { class:`tag ${tone}` }, label);
 const hint = value => el('p', { class:'hint' }, value);
 const field = (label, name, type = 'text', attrs = {}) => el('div', { class:'field' },
@@ -46,13 +50,17 @@ function emergencyBanner() {
 function setupPanel() {
   const bootstrap = el('form', { onSubmit:async event => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    // SyntheticEvent-style currentTarget access is not stable across an await.
+    // Keep the concrete form reference before the request so the success cleanup
+    // does not throw after the workspace has already been created.
+    const form = event.currentTarget;
+    const data = new FormData(form);
     await controller.bootstrap({
       bootstrapToken: data.get('bootstrapToken'),
       displayName: data.get('displayName'),
       ownerName: data.get('ownerName'),
     });
-    event.currentTarget.elements.bootstrapToken.value = '';
+    form.elements.bootstrapToken.value = '';
   } },
   el('h2', {}, 'Create a local persistent workspace'),
   hint('Administrator setup only. The bootstrap secret is sent to the local API once, is never stored by the UI, and must be replaced by a real identity provider before deployment.'),
@@ -91,6 +99,19 @@ function matrixPanel() {
         el('span', { role:'cell' }, String(member.policiesFound)),
         el('span', { role:'cell' }, member.immediateIssue?.triggerType?.replaceAll('_', ' ') ?? 'No active case'),
         el('span', { role:'cell' }, tag(member.immediateIssue ? 'Dynamic' : 'Unknown', member.immediateIssue ? 'dynamic' : 'unknown'))))));
+}
+
+function documentUploadSection() {
+  documentPanel.setContext({ caseId: view.policyCaseRecord?.id ?? '', consentGrantId: view.documentConsent?.id ?? '' });
+  if (!view.policyCaseRecord || view.documentConsent) return documentPanel.element;
+  // LEGAL REVIEW REQUIRED: draft consent copy.
+  return el('div', {},
+    el('section', { class:'panel', 'aria-labelledby':'doc-consent-title' },
+      el('h2', { id:'doc-consent-title' }, 'Allow document upload for this case'),
+      hint('Uploading needs your separate permission for this service to collect your insurance documents, and to show you the status of documents on this case. Draft wording pending legal review.'),
+      el('button', { class:'button', type:'button', disabled:view.busy, onClick:() => controller.grantDocumentConsent() },
+        view.busy ? 'Working...' : 'Allow document upload')),
+    documentPanel.element);
 }
 
 function actionPanel() {
@@ -231,7 +252,7 @@ function render() {
         el('h1', {}, 'Your policy, ready before care happens.')),
         el('p', {}, 'Break down the policy once, then use the same source-backed record for planned care or an emergency.')),
       messages,
-      view.identity ? [matrixPanel(), policyBreakdownPanel(), view.policyJob?.status === 'completed'
+      view.identity ? [matrixPanel(), documentUploadSection(), policyBreakdownPanel(), view.policyJob?.status === 'completed'
         ? el('div', { class:'layout', id:'care-routes' }, actionPanel(), resultPanel())
         : null] : setupPanel(),
       createEvidenceStateKey({ el, tag }),

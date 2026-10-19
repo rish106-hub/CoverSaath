@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -58,7 +58,7 @@ export function runMigrations(database, { directory = migrationDirectory } = {})
   return completed;
 }
 
-const expectedTables = Object.freeze([
+export const expectedTables = Object.freeze([
   'schema_migrations', 'households', 'adult_users', 'household_roles', 'household_members',
   'consent_grants', 'consent_scopes', 'consent_revocations', 'service_cases', 'case_participants',
   'document_uploads', 'ocr_jobs', 'source_pages', 'insurers', 'policies', 'policy_members',
@@ -66,12 +66,15 @@ const expectedTables = Object.freeze([
   'coverage_graph_edges', 'workflow_runs', 'workflow_tasks', 'workflow_task_dependencies',
   'workflow_events', 'reviewer_findings', 'release_gates', 'human_reviews', 'human_approvals',
   'integration_outbox', 'integration_webhook_events', 'idempotency_keys', 'retention_records',
-  'audit_events', 'api_sessions',
+  'audit_events', 'api_sessions', 'coverage_parameter_registry_versions',
+  'coverage_parameter_registry_pins', 'coverage_parameter_records',
+  'coverage_parameter_acquisitions', 'coverage_parameter_observations',
+  'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
 ]);
 
-const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
+export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
 
-const criticalTriggers = Object.freeze([
+export const criticalTriggers = Object.freeze([
   'consent_revocations_mark_grant', 'integration_outbox_requires_active_consent',
   'audit_events_no_update', 'audit_events_no_delete',
   'workflow_task_dependencies_same_run_insert', 'workflow_task_dependencies_same_run_update',
@@ -81,15 +84,30 @@ const criticalTriggers = Object.freeze([
   'document_uploads_quarantine_after_insert', 'document_uploads_activation_guard',
   'policies_household_source_insert', 'policy_members_household_refs_insert',
   'evidence_facts_household_refs_insert', 'coverage_graph_snapshots_household_case_insert',
-  'evidence_facts_provenance_immutable', 'fact_conflicts_same_fact_insert',
+  'evidence_facts_provenance_immutable', 'evidence_facts_no_delete', 'evidence_facts_redaction_insert',
+  'evidence_facts_erased_document_insert', 'evidence_facts_redaction_format_update',
+  'evidence_facts_redact_on_document_erasure', 'fact_conflicts_same_fact_insert',
   'coverage_graph_nodes_snapshot_fact_insert', 'coverage_graph_edges_snapshot_nodes_insert',
   'workflow_runs_household_consent_insert',
   'consent_scopes_profile_viewer_insert', 'consent_scopes_profile_viewer_update',
   'ocr_jobs_document_ready_insert', 'source_pages_ocr_document_match_insert',
   'source_pages_ocr_document_match_update',
+  'coverage_parameter_records_scope_insert', 'coverage_parameter_records_identity_immutable',
+  'coverage_parameter_observations_source_insert', 'coverage_parameter_observations_no_update',
+  'coverage_parameter_observations_no_delete', 'coverage_parameter_resolutions_observation_insert',
+  'coverage_parameter_resolutions_observation_update',
+  'coverage_parameter_resolutions_authority_insert', 'coverage_parameter_resolutions_authority_update',
+  'coverage_parameter_resolutions_model_no_downgrade', 'coverage_parameter_resolutions_not_permitted_exit',
+  'coverage_parameter_observations_redaction_resets_resolution',
+  'coverage_parameter_observations_redact_on_document_erasure',
+  'coverage_parameter_registry_pins_immutable', 'coverage_parameter_registry_pins_no_delete',
+  'coverage_parameter_registry_versions_immutable',
+  'coverage_parameter_registry_versions_no_delete', 'coverage_parameter_observation_rules_immutable',
+  'coverage_parameter_observation_rules_no_delete',
+  'coverage_parameter_observations_active_document_insert', 'coverage_parameter_observations_human_review_insert',
 ]);
 
-const criticalIndexes = Object.freeze([
+export const criticalIndexes = Object.freeze([
   'consent_grants_subject_idx', 'service_cases_household_idx', 'document_uploads_household_consent_idx',
   'source_pages_ocr_job_idx', 'policy_members_member_idx', 'evidence_facts_case_idx',
   'workflow_runs_case_idx', 'workflow_tasks_claim_idx', 'workflow_tasks_lease_idx',
@@ -98,15 +116,23 @@ const criticalIndexes = Object.freeze([
   'audit_events_household_chain_idx',
   'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'consent_scopes_field_viewer_idx',
   'ocr_jobs_lifecycle_idx',
+  'coverage_parameter_records_run_idx', 'coverage_parameter_records_case_idx',
+  'coverage_parameter_observations_parameter_idx', 'coverage_parameter_observations_document_idx',
+  'document_uploads_household_content_live_uidx', 'document_uploads_household_logical_version_uidx',
+  'document_uploads_work_idx',
 ]);
 
-const requiredColumns = Object.freeze({
-  document_uploads: ['logical_document_id', 'source_version'],
-  evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status'],
+export const requiredColumns = Object.freeze({
+  document_uploads: ['logical_document_id', 'source_version', 'scan_attempts', 'next_scan_at'],
+  evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status', 'redacted_at', 'redaction_reason_code'],
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],
   ocr_jobs: ['contract_version', 'authorization_json', 'result_json', 'result_digest', 'updated_at'],
   source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json'],
+  coverage_parameter_records: ['registry_version', 'parameter_key', 'subject_id', 'policy_id', 'applicable'],
+  coverage_parameter_resolutions: ['resolution_state', 'transition_authority'],
+  coverage_parameter_observations: ['redacted_at', 'redaction_reason_code'],
+  coverage_parameter_observation_rules: ['extraction_method', 'resolution_state', 'transition_authority', 'requires_accepted'],
 });
 
 export function validateSchema(database) {
@@ -148,11 +174,20 @@ export function purgeExpiredIdempotencyKeys(database, { at = new Date().toISOStr
 }
 
 export function openDatabase({ path = '.local/knowvia.sqlite', migrate = true } = {}) {
-  if (path !== ':memory:') mkdirSync(dirname(resolve(path)), { recursive: true, mode: 0o700 });
-  const database = new DatabaseSync(path);
+  const inMemory = path === ':memory:';
+  const databaseRoot = resolve('.local');
+  const resolvedPath = inMemory ? ':memory:' : resolve(databaseRoot, path);
+  if (!inMemory) {
+    const relativeToRoot = relative(databaseRoot, resolvedPath);
+    if (relativeToRoot.startsWith('..') || relativeToRoot === '' || relativeToRoot.startsWith('../')) {
+      throw new Error('Invalid database path: path must be within .local');
+    }
+    mkdirSync(dirname(resolvedPath), { recursive: true, mode: 0o700 });
+  }
+  const database = new DatabaseSync(resolvedPath);
   database.exec('PRAGMA foreign_keys = ON');
   database.exec('PRAGMA busy_timeout = 5000');
-  if (path !== ':memory:') database.exec('PRAGMA journal_mode = WAL');
+  if (!inMemory) database.exec('PRAGMA journal_mode = WAL');
   if (migrate) {
     runMigrations(database);
     purgeExpiredIdempotencyKeys(database);

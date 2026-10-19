@@ -32,7 +32,7 @@ test('a fresh local database migrates to the complete v1 schema', async () => {
   const validation = validateSchema(database);
   assert.equal(validation.valid, true);
   assert.equal(validation.integrity, 'ok');
-  assert.equal(validation.migrationCount, 4);
+  assert.equal(validation.migrationCount, 10);
   assert.deepEqual(runMigrations(database), []);
 
   const tables = database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table'").all().map(row => row.name);
@@ -63,6 +63,7 @@ test('evidence facts preserve UNKNOWN and require a source citation for claims',
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run('fact-uncited', 'household-1', 'case-1', 'room_limit', '5000', 'known',
       'document', 'document_page', 'agent', at, at), /CHECK constraint failed/);
+  assert.throws(() => database.prepare("DELETE FROM evidence_facts WHERE id = 'fact-unknown'").run(), /append only/);
   database.close();
 });
 

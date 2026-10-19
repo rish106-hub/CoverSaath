@@ -1,0 +1,70 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createPostgresPool } from '../src/backend/database/postgres/index.js';
+import { postgresTestOptions, testDatabaseUrl } from './support/postgres.mjs';
+
+// These need no server: the factory validates before it builds anything.
+test('the pool factory requires a URL and never echoes it', () => {
+  for (const value of [undefined, '', '   ', 42]) {
+    assert.throws(() => createPostgresPool({ connectionString: value }), { code: 'DATABASE_URL_REQUIRED' });
+  }
+  assert.throws(() => createPostgresPool(), { code: 'DATABASE_URL_REQUIRED' });
+  for (const url of ['not a url with secret-token', 'http://user:secret-token@host/db', 'mysql://user:secret-token@host/db']) {
+    assert.throws(() => createPostgresPool({ connectionString: url }), error => {
+      assert.equal(error.code, 'DATABASE_URL_INVALID');
+      assert.ok(!error.message.includes('secret-token'), 'the message must not contain the URL');
+      return true;
+    });
+  }
+  for (const bad of [
+    { max: 0 }, { statementTimeoutMs: 0 }, { lockTimeoutMs: 0 }, { lockTimeoutMs: 1.5 },
+    { idleInTransactionTimeoutMs: 0 }, { idleInTransactionTimeoutMs: '5' }, { connectionTimeoutMs: 0 },
+    { applicationName: '' },
+  ]) {
+    assert.throws(() => createPostgresPool({ connectionString: 'postgres://u:p@localhost/db', ...bad }), { code: 'DATABASE_POOL_OPTION_INVALID' });
+  }
+});
+
+test('the pool factory builds without connecting or logging', async t => {
+  const logged = [];
+  for (const method of ['log', 'info', 'warn', 'error']) t.mock.method(console, method, (...args) => logged.push(args.join(' ')));
+  const pool = createPostgresPool({ connectionString: 'postgres://user:secret-token@127.0.0.1:1/db' });
+  assert.equal(pool.totalCount, 0, 'no connection is opened at construction');
+  await pool.end();
+  assert.deepEqual(logged, []);
+});
+
+test('every pooled connection carries the timeouts and application name, whatever the URL says', postgresTestOptions(), async t => {
+  const url = new URL(testDatabaseUrl());
+  url.searchParams.set('options', '-c statement_timeout=1');
+  url.searchParams.set('application_name', 'from-the-url');
+  url.searchParams.set('statement_timeout', '1');
+  url.searchParams.set('lock_timeout', '1');
+  url.searchParams.set('idle_in_transaction_session_timeout', '1');
+  url.searchParams.set('replication', 'database');
+  const pool = createPostgresPool({
+    connectionString: url.toString(), max: 3, statementTimeoutMs: 12_345, lockTimeoutMs: 2_345, idleInTransactionTimeoutMs: 34_567,
+    applicationName: 'coversaath-pool-test',
+  });
+  t.after(() => pool.end());
+  const settings = await Promise.all(Array.from({ length: 3 }, () => pool.query(`SELECT current_setting('statement_timeout') AS statement,
+    current_setting('lock_timeout') AS lock, current_setting('idle_in_transaction_session_timeout') AS idle,
+    current_setting('application_name') AS name, pg_sleep(0.1)`)));
+  for (const { rows: [row] } of settings) {
+    assert.deepEqual(
+      { statement: row.statement, lock: row.lock, idle: row.idle, name: row.name },
+      { statement: '12345ms', lock: '2345ms', idle: '34567ms', name: 'coversaath-pool-test' },
+    );
+  }
+  // A replication connection rejects the extended protocol that parameterised queries use.
+  assert.equal((await pool.query('SELECT $1::int AS value', [7])).rows[0].value, 7);
+  assert.equal(pool.options.max, 3);
+});
+
+test('defaults apply and the statement timeout cancels a slow query', postgresTestOptions(), async t => {
+  const pool = createPostgresPool({ connectionString: testDatabaseUrl(), statementTimeoutMs: 200 });
+  t.after(() => pool.end());
+  const { rows: [row] } = await pool.query("SELECT current_setting('lock_timeout') AS lock, current_setting('application_name') AS name");
+  assert.deepEqual({ ...row }, { lock: '5s', name: 'cover_saath' });
+  await assert.rejects(pool.query('SELECT pg_sleep(5)'), { code: '57014' });
+});
