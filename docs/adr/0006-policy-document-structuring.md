@@ -76,3 +76,44 @@ again before commit.
 - Consent and privacy-notice wording for the Gemini step is not final. Mark for legal review.
 - Gemini model choice, limits and billed cost are unmeasured.
 - Postgres parity for the new store follows ADR 0004; SQLite is the runtime today.
+
+## Addendum (2026-10-19): stored OCR blocks (Block 2 close-out W3)
+
+Status: accepted. Before this, `source_pages` kept only page text, so Sarvam's blocks, tables, layout tags and
+block indices were lost after OCR persistence and the sectioner could not run from stored data.
+
+Decision:
+
+- **Storage: a nullable `blocks_json` column on `source_pages`** (SQLite 012, PostgreSQL 009, expand-only), written
+  once at page insert. Chosen over a `source_page_blocks` table because the repository inserts pages once and
+  never replaces them, `source_pages` has no row-immutability trigger that a new column would conflict with, and
+  both erasure paths (consent revocation and document deletion) already redact the page row in one UPDATE. One
+  row keeps blocks and text together, so they cannot drift and need one erasure step.
+- **Shape (`knowvia.ocr.v2`)**: `{ version, page, blocks: [{ index, tag, readingOrder, text, rows?, textOmitted? }] }`.
+  `index` is the 0-based position in provider reading order and equals the sectioner's block index. `rows` holds
+  table cells parsed from the table text at write time. No provider payload, block ids, coordinates or
+  confidences. Blocks whose tag the sectioner drops as `model_description` (`image`, `image-caption`) keep index
+  and tag, but their text is replaced by `''` with `textOmitted: 'model_description'`.
+- **Versioning**: `knowvia.ocr.v2` is the OCR output and stored-blocks version. `ocr_jobs.contract_version` and
+  `source_pages.output_contract_version` stay `knowvia.ocr.v1` because they describe the page text contract,
+  which is unchanged. Changing them would drop every new page from coverage-analysis source selection (which
+  filters on v1) and break OCR job de-duplication (keyed on contract version), causing paid re-runs.
+- **Validation**: `src/modules/document-intake/ocr-blocks.js`. On write, provider blocks must rebuild the page
+  text exactly (missing, extra or reordered blocks fail), tags must be a known Sarvam section type, reading order
+  must be finite and non-decreasing, and text, block, row and stored sizes are bounded. The repository re-validates
+  before insert and on every read (indices must equal positions, rows must match the table text, no extra fields).
+  The database CHECK enforces a JSON object of at most 1,000,000 characters.
+- **Read path**: `OcrRepository.getDocumentBlockPages({ documentId, householdId })` returns household-scoped
+  pages of the active document version. Pages stored before v2 come back with `status: 'blocks_unavailable'`
+  and `blocks: null`; `sectionStoredDocument` refuses them (`STRUCTURING_BLOCKS_UNAVAILABLE`).
+- **Erasure**: revocation nulls `blocks_json` with the page text. Triggers are the safety net:
+  `source_pages_blocks_erase_with_text` (redacting page text clears blocks; this also covers document deletion)
+  and `source_pages_blocks_erase_on_document_erasure`. `source_pages_blocks_immutable` allows only clearing;
+  `source_pages_blocks_insert` refuses blocks without page text or for an erasing document. The job-level
+  `ocr_jobs.result_json` copy of the normalised output, which now includes blocks, is already nulled by both paths.
+
+Limits: existing v1 pages are not backfilled (the provider output is gone; a re-run is a paid, consented OCR
+call). The tag list comes from Sarvam's published section types; an unlisted tag fails OCR persistence closed
+and needs a code change. Page text still contains image descriptions, as before this addendum. `photograph`,
+`chart` and `diagram` blocks keep their text because the sectioner does not drop them; whether that text is
+model-written is unverified against real Sarvam output.

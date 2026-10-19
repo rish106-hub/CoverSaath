@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { parseStoredBlocks, serializeStoredBlocks } from '../../modules/document-intake/ocr-blocks.js';
 
 const parse = value => value == null ? null : JSON.parse(value);
+const coded = (code, message, statusCode) => Object.assign(new Error(message), { code, statusCode });
 const SAFE_PRE_DISPATCH_RETRY_CODES = new Set([
   'PROVIDER_NOT_CONFIGURED',
   'OCR_PROVIDER_DISABLED',
@@ -252,13 +254,16 @@ export class OcrRepository {
       const insert = this.database.prepare(`INSERT INTO source_pages
         (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
          extracted_text, extraction_status, confidence_basis_points, created_at,
-         output_contract_version, text_sha256, provider_page_ref, provenance_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+         output_contract_version, text_sha256, provider_page_ref, provenance_json, blocks_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       for (const page of pages) {
+        // knowvia.ocr.v2 pages carry validated blocks; they are re-validated here so a malformed,
+        // reordered or oversize block set fails the whole completion closed. v1 pages store NULL.
+        const blocksJson = page.blocks == null ? null : serializeStoredBlocks(page.pageNumber, page.blocks);
         insert.run(
           `page-${randomUUID()}`, page.documentUploadId, jobId, page.pageNumber, page.sourceVersion,
           page.textSha256, page.text, page.extractionStatus, page.confidenceBasisPoints, page.createdAt,
-          page.outputContractVersion, page.textSha256, page.providerPageRef, JSON.stringify(page.provenance),
+          page.outputContractVersion, page.textSha256, page.providerPageRef, JSON.stringify(page.provenance), blocksJson,
         );
       }
       const next = { ...job, ...changes };
@@ -281,5 +286,40 @@ export class OcrRepository {
       this.database.exec('ROLLBACK');
       throw error;
     }
+  }
+
+  /**
+   * Block-level pages of a document's current version for the policy sectioner, household scoped.
+   * Returns { documentId, sourceVersion, complete, pages: [{ page, sourcePageId, providerPageRef,
+   * status, blocks }] }. A page stored without blocks (knowvia.ocr.v1) has status
+   * 'blocks_unavailable' and blocks null, so it is never sectioned as if it were complete.
+   */
+  getDocumentBlockPages({ documentId, householdId }) {
+    const document = this.database.prepare(`SELECT id, source_version FROM document_uploads
+      WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`).get(documentId, householdId);
+    if (!document) throw coded('DOCUMENT_NOT_FOUND', 'Document was not found.', 404);
+    const rows = this.database.prepare(`SELECT page.id, page.page_number, page.provider_page_ref, page.blocks_json
+      FROM source_pages page
+      JOIN ocr_jobs job ON job.id = page.ocr_job_id
+      WHERE page.document_upload_id = ? AND page.source_version = ? AND job.status = 'succeeded'
+        AND page.extraction_status IN ('extracted', 'manual_verified') AND page.extracted_text IS NOT NULL
+      ORDER BY page.page_number`).all(document.id, document.source_version);
+    if (!rows.length) throw coded('OCR_PAGES_UNAVAILABLE', 'No stored OCR pages are available for this document.', 409);
+    if (rows.some((row, index) => row.page_number !== index + 1)) {
+      throw coded('OCR_PAGES_INCOMPLETE', 'Stored OCR pages are incomplete.', 409);
+    }
+    const pages = rows.map(row => Object.freeze({
+      page: row.page_number,
+      sourcePageId: row.id,
+      providerPageRef: row.provider_page_ref,
+      status: row.blocks_json == null ? 'blocks_unavailable' : 'stored',
+      blocks: row.blocks_json == null ? null : parseStoredBlocks(row.blocks_json, row.page_number),
+    }));
+    return Object.freeze({
+      documentId: document.id,
+      sourceVersion: document.source_version,
+      complete: pages.every(page => page.status === 'stored'),
+      pages: Object.freeze(pages),
+    });
   }
 }
