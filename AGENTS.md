@@ -34,7 +34,7 @@ npm run db:init
 npm run dev
 git diff --check
 ```
-Runtime: Node 22.16 or later, npm and Vite. SQLite is still the application runtime. PostgreSQL schema and tests exist under ADR 0004. No deployment target exists.
+Runtime: Node 25 or later, npm and Vite. CI uses Node 26. SQLite is still the application runtime. PostgreSQL schema and tests exist under ADR 0004. No deployment target exists.
 
 ## Working loop
 1. Restate the user outcome, scope, non-goals and acceptance criteria.

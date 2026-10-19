@@ -95,6 +95,9 @@ export function validateOcrOutput(value, expected = {}) {
 }
 
 export function assertOcrProvider(provider, mode) {
+  // Live createJob/cancelJob calls receive the same durable requestId. A verified transport must
+  // use it as its idempotency and reconciliation identity so erasure can cancel an ambiguous
+  // submission even when the provider never returned a jobRef.
   const methods = ['health', 'createJob', 'getJob', 'cancelJob', 'normalizeResult'];
   if (!provider || methods.some(method => typeof provider[method] !== 'function')) {
     throw new TypeError(`OCR provider must implement: ${methods.join(', ')}.`);
@@ -104,7 +107,10 @@ export function assertOcrProvider(provider, mode) {
 }
 
 export function assertOcrRepository(repository) {
-  const methods = ['getReadyDocument', 'createJob', 'getJob', 'updateJob', 'completeJob'];
+  const methods = [
+    'getReadyDocument', 'createJob', 'getJob', 'updateJob', 'completeJob',
+    'recordCancellationReference', 'completeCancellation',
+  ];
   if (!repository || methods.some(method => typeof repository[method] !== 'function')) {
     throw new TypeError(`OCR repository must implement: ${methods.join(', ')}.`);
   }

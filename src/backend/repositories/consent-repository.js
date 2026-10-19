@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 const id = prefix => `${prefix}-${randomUUID()}`;
 
 const ERASURE_MARKER = 'consent_revoked';
-// Erasure reasons recorded on observations and evidence facts; anything else is recorded as consent_revoked.
-const OBSERVATION_ERASURE_REASONS = new Set(['consent_revoked', 'source_consent_not_current']);
+// Erasure reasons recorded on observations, evidence facts and persisted source-page excerpts.
+// Anything else is recorded as consent_revoked so an arbitrary caller value cannot become stored state.
+const OBSERVATION_ERASURE_REASONS = new Set(['consent_revoked', 'document_erasure', 'source_consent_not_current']);
 const RUN_SCAN_BATCH_SIZE = 100;
 const MAX_ERASURE_RUNS = 5_000;
 
@@ -152,22 +153,30 @@ export class ConsentRepository {
         .run(revocationId, grantId, revokedByAdultId, reason, at, downstreamDeletionDueAt, at);
       this.database.prepare(`UPDATE integration_outbox SET status = 'cancelled', updated_at = ?, last_error = 'Consent revoked.'
         WHERE consent_grant_id = ? AND status IN ('pending', 'processing')`).run(at, grantId);
-      this.database.prepare(`UPDATE ocr_jobs SET
+      // Revocation deletes source documents collected under this grant. A document merely named
+      // by a later derive/read scope remains owned by its uploader; the consent-authorised runs
+      // are still erased below through consentGrantId.
+      const documents = this.database.prepare(`SELECT id FROM document_uploads
+        WHERE consent_grant_id = ? ORDER BY id`).all(grantId);
+      const cancelOcr = this.database.prepare(`UPDATE ocr_jobs SET
           status = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN 'cancelled' ELSE status END,
           completed_at = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN ? ELSE completed_at END,
-          error_code = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN 'CONSENT_REVOKED' ELSE error_code END,
-          error_message = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN 'Source processing consent was revoked.' ELSE error_message END,
-          result_json = NULL, result_digest = NULL, updated_at = ?
-        WHERE document_upload_id IN (
-          SELECT id FROM document_uploads WHERE consent_grant_id = ?
-        )`).run(at, at, grantId);
-      // Documents this grant covers: uploaded under it, or named by one of its scopes.
-      const documents = this.database.prepare(`SELECT id FROM document_uploads WHERE consent_grant_id = ?
-        UNION
-        SELECT resource_id FROM consent_scopes
-        WHERE consent_grant_id = ? AND resource_type = 'document' AND resource_id IS NOT NULL
-          AND resource_id IN (SELECT id FROM document_uploads)
-        ORDER BY 1`).all(grantId, grantId);
+          error_code = CASE
+            WHEN status IN ('submitted', 'processing') OR (status = 'queued' AND started_at IS NOT NULL)
+              THEN 'CONSENT_REVOKED'
+            WHEN status = 'cancelled' AND error_code IN ('DOCUMENT_DELETED', 'CONSENT_REVOKED')
+              THEN error_code
+            ELSE NULL
+          END,
+          provider_job_ref = CASE
+            WHEN status IN ('submitted', 'processing')
+              OR (status = 'cancelled' AND error_code IN ('DOCUMENT_DELETED', 'CONSENT_REVOKED'))
+              THEN provider_job_ref
+            ELSE NULL
+          END,
+          error_message = NULL, authorization_json = NULL, result_json = NULL, result_digest = NULL, updated_at = ?
+        WHERE document_upload_id = ?`);
+      for (const { id: documentId } of documents) cancelOcr.run(at, at, documentId);
       // Observation values derived from the revoked documents are erased and the
       // erasure is audited (counts only) before the lifecycle change below, which
       // would otherwise redact them silently through the database safety net.
@@ -192,13 +201,17 @@ export class ConsentRepository {
         actorId: revokedByAdultId,
         at,
       });
-      this.database.prepare(`UPDATE source_pages SET extracted_text = NULL, extraction_status = 'failed',
+      const redactPages = this.database.prepare(`UPDATE source_pages SET extracted_text = NULL, extraction_status = 'failed',
           confidence_basis_points = NULL, page_sha256 = ?, text_sha256 = NULL,
           provider_page_ref = NULL, provenance_json = NULL, source_version = 'revoked:' || id
-        WHERE document_upload_id IN (SELECT id FROM document_uploads WHERE consent_grant_id = ?)`)
-        .run('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', grantId);
-      this.database.prepare(`UPDATE document_uploads SET lifecycle_state = 'deletion_requested'
-        WHERE consent_grant_id = ? AND lifecycle_state IN ('active', 'quarantined')`).run(grantId);
+        WHERE document_upload_id = ?`);
+      const requestDocumentDeletion = this.database.prepare(`UPDATE document_uploads
+        SET lifecycle_state = 'deletion_requested', next_scan_at = NULL
+        WHERE id = ? AND lifecycle_state IN ('active', 'quarantined')`);
+      for (const { id: documentId } of documents) {
+        redactPages.run('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', documentId);
+        requestDocumentDeletion.run(documentId);
+      }
       this.database.prepare(`UPDATE workflow_tasks
         SET status = 'revoked', finished_at = ?, terminal_reason = 'CONSENT_REVOKED',
             output_json = NULL, output_digest = NULL, lease_owner = NULL, lease_expires_at = NULL
@@ -229,7 +242,8 @@ export class ConsentRepository {
    *     input lose their text and keep only ids, version, page and `redacted: 'consent_revoked'`;
    *   - every task output is nulled (all tasks are downstream of model extraction of those pages)
    *     and pending, running and completed tasks become revoked;
-   *   - queued, running, completed and blocked runs become revoked; graph snapshots are superseded.
+   *   - queued, running, completed and blocked runs become revoked; graph payloads, nodes and edges
+   *     are erased while a non-sensitive superseded snapshot tombstone remains.
    * Evidence facts sourced from pages of `documentIds` are redacted (value and locators erased).
    * One audit event per store records counts only. Idempotent. Returns the counts.
    */
@@ -238,6 +252,11 @@ export class ConsentRepository {
     resourceType, resourceId, caseId = null, actorType = 'system', actorId = 'local-backend',
     at = this.clock().toISOString(),
   }) {
+    const redactionReason = OBSERVATION_ERASURE_REASONS.has(reason) ? reason : ERASURE_MARKER;
+    // Existing consent-stop paths intentionally keep their stable consent_revoked excerpt marker.
+    // A direct document erasure is distinct and must not be mislabeled as consent revocation.
+    const erasureMarker = redactionReason === 'document_erasure' ? 'document_erasure' : ERASURE_MARKER;
+    const terminalReason = redactionReason === 'document_erasure' ? 'DOCUMENT_DELETED' : 'CONSENT_REVOKED';
     const documents = new Set(documentIds);
     const targeted = new Set(runIds);
     const candidates = new Map();
@@ -268,19 +287,30 @@ export class ConsentRepository {
     let runs = 0;
     let tasks = 0;
     let pages = 0;
+    let graphs = 0;
+    let graphNodes = 0;
+    let graphEdges = 0;
+    let policies = 0;
+    let policyMembers = 0;
     const setInput = this.database.prepare('UPDATE workflow_runs SET input_json = ? WHERE id = ?');
     const nullOutputs = this.database.prepare(`UPDATE workflow_tasks
       SET status = CASE WHEN status IN ('pending', 'running', 'completed') THEN 'revoked' ELSE status END,
           finished_at = CASE WHEN status IN ('pending', 'running', 'completed') THEN ? ELSE finished_at END,
-          terminal_reason = CASE WHEN status IN ('pending', 'running', 'completed') THEN 'CONSENT_REVOKED' ELSE terminal_reason END,
+          terminal_reason = CASE WHEN status IN ('pending', 'running', 'completed') THEN ? ELSE terminal_reason END,
           output_json = NULL, output_digest = NULL, lease_owner = NULL, lease_expires_at = NULL
       WHERE workflow_run_id = ?
         AND (status IN ('pending', 'running', 'completed') OR output_json IS NOT NULL OR output_digest IS NOT NULL)`);
     const revokeRun = this.database.prepare(`UPDATE workflow_runs
-      SET status = 'revoked', finished_at = ?, terminal_reason = 'CONSENT_REVOKED'
+      SET status = 'revoked', finished_at = ?, terminal_reason = ?
       WHERE id = ? AND status IN ('queued', 'running', 'completed', 'blocked')`);
-    const supersede = this.database.prepare(`UPDATE coverage_graph_snapshots SET status = 'superseded'
-      WHERE generated_by_run_id = ? AND status <> 'superseded'`);
+    const graphIds = this.database.prepare('SELECT id FROM coverage_graph_snapshots WHERE generated_by_run_id = ?');
+    const eraseGraphEdges = this.database.prepare(`DELETE FROM coverage_graph_edges
+      WHERE snapshot_id IN (SELECT id FROM coverage_graph_snapshots WHERE generated_by_run_id = ?)`);
+    const eraseGraphNodes = this.database.prepare(`DELETE FROM coverage_graph_nodes
+      WHERE snapshot_id IN (SELECT id FROM coverage_graph_snapshots WHERE generated_by_run_id = ?)`);
+    const eraseGraphs = this.database.prepare(`UPDATE coverage_graph_snapshots
+      SET status = 'superseded', graph_json = '{}'
+      WHERE generated_by_run_id = ? AND (status <> 'superseded' OR graph_json <> '{}')`);
     for (const row of candidates.values()) {
       let input = null;
       try { input = row.input_json === null ? null : JSON.parse(row.input_json); } catch { input = null; }
@@ -295,22 +325,27 @@ export class ConsentRepository {
         let changed = 0;
         const sourcePages = input.sourcePages.map(page => {
           if (!page || typeof page !== 'object' || (!wholeRun && !documents.has(page.documentId))) return page;
-          if (page.redacted === ERASURE_MARKER && Object.keys(page).every(key => ['sourceId', 'version', 'page', 'documentId', 'redacted'].includes(key))) return page;
+          if (page.redacted === erasureMarker && Object.keys(page).every(key => ['sourceId', 'version', 'page', 'documentId', 'redacted'].includes(key))) return page;
           changed += 1;
-          return { sourceId: page.sourceId, version: page.version, page: page.page, documentId: page.documentId, redacted: ERASURE_MARKER };
+          return { sourceId: page.sourceId, version: page.version, page: page.page, documentId: page.documentId, redacted: erasureMarker };
         });
         if (changed > 0) {
           setInput.run(JSON.stringify({ ...input, sourcePages }), row.id);
           pages += changed;
         }
       }
-      tasks += Number(nullOutputs.run(at, row.id).changes);
-      revokeRun.run(at, row.id);
-      supersede.run(row.id);
+      tasks += Number(nullOutputs.run(at, terminalReason, row.id).changes);
+      revokeRun.run(at, terminalReason, row.id);
+      const snapshots = graphIds.all(row.id).length;
+      if (snapshots > 0) {
+        graphEdges += Number(eraseGraphEdges.run(row.id).changes);
+        graphNodes += Number(eraseGraphNodes.run(row.id).changes);
+        graphs += Number(eraseGraphs.run(row.id).changes);
+      }
       // Parameter observations recorded by the run are derived data too: their values are
       // erased with the run (counts-only audit inside the parameter repository).
       if (this.coverageParameters) {
-        this.coverageParameters.redactObservationsForRun({ workflowRunId: row.id, reasonCode: OBSERVATION_ERASURE_REASONS.has(reason) ? reason : ERASURE_MARKER, actorType, actorId, at });
+        this.coverageParameters.redactObservationsForRun({ workflowRunId: row.id, reasonCode: redactionReason, actorType, actorId, at });
       } else if (this.database.prepare(`SELECT 1 FROM coverage_parameter_observations observation
           JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id
           WHERE parameter.workflow_run_id = ? AND observation.redacted_at IS NULL LIMIT 1`).get(row.id)) {
@@ -319,9 +354,31 @@ export class ConsentRepository {
       }
     }
     if (runs > 0) {
+      const graphCounts = graphs || graphNodes || graphEdges ? { graphs, graphNodes, graphEdges } : {};
       this.audit?.append({
         householdId, caseId, actorType, actorId, action: 'analysis.derived_data_erased', resourceType, resourceId,
-        payload: { reason, runs, tasks, pages, documents: documents.size },
+        payload: { reason, runs, tasks, pages, ...graphCounts, documents: documents.size },
+      });
+    }
+    if (documents.size > 0) {
+      const erasePolicyMembers = this.database.prepare(`DELETE FROM policy_members
+        WHERE policy_id IN (SELECT id FROM policies WHERE source_document_id = ?)
+          OR source_page_id IN (SELECT id FROM source_pages WHERE document_upload_id = ?)`);
+      const erasePolicies = this.database.prepare(`UPDATE policies SET insurer_id = NULL,
+          policy_kind = 'unknown', policy_number_masked = NULL, policy_version = NULL,
+          starts_on = NULL, ends_on = NULL, verification_state = 'unverified', updated_at = ?
+        WHERE source_document_id = ? AND (insurer_id IS NOT NULL OR policy_kind <> 'unknown'
+          OR policy_number_masked IS NOT NULL OR policy_version IS NOT NULL OR starts_on IS NOT NULL
+          OR ends_on IS NOT NULL OR verification_state <> 'unverified')`);
+      for (const documentId of documents) {
+        policyMembers += Number(erasePolicyMembers.run(documentId, documentId).changes);
+        policies += Number(erasePolicies.run(at, documentId).changes);
+      }
+    }
+    if (policies > 0 || policyMembers > 0) {
+      this.audit?.append({
+        householdId, caseId, actorType, actorId, action: 'policy.derived_data_erased', resourceType, resourceId,
+        payload: { reason, policies, policyMembers, documents: documents.size },
       });
     }
     // Evidence facts sourced from the affected documents are derived data too: the one permitted
@@ -336,7 +393,7 @@ export class ConsentRepository {
         WHERE redacted_at IS NULL
           AND (? IS NULL OR household_id = ?)
           AND source_page_id IN (SELECT id FROM source_pages WHERE document_upload_id = ?)`);
-      const reasonCode = OBSERVATION_ERASURE_REASONS.has(reason) ? reason : ERASURE_MARKER;
+      const reasonCode = redactionReason;
       for (const documentId of documents) {
         facts += Number(redactFacts.run(at, reasonCode, householdId, householdId, documentId).changes);
       }
@@ -347,6 +404,6 @@ export class ConsentRepository {
         payload: { reason, facts, documents: documents.size },
       });
     }
-    return Object.freeze({ runs, tasks, pages, facts });
+    return Object.freeze({ runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers });
   }
 }

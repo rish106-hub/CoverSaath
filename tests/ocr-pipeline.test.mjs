@@ -167,3 +167,135 @@ test('verified live transport normalizes provider data and never persists its ra
   assert.equal(JSON.stringify(completed).includes('must-not-persist'), false);
   assert.equal(context.database.prepare('SELECT result_json FROM ocr_jobs WHERE id = ?').get(submitted.id).result_json.includes('must-not-persist'), false);
 });
+
+test('document deletion while provider submission is in flight stays cancelled and cancels remote work', async t => {
+  const context = harness();
+  t.after(() => context.database.close());
+  let releaseProvider;
+  let providerEntered;
+  const entered = new Promise(resolve => { providerEntered = resolve; });
+  const gate = new Promise(resolve => { releaseProvider = resolve; });
+  const cancelledRefs = [];
+  const requestIds = [];
+  const provider = {
+    name: 'sarvam',
+    mode: 'live',
+    health: () => ({ provider: 'sarvam', status: 'ready' }),
+    async createJob({ requestId }) {
+      requestIds.push(requestId);
+      providerEntered();
+      await gate;
+      return { status: 'submitted', jobRef: 'remote-delete-race' };
+    },
+    async getJob() { throw new Error('not reached'); },
+    async cancelJob({ jobRef, requestId }) { cancelledRefs.push(jobRef); requestIds.push(requestId); return { status: 'cancelled' }; },
+    normalizeResult() { throw new Error('not reached'); },
+  };
+  const service = createOcrService({
+    repository: context.repository,
+    provider,
+    byteReader: async () => Buffer.from('%PDF- synthetic'),
+    mode: 'live',
+    now: () => new Date(AT),
+  });
+  const starting = service.start({ documentId: 'document-ocr', authorization });
+  await entered;
+  const job = context.database.prepare('SELECT id FROM ocr_jobs').get();
+  context.database.prepare("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-ocr'").run();
+  context.database.prepare(`UPDATE ocr_jobs SET status = 'cancelled', completed_at = ?,
+    error_code = 'DOCUMENT_DELETED', error_message = 'Source document deletion was requested.', updated_at = ?
+    WHERE id = ?`).run(AT, AT, job.id);
+  releaseProvider();
+
+  const result = await starting;
+  assert.equal(result.status, 'cancelled');
+  assert.deepEqual(cancelledRefs, ['remote-delete-race']);
+  assert.deepEqual(requestIds, [job.id, job.id]);
+  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 0);
+  assert.equal(context.database.prepare('SELECT status FROM ocr_jobs WHERE id = ?').get(job.id).status, 'cancelled');
+});
+
+test('consent revocation during provider submission preserves a failed remote cancellation for retry', async t => {
+  const context = harness();
+  t.after(() => context.database.close());
+  let releaseProvider;
+  let providerEntered;
+  const entered = new Promise(resolve => { providerEntered = resolve; });
+  const gate = new Promise(resolve => { releaseProvider = resolve; });
+  const provider = {
+    name: 'sarvam', mode: 'live',
+    health: () => ({ provider: 'sarvam', status: 'ready' }),
+    async createJob() { providerEntered(); await gate; return { status: 'submitted', jobRef: 'remote-consent-race' }; },
+    async getJob() { throw new Error('not reached'); },
+    async cancelJob() { throw new Error('synthetic provider cancellation outage'); },
+    normalizeResult() { throw new Error('not reached'); },
+  };
+  const service = createOcrService({
+    repository: context.repository, provider,
+    byteReader: async () => Buffer.from('%PDF- synthetic'), mode: 'live', now: () => new Date(AT),
+  });
+  const starting = service.start({ documentId: 'document-ocr', authorization });
+  await entered;
+  const job = context.database.prepare('SELECT id, started_at FROM ocr_jobs').get();
+  assert.equal(job.started_at, AT);
+  context.database.prepare(`UPDATE ocr_jobs SET status = 'cancelled', completed_at = ?,
+    error_code = 'CONSENT_REVOKED', error_message = NULL, authorization_json = NULL, updated_at = ?
+    WHERE id = ?`).run(AT, AT, job.id);
+  releaseProvider();
+
+  await assert.rejects(starting, /synthetic provider cancellation outage/);
+  assert.deepEqual({ ...context.database.prepare(`SELECT status, provider_job_ref, error_code
+    FROM ocr_jobs WHERE id = ?`).get(job.id) }, {
+    status: 'cancelled', provider_job_ref: 'remote-consent-race', error_code: 'CONSENT_REVOKED',
+  });
+});
+
+test('deletion racing an immediate OCR result erases locally and reconciles by durable request id', async t => {
+  const context = harness();
+  t.after(() => context.database.close());
+  let releaseProvider;
+  let providerEntered;
+  const entered = new Promise(resolve => { providerEntered = resolve; });
+  const gate = new Promise(resolve => { releaseProvider = resolve; });
+  const cancellations = [];
+  const provider = {
+    name: 'sarvam', mode: 'live',
+    health: () => ({ provider: 'sarvam', status: 'ready' }),
+    async createJob({ requestId }) {
+      providerEntered();
+      await gate;
+      return {
+        status: 'succeeded',
+        result: {
+          schemaVersion: 'knowvia.ocr.v1',
+          document: { id: 'document-ocr', sourceVersion: '3', contentSha256: SHA },
+          provider: { name: 'sarvam', jobRef: 'remote-immediate-result' },
+          pages: [{ pageNumber: 1, text: 'must not persist', confidenceBasisPoints: 9000 }],
+          warnings: [], requestId,
+        },
+      };
+    },
+    async getJob() { throw new Error('not reached'); },
+    async cancelJob(input) { cancellations.push(input); return { status: 'cancelled' }; },
+    normalizeResult(raw) { return raw; },
+  };
+  const service = createOcrService({
+    repository: context.repository, provider,
+    byteReader: async () => Buffer.from('%PDF- synthetic'), mode: 'live', now: () => new Date(AT),
+  });
+  const starting = service.start({ documentId: 'document-ocr', authorization });
+  await entered;
+  const job = context.database.prepare('SELECT id FROM ocr_jobs').get();
+  context.database.prepare(`UPDATE ocr_jobs SET status = 'cancelled', completed_at = ?,
+    error_code = 'DOCUMENT_DELETED', error_message = NULL, authorization_json = NULL, updated_at = ?
+    WHERE id = ?`).run(AT, AT, job.id);
+  releaseProvider();
+
+  const result = await starting;
+  assert.equal(result.status, 'cancelled');
+  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 0);
+  assert.equal(context.database.prepare('SELECT provider_job_ref FROM ocr_jobs WHERE id = ?').get(job.id).provider_job_ref, null);
+  assert.deepEqual(cancellations.map(item => ({ jobRef: item.jobRef, requestId: item.requestId })), [
+    { jobRef: 'remote-immediate-result', requestId: job.id },
+  ]);
+});

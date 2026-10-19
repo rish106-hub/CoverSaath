@@ -92,6 +92,11 @@ test('sandbox flags: the permission flag is detected for the running Node, with 
   assert.equal(permissionFlag(new Set(['--experimental-permission'])), '--experimental-permission');
   assert.equal(permissionFlag(new Set()), null);
   assert.throws(() => buildSandboxArgs({ entry: PDF_SANDBOX_CHILD.entry, readPaths: [], flags: new Set() }), /permission model/);
+  assert.throws(() => buildSandboxArgs({
+    entry: PDF_SANDBOX_CHILD.entry,
+    readPaths: [],
+    flags: new Set(['--permission']),
+  }), /network permission controls/);
   const args = buildSandboxArgs({ entry: PDF_SANDBOX_CHILD.entry, readPaths: PDF_SANDBOX_CHILD.readPaths });
   assert.equal(args[0], '--permission');
   assert.ok(args.includes('--max-old-space-size=128'));
@@ -146,7 +151,7 @@ test('sandbox denials: a probe child with the production flags cannot read, writ
     }
     assert.ok(['ERR_DLOPEN_DISABLED', 'ERR_ACCESS_DENIED'].includes(results.addon), `addon: ${results.addon}`);
     assert.equal(results.codeGeneration, 'EvalError');
-    if (NET_SCOPE) assert.equal(results.network, 'ERR_ACCESS_DENIED');
+    assert.equal(results.network, 'ERR_ACCESS_DENIED');
     assert.equal(results.permissionActive, true);
     assert.deepEqual(results.envKeys, [], 'no parent environment reaches the child');
   } finally {
@@ -154,7 +159,7 @@ test('sandbox denials: a probe child with the production flags cannot read, writ
   }
 });
 
-test('sandbox denials: network is a permission scope only from Node 25', { skip: NET_SCOPE ? false : 'This Node has no network permission scope; the child can open sockets (ADR 0005 residual risk).' }, () => {
+test('sandbox denials: the supported Node runtime exposes the network permission scope', () => {
   assert.equal(NET_SCOPE, true);
 });
 

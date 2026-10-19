@@ -59,3 +59,24 @@ CLAMD_TEST_HOST=127.0.0.1 CLAMD_TEST_PORT=3310 node --test tests/clamd-integrati
 It checks PING, EICAR blocked, a synthetic PDF clean, a 15 MiB input fully scanned, and a 17 MiB input refused as `SCANNER_ERROR` (never clean). Without `CLAMD_TEST_HOST` the tests skip, so CI does not need clamd.
 
 Verified 2026-10-18 with ClamAV 1.5.4 (Homebrew) and the settings above. ClamAV's EICAR signature matches only at offset 0: an EICAR string inside a PDF scans clean. Use a raw EICAR file for scanner checks; the upload route rejects it as not a PDF before scanning.
+
+## Authenticated API malware proof
+
+The upload path needs a valid synthetic PDF that clamd itself marks as infected. Keep this proof isolated from
+the normal signature database:
+
+1. Create a temporary `.ndb` signature for a unique marker that exists inside a valid synthetic PDF.
+2. Start a second loopback-only clamd with a temporary database directory containing only that signature.
+3. Run the opt-in API test against that port:
+
+```bash
+CLAMD_CUSTOM_TEST_HOST=127.0.0.1 CLAMD_CUSTOM_TEST_PORT=3311 \
+  node --test --test-name-pattern='real clamd blocks a valid synthetic PDF' \
+  tests/document-upload-api.test.mjs
+```
+
+4. Stop the isolated daemon and remove the temporary signature and configuration.
+
+This proves authenticated upload, encrypted quarantine, the real clamd protocol, malware rejection, byte
+removal and a sanitised audit record in one path. It does not prove Azure networking or production signatures.
+The isolated proof passed locally on 2026-10-18 with ClamAV 1.5.4.

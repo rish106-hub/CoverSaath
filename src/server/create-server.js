@@ -78,6 +78,17 @@ export function createApiServer({
       repository: services.documents,
       storage: documentStorage,
       scanner,
+      cancelOcrJob: async ({ provider, jobRef, requestId }) => {
+        const integration = integrations[provider];
+        if (!integration || typeof integration.cancelJob !== 'function') {
+          throw Object.assign(new Error('OCR cancellation provider is unavailable.'), { code: 'OCR_PROVIDER_NOT_CONFIGURED' });
+        }
+        await integration.cancelJob({
+          jobRef,
+          requestId,
+          authorization: { authorized: true, purpose: 'document_erasure' },
+        });
+      },
       inspectFile: validated => (validated.detectedMimeType === 'application/pdf' ? pdfInspector.inspect(validated.bytes) : null),
       limits: {
         maxDocumentsPerCase: config.documents.maxDocumentsPerCase,

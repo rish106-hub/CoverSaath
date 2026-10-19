@@ -65,6 +65,9 @@ export function permissionFlag(flags = process.allowedNodeEnvironmentFlags) {
 export function buildSandboxArgs({ entry, readPaths, maxOldSpaceMb = PDF_SANDBOX_LIMITS.maxOldSpaceMb, flags } = {}) {
   const permission = permissionFlag(flags);
   if (!permission) throw new TypeError('PDF sandbox requires the Node permission model.');
+  if (!(flags ?? process.allowedNodeEnvironmentFlags).has('--allow-net')) {
+    throw new TypeError('PDF sandbox requires a Node runtime with network permission controls.');
+  }
   if (!Number.isSafeInteger(maxOldSpaceMb) || maxOldSpaceMb < 16) throw new TypeError('maxOldSpaceMb must be an integer of at least 16.');
   const paths = [...new Set([entry, ...(readPaths ?? [])])];
   for (const path of paths) {

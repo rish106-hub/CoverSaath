@@ -45,10 +45,12 @@ function toRecord(row) {
 }
 
 export class DocumentRepository {
-  constructor(database, { clock = () => new Date(), audit } = {}) {
+  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, consents = null } = {}) {
     this.database = database;
     this.clock = clock;
     this.audit = audit;
+    this.coverageParameters = coverageParameters;
+    this.consents = consents;
   }
 
   transaction(fn) {
@@ -212,6 +214,19 @@ export class DocumentRepository {
       WHERE lifecycle_state <> 'deleted'`).all().map(row => row.storage_path));
   }
 
+  listPendingOcrCancellations(documentId) {
+    return this.database.prepare(`SELECT id, provider, provider_job_ref AS providerJobRef
+      FROM ocr_jobs WHERE document_upload_id = ? AND status = 'cancelled'
+        AND error_code IN ('DOCUMENT_DELETED', 'CONSENT_REVOKED')
+      ORDER BY id`).all(documentId);
+  }
+
+  completeOcrCancellation(jobId) {
+    return this.database.prepare(`UPDATE ocr_jobs SET provider_job_ref = NULL, error_code = NULL,
+      error_message = NULL WHERE id = ? AND status = 'cancelled'
+        AND error_code IN ('DOCUMENT_DELETED', 'CONSENT_REVOKED')`).run(jobId).changes === 1;
+  }
+
   markScanClean(documentId, { engine = null } = {}) {
     return this.transaction(() => {
       const changed = this.database.prepare(`UPDATE document_uploads
@@ -233,6 +248,93 @@ export class DocumentRepository {
       if (changed !== 1) return false;
       this.appendSystemAudit(documentId, 'document.scan_blocked', { reasonCode, ...(signature ? { signature } : {}) });
       return true;
+    });
+  }
+
+  requestDeletion(documentId, { actorAdultId }) {
+    const existing = this.getDocument(documentId);
+    if (!existing) return null;
+    if (existing.lifecycleState === 'deleted') return { state: 'deleted', document: existing };
+    if (existing.lifecycleState === 'deletion_requested') return { state: 'pending', document: existing };
+    if (!this.coverageParameters || !this.consents?.eraseDerivedRunData) {
+      throw coded('ERASURE_NOT_CONFIGURED', 'Document erasure is not configured.', 503);
+    }
+    return this.transaction(() => {
+      const at = this.clock().toISOString();
+      const current = this.getDocument(documentId);
+      if (!current) return null;
+      if (current.lifecycleState === 'deleted') return { state: 'deleted', document: current };
+      if (current.lifecycleState === 'deletion_requested') return { state: 'pending', document: current };
+
+      const observationCounts = this.coverageParameters.redactObservationsForDocument({
+        documentId,
+        reasonCode: 'document_erasure',
+        actorType: 'adult_user',
+        actorId: actorAdultId,
+        at,
+      });
+      const derivedCounts = this.consents.eraseDerivedRunData({
+        householdId: current.householdId,
+        documentIds: [documentId],
+        reason: 'document_erasure',
+        resourceType: 'document',
+        resourceId: documentId,
+        caseId: current.caseId,
+        actorType: 'adult_user',
+        actorId: actorAdultId,
+        at,
+      });
+      const ocrJobs = this.database.prepare(`UPDATE ocr_jobs SET
+          status = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN 'cancelled' ELSE status END,
+          completed_at = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN ? ELSE completed_at END,
+          error_code = CASE
+            WHEN status IN ('submitted', 'processing') OR (status = 'queued' AND started_at IS NOT NULL)
+              THEN 'DOCUMENT_DELETED'
+            WHEN status = 'cancelled' AND error_code IN ('DOCUMENT_DELETED', 'CONSENT_REVOKED')
+              THEN error_code
+            ELSE NULL
+          END,
+          provider_job_ref = CASE
+            WHEN status IN ('submitted', 'processing')
+              OR (status = 'cancelled' AND error_code IN ('DOCUMENT_DELETED', 'CONSENT_REVOKED'))
+              THEN provider_job_ref
+            ELSE NULL
+          END,
+          error_message = NULL, authorization_json = NULL, result_json = NULL, result_digest = NULL, updated_at = ?
+        WHERE document_upload_id = ?`).run(at, at, documentId).changes;
+      const sourcePages = this.database.prepare(`UPDATE source_pages SET extracted_text = NULL,
+          extraction_status = 'failed', confidence_basis_points = NULL, page_sha256 = ?, text_sha256 = NULL,
+          provider_page_ref = NULL, provenance_json = NULL, source_version = 'deleted:' || id
+        WHERE document_upload_id = ?`).run(
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', documentId,
+      ).changes;
+      const changed = this.database.prepare(`UPDATE document_uploads
+        SET lifecycle_state = 'deletion_requested', next_scan_at = NULL
+        WHERE id = ? AND lifecycle_state IN ('active', 'quarantined')`).run(documentId).changes;
+      if (changed !== 1) throw coded('DOCUMENT_DELETE_CONFLICT', 'Document deletion could not be requested.', 409);
+      this.audit.append({
+        householdId: current.householdId,
+        caseId: current.caseId,
+        actorType: 'adult_user',
+        actorId: actorAdultId,
+        action: 'document.deletion_requested',
+        resourceType: 'document',
+        resourceId: documentId,
+        payload: {
+          ocrJobs,
+          sourcePages,
+          observations: observationCounts.redactedObservations,
+          runs: derivedCounts.runs,
+          tasks: derivedCounts.tasks,
+          facts: derivedCounts.facts,
+          policies: derivedCounts.policies,
+          policyMembers: derivedCounts.policyMembers,
+          graphs: derivedCounts.graphs,
+          graphNodes: derivedCounts.graphNodes,
+          graphEdges: derivedCounts.graphEdges,
+        },
+      });
+      return { state: 'pending', document: this.getDocument(documentId) };
     });
   }
 
