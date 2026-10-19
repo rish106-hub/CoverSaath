@@ -557,7 +557,7 @@ test('Block 1 to Block 2 journey splits 11 pages, uses Sarvam consent and persis
       return providerJson({
         type: 'digitise', job_id: jobId, status: 'completed',
         usage: { pages_total: count, pages_processed: count, pages_succeeded: count, pages_failed: 0, provider_secret: 'do-not-store' },
-        documents: [{ pages: Array.from({ length: count }, (_, index) => ({ page_number: index + 1, content: `Page ${index + 1} from ${jobId}` })) }],
+        documents: [{ pages: Array.from({ length: count }, (_, index) => ({ page_num: index + 1, blocks: [{ block_id: `b${index + 1}`, text: `Page ${index + 1} from ${jobId}`, layout_tag: 'paragraph', reading_order: 1 }] })) }],
       });
     }
     throw new Error(`Unexpected provider request: ${url}`);

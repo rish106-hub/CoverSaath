@@ -22,11 +22,19 @@ const segmenter = {
   },
 };
 
+// Live Sarvam digitise shape: page_num plus layout blocks, not page_number plus content.
+function livePage(pageNum, text) {
+  return { page_num: pageNum, blocks: [{
+    block_id: `b${pageNum}`, text, layout_tag: 'paragraph', reading_order: 1,
+    coordinates: { x1: 0, y1: 0, x2: 1, y2: 1 }, bbox_norm: [0, 0, 1, 1],
+  }] };
+}
+
 function completedResult(jobId, pageCount) {
   return {
     type: 'digitise', job_id: jobId, status: 'completed',
     documents: [{ file_name: 'synthetic.pdf', pages: Array.from({ length: pageCount }, (_, index) => ({
-      page_number: index + 1, content: `Synthetic page ${index + 1} from ${jobId}`,
+      ...livePage(index + 1, `Synthetic page ${index + 1} from ${jobId}`),
     })) }],
     usage: { pages_total: pageCount, pages_processed: pageCount, pages_succeeded: pageCount, pages_failed: 0 },
   };
@@ -206,7 +214,7 @@ test('normalization preserves exact multilingual policy text, punctuation, negat
     results: [{
       type: 'digitise', job_id: 'multilingual-job', status: 'completed',
       usage: { pages_total: 1, pages_processed: 1, pages_succeeded: 1, pages_failed: 0 },
-      documents: [{ pages: [{ page_number: 1, content }] }],
+      documents: [{ pages: [livePage(1, content)] }],
     }],
   }, { documentId: 'document-1', sourceVersion: '1', contentSha256: 'b'.repeat(64) });
   assert.equal(normalized.pages[0].text, content);
@@ -220,9 +228,9 @@ test('Sarvam Document AI rejects missing, duplicate and reordered provider pages
   };
   const expected = { documentId: 'document-1', sourceVersion: '1', contentSha256: 'b'.repeat(64) };
   for (const pages of [
-    [{ page_number: 1, content: 'one' }],
-    [{ page_number: 1, content: 'one' }, { page_number: 1, content: 'again' }],
-    [{ page_number: 2, content: 'two' }, { page_number: 1, content: 'one' }],
+    [livePage(1, 'one')],
+    [livePage(1, 'one'), livePage(1, 'again')],
+    [livePage(2, 'two'), livePage(1, 'one')],
   ]) {
     assert.throws(() => transport.normalizeResult({
       manifest,
@@ -234,7 +242,7 @@ test('Sarvam Document AI rejects missing, duplicate and reordered provider pages
     manifest,
     results: [{ type: 'digitise', job_id: 'wrong-job', status: 'completed',
       usage: { pages_total: 2, pages_processed: 2, pages_succeeded: 2, pages_failed: 0 }, documents: [{ pages: [
-      { page_number: 1, content: 'one' }, { page_number: 2, content: 'two' },
+      livePage(1, 'one'), livePage(2, 'two'),
     ] }] }],
   }, expected), error => error.code === 'OCR_PROVIDER_RESPONSE_INVALID');
 });
@@ -249,7 +257,7 @@ test('a blank provider page remains an explicit failed page and cannot look comp
     results: [{
       type: 'digitise', job_id: 'blank-job', status: 'completed',
       usage: { pages_total: 1, pages_processed: 1, pages_succeeded: 1, pages_failed: 0 },
-      documents: [{ pages: [{ page_number: 1, content: '   ' }] }],
+      documents: [{ pages: [livePage(1, '   ')] }],
     }],
   }, { documentId: 'document-1', sourceVersion: '1', contentSha256: 'b'.repeat(64) });
   assert.equal(normalized.pages[0].extractionStatus, 'failed');
@@ -266,7 +274,7 @@ test('Sarvam rejects completed page content when terminal usage reports a failed
     results: [{
       type: 'digitise', job_id: 'usage-job', status: 'completed',
       usage: { pages_total: 1, pages_processed: 1, pages_succeeded: 0, pages_failed: 1 },
-      documents: [{ pages: [{ page_number: 1, content: 'Provider returned text despite reporting failure.' }] }],
+      documents: [{ pages: [livePage(1, 'Provider returned text despite reporting failure.')] }],
     }],
   }, { documentId: 'document-1', sourceVersion: '1', contentSha256: 'b'.repeat(64) }),
   error => error.code === 'OCR_PROVIDER_RESPONSE_INVALID');
@@ -291,4 +299,45 @@ test('Sarvam cancellation reports the documented local-only cleanup limit', asyn
   assert.deepEqual(await transport.cancelJob({ jobRef: 'unused' }), {
     status: 'not_supported', remoteCancellation: false,
   });
+});
+
+test('Sarvam page text joins blocks by reading order and keeps layout tags', () => {
+  const transport = createSarvamDocAiTransport({ apiKey: 'secret', segmenter, fetchImpl: async () => jsonResponse({}) });
+  const normalized = transport.normalizeResult({
+    manifest: {
+      version: 1, pageCount: 1,
+      segments: [{ index: 0, jobId: 'blocks-job', originalPages: [1], segmentSha256: 'a'.repeat(64), lastStatus: 'completed' }],
+    },
+    results: [{
+      type: 'digitise', job_id: 'blocks-job', status: 'completed',
+      usage: { pages_total: 1, pages_processed: 1, pages_succeeded: 1, pages_failed: 0 },
+      documents: [{ pages: [{ page_num: 1, blocks: [
+        { block_id: 'b2', text: 'second', layout_tag: 'paragraph', reading_order: 2 },
+        { block_id: 'b1', text: 'first', layout_tag: 'header', reading_order: 1 },
+      ] }] }],
+    }],
+  }, { documentId: 'document-1', sourceVersion: '1', contentSha256: 'b'.repeat(64) });
+  assert.equal(normalized.pages[0].text, 'first\nsecond');
+  assert.deepEqual(normalized.pages[0].layoutTags, ['header', 'paragraph']);
+});
+
+test('Sarvam rejects the legacy page_number/content shape and malformed blocks', () => {
+  const transport = createSarvamDocAiTransport({ apiKey: 'secret', segmenter, fetchImpl: async () => jsonResponse({}) });
+  const manifest = {
+    version: 1, pageCount: 1,
+    segments: [{ index: 0, jobId: 'bad-shape', originalPages: [1], segmentSha256: 'a'.repeat(64) }],
+  };
+  for (const page of [
+    { page_number: 1, content: 'legacy' },
+    { page_num: 1 },
+    { page_num: 1, blocks: [{ block_id: 'b', text: 5, reading_order: 1 }] },
+    { page_num: 1, blocks: [{ block_id: 'b', text: 'x' }] },
+  ]) {
+    assert.throws(() => transport.normalizeResult({
+      manifest,
+      results: [{ type: 'digitise', job_id: 'bad-shape', status: 'completed',
+        usage: { pages_total: 1, pages_processed: 1, pages_succeeded: 1, pages_failed: 0 }, documents: [{ pages: [page] }] }],
+    }, { documentId: 'document-1', sourceVersion: '1', contentSha256: 'b'.repeat(64) }),
+    error => error.code === 'OCR_PROVIDER_PAGE_MISMATCH');
+  }
 });
