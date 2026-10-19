@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<implementation_prompt id="coversaath-sarvam-gemini-parse-validation" version="1.0" created="2026-10-19" status="planned">
+  <title>Sarvam parse fix, Gemini 3.8 Flash adjudicator, accuracy eval on one real policy PDF</title>
+
+  <persona>
+    Act as a pragmatic MVP implementation owner. Fix only what the smoke test proved broken.
+    Short PLAN, BUILD, FEEDBACK loops. Evidence before claims. Terse reports.
+    Do not propose feature enhancements. Report fixes only.
+  </persona>
+
+  <mvp_stance>
+    MVP: accuracy and code quality need to be honest, not production grade. Still obey AGENTS.md
+    invariants (consent gate, model output is only extracted_unverified | conflicting | unknown,
+    no PII in repo or logs).
+  </mvp_stance>
+
+  <smoke_test_findings date="2026-10-19">
+    <finding id="F1" severity="high" status="confirmed">
+      Gemini model id in .env is gemini-2.5-flash-exp and returns HTTP 404. Key is valid.
+      gemini-3.8-flash is listed for this key and returned HTTP 200 on generateContent.
+      Fix: LLM_MODEL=gemini-3.8-flash in .env and .env.example. Grep scripts/smoke-test-gemini.mjs
+      for the stale default.
+    </finding>
+    <finding id="F2" severity="high" status="confirmed">
+      Live Sarvam digitise job succeeds (synthetic 1 page, real PDF 20 pages as 2 segments of 10,
+      usage pages_failed=0). src/integrations/sarvam/doc-ai-transport.js normalizeResult (around line 225-232)
+      throws OCR_PROVIDER_PAGE_MISMATCH "Sarvam page mapping is invalid." because live pages carry
+      page_num and blocks[] (block_id, text, layout_tag, reading_order, coordinates, bbox_norm),
+      not page_number and content:string. Mocked tests encode the wrong shape. This blocks all live OCR.
+      Fix: accept page_num, build page text from blocks sorted by reading_order, keep layout_tag,
+      keep fail-closed on missing, duplicate or reordered pages. Correct the mocked fixtures to the live shape.
+    </finding>
+    <finding id="F3" severity="info">
+      Sarvam real-PDF parse structure is healthy: 20 pages, 0 empty blocks, tags header, headline,
+      image, section-title, paragraph, footer, page-number, table (24), footnote, image-caption.
+      Text correctness is not yet scored. That is this plan's eval.
+    </finding>
+    <finding id="F4" severity="info">
+      No prior eval measures parse accuracy against ground truth. Docs state accuracy corpus is unverified.
+    </finding>
+  </smoke_test_findings>
+
+  <target>
+    <t1>Live Sarvam output normalizes to knowvia.ocr.v1 for the real 20 page PDF with zero page loss.</t1>
+    <t2>Field extraction score on the real PDF against a human verified golden file, per field and overall.</t2>
+    <t3>Gemini 3.8 Flash adjudicates only disagreements, returns a verdict with evidence, and its verdict
+        is stored as extracted_unverified or conflicting, never as final truth.</t3>
+    <t4>Snapshot report: accuracy score, what works, what fails, fix list.</t4>
+  </target>
+
+  <scope>
+    <in>
+      F1 and F2 fixes. Golden file. Eval harness. Adjudicator addon. Live opt-in tests. Report.
+    </in>
+    <out>
+      New features, UI, PostgreSQL, deployment, multi-document corpus, production scale claims,
+      prompt tuning beyond making the eval run, Sarvam cancellation or deletion work.
+    </out>
+    <owned_paths>
+      src/integrations/sarvam/doc-ai-transport.js
+      src/modules/ai-analysis/ (adjudicator file only)
+      tests/sarvam-doc-ai.test.mjs (fixture shape fix)
+      tests/evals/parse-accuracy.test.mjs (new, opt-in)
+      scripts/eval-parse.mjs (new)
+      .env.example, scripts/smoke-test-gemini.mjs (model id only)
+    </owned_paths>
+  </scope>
+
+  <data_handling>
+    The PDF is a real policy schedule with personal data. It stays at its Downloads path.
+    Raw Sarvam output, golden file, run reports with values: write only under .local/eval/ (gitignored).
+    Committed files hold structure, field names, scores and redacted examples only. No names,
+    addresses, policy numbers or IDs in code, tests, logs, prompts or commits. Do not commit or push.
+    Provider calls run only through the existing consent gate with a document-specific grant for sarvam
+    and gemini. Never print API keys.
+  </data_handling>
+
+  <build_plan>
+    <step n="1" name="fix-config">Set LLM_MODEL=gemini-3.8-flash. Re-run curl style smoke. Expect HTTP 200.</step>
+    <step n="2" name="fix-sarvam-normalize">
+      Failing test first: fixture in live shape (page_num, blocks). Then patch normalizeResult.
+      Run npm test (sarvam-doc-ai, ocr-pipeline) and npm run test:sarvam-live. Expect live test green.
+    </step>
+    <step n="3" name="golden-file">
+      Draft candidate fields from Sarvam text (insurer, plan name, policy number, insured members, dates,
+      sum insured, premium, room rent, co-payment, waiting periods, add-ons, exclusions list presence).
+      Owner confirms every value against the PDF by eye. Save as .local/eval/golden.json with page number
+      per field. Unconfirmed fields are excluded from the score.
+    </step>
+    <step n="4" name="extractor-run">
+      Run the existing extraction path on Sarvam text. Each field gets a value or unknown plus source page.
+      Compare to golden using normalized comparison (case, whitespace, currency, date format).
+      Classify each field: match, mismatch, missing, hallucinated.
+    </step>
+    <step n="5" name="gemini-adjudicator">
+      Trigger only when: extractor value is mismatch vs a second signal (Sarvam block text regex or table cell),
+      or extractor returned conflicting, or confidence below threshold, or field missing but the golden page hint
+      says present. Never for fields that agree. Send one batched request with only the disputed field names
+      and the minimal quoted Sarvam block snippets (not the full document). Model gemini-3.8-flash,
+      temperature 0, JSON schema output {field, verdict: a|b|neither|unknown, value, evidence_quote, page}.
+      Reject output whose evidence_quote is not a substring of the supplied snippets.
+      Persist as extracted_unverified or conflicting. Cap calls per document and log token usage.
+    </step>
+    <step n="6" name="eval-and-report">
+      Score before adjudication and after. Write .local/eval/report.json and a redacted markdown snapshot.
+    </step>
+    <step n="7" name="independent-review">
+      Read-only review of consent, model-authority and data-handling per AGENTS.md. Then npm run check,
+      npm run eval:safety, git diff --check.
+    </step>
+  </build_plan>
+
+  <evaluation>
+    <metrics>
+      <m id="page_recall">Pages returned / pages in PDF. Pass: 20 of 20.</m>
+      <m id="field_accuracy">Matched golden fields / confirmed golden fields. Pass: at least 0.85 overall.</m>
+      <m id="critical_field_accuracy">Policy number, insured names, sum insured, premium, policy period, room rent limit, co-payment.
+        Pass: 1.00 exact. Any critical miss is a fail.</m>
+      <m id="hallucination_rate">Fields with a value not present in source text / total fields. Pass: 0.</m>
+      <m id="adjudicator_lift">Accuracy after minus before. Pass: not negative.</m>
+      <m id="adjudicator_precision">Adjudicator corrections that are right per golden / corrections made. Pass: at least 0.80.</m>
+      <m id="adjudicator_economy">Gemini calls per document. Pass: at most 2, and zero when no disagreement exists.</m>
+    </metrics>
+    <verdict_rule>
+      PASS: page_recall, critical_field_accuracy, hallucination_rate and adjudicator_lift all pass, and F1, F2 closed with
+      tests that fail on old code. PARTIAL: critical pass, overall below 0.85. FAIL: any critical miss or page loss.
+    </verdict_rule>
+    <method_validity>
+      Method is right only if the golden file was human verified, the scorer is deterministic, the adjudicator cannot
+      see the golden file, and a negative control (field removed from the snippet) makes the adjudicator return unknown.
+      Mocked tests do not count as journey proof. State what stays unverified.
+    </method_validity>
+  </evaluation>
+
+  <execution>
+    Run in a separate session and agent from the planning session. One worktree. Follow steps in order.
+    Consult Opus 5.5 at medium effort only when a scoring or authority question is genuinely ambiguous.
+    Final report: changes, evidence, checks, unverified items, security and data impact, rollback, follow-ups.
+    Rollback: revert the two source edits and the .env model id. No data migration involved.
+  </execution>
+</implementation_prompt>
