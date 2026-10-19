@@ -1,0 +1,57 @@
+src/modules/policy-structuring/extractor.js
+  s_0cc44eccc0b942::t_a1673119ce0523 30-33,35,112,125
+tests/policy-structuring-journey.test.mjs
+  s_0cc44eccc0b942::t_fd5965f9d78044 64,124
+scripts/eval-structuring-accuracy.mjs
+  s_0cc44eccc0b942::t_9ca8434021295b 1-61
+src/backend/services/policy-structuring-service.js
+  s_0cc44eccc0b942::t_dde1cfad7f86e0 14,33-36,57,68,86,89-96,98,126,128
+src/modules/policy-structuring/index.js
+  s_0cc44eccc0b942::t_09bea4b29a6797 15
+  s_0cc44eccc0b942::t_a1673119ce0523 89
+  s_0cc44eccc0b942::t_dde1cfad7f86e0 27,29,32-33
+tests/policy-structuring-review-fixes.test.mjs
+  s_0cc44eccc0b942::t_d49284614bc88e 1-62
+tests/policy-structuring-validator.test.mjs
+  s_0cc44eccc0b942::t_51011cb440254d 151-152,154-157
+src/modules/ai-analysis/structuring-runtime.js
+  s_0cc44eccc0b942::t_a1673119ce0523 31-32,35,42
+src/modules/policy-structuring/coverage-report.js
+  s_0cc44eccc0b942::t_09bea4b29a6797 94-179
+src/modules/ai-analysis/index.js
+  s_0cc44eccc0b942::t_a1673119ce0523 7
+src/modules/ai-analysis/live-coverage-runtime.js
+  s_0cc44eccc0b942::t_a1673119ce0523 77-83,417,421
+tests/policy-structuring-critical-fields.test.mjs
+  s_0cc44eccc0b942::t_6e9c50951f4762 1-47
+tests/policy-structuring-authority.test.mjs
+  s_0cc44eccc0b942::t_fd5965f9d78044 51
+src/modules/policy-structuring/reconciler.js
+  s_0cc44eccc0b942::t_a1673119ce0523 121,130-134
+scripts/structure-policy.mjs
+  s_0cc44eccc0b942::t_fd5965f9d78044 183
+src/server/create-server.js
+  s_0cc44eccc0b942::t_a1673119ce0523 24,60-61,64,76
+src/modules/policy-structuring/validator.js
+  s_0cc44eccc0b942::t_dde1cfad7f86e0 192-196
+src/backend/repositories/consent-repository.js
+  s_0cc44eccc0b942::t_d1e7c5595dbe79 29-36,181-189,218,229,238-243
+tests/policy-structuring-api.test.mjs
+  s_0cc44eccc0b942::t_bacf3afe82bcfb 285-309
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "77953bb297fb7d417892f56d47c7d393fd57706b",
+  "prompts": {},
+  "sessions": {
+    "s_0cc44eccc0b942": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ae4081c9-5326-403e-a828-7e5343c11629",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
