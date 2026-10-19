@@ -193,7 +193,7 @@ function requireOwnedDocument({ services, documentUploads, principal, documentId
   }
 }
 
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -416,6 +416,27 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         recipient: 'sarvam',
       } });
       return { status: 200, body: { job: ocrJobDto(job) } };
+    }
+    // Policy structuring (ADR 0006): start for an owned, OCR'd document and one analysis run of its case;
+    // read the human-reviewable result. Missing and foreign-household documents are indistinguishable.
+    const structuringMatch = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/structuring-runs$/);
+    if (req.method === 'POST' && structuringMatch) {
+      const record = requireOwnedDocument({ services, documentUploads, principal, documentId: structuringMatch[1], write: true });
+      const body = await readBody(req);
+      const started = getStructuringService().start({
+        document: record,
+        workflowRunId: requiredString(body.workflowRunId, 'workflowRunId'),
+        consentGrantId: requiredString(body.consentGrantId, 'consentGrantId'),
+        subjectAdultId: principal.adultId,
+      });
+      return { status: started.status === 'completed' ? 200 : 202, body: { structuring: started } };
+    }
+    if (req.method === 'GET' && structuringMatch) {
+      const record = requireOwnedDocument({ services, documentUploads, principal, documentId: structuringMatch[1] });
+      // Readings quote the document, so the same field permission as reading the case's sources applies.
+      responses.requireCaseField({ principal, caseRecord: services.access.requireCase(principal, record.caseId), field: READ_FIELDS.sourcePack });
+      const workflowRunId = url.searchParams.get('workflowRunId');
+      return { status: 200, body: { structuring: getStructuringService().result({ document: record, workflowRunId: requiredString(workflowRunId, 'workflowRunId') }) } };
     }
     if (req.method === 'DELETE' && documentMatch) {
       // Missing and foreign-household ids are deliberately indistinguishable. Deletion does not

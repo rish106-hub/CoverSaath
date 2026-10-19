@@ -4,6 +4,8 @@ export const AI_TASKS = Object.freeze([
   'personal_cover_extraction',
   'evidence_synthesis',
   'question_drafting',
+  'policy_structuring_extract',
+  'policy_structuring_reconcile',
 ]);
 
 export const DETERMINISTIC_TASKS = Object.freeze([
@@ -66,5 +68,7 @@ export const AI_RESPONSIBILITY_MATRIX = Object.freeze({
   personal_cover_extraction: 'Extract personal policy wording and preserve conflicts and missing facts.',
   evidence_synthesis: 'Summarise already extracted evidence without making a decision or changing a fact.',
   question_drafting: 'Draft questions for the named authority. Never send them.',
+  policy_structuring_extract: 'Propose registry readings from privacy-gated policy chunks, each with a verbatim quote. Code validates and decides.',
+  policy_structuring_reconcile: 'Flag disagreeing readings and propose which quoted reading applies. Code accepts only grounded selections of real contradictions.',
   deterministic: 'Code owns consent, authorization, graph construction, arithmetic, classification, review, state, external actions and release.',
 });

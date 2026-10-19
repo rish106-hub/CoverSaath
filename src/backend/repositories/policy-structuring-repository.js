@@ -44,6 +44,10 @@ const maximumProposalLimit = 500;
 const maximumRunParameters = 1000;
 const maximumObservations = 500;
 
+const MAX_SKIPPED_CHUNKS = 40;
+const reasonPattern = /^[a-z][a-z0-9_]{0,47}$/;
+const COVERAGE_CHUNK_KEYS = ['total', 'stored', 'proposed', 'skipped', 'unaccounted'];
+
 function coded(code, message, statusCode) {
   return Object.assign(new Error(message), { code, statusCode });
 }
@@ -223,6 +227,35 @@ function mapRun(row) {
   });
 }
 
+const count = (value, name) => {
+  if (!Number.isInteger(value) || value < 0 || value > 1_000_000_000) throw invalid(`${name} must be a count.`);
+  return value;
+};
+
+// Counts-only coverage of one structuring run, stored with the run so skipped chunks stay visible after
+// the in-process run ends. Reasons are codes, never document text; the skipped list is bounded.
+function validateCoverage(coverage) {
+  if (coverage === null || coverage === undefined) return null;
+  if (!isPlainObject(coverage) || !isPlainObject(coverage.chunks) || !isPlainObject(coverage.usage)) throw invalid('coverage is invalid.');
+  const chunks = Object.fromEntries(COVERAGE_CHUNK_KEYS.map(key => [key, count(coverage.chunks[key], `coverage.chunks.${key}`)]));
+  const skipped = Array.isArray(coverage.skippedChunks) ? coverage.skippedChunks : [];
+  const skippedChunks = skipped.slice(0, MAX_SKIPPED_CHUNKS).map((entry, index) => {
+    if (!isPlainObject(entry) || typeof entry.reason !== 'string' || !reasonPattern.test(entry.reason)) throw invalid(`coverage.skippedChunks[${index}] is invalid.`);
+    if (!Number.isInteger(entry.page) || entry.page < 1 || entry.page > 10_000) throw invalid(`coverage.skippedChunks[${index}].page is invalid.`);
+    return { page: entry.page, reason: entry.reason };
+  });
+  const costUsd = coverage.costUsd ?? 0;
+  if (!Number.isFinite(costUsd) || costUsd < 0 || costUsd > 1_000) throw invalid('coverage.costUsd is invalid.');
+  return {
+    chunks,
+    skippedChunks,
+    skippedTruncated: skipped.length > MAX_SKIPPED_CHUNKS,
+    calls: count(coverage.calls, 'coverage.calls'),
+    usage: { inputTokens: count(coverage.usage.inputTokens, 'coverage.usage.inputTokens'), outputTokens: count(coverage.usage.outputTokens, 'coverage.usage.outputTokens') },
+    costUsd: Math.round(costUsd * 1e6) / 1e6,
+  };
+}
+
 export class PolicyStructuringRepository {
   constructor(database, { clock = () => new Date(), audit = null, coverageParameters = null } = {}) {
     if (!database?.prepare || !database?.exec) throw new TypeError('A database is required.');
@@ -290,7 +323,7 @@ export class PolicyStructuringRepository {
    */
   commitStructuring({
     householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
-    decisions = [], proposals = [], consentCheck, at = this.clock().toISOString(),
+    decisions = [], proposals = [], coverage = null, consentCheck, at = this.clock().toISOString(),
   } = {}) {
     requireBounded(householdId, 'householdId');
     requireBounded(workflowRunId, 'workflowRunId');
@@ -304,11 +337,12 @@ export class PolicyStructuringRepository {
     if (typeof consentCheck !== 'function') throw invalid('consentCheck is required.');
     const checkedDecisions = validateDecisions(decisions);
     const checkedProposals = validateProposals(proposals);
+    const checkedCoverage = validateCoverage(coverage);
 
     try {
       return this.#commit({
         householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
-        decisions: checkedDecisions, proposals: checkedProposals, consentCheck, at,
+        decisions: checkedDecisions, proposals: checkedProposals, coverage: checkedCoverage, consentCheck, at,
       });
     } catch (error) {
       throw clientSafe(error);
@@ -317,7 +351,7 @@ export class PolicyStructuringRepository {
 
   #commit({
     householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
-    decisions: checkedDecisions, proposals: checkedProposals, consentCheck, at,
+    decisions: checkedDecisions, proposals: checkedProposals, coverage, consentCheck, at,
   }) {
     return this.#atomic(() => {
       const scope = this.#scope({ householdId, workflowRunId, documentId, requireActive: true });
@@ -416,7 +450,7 @@ export class PolicyStructuringRepository {
         (id, household_id, case_id, workflow_run_id, document_id, source_version, pipeline_version, counts_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         structuringRunId, householdId, scope.case_id, workflowRunId, documentId, sourceVersion, pipelineVersion,
-        JSON.stringify(counts), at,
+        JSON.stringify(coverage ? { ...counts, coverage } : counts), at,
       );
       const insertProposal = this.database.prepare(`INSERT INTO proposed_parameters
         (id, structuring_run_id, household_id, document_id, source_page_id, registry_version, proposed_key,
