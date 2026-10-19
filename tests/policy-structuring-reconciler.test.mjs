@@ -46,7 +46,8 @@ test('cross-subject differences involving the policy subject are disagreements; 
       item(sheet, 'd.room_rent_limit', '1% of SI', 'Room rent 1% of SI')], { chunk: sheet, registryVersion }).accepted,
   ];
   const conflicts = deterministicConflicts(groupItems(items, []));
-  assert.deepEqual(conflicts.map(conflict => [conflict.groupId, conflict.reasonCode]), [['registry:f.ped_waiting_period|*', 'model_observations_conflict']]);
+  // A plan label is not an insured member, so its readings group under the key with the policy readings.
+  assert.deepEqual(conflicts.map(conflict => [conflict.groupId, conflict.reasonCode]), [['registry:f.ped_waiting_period|policy', 'model_observations_conflict']]);
   const decisions = decideStates({ accepted: items, conflicts });
   assert.deepEqual(decisions.map(decision => [decision.parameterKey, decision.state]), [['d.room_rent_limit', 'extracted_unverified'], ['f.ped_waiting_period', 'conflicting']]);
 });

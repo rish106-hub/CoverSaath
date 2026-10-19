@@ -1,7 +1,8 @@
 // Conflict detection and selection across validated items. Deterministic comparison always runs; one
 // optional model call may flag extra conflicts and, by owner decision (2026-10-19, ADR 0006), select which
-// reading applies. A selection is accepted only when it cites one of that group's own quotes; the selected
-// value stays extracted_unverified, every reading is kept, and the household confirms it before use.
+// reading applies. A selection is accepted only for a deterministic contradiction of comparable readings and
+// only when it cites one of that group's own quotes; context differences and per-subject variations are never
+// selected. The selected value stays extracted_unverified, every reading is kept, and the household confirms it.
 import { modelMayProduceResolutionState } from '../../contracts/ai-authority.js';
 import { errorReason } from './extractor.js';
 import { comparisonKey } from './validator.js';
@@ -28,7 +29,22 @@ export const RECONCILE_SCHEMA = Object.freeze({
 
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
 
-const subjectNorm = subject => String(subject ?? 'policy').toLowerCase().replace(/[^\p{L}\p{N}<>_ ]+/gu, ' ').replace(/\s+/g, ' ').trim() || 'policy';
+// Readings split by subject only when the subject is an insured member: a privacy-gate name placeholder or a
+// member or relation term ("Self", "Spouse", "Insured Person 2", "Member A"). Gemini fills subject with
+// descriptive or benefit labels ("pre-existing diseases", "Pre-Hospitalization"); those would hide a
+// contradiction as a per-subject variation, so they group under the key ('policy'). Over-reporting is
+// acceptable; hiding a contradiction is not.
+const MEMBER_WORDS = new Set(['self', 'spouse', 'husband', 'wife', 'son', 'daughter', 'child', 'children', 'mother', 'father',
+  'proposer', 'insured', 'person', 'member', 'primary', 'dependent', 'dependant']);
+const NAME_PLACEHOLDER = /^<name_[1-9][0-9]{0,5}>$/;
+function memberSubject(words) {
+  const fits = word => MEMBER_WORDS.has(word) || NAME_PLACEHOLDER.test(word) || /^\d{1,2}$/.test(word) || /^[a-z]$/.test(word);
+  return words.every(fits) && words.some(word => MEMBER_WORDS.has(word) || NAME_PLACEHOLDER.test(word));
+}
+const subjectNorm = subject => {
+  const norm = String(subject ?? 'policy').toLowerCase().replace(/[^\p{L}\p{N}<>_ ]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  return norm && memberSubject(norm.split(' ')) ? norm : 'policy';
+};
 const ref = item => ({ chunkId: item.chunkId, page: item.page, blockIndex: item.blockIndex });
 
 export function groupItems(accepted = [], proposals = []) {
@@ -55,14 +71,19 @@ function comparable(left, right) {
   if (a?.kind && b?.kind && a.kind === b.kind) return true;
   return String(left.value?.text ?? '').length <= SHORT_VALUE_CHARS && String(right.value?.text ?? '').length <= SHORT_VALUE_CHARS;
 }
+const contradictPair = (left, right) => comparable(left, right) && comparisonKey(left.value) !== comparisonKey(right.value);
 function contradicts(items) {
   for (let i = 0; i < items.length; i += 1) {
     for (let j = i + 1; j < items.length; j += 1) {
-      if (comparable(items[i], items[j]) && comparisonKey(items[i].value) !== comparisonKey(items[j].value)) return true;
+      if (contradictPair(items[i], items[j])) return true;
     }
   }
   return false;
 }
+// A selected reading must itself take part in a contradiction: comparable with, and different from,
+// another reading of the same group. A clause beside a schedule value is never picked as the winner.
+const selectable = (items, quote) => items.some(item => item.evidenceQuote === quote
+  && items.some(other => other !== item && contradictPair(item, other)));
 
 const entry = (groupId, target, subject, kind, items) => ({
   groupId, target, subject, kind, sources: ['deterministic'],
@@ -151,16 +172,25 @@ export async function reconcile({ accepted = [], proposals = [], call, consentCh
       existing = { groupId: result.group.groupId, target: result.group.target, subject: result.group.subject, kind: 'conflict', sources: ['reconciler'], reasonCode: 'reconciler_conflict', itemRefs: result.group.items.map(ref) };
       conflicts.push(existing);
     }
-    if (result.selectedQuote) existing.selectedQuote = result.selectedQuote;
+    // Auto-selection only for a deterministic contradiction of comparable readings in this group. A
+    // model-only flag, context difference or a reading outside the contradiction stays unresolved.
+    if (result.selectedQuote) {
+      if (existing.kind === 'conflict' && existing.sources.includes('deterministic') && selectable(result.group.items, result.selectedQuote)) {
+        existing.selectedQuote = result.selectedQuote;
+      } else {
+        out.skipped.push({ groupId: result.group.groupId, reason: 'selection_not_contradiction' });
+      }
+    }
   }
   return out;
 }
 
 const REASON_ORDER = ['model_observations_conflict', 'reconciler_conflict', 'context_differs', 'per_subject_values'];
 
-// A key with differing readings is conflicting unless its only contradiction or context entry carries a
-// grounded model selection and nothing else differs (no per-subject variation, no second entry). Then the
-// selected reading is the value, still extracted_unverified, with reasonCode model_selected_from_conflict.
+// A key with differing readings is conflicting unless its only entry is a contradiction that carries a
+// grounded model selection and nothing else differs (no context difference, no per-subject variation, no
+// second entry). Then the selected reading is the value, still extracted_unverified, with reasonCode
+// model_selected_from_conflict. The selected reading must be one the entry itself cites.
 export function decideStates({ accepted = [], conflicts = [] } = {}) {
   const byKey = new Map();
   for (const item of accepted.filter(candidate => candidate.kind === 'registry')) {
@@ -171,9 +201,11 @@ export function decideStates({ accepted = [], conflicts = [] } = {}) {
     const entries = conflicts.filter(conflict => conflict.target?.kind === 'registry' && conflict.target.key === parameterKey);
     const reasons = entries.map(conflict => conflict.reasonCode ?? (conflict.sources?.includes('deterministic') ? 'model_observations_conflict' : 'reconciler_conflict'));
     const conflictReason = observations.length >= 2 ? REASON_ORDER.find(reason => reasons.includes(reason)) : undefined;
-    const open = entries.filter(conflict => kindOf(conflict) !== 'variation');
-    const selection = open.length === 1 && open.length === entries.length && open[0].selectedQuote
-      && observations.some(observation => observation.evidenceQuote === open[0].selectedQuote) ? open[0].selectedQuote : null;
+    const [only] = entries;
+    const cited = observation => Array.isArray(only?.itemRefs)
+      && only.itemRefs.some(item => item.page === observation.page && item.blockIndex === observation.blockIndex);
+    const selection = entries.length === 1 && kindOf(only) === 'conflict' && only.reasonCode === 'model_observations_conflict' && only.selectedQuote
+      && observations.some(observation => observation.evidenceQuote === only.selectedQuote && cited(observation)) ? only.selectedQuote : null;
     const state = conflictReason && !selection ? 'conflicting' : 'extracted_unverified';
     if (!modelMayProduceResolutionState(state)) fail('STRUCTURING_AUTHORITY', 'Model may not produce this resolution state.');
     if (selection && observations.length >= 2) return { parameterKey, state, reasonCode: 'model_selected_from_conflict', selectedQuote: selection, observations };
