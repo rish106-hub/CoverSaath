@@ -11,6 +11,7 @@ import {
 // A committed run is durable and is never paid for twice (idempotent replay by pipeline version).
 
 const MAX_KNOWN_IDENTIFIERS = 200;
+const MAX_JOBS = 200;
 const RECORDED_BY = 'policy-structuring-service';
 
 function coded(code, message, statusCode) {
@@ -28,6 +29,10 @@ function documentNames(pages) {
     .filter(value => typeof value === 'string' && /\p{L}/u.test(value) && value.length <= 200)
     .map(value => ({ kind: 'NAME', value }));
 }
+
+// A stored run counts only while it is not erased and was made by the current pipeline version; an erased
+// or older run can be structured again (the commit replays only a live run of the same version).
+const current = run => Boolean(run && !run.erasedAt && run.pipelineVersion === POLICY_STRUCTURING_VERSION);
 
 const label = (registryVersion, key) => { try { return getPolicyParameterDefinition(registryVersion, key).label; } catch { return key; } };
 
@@ -49,7 +54,7 @@ export function createPolicyStructuringService({ services, loadKnownIdentifiers,
   }
 
   async function execute({ document, workflowRunId, consentGrantId, subjectAdultId, registryVersion, stored }) {
-    const consentCheck = documentGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id });
+    const consentCheck = documentGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId: document.householdId });
     let costUsd = 0;
     const call = createModelCall({ consentCheck, onCall: event => { costUsd += event.costUsd; } });
     const knownIdentifiers = [...(await loadKnownIdentifiers(document.caseId)), ...documentNames(stored.pages)].slice(0, MAX_KNOWN_IDENTIFIERS);
@@ -60,7 +65,7 @@ export function createPolicyStructuringService({ services, loadKnownIdentifiers,
       knownIdentifiers,
       registryVersion,
       env,
-      alreadyStored: () => Boolean(services.policyStructuring.getStructuringRun({ householdId: document.householdId, workflowRunId, documentId: document.id })),
+      alreadyStored: () => current(services.policyStructuring.getStructuringRun({ householdId: document.householdId, workflowRunId, documentId: document.id })),
       commit: async ({ decisions, proposals, coverage }) => services.policyStructuring.commitStructuring({
         householdId: document.householdId, workflowRunId, documentId: document.id, sourceVersion: stored.sourceVersion,
         pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion, recordedBy: RECORDED_BY, decisions, proposals,
@@ -78,11 +83,19 @@ export function createPolicyStructuringService({ services, loadKnownIdentifiers,
       if (!structuringEnabled(env)) throw coded('STRUCTURING_DISABLED', 'Policy structuring is disabled.', 503);
       if (typeof consentGrantId !== 'string' || !consentGrantId) throw coded('VALIDATION_ERROR', 'consentGrantId is required.', 400);
       const { stored: existing, registryVersion } = scopeOf(document, workflowRunId);
-      if (existing && !existing.erasedAt) return { status: 'completed' };
+      if (current(existing)) return { status: 'completed' };
       const key = jobKey(document.id, workflowRunId);
       if (jobs.get(key)?.status === 'running') return { status: 'running' };
+      // Bounded in-process state: settled entries go first, oldest first.
+      if (jobs.size >= MAX_JOBS) {
+        for (const [entryKey, entry] of jobs) {
+          if (entry.status !== 'running') jobs.delete(entryKey);
+          if (jobs.size < MAX_JOBS) break;
+        }
+        if (jobs.size >= MAX_JOBS) throw coded('STRUCTURING_BUSY', 'Too many structuring runs are in progress.', 503);
+      }
       // Checked before any work so a missing grant or missing blocks fails the request, not the background run.
-      documentGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id })();
+      documentGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId: document.householdId })();
       const stored = services.ocr.getDocumentBlockPages({ documentId: document.id, householdId: document.householdId });
       if (!stored.complete) throw coded('STRUCTURING_BLOCKS_UNAVAILABLE', 'Some pages have no stored blocks. Run OCR again.', 409);
       const job = { status: 'running', errorCode: null };
@@ -110,8 +123,9 @@ export function createPolicyStructuringService({ services, loadKnownIdentifiers,
     result({ document, workflowRunId }) {
       const { stored, registryVersion } = scopeOf(document, workflowRunId);
       const job = jobs.get(jobKey(document.id, workflowRunId));
+      if (job?.status === 'running') return { status: 'running', errorCode: null };
       if (!stored || stored.erasedAt) {
-        return { status: stored?.erasedAt ? 'erased' : job?.status ?? 'not_started', errorCode: job?.errorCode ?? null };
+        return { status: job?.status === 'failed' ? 'failed' : stored?.erasedAt ? 'erased' : 'not_started', errorCode: job?.errorCode ?? null };
       }
       const records = services.coverageParameters.listForRun(workflowRunId, { limit: 1000 });
       const parameters = [];

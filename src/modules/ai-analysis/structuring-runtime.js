@@ -28,17 +28,18 @@ function readStructuringConfig(env) {
 
 /**
  * Returns createCall({ consentCheck, onCall }) => call({ task, payload }) => { json, usage, costUsd }.
- * One run budget per createCall (one document run); one project budget per factory. onCall receives
+ * One run budget per createCall (one document run); the project budget is shared with live analysis when
+ * `projectBudget` (createSharedProjectBudget) is passed, else one per factory. onCall receives
  * counts only (task, tokens, cost, outcome), never prompts or output.
  */
-export function createStructuringModelCallFactory({ env = process.env, loadModel, createAgent } = {}) {
+export function createStructuringModelCallFactory({ env = process.env, loadModel, createAgent, projectBudget } = {}) {
   let project;
   return ({ consentCheck, onCall = () => {} } = {}) => {
     if (typeof consentCheck !== 'function') {
       throw Object.assign(new Error('A consent check is required for live model dispatch.'), { code: 'LIVE_AI_CONFIG_INVALID', statusCode: 503 });
     }
     const config = readStructuringConfig(env);
-    project ||= createBudgetScope(config.projectBudgetUsd);
+    project ||= projectBudget ? projectBudget.get(config.projectBudgetUsd) : createBudgetScope(config.projectBudgetUsd);
     const modelRunner = createAiSdkRunner({
       loadModel: loadModel ?? (async () => createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)),
       provider: 'google', model: config.model, modelVersion: config.modelVersion,

@@ -180,7 +180,7 @@ async function main() {
   const backend = flags.store !== undefined ? freshBackend(await readJson('normalized.json'), at) : null;
   // With --store the grant lives in the database and is re-checked before each call and inside the commit.
   const consentCheck = backend
-    ? documentGrantCheck({ consents: backend.services.consents, grantId: 'consent-local', subjectAdultId: 'adult-local', documentId: 'document-local' })
+    ? documentGrantCheck({ consents: backend.services.consents, grantId: 'consent-local', subjectAdultId: 'adult-local', documentId: 'document-local', householdId: 'household-local' })
     : () => { if (!consent.has('gemini')) throw Object.assign(new Error('Gemini grant missing.'), { code: 'CONSENT_REQUIRED' }); };
   const commit = backend ? async ({ decisions, proposals }) => backend.services.policyStructuring.commitStructuring({
     householdId: 'household-local', workflowRunId: 'run-local', documentId: 'document-local', sourceVersion: backend.sourceVersion,

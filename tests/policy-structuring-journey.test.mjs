@@ -61,7 +61,7 @@ function addScope(database, { id, documentId = null, recipient = 'google-gemini'
     VALUES (?, 'consent-parameters', 'document', ?, 'derive', 'insurance_document', ?, ?)`).run(id, documentId, recipient, at);
 }
 
-const grantCheck = services => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId: document });
+const grantCheck = services => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId: document, householdId: 'household-parameters' });
 const commitWith = (services, consentCheck) => async ({ decisions, proposals }) => services.policyStructuring.commitStructuring({
   householdId: 'household-parameters', workflowRunId: run, documentId: document, sourceVersion: 'version-1',
   pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion: 'policy-parameters/v1', recordedBy: 'policy-structuring',
@@ -121,7 +121,7 @@ test('section titles are privacy-gated like chunk text before any call', async (
 
 test('the Gemini grant must name this document and the google-gemini recipient', t => {
   const { database, services } = open(t);
-  const check = documentId => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId });
+  const check = documentId => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId, householdId: 'household-parameters' });
   assert.doesNotThrow(check(document));
   addScope(database, { id: 'scope-any-document' });
   assert.throws(check('document-unnamed'), { code: 'CONSENT_SCOPE_REQUIRED' }, 'a scope without a document id is not document-specific');

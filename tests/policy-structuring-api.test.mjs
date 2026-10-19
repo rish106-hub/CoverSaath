@@ -282,6 +282,31 @@ test('W4: an uploaded policy is structured through the app and returns a human-r
   const remaining = app.database.prepare(`SELECT COUNT(*) AS n FROM coverage_parameter_observations
     WHERE document_id = ? AND extraction_method = 'document_extraction' AND redacted_at IS NULL`).get(s.documentId).n;
   assert.equal(remaining, 0);
+  // Only the Gemini-derived output went: the document and its OCR pages rest on other grants and stay.
+  assert.equal(app.database.prepare(`SELECT lifecycle_state FROM document_uploads WHERE id = ?`).get(s.documentId).lifecycle_state, 'active');
+  assert.equal(app.database.prepare(`SELECT COUNT(*) AS n FROM source_pages WHERE document_upload_id = ? AND extracted_text IS NOT NULL AND blocks_json IS NOT NULL`).get(s.documentId).n, 2);
+
+  // A grant cannot name another household's document, so it can never authorise or erase across households.
+  const foreignGrant = await app.call('/api/v1/consents', {
+    method: 'POST', token: other.token,
+    body: { householdId: other.householdId, subjectAdultId: other.adultId, grantedToActor: 'google-gemini', purpose: 'document_processing',
+      scopes: [{ resourceType: 'document', resourceId: s.documentId, action: 'derive', dataCategory: 'insurance_document', recipient: 'google-gemini' }] },
+  });
+  assert.equal(foreignGrant.status, 404);
+
+  // After revocation the household can consent again and structure the same document for the same run.
+  const regrant = await app.call('/api/v1/consents', {
+    method: 'POST', token: s.token,
+    body: { householdId: s.householdId, subjectAdultId: s.adultId, grantedToActor: 'google-gemini', purpose: 'document_processing',
+      scopes: [{ resourceType: 'document', resourceId: s.documentId, action: 'derive', dataCategory: 'insurance_document', recipient: 'google-gemini' }] },
+  });
+  assert.equal(regrant.status, 201);
+  const rerun = await startStructuring(app, s, regrant.data.id);
+  assert.equal(rerun.status, 202, JSON.stringify(rerun.data));
+  await app.server.structuring.settle(s.documentId, s.workflowRunId);
+  const again = await readResult(app, s);
+  assert.equal(again.data.structuring.status, 'completed');
+  assert.ok(again.data.structuring.parameters.some(parameter => parameter.key === 'd.room_rent_limit'));
 });
 
 test('W4: without a document-specific Gemini grant nothing is sent', async t => {

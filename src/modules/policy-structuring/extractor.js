@@ -27,7 +27,12 @@ export function registryCatalog(registryVersion) {
 const estimateTokens = batch => Math.ceil(batch.reduce((sum, chunk) => sum + chunk.text.length, 0) / 4);
 const tokens = value => (Number.isFinite(value) && value > 0 ? value : 0);
 
+// The gateway refused the reservation or the actual cost overran it: no further paid call for this document.
+const BUDGET_STOP_CODES = new Set(['reservation_exceeded', 'budget_refused']);
+export const isBudgetStop = error => BUDGET_STOP_CODES.has(error?.code);
+
 export function errorReason(error) {
+  if (isBudgetStop(error)) return 'budget_stop';
   if (/TIMEOUT/i.test(String(error?.code ?? '')) || ['AbortError', 'TimeoutError'].includes(error?.name)) return 'timeout';
   return 'provider_error';
 }
@@ -104,6 +109,7 @@ export async function extractChunks({ chunks, registryVersion, call, consentChec
     calls += 1;
     try { response = await call({ task: STRUCTURING_EXTRACT_TASK, system: STRUCTURING_INSTRUCTIONS[STRUCTURING_EXTRACT_TASK], payload, schema: EXTRACTION_SCHEMA }); } catch (error) {
       for (const chunk of batch) outcomes[chunk.id] = { status: 'skipped', reason: errorReason(error) };
+      if (isBudgetStop(error)) stop = 'budget_stop';
       continue;
     }
     usage.inputTokens += tokens(response?.usage?.inputTokens);
@@ -116,5 +122,5 @@ export async function extractChunks({ chunks, registryVersion, call, consentChec
     collect(json, batch, registryVersion, caps, out, outcomes);
     if (usage.inputTokens > caps.maxInputTokensPerDocument || usage.outputTokens > caps.maxOutputTokensPerDocument) stop = 'token_cap';
   }
-  return { accepted: out.accepted, proposals: out.proposals, rejected: out.rejected, rawItems: out.rawItems, chunkOutcomes: outcomes, calls, usage };
+  return { accepted: out.accepted, proposals: out.proposals, rejected: out.rejected, rawItems: out.rawItems, chunkOutcomes: outcomes, calls, usage, budgetStopped: stop === 'budget_stop' };
 }

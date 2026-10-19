@@ -74,6 +74,13 @@ export function createBudgetScope(maxUsd) {
   };
 }
 
+// One project budget per process, shared by every live model path (analysis and policy structuring), so
+// ORCHESTRATION_PROJECT_BUDGET_USD caps their total. Created on first live use.
+export function createSharedProjectBudget() {
+  let scope = null;
+  return Object.freeze({ get: maxUsd => (scope ||= createBudgetScope(maxUsd)) });
+}
+
 export function createRunBudget(runMaxUsd, project) {
   const run = createBudgetScope(runMaxUsd);
   return Object.freeze({
@@ -407,11 +414,11 @@ function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization,
   return { requestBuilders: Object.freeze(requestBuilders), resultAdapters: Object.freeze(resultAdapters) };
 }
 
-export function createGeminiCoverageRegistryFactory({ env = process.env, loadModel, createAgent, resolveParameterPolicy, preDispatchValidator, privacyLimits, knownIdentifierLoader } = {}) {
+export function createGeminiCoverageRegistryFactory({ env = process.env, loadModel, createAgent, resolveParameterPolicy, preDispatchValidator, privacyLimits, knownIdentifierLoader, projectBudget } = {}) {
   let project;
   return () => {
     const config = readConfig(env);
-    project ||= createBudgetScope(config.projectBudgetUsd);
+    project ||= projectBudget ? projectBudget.get(config.projectBudgetUsd) : createBudgetScope(config.projectBudgetUsd);
     const preDispatchAuthorization = createPreDispatchAuthorization(preDispatchValidator);
     // Live dispatch without known-value redaction is never allowed.
     if (typeof knownIdentifierLoader !== 'function') fail('LIVE_AI_CONFIG_INVALID', 'A household identifier loader is required for live model dispatch.');

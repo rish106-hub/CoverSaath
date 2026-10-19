@@ -26,6 +26,14 @@ export class ConsentRepository {
 
   grant({ id: grantId = id('consent'), householdId, subjectAdultId, grantedToActor = 'knowvia-local', purpose, noticeVersion = 'v1', evidenceMethod = 'typed', expiresAt = null, scopes = [] }) {
     if (!scopes.length) throw new Error('At least one consent scope is required.');
+    // A scope may name only a document of the grant's own household; otherwise revoking the grant would
+    // erase under the wrong household. Missing and foreign documents are indistinguishable.
+    const documentHousehold = this.database.prepare('SELECT household_id FROM document_uploads WHERE id = ?');
+    for (const scope of scopes) {
+      if (scope.resourceType === 'document' && scope.resourceId != null && documentHousehold.get(scope.resourceId)?.household_id !== householdId) {
+        throw Object.assign(new Error('Document was not found.'), { code: 'DOCUMENT_NOT_FOUND', statusCode: 404 });
+      }
+    }
     const at = this.clock().toISOString();
     this.database.exec('BEGIN IMMEDIATE');
     try {
@@ -170,15 +178,15 @@ export class ConsentRepository {
       const affectedDocuments = [...new Map(
         [...collectedDocuments, ...derivedDocuments].map(document => [document.id, document]),
       ).values()];
-      // Documents this grant disclosed to a model (a document scope naming the model recipient). Their
-      // model-derived data (observations, structuring runs and proposals, run excerpts) is erased below;
-      // the document and its OCR pages stay, because they rest on other grants.
-      const modelDisclosedDocuments = this.database.prepare(`SELECT DISTINCT resource_id AS id FROM consent_scopes
-        WHERE consent_grant_id = ? AND resource_type = 'document' AND resource_id IS NOT NULL AND recipient = ?
-        ORDER BY resource_id`).all(grantId, GEMINI_RECIPIENT);
-      const modelDerivedDocuments = [...new Map(
-        [...affectedDocuments, ...modelDisclosedDocuments].map(document => [document.id, document]),
-      ).values()];
+      // Documents this grant disclosed to Gemini for policy structuring (a document scope naming the model
+      // recipient). Only the structuring output is erased for them (runs, proposals and the observations those
+      // runs wrote), under each document's own household; the document, its OCR pages and analysis resting on
+      // other grants stay.
+      const modelDisclosedDocuments = this.database.prepare(`SELECT DISTINCT document.id, document.household_id
+        FROM consent_scopes scope JOIN document_uploads document ON document.id = scope.resource_id
+        WHERE scope.consent_grant_id = ? AND scope.resource_type = 'document' AND scope.recipient = ?
+        ORDER BY document.id`).all(grantId, GEMINI_RECIPIENT)
+        .filter(document => !affectedDocuments.some(affected => affected.id === document.id));
       const cancelOcrSet = `status = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN 'cancelled' ELSE status END,
           completed_at = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN ? ELSE completed_at END,
           error_code = CASE
@@ -207,7 +215,7 @@ export class ConsentRepository {
       // erasure is audited (counts only) before the lifecycle change below, which
       // would otherwise redact them silently through the database safety net.
       if (this.coverageParameters) {
-        for (const { id: documentId } of modelDerivedDocuments) {
+        for (const { id: documentId } of affectedDocuments) {
           this.coverageParameters.redactObservationsForDocument({
             documentId, reasonCode: 'consent_revoked', actorType: 'adult_user', actorId: revokedByAdultId, at,
           });
@@ -218,7 +226,7 @@ export class ConsentRepository {
       // transaction. Counts only are audited.
       this.eraseDerivedRunData({
         householdId: grant.household_id,
-        documentIds: modelDerivedDocuments.map(document => document.id),
+        documentIds: affectedDocuments.map(document => document.id),
         consentGrantId: grantId,
         reason: ERASURE_MARKER,
         resourceType: 'consent_grant',
@@ -227,6 +235,12 @@ export class ConsentRepository {
         actorId: revokedByAdultId,
         at,
       });
+      for (const document of modelDisclosedDocuments) {
+        this.policyStructuring?.eraseDerived({
+          householdId: document.household_id, documentIds: [document.id], reasonCode: ERASURE_MARKER,
+          resourceType: 'consent_grant', resourceId: grantId, actorType: 'adult_user', actorId: revokedByAdultId, at,
+        });
+      }
       // Stored OCR blocks are page text in another shape and are erased with it.
       const redactPages = this.database.prepare(`UPDATE source_pages SET extracted_text = NULL, extraction_status = 'failed',
           confidence_basis_points = NULL, page_sha256 = ?, text_sha256 = NULL,

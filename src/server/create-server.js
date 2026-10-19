@@ -21,7 +21,7 @@ import {
 } from '../integrations/index.js';
 import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
 import { readServerConfig } from './config.js';
-import { createGeminiCoverageRegistryFactory, createStructuringModelCallFactory } from '../modules/ai-analysis/index.js';
+import { createGeminiCoverageRegistryFactory, createSharedProjectBudget, createStructuringModelCallFactory } from '../modules/ai-analysis/index.js';
 
 export function createApiServer({
   env = process.env,
@@ -57,8 +57,11 @@ export function createApiServer({
   // Only the model driver (loadModel/createAgent) may be injected; there is no
   // option to replace the registry, the validator or the parameter policy.
   const modelDispatchValidator = request => createCoverageAnalysisPort(getBackend()).authorizeModelDispatch(request);
+  // Analysis and structuring share one project budget, so the configured cap bounds their total spend.
+  const projectBudget = createSharedProjectBudget();
   const liveRegistryFactory = createGeminiCoverageRegistryFactory({
     env,
+    projectBudget,
     ...(analysisLiveModelDriver?.loadModel ? { loadModel: analysisLiveModelDriver.loadModel } : {}),
     ...(analysisLiveModelDriver?.createAgent ? { createAgent: analysisLiveModelDriver.createAgent } : {}),
     preDispatchValidator: modelDispatchValidator,
@@ -70,6 +73,7 @@ export function createApiServer({
   // consent check before every call. Same injectable model driver as live analysis, nothing else.
   const createStructuringModelCall = createStructuringModelCallFactory({
     env,
+    projectBudget,
     ...(analysisLiveModelDriver?.loadModel ? { loadModel: analysisLiveModelDriver.loadModel } : {}),
     ...(analysisLiveModelDriver?.createAgent ? { createAgent: analysisLiveModelDriver.createAgent } : {}),
   });
