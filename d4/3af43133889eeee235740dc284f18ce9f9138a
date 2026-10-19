@@ -1,0 +1,155 @@
+tests/evidence-fact-redaction.test.mjs
+  s_9d89416023ef69::t_9e56bb047a7dc1 251-275
+docs/architecture/system.md
+  s_9d89416023ef69::t_9cc55daca608fb 76
+docs/adr/0005-document-intake-validation-and-scanning.md
+  s_9d89416023ef69::t_9cc55daca608fb 41,50
+src/backend/repositories/household-repository.js
+  s_9d89416023ef69::t_43a9cf56d36c71 78-86
+docs/agent-tooling.md
+  s_9d89416023ef69::t_9cc55daca608fb 30
+src/backend/repositories/consent-repository.js
+  s_9d89416023ef69::t_cecf19810f4b51 6-8,328,330
+  s_9d89416023ef69::t_cf9568a17816b2 255-259,348,396
+  s_9d89416023ef69::t_2e790e44c70ccd 293-294,362-381,407
+  s_9d89416023ef69::t_0bf231743e37b7 156-160,164-166,169-170
+  s_9d89416023ef69::t_154af976c46dd9 161,177-179,204,207,210-214
+  s_9d89416023ef69::t_779ef02eef802e 208-209
+  s_9d89416023ef69::t_24cde6d106fd4e 167-168,171-176
+  s_9d89416023ef69::t_fcc63a21803fb8 245-246,290-292,306-313,339-344
+  s_9d89416023ef69::t_426644106ffddc 299,304,337-338
+  s_9d89416023ef69::t_f2b243b0add151 357,360
+  s_9d89416023ef69::t_4050c018db8644 361
+src/backend/services/backend-services.js
+  s_9d89416023ef69::t_cecf19810f4b51 17
+src/ui/api/v1-client.js
+  s_9d89416023ef69::t_14404381a994f9 53
+  s_9d89416023ef69::t_69d843422ecb17 55
+tests/pdf-inspection-sandbox.test.mjs
+  s_9d89416023ef69::t_9cc55daca608fb 95-99,154,162
+src/ui/app.js
+  s_9d89416023ef69::t_7c3d7079509558 53-57,63
+package.json
+  s_9d89416023ef69::t_9cc55daca608fb 7
+docs/architecture/block-1-input.md
+  s_9d89416023ef69::t_bbc47a289e36e2 27,96
+src/backend/repositories/ocr-repository.js
+  s_9d89416023ef69::t_59258553b470e3 85-87,89,92,97
+  s_9d89416023ef69::t_0bf231743e37b7 103-104
+  s_9d89416023ef69::t_cd7623d48c7390 98-99,101-102,105-111
+  s_9d89416023ef69::t_60ba3b26602597 100
+src/backend/services/document-upload-service.js
+  s_9d89416023ef69::t_e119b2d9d79cdf 218-225
+  s_9d89416023ef69::t_236195e6568ab8 94,252-262,264-275
+  s_9d89416023ef69::t_43a9cf56d36c71 216-217
+  s_9d89416023ef69::t_cecf19810f4b51 230-235
+  s_9d89416023ef69::t_779ef02eef802e 263
+src/server/create-server.js
+  s_9d89416023ef69::t_779ef02eef802e 81,88
+  s_9d89416023ef69::t_e02836e0ae91fb 82-87,89-91
+src/server/routes/v1-backend-routes.js
+  s_9d89416023ef69::t_cecf19810f4b51 355-360,362-365,368-376
+  s_9d89416023ef69::t_1a67d4e9884809 361
+  s_9d89416023ef69::t_43a9cf56d36c71 323-324,326,366-367
+  s_9d89416023ef69::t_14404381a994f9 318-322,328-336
+  s_9d89416023ef69::t_e119b2d9d79cdf 325,327
+src/contracts/error-codes.js
+  s_9d89416023ef69::t_cecf19810f4b51 59-60
+  s_9d89416023ef69::t_2acce0af1f6136 34,96
+src/ui/state/document-selection.js
+  s_9d89416023ef69::t_69d843422ecb17 35-37
+docs/architecture/security.md
+  s_9d89416023ef69::t_bbc47a289e36e2 85
+src/integrations/sarvam/ocr-provider.js
+  s_9d89416023ef69::t_779ef02eef802e 37,39-41,47,49
+tests/ui-document-upload.test.mjs
+  s_9d89416023ef69::t_fef2d80b5f7f11 146-158
+  s_9d89416023ef69::t_462b090353a3bb 131-145
+src/modules/document-intake/sandboxed-pdf-inspection.js
+  s_9d89416023ef69::t_9cc55daca608fb 68-70
+src/modules/document-intake/ocr-service.js
+  s_9d89416023ef69::t_0bf231743e37b7 66-69
+  s_9d89416023ef69::t_59258553b470e3 86,92,96-97
+  s_9d89416023ef69::t_779ef02eef802e 70-81,94,137-139
+  s_9d89416023ef69::t_cd7623d48c7390 93,95
+docs/runbooks/clamav.md
+  s_9d89416023ef69::t_7c3d7079509558 62-82
+src/backend/repositories/document-repository.js
+  s_9d89416023ef69::t_cecf19810f4b51 48,52-53,254-289,304-329,335-337
+  s_9d89416023ef69::t_0bf231743e37b7 220,290-292,295-296
+  s_9d89416023ef69::t_24cde6d106fd4e 293-294,297-302
+  s_9d89416023ef69::t_fbd19018d4b18b 227
+  s_9d89416023ef69::t_3d373b7b2c96bc 217-219,221-226,228-229,303,330-331,339
+  s_9d89416023ef69::t_fcc63a21803fb8 332-334
+  s_9d89416023ef69::t_5b6db8edf6c428 338
+  s_9d89416023ef69::t_57b6dd6a488ce5 340
+src/modules/document-intake/ocr-contracts.js
+  s_9d89416023ef69::t_f8f7f13a4f545f 98-100
+  s_9d89416023ef69::t_cd7623d48c7390 110-113
+.github/workflows/ci.yml
+  s_9d89416023ef69::t_9cc55daca608fb 55
+  s_9d89416023ef69::t_0bf231743e37b7 52,72-95
+README.md
+  s_9d89416023ef69::t_9cc55daca608fb 184
+  s_9d89416023ef69::t_7c3d7079509558 220-223,225-226
+AGENTS.md
+  s_9d89416023ef69::t_9cc55daca608fb 37
+src/ui/components/document-upload.js
+  s_9d89416023ef69::t_79f806a432f61c 214-215,218,223
+  s_9d89416023ef69::t_14404381a994f9 247,252-262
+  s_9d89416023ef69::t_69d843422ecb17 26,176-200,226,239
+  s_9d89416023ef69::t_e119b2d9d79cdf 216-217,219-222
+tests/document-upload-api.test.mjs
+  s_9d89416023ef69::t_9d86efa8daa709 304
+  s_9d89416023ef69::t_c662633929fb52 370
+  s_9d89416023ef69::t_c0ddf9f0e54931 792-795,804-806
+  s_9d89416023ef69::t_3dd6ccc670a356 770,773-776,790,798-801,803,807
+  s_9d89416023ef69::t_fef2d80b5f7f11 333-334,336-338,372-395,575,814
+  s_9d89416023ef69::t_0883bf5c5cb519 213-225,229-233,236-238,240-246,270-293,326-329,351-361,366-367
+  s_9d89416023ef69::t_e119b2d9d79cdf 319-321
+  s_9d89416023ef69::t_c8edfe656847ff 704,716-717,768-769,771,777-778,780-781,783,787-789,802,808-813
+  s_9d89416023ef69::t_1fc01176f7f2a6 134-136,559,561,567,574
+  s_9d89416023ef69::t_cfa8f4a4b64a3e 207,239
+  s_9d89416023ef69::t_462b090353a3bb 106-114,204-206,208-212,226-228,234-235,294-303,322-325,330-332,339-342,362-365,368-369,371
+  s_9d89416023ef69::t_666515cd34b7f6 247-269,343-350
+  s_9d89416023ef69::t_58bda8256ef4df 305-318,782,784-786,796-797
+  s_9d89416023ef69::t_d6ece2b7708456 335
+  s_9d89416023ef69::t_8da1de1bc333ae 791
+  s_9d89416023ef69::t_b06038defbbf6c 560,562-566,568-573
+  s_9d89416023ef69::t_87722c37f0270c 772,779
+  s_9d89416023ef69::t_42c02b432a812d 396
+  s_9d89416023ef69::t_16ce0b11ed88ea 576
+  s_9d89416023ef69::t_58068ee5659ff6 815
+tests/ocr-pipeline.test.mjs
+  s_9d89416023ef69::t_8aa6ba077e473b 170-178,180,182,186-190,192-212,214-216
+  s_9d89416023ef69::t_189d06bf6dd93b 179,184-185,191,213
+  s_9d89416023ef69::t_58bda8256ef4df 217-251
+  s_9d89416023ef69::t_bb15ae0f2e4067 252-301
+  s_9d89416023ef69::t_c662633929fb52 181,183
+package-lock.json
+  s_bb82848cbf7e0c::t_951d3296f141e2 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d43af43133889eeee235740dc284f18ce9f9138a",
+  "prompts": {},
+  "sessions": {
+    "s_9d89416023ef69": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14ed0-f0d1-7513-b46b-cd43bbf8db17",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_bb82848cbf7e0c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a14ed0-f0d1-7513-b46b-cd43bbf8db17",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
