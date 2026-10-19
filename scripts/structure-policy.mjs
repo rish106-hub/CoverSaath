@@ -100,7 +100,7 @@ function freshBackend(normalized, at) {
 }
 
 const label = key => { try { return getPolicyParameterDefinition(REGISTRY, key).label; } catch { return key; } };
-const cell = value => String(value ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
+const cell = value => String(value ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
 const shown = value => (value?.normalized ? `${cell(value.text)} → \`${JSON.stringify(value.normalized)}\`` : cell(value?.text));
 
 // Local review of what was stored and why. Contains document values; stays under .local/.
