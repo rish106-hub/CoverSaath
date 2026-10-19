@@ -1,0 +1,93 @@
+tests/support/postgres.mjs
+  s_9d89416023ef69::t_ce879fa1f08772 43,45-49,51-52,115-118,120
+.github/workflows/ci.yml
+  s_9d89416023ef69::t_ecc836fb774258 52,55,72-95
+AGENTS.md
+  s_9d89416023ef69::t_e67bf073f49805 37
+README.md
+  s_9d89416023ef69::t_6c9c628c8f638c 184,220-223,225-226
+docs/adr/0005-document-intake-validation-and-scanning.md
+  s_9d89416023ef69::t_5ad7c9a29fc256 15,21,36-57,60-61
+docs/agent-tooling.md
+  s_9d89416023ef69::t_776362fb2f30ad 30
+docs/architecture/block-1-input.md
+  s_9d89416023ef69::t_e31ad0314ebe66 16,27,56,92,96,127
+docs/architecture/security.md
+  s_9d89416023ef69::t_5ba28095945d73 85
+docs/architecture/system.md
+  s_9d89416023ef69::t_095d5d1c46455f 76
+docs/runbooks/clamav.md
+  s_9d89416023ef69::t_952ae33c536a80 62-82
+package-lock.json
+  s_9d89416023ef69::t_d8fd0eb459bf5a 19
+package.json
+  s_9d89416023ef69::t_1266c5b6799dfa 7
+src/backend/database/database.js
+  s_9d89416023ef69::t_d1e37cf11f19c6 3,177-187,190
+src/backend/repositories/consent-repository.js
+  s_9d89416023ef69::t_0228a300c6a668 6-8,156-161,164-179,204,207-214,245-246,255-259,290-294,299,304,306-313,328,330,337-344,348,357,360-381,396,407
+src/backend/repositories/document-repository.js
+  s_9d89416023ef69::t_9230b1ab79c51d 48,52-53,217-229,254-340
+src/backend/repositories/household-repository.js
+  s_9d89416023ef69::t_3ae9df144f395a 78-86
+src/backend/repositories/ocr-repository.js
+  s_9d89416023ef69::t_60be5ad14893e9 85-87,89,92,97-111
+src/backend/services/backend-services.js
+  s_9d89416023ef69::t_8879e5ce9926d0 17
+src/backend/services/document-upload-service.js
+  s_9d89416023ef69::t_505f051cf79be4 94,216-225,230-235,252-275
+src/contracts/error-codes.js
+  s_9d89416023ef69::t_adc69402acefc6 34,59-60,84-87,96
+src/integrations/sarvam/ocr-provider.js
+  s_9d89416023ef69::t_6d9ad9f76a849a 37,39-41,47,49
+src/modules/document-intake/document-intake-service.js
+  s_9d89416023ef69::t_14319ddbe70cf6 65-68
+src/modules/document-intake/index.js
+  s_9d89416023ef69::t_2fd01671d5eb18 10
+src/modules/document-intake/ocr-contracts.js
+  s_9d89416023ef69::t_452cdc2ca018ad 98-100,110-113
+src/modules/document-intake/ocr-service.js
+  s_9d89416023ef69::t_790f40a6142e82 66-81,86,92-97,137-139
+src/modules/document-intake/pdf-inspection-child.mjs
+  s_9d89416023ef69::t_6e4a999f39c6f2 1-76
+src/modules/document-intake/sandboxed-pdf-inspection.js
+  s_9d89416023ef69::t_7c07043bbe4ef8 1-241
+src/server/create-server.js
+  s_9d89416023ef69::t_babe9fd497e3b4 12,39-49,81-92,166
+src/server/routes/v1-backend-routes.js
+  s_9d89416023ef69::t_917dc29c4c48c6 318-336,355-376
+src/ui/api/v1-client.js
+  s_9d89416023ef69::t_3bd38e8ed9dbb7 53,55
+src/ui/app.js
+  s_9d89416023ef69::t_82c53ca6a2bfa6 53-57,63
+src/ui/components/document-upload.js
+  s_9d89416023ef69::t_8c52b45dfed052 26,176-200,214-223,226,239,247,252-262
+src/ui/state/document-selection.js
+  s_9d89416023ef69::t_8ce2ba031f77ec 35-37
+tests/document-upload-api.test.mjs
+  s_9d89416023ef69::t_13dba7f9651e33 106-114,134-136,204-396,559-576,704,716-717,768-815
+tests/evidence-fact-redaction.test.mjs
+  s_9d89416023ef69::t_f9555c34dbbea9 251-275
+tests/ocr-pipeline.test.mjs
+  s_9d89416023ef69::t_d781922e8d6d48 170-301
+tests/pdf-inspection-sandbox.test.mjs
+  s_9d89416023ef69::t_5ebad15c8a8f5d 1-400
+tests/ui-document-upload.test.mjs
+  s_9d89416023ef69::t_4fec0134974686 131-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3ea67b74a6baf2d1885720223398fd1d6ce0c02a",
+  "prompts": {},
+  "sessions": {
+    "s_9d89416023ef69": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14ed0-f0d1-7513-b46b-cd43bbf8db17",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
