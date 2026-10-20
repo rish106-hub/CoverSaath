@@ -1,0 +1,22 @@
+scripts/smoke-test-gemini.mjs
+  s_c52538788cad78::t_040c11e4c28ebc 18
+  s_c52538788cad78::t_d43a9c2698559c 86,109
+scripts/eval-structuring-accuracy.mjs
+  s_c52538788cad78::t_d43a9c2698559c 44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ec7c4b731f23fb8868d20f3540e097e0e7c6b790",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
