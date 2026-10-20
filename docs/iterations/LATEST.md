@@ -1,5 +1,9 @@
 # Latest iteration
 
+## Phase 3: candidate document-to-policy association (2026-10-20)
+
+`association.js`: a document is a candidate member of a logical policy (`pol-` + digest) only when its own clauses print exactly one policy number; several numbers is `ambiguous`, none is `unestablished`. The number is never returned and the uploader kind is never used. Facts now sit on their candidate policy (personal and corporate separate); the catalogue returns `documentAssociations`. Association is never verified by this path: a reviewer's `attestsPolicyAssociation` (independent grant) names the fact's own policy. Not built: endorsement/version relationships beyond a shared number, member enrolment evidence, a stored association review, ADR 0007. Tests: `tests/decision-catalogue-association.test.mjs`, API assertions in `decision-catalogue-api.test.mjs`.
+
 ## Phase 4: reviewer authority and review API (2026-10-20)
 
 On branch `closeout/block2-block3-codeql`, not pushed. Design and limits: [ADR 0009 part 2](../adr/0009-reviewed-facts-and-decision-catalogue.md).

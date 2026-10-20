@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { CONTRACTUAL_SOURCES, isIsoDate } from '../../features/decision-catalogue/contracts.js';
-import { CURATED_OFFICIAL_SOURCES, answerToCandidates, buildDecisionCatalogue, typedTwins } from '../../features/decision-catalogue/index.js';
+import { CURATED_OFFICIAL_SOURCES, answerToCandidates, associateDocuments, buildDecisionCatalogue, typedTwins } from '../../features/decision-catalogue/index.js';
 
 // Builds the Block 3 decision catalogue from one stored policy answer (ADR 0008) and, since ADR 0009 part 2, the
 // authenticated reviews recorded against its facts. Read paths are derived on every call: revoking consent or erasing a
@@ -34,17 +34,25 @@ export function createDecisionCatalogueService({ services, evidence } = {}) {
     const stored = evidence.readForCatalogue({ caseRecord, answerId });
     const clauseRows = services.clauses.listClauses({ householdId, caseId: caseRecord.id, documentIds: stored.documentIds });
     const documentKinds = new Map(stored.documentIds.map(id => [id, services.documents.getDocument(id)?.documentKind]));
-    // Which policy a document belongs to is not established (ADR 0007), so every model fact is tied to an unresolved
-    // policy whose association is never verified by the model path.
-    const policyId = `unresolved-${stored.answerId}`;
-    const { candidates, skipped } = answerToCandidates(stored.answer, { clauseRows, documentKinds, policyId });
-    return { householdId, stored, clauseRows, policyId, candidates: [...candidates, ...typedTwins(candidates, clauseRows)], skipped };
+    // Which policy a document belongs to is a CANDIDATE finding only (printed policy number, see association.js) and is
+    // never verified by this path. A document with no single printed number stays on one unresolved policy per answer.
+    const unresolvedId = `unresolved-${stored.answerId}`;
+    const association = associateDocuments(clauseRows, stored.documentIds);
+    const policyByDocument = new Map(association.documents.filter(d => d.policyId).map(d => [d.documentId, d]));
+    const { candidates: base, skipped } = answerToCandidates(stored.answer, { clauseRows, documentKinds, policyId: unresolvedId });
+    const placed = base.map(candidate => {
+      const found = policyByDocument.get(candidate.documentId);
+      return found ? { ...candidate, policyId: found.policyId, policyAssociation: { basis: found.basis } } : candidate;
+    });
+    const all = [...placed, ...typedTwins(placed, clauseRows)];
+    const policyIds = [...new Set([...association.policies.map(policy => policy.policyId), ...(all.some(c => c.policyId === unresolvedId) || !association.policies.length ? [unresolvedId] : [])])];
+    return { householdId, stored, clauseRows, policyIds, association, candidates: all, skipped };
   }
 
   const evidenceRows = rows => rows.map(row => ({ id: row.clauseId, documentId: row.documentId, sourceVersion: row.sourceVersion, page: row.page, digest: row.digest }));
   const compose = (ctx, batches, { asOf, memberId }) => buildDecisionCatalogue({
     householdId: ctx.householdId, clauseRows: evidenceRows(ctx.clauseRows), batches,
-    policies: [{ policyId: ctx.policyId, kind: 'unresolved', coverBasis: 'unknown' }], asOf, memberId,
+    policies: ctx.policyIds.map(policyId => ({ policyId, kind: 'unresolved', coverBasis: 'unknown' })), asOf, memberId,
     officialSources: CURATED_OFFICIAL_SOURCES, today: new Date().toISOString().slice(0, 10),
   });
   const modelBatch = candidates => ({ origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates });
@@ -85,7 +93,7 @@ export function createDecisionCatalogueService({ services, evidence } = {}) {
         origin: 'human_review',
         // A household confirmation is a statement by the data subject: it is `reported` at most, never `proven`.
         reviewStatus: independent ? 'accepted' : 'self_confirmed',
-        verifiedPolicyIds: independent && review.fact?.attestsPolicyAssociation === true ? [ctx.policyId] : [],
+        verifiedPolicyIds: independent && review.fact?.attestsPolicyAssociation === true ? [fact.policyId] : [],
         candidates: [candidateFromFact(fact, { sourceType: attestedType ?? 'user_statement', supersedes: [] })],
       });
     }
@@ -96,11 +104,12 @@ export function createDecisionCatalogueService({ services, evidence } = {}) {
     });
     const catalogue = reviewedBatches.length || rejectedKeys.size ? compose(ctx, [modelBatch(keptModel), ...reviewedBatches], { asOf, memberId }) : first;
     const disputed = reviewSummary.filter(item => item.state === 'disputed');
+    const withAssociation = { ...catalogue, documentAssociations: ctx.association.documents };
     const out = reviewSummary.length ? Object.freeze({
-      ...catalogue, reviews: Object.freeze(reviewSummary),
+      ...withAssociation, reviews: Object.freeze(reviewSummary),
       reviewRequired: catalogue.reviewRequired || disputed.length > 0,
-      conflicts: Object.freeze([...catalogue.conflicts, ...disputed.map(item => ({ policyId: ctx.policyId, rule: `review_disputed/${item.factId}`, conflicting: null }))]),
-    }) : Object.freeze({ ...catalogue, reviews: Object.freeze([]) });
+      conflicts: Object.freeze([...catalogue.conflicts, ...disputed.map(item => ({ policyId: factByKey.get(factKeyOf(item.factId))?.policyId ?? null, rule: `review_disputed/${item.factId}`, conflicting: null }))]),
+    }) : Object.freeze({ ...withAssociation, reviews: Object.freeze([]) });
     // An answer stored by an earlier pipeline is served as stored; the flag tells the reader it was not re-bucketed.
     return { sourceAnswerId: ctx.stored.answerId, pipelineCurrent: ctx.stored.pipelineCurrent, catalogue: out, skipped: ctx.skipped };
   }
