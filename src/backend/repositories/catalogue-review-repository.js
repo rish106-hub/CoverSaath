@@ -24,19 +24,46 @@ export class CatalogueReviewRepository {
     this.audit = audit ?? new AuditRepository(database, { clock });
   }
 
-  #grant(householdId, adultUserId, kind, grantedBy) {
-    const at = this.clock().toISOString();
-    const existing = this.database.prepare('SELECT * FROM catalogue_reviewer_grants WHERE household_id = ? AND adult_user_id = ? AND kind = ?').get(householdId, adultUserId, kind);
-    if (existing) {
-      if (existing.status === 'active') return existing;
-      this.database.prepare("UPDATE catalogue_reviewer_grants SET status = 'active', revoked_at = NULL, granted_by = ? WHERE id = ?").run(grantedBy, existing.id);
-      return { ...existing, status: 'active', granted_by: grantedBy };
+  #atomic(work) {
+    const savepoint = `catalogue_review_${randomUUID().replaceAll('-', '')}`;
+    let nested;
+    if (typeof this.database.isTransaction === 'boolean') {
+      nested = this.database.isTransaction;
+      if (!nested) this.database.exec('BEGIN IMMEDIATE');
+    } else {
+      try { this.database.exec('BEGIN IMMEDIATE'); nested = false; } catch (error) {
+        if (!/within a transaction/i.test(String(error?.message))) throw error;
+        nested = true;
+      }
     }
-    const id = `crg-${randomUUID()}`;
-    this.database.prepare(`INSERT INTO catalogue_reviewer_grants (id, household_id, adult_user_id, kind, status, granted_by, created_at)
-      VALUES (?, ?, ?, ?, 'active', ?, ?)`).run(id, householdId, adultUserId, kind, grantedBy, at);
-    this.audit.append({ householdId, actorType: 'adult_user', actorId: grantedBy, action: 'catalogue_reviewer.granted', resourceType: 'catalogue_reviewer_grant', resourceId: id, payload: { kind } });
-    return this.database.prepare('SELECT * FROM catalogue_reviewer_grants WHERE id = ?').get(id);
+    if (nested) this.database.exec(`SAVEPOINT ${savepoint}`);
+    try {
+      const result = work();
+      this.database.exec(nested ? `RELEASE ${savepoint}` : 'COMMIT');
+      return result;
+    } catch (error) {
+      this.database.exec(nested ? `ROLLBACK TO ${savepoint}` : 'ROLLBACK');
+      if (nested) this.database.exec(`RELEASE ${savepoint}`);
+      throw error;
+    }
+  }
+
+  #grant(householdId, adultUserId, kind, grantedBy, actorType) {
+    return this.#atomic(() => {
+      const at = this.clock().toISOString();
+      const existing = this.database.prepare('SELECT * FROM catalogue_reviewer_grants WHERE household_id = ? AND adult_user_id = ? AND kind = ?').get(householdId, adultUserId, kind);
+      if (existing?.status === 'active') return existing;
+      let id = existing?.id;
+      if (existing) {
+        this.database.prepare("UPDATE catalogue_reviewer_grants SET status = 'active', revoked_at = NULL, granted_by = ? WHERE id = ?").run(grantedBy, id);
+      } else {
+        id = `crg-${randomUUID()}`;
+        this.database.prepare(`INSERT INTO catalogue_reviewer_grants (id, household_id, adult_user_id, kind, status, granted_by, created_at)
+          VALUES (?, ?, ?, ?, 'active', ?, ?)`).run(id, householdId, adultUserId, kind, grantedBy, at);
+      }
+      this.audit.append({ householdId, actorType, actorId: grantedBy, action: existing ? 'catalogue_reviewer.regranted' : 'catalogue_reviewer.granted', resourceType: 'catalogue_reviewer_grant', resourceId: id, payload: { kind } });
+      return this.database.prepare('SELECT * FROM catalogue_reviewer_grants WHERE id = ?').get(id);
+    });
   }
 
   /** The household owner designates a household adult. Self confirmation: its reviews never reach `proven`. */
@@ -46,19 +73,23 @@ export class CatalogueReviewRepository {
     if (!owner) throw notAuthorised();
     const target = this.database.prepare("SELECT 1 FROM household_roles WHERE household_id = ? AND adult_user_id = ? AND status = 'active'").get(householdId, adultUserId);
     if (!target) throw invalid('adultUserId holds no active role in this household.');
-    return this.#grant(householdId, adultUserId, 'household_confirmer', grantedByAdultId);
+    return this.#grant(householdId, adultUserId, 'household_confirmer', grantedByAdultId, 'adult_user');
   }
 
   /** Operator tooling only: no route calls this. An independent reviewer is a person outside the household's own data. */
   grantIndependentReviewer({ householdId, adultUserId, operatorId }) {
     str(householdId, 'householdId'); str(adultUserId, 'adultUserId'); str(operatorId, 'operatorId', 128);
-    return this.#grant(householdId, adultUserId, 'independent_reviewer', `operator:${operatorId}`.slice(0, 128));
+    // Independent means outside the household's own data: an adult with any role in this household is refused.
+    if (this.database.prepare('SELECT 1 FROM household_roles WHERE household_id = ? AND adult_user_id = ?').get(householdId, adultUserId)) {
+      throw invalid('A person with a role in this household cannot be its independent reviewer.');
+    }
+    return this.#grant(householdId, adultUserId, 'independent_reviewer', `operator:${operatorId}`.slice(0, 128), 'system');
   }
 
-  revokeGrant({ householdId, grantId }) {
+  revokeGrant({ householdId, grantId, revokedBy = 'operator' }) {
     const at = this.clock().toISOString();
     const done = this.database.prepare("UPDATE catalogue_reviewer_grants SET status = 'revoked', revoked_at = ? WHERE id = ? AND household_id = ? AND status = 'active'").run(at, grantId, householdId);
-    if (Number(done.changes) > 0) this.audit.append({ householdId, action: 'catalogue_reviewer.revoked', resourceType: 'catalogue_reviewer_grant', resourceId: grantId });
+    if (Number(done.changes) > 0) this.audit.append({ householdId, actorType: 'system', actorId: String(revokedBy).slice(0, 128), action: 'catalogue_reviewer.revoked', resourceType: 'catalogue_reviewer_grant', resourceId: grantId });
     return Number(done.changes) > 0;
   }
 
@@ -84,7 +115,9 @@ export class CatalogueReviewRepository {
     if (!grant) throw notAuthorised();
     const authority = grant.kind === 'independent_reviewer' ? 'independent' : 'household';
     const factJson = JSON.stringify(review.fact ?? null);
+    if (factJson.length > 16000) throw invalid('The reviewed fact is too large to store.');
     const requestDigest = createHash('sha256').update(JSON.stringify([review.factKey, review.decision, review.reasonCode, review.sourceVersion, review.clauseIds, factJson, authority])).digest('hex');
+    return this.#atomic(() => {
     const prior = this.database.prepare('SELECT * FROM catalogue_reviews WHERE household_id = ? AND case_id = ? AND idempotency_key = ?').get(householdId, caseId, key);
     if (prior) {
       if (prior.request_digest !== requestDigest || prior.reviewer_adult_id !== review.reviewerAdultId) throw coded('IDEMPOTENCY_CONFLICT', 'The idempotency key was used for a different review.', 409);
@@ -104,6 +137,7 @@ export class CatalogueReviewRepository {
       resourceType: 'catalogue_review', resourceId: id, payload: { decision: review.decision, reasonCode: review.reasonCode, authority },
     });
     return { ...this.#dto(this.database.prepare('SELECT * FROM catalogue_reviews WHERE id = ?').get(id)), replayed: false };
+    });
   }
 
   #dto(row) {
@@ -115,11 +149,22 @@ export class CatalogueReviewRepository {
     };
   }
 
-  /** Latest review per fact key wins; the rest are returned as superseded. Household and case scoped. */
+  /**
+   * Per fact key one review is current: the strongest authority among reviews whose grant is still active, then the
+   * latest. A household confirmation never supersedes an independent review. Reviews whose grant was revoked are
+   * returned with `reviewerActive: false` and count for nothing.
+   */
   list({ householdId, caseId }) {
-    const rows = this.database.prepare('SELECT * FROM catalogue_reviews WHERE household_id = ? AND case_id = ? ORDER BY created_at, rowid').all(str(householdId, 'householdId'), str(caseId, 'caseId'));
-    const latest = new Map();
-    for (const row of rows) latest.set(row.fact_key, row.id);
-    return rows.map(row => ({ ...this.#dto(row), superseded: latest.get(row.fact_key) !== row.id }));
+    const rows = this.database.prepare(`SELECT review.*, reviewer_grant.status AS grant_status FROM catalogue_reviews review
+      JOIN catalogue_reviewer_grants reviewer_grant ON reviewer_grant.id = review.grant_id
+      WHERE review.household_id = ? AND review.case_id = ? ORDER BY review.created_at, review.rowid`).all(str(householdId, 'householdId'), str(caseId, 'caseId'));
+    const rank = row => (row.authority === 'independent' ? 2 : 1);
+    const winner = new Map();
+    for (const row of rows) {
+      if (row.grant_status !== 'active') continue;
+      const held = winner.get(row.fact_key);
+      if (!held || rank(row) >= rank(held)) winner.set(row.fact_key, row);
+    }
+    return rows.map(row => ({ ...this.#dto(row), reviewerActive: row.grant_status === 'active', superseded: row.grant_status === 'active' && winner.get(row.fact_key)?.id !== row.id }));
   }
 }

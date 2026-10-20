@@ -5,7 +5,8 @@
 --       independent_reviewer a person outside the household's own data. Granted by operator tooling only, never by an API request body.
 --   * catalogue_reviews: immutable decisions about one cited, typed fact. A later decision on the same fact supersedes an
 --     earlier one at read time; rows are never updated. Deleted (never redacted) when a cited document is erased or
---     consent is revoked. No quote text is stored: clause ids and digests link to policy_clauses.
+--     consent is revoked. No clause quote is stored: clause ids and digests link to policy_clauses. fact_json does copy the model's short
+--     condition/exception strings (they may hold personal data), so it is derived data and erased with the document.
 -- Mirrored by PostgreSQL migration 013.
 
 CREATE TABLE catalogue_reviewer_grants (
