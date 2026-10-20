@@ -1,8 +1,17 @@
 # Latest iteration
 
+## Closeout slice: obfuscated email, typed twins, CodeQL hardening (2026-10-20)
+
+Base `main` `be3b102`. No provider call, no migration.
+
+- Privacy: spelled-out emails ("name (at) host (dot) com", "[at]", "{at}") are removed from storage and model payloads (`tests/privacy-gate-obfuscated-email.test.mjs`). A probe of phones, Aadhaar, PAN, names, OTP, card, token, split cards and addresses found no other leak; this is a probe, not a fresh independent review. Block 2 security status: **BLOCK2_QA_PENDING** (fresh independent review of the final gate still required; address detection stays heuristic and fail-open for the residuals listed below).
+- Block 3: `typed-candidates.js` adds a typed twin beside a finding only when exactly one cited clause line names the subject and states one unambiguous value (room rent, ICU, copay, waiting period, sublimit, not-opted add-on). `Rs`/`INR`/`₹` is required for money; bare numbers get no twin. Twins stay `extracted_unverified` (model origin) and never become a `known` rule value. API test asserts this through the real endpoint. Status: **BLOCK3_IMPLEMENTED_QA_PENDING**.
+- CodeQL: `js/remote-property-injection` objects in `coverage-report.js` and `eval-scorer.js` now null-prototype. Not re-scanned: the separate CodeQL workflow fails with "advanced configurations cannot be processed when the default setup is enabled". Fix needs a repository setting (disable default setup, or drop `codeql.yml`); not changed without approval. 11 alerts open at start (mostly scripts and tests; `migrate.js` runs repo-owned SQL files). Status: **CODEQL_PARTIALLY_RESOLVED**.
+- Not built in this slice: authenticated reviewer role and fact storage (needs ADR 0009 schema decision), verified document-to-policy association, curated official-source data (none verified, left empty), Block 4 consumer, multi-insurer holdout evaluation, legal review.
+
 ## Block 3 first slice: decision catalogue (2026-10-20)
 
-Committed and pushed on `block3/decision-catalogue` (from `b94c958`), merged with the privacy gate fixes from `optimistic-kare-0c8f4b`. Not merged to `main`. No provider call, no migration. Design: [decision-catalogue.md](../architecture/decision-catalogue.md).
+Merged to `main` (PR #37, `be3b102`) with the privacy gate fixes from `optimistic-kare-0c8f4b`. No provider call, no migration. Design: [decision-catalogue.md](../architecture/decision-catalogue.md).
 
 - `src/features/decision-catalogue/`: facts bridge, applicability, 12 typed rules, cross-policy separation, official-source validator, `decision-catalogue/v1` handoff. Derived on read from live clauses, so erasure needs no derived-store path.
 - Authority is a batch attestation (`origin`, `reviewStatus`, `verifiedPolicyIds` set by the calling channel). A candidate cannot claim its own authority. Deterministic facts are never ingested.
