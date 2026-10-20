@@ -146,3 +146,29 @@ test('B3: no clauses is an error, and an empty first pass is insufficient eviden
   assert.equal(answer.state, 'insufficient_evidence');
   assert.ok(answer.unknowns.length > 0);
 });
+
+test('B3: ungrounded conditions, exceptions, value and appliesTo are dropped and counted', async () => {
+  const first = { findings: [finding(38, 'capped at Rs. 40,000 per eye', {
+    conditions: ['Cataract surgery is capped at Rs. 40,000 per eye', 'pre-authorisation within 48 hours'],
+    exceptions: ['not printed anywhere'], value: 'Rs. 40,000', applies_to: 'all members worldwide',
+  })] };
+  const { answer } = await run({ call: fixture({ first, second: { overrides: [] } }) });
+  const texts = answer.conditions.map(entry => entry.text);
+  assert.ok(!texts.some(text => /pre-authorisation|worldwide/.test(text)));
+  assert.ok(texts.includes('Cataract surgery is capped at Rs. 40,000 per eye'));
+  assert.ok(answer.unknowns.some(text => /3 model finding\(s\) failed validation/.test(text)), 'pre-authorisation, exception and appliesTo dropped');
+});
+
+test('B3: the sweep runs its own retrieval and sees a clause the first pass context missed', async () => {
+  const payloads = [];
+  const exclusion = byPage(61);
+  const budget = 700;
+  const search = ({ query, kinds }) => (/waiting|exclusion/.test(query) ? clauses.filter(clause => clause.clauseId === exclusion.clauseId) : []);
+  const first = { findings: [finding(12, 'cataract surgery as a hospitalisation benefit')] };
+  const second = { overrides: [{ clause_ids: [exclusion.clauseId], quote: 'waiting period of 24 months', effect: 'limits', target_finding_ids: ['f1'] }] };
+  const { answer } = await run({ call: fixture({ first, second, payloads }), search: input => (input.kinds.length === 1 ? [byPage(12)] : search(input)), limits: { contextBudgetBytes: budget } });
+  const sweepIds = payloads.find(entry => entry.task === 'policy_evidence_override_sweep').payload.clauses.map(clause => clause.clause_id);
+  const firstIds = payloads.find(entry => entry.task === 'policy_evidence_investigate').payload.clauses.map(clause => clause.clause_id);
+  assert.ok(!firstIds.includes(exclusion.clauseId) && sweepIds.includes(exclusion.clauseId));
+  assert.ok(answer.limited_or_excluded.some(entry => entry.clauseIds.includes(exclusion.clauseId)));
+});
