@@ -10,7 +10,7 @@ import {
   createFixtureMemoryByteStorage,
   createMemoryDocumentRepository,
   sanitizeFilename,
-} from '../src/modules/document-intake/index.js';
+} from '../src/features/input/index.js';
 
 const PDF = Buffer.from('%PDF-1.7\nsynthetic policy fixture only\n%%EOF');
 const OTHER_PDF = Buffer.from('%PDF-1.7\ndifferent synthetic fixture\n%%EOF');

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { LIVE_REQUEST_BUILDERS, createGeminiCoverageRegistryFactory, resolveCanonicalParameterPolicy } from '../src/modules/ai-analysis/live-coverage-runtime.js';
-import { sanitizeEvidenceForModel } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
-import { validateTaskInput } from '../src/modules/ai-analysis/schemas.js';
-import { createCoverageAnalysisSourceInput } from '../src/modules/coverage-analysis/source-input.js';
-import { POLICY_PARAMETER_REGISTRY } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { assertAcquisitionTransition } from '../src/modules/coverage-analysis/parameter-records.js';
+import { LIVE_REQUEST_BUILDERS, createGeminiCoverageRegistryFactory, resolveCanonicalParameterPolicy } from '../src/features/ai-analysis/live-coverage-runtime.js';
+import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { validateTaskInput } from '../src/features/ai-analysis/schemas.js';
+import { createCoverageAnalysisSourceInput } from '../src/features/coverage-analysis/source-input.js';
+import { POLICY_PARAMETER_REGISTRY } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { assertAcquisitionTransition } from '../src/features/coverage-analysis/parameter-records.js';
 import { liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
 const PINNED = 'policy-parameters/v1';

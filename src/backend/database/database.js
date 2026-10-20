@@ -70,7 +70,7 @@ export const expectedTables = Object.freeze([
   'coverage_parameter_registry_pins', 'coverage_parameter_records',
   'coverage_parameter_acquisitions', 'coverage_parameter_observations',
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
-  'policy_structuring_runs', 'proposed_parameters',
+  'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -111,6 +111,10 @@ export const criticalTriggers = Object.freeze([
   'proposed_parameters_scope_insert', 'proposed_parameters_active_document_insert',
   'proposed_parameters_initial_state_insert', 'proposed_parameters_no_update', 'proposed_parameters_no_delete',
   'policy_structuring_erase_on_document_erasure',
+  'source_pages_blocks_insert', 'source_pages_blocks_immutable', 'source_pages_blocks_erase_with_text',
+  'source_pages_blocks_erase_on_document_erasure', 'source_pages_blocks_upgrade_job_immutable',
+  'policy_structuring_jobs_scope_insert', 'policy_structuring_jobs_no_update', 'policy_structuring_jobs_no_delete',
+  'policy_structuring_jobs_erase_on_document_erasure',
 ]);
 
 export const criticalIndexes = Object.freeze([
@@ -128,6 +132,7 @@ export const criticalIndexes = Object.freeze([
   'document_uploads_work_idx',
   'policy_structuring_runs_live_identity_uidx', 'policy_structuring_runs_document_idx',
   'proposed_parameters_document_idx', 'proposed_parameters_run_idx',
+  'policy_structuring_jobs_active_uidx', 'policy_structuring_jobs_attempt_uidx', 'policy_structuring_jobs_status_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
@@ -136,13 +141,14 @@ export const requiredColumns = Object.freeze({
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],
   ocr_jobs: ['contract_version', 'authorization_json', 'result_json', 'result_digest', 'updated_at'],
-  source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json'],
+  source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json', 'blocks_json', 'blocks_upgrade_job_id'],
   coverage_parameter_records: ['registry_version', 'parameter_key', 'subject_id', 'policy_id', 'applicable'],
   coverage_parameter_resolutions: ['resolution_state', 'transition_authority'],
   coverage_parameter_observations: ['redacted_at', 'redaction_reason_code'],
   coverage_parameter_observation_rules: ['extraction_method', 'resolution_state', 'transition_authority', 'requires_accepted'],
   policy_structuring_runs: ['erased_at', 'erasure_reason_code', 'counts_json'],
   proposed_parameters: ['redacted_at', 'redaction_reason_code', 'status'],
+  policy_structuring_jobs: ['status', 'evidence_outcome', 'error_code', 'attempt', 'structuring_run_id', 'erased_at'],
 });
 
 export function validateSchema(database) {

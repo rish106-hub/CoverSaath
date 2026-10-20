@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { deflateSync } from 'node:zlib';
-import { DocumentIntakeError } from '../src/modules/document-intake/contracts.js';
-import { PDF_INSPECTION_LIMITS, inspectPdf } from '../src/modules/document-intake/pdf-inspection.js';
+import { DocumentIntakeError } from '../src/features/input/contracts.js';
+import { PDF_INSPECTION_LIMITS, inspectPdf } from '../src/features/input/pdf-inspection.js';
 
 // All PDFs below are synthetic and built in memory. No real documents or personal data.
 const CANARY = 'CANARY-SYNTHETIC-7F3A';

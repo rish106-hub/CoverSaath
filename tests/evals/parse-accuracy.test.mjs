@@ -4,9 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { extractFields } from '../../src/modules/ai-analysis/eval-extractor.js';
-import { scoreFields } from '../../src/modules/ai-analysis/eval-scorer.js';
-import { adjudicate, createGeminiCaller } from '../../src/modules/ai-analysis/field-adjudicator.js';
+import { extractFields } from '../../src/features/ai-analysis/eval-extractor.js';
+import { scoreFields } from '../../src/features/ai-analysis/eval-scorer.js';
+import { adjudicate, createGeminiCaller } from '../../src/features/ai-analysis/field-adjudicator.js';
 
 const enabled = process.env.RUN_PARSE_EVAL === '1';
 const skip = enabled ? false : 'set RUN_PARSE_EVAL=1 with .local/eval/sarvam-raw.json and golden.json';

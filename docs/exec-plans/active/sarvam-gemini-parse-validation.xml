@@ -58,7 +58,7 @@
     </out>
     <owned_paths>
       src/integrations/sarvam/doc-ai-transport.js
-      src/modules/ai-analysis/ (adjudicator file only)
+      src/features/ai-analysis/ (adjudicator file only)
       tests/sarvam-doc-ai.test.mjs (fixture shape fix)
       tests/evals/parse-accuracy.test.mjs (new, opt-in)
       scripts/eval-parse.mjs (new)

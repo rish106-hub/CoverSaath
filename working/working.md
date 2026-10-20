@@ -227,10 +227,9 @@ admit-first human route before any analysis or chat action.
 
 | Area | Owns | Must not own |
 |---|---|---|
-| `src/ui/` | Accessible household matrix, case intake, four answer layers, permission-aware rendering and explicit prototype status | Policy, payment or institutional decisions |
 | `src/server/` and `src/shared/http/` | HTTP composition, request validation, local security and versioned route dispatch | Business rules or provider-specific logic |
 | `src/backend/` | SQLite migrations, repositories, consent, case lifecycle, task persistence and immutable audit events | UI state or provider clients |
-| `src/agents/` and `src/modules/` | Typed source-pack analysis, coverage graph, worker contracts, deterministic classification, workflow execution, model gateway, reservations, retry and release gates | External actions, money authority, hidden inference or a fallback that silently turns live mode into fixtures |
+| `src/agents/` and `src/features/` | Typed source-pack analysis, coverage graph, worker contracts, deterministic classification, workflow execution, model gateway, reservations, retry and release gates | External actions, money authority, hidden inference or a fallback that silently turns live mode into fixtures |
 | `src/integrations/` | Narrow fail-closed adapters for document, voice, payment, email and future confirmation rails | Policy interpretation or unauthorised side effects |
 | `tests/` and `tests/evals/` | Module-level contracts, route journeys, migration safety and adversarial safety evidence | Assertions that synthetic runs prove production effectiveness |
 

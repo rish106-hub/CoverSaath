@@ -6,7 +6,7 @@ import {
   createFixtureOcrProvider,
   createOcrService,
   validateOcrOutput,
-} from '../src/modules/document-intake/index.js';
+} from '../src/features/input/index.js';
 import { createSarvamOcrProvider } from '../src/integrations/index.js';
 
 const AT = '2026-09-18T12:00:00.000Z';
@@ -87,7 +87,7 @@ test('fixture OCR persists versioned structured output and page provenance with 
   const job = await service.start({ documentId: 'document-ocr', authorization });
 
   assert.equal(job.status, 'succeeded');
-  assert.equal(job.contractVersion, 'knowvia.ocr.v1');
+  assert.equal(job.contractVersion, 'knowvia.ocr.v2', 'the job records the output contract it stored: pages with blocks');
   assert.equal(job.result.assessment.authority, 'unverified_evidence_only');
   assert.equal(job.result.assessment.humanReviewRequired, true);
   assert.deepEqual(job.result.pages.map(page => page.pageNumber), [1, 2]);

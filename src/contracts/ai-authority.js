@@ -1,8 +1,8 @@
 // AI authority matrix: one frozen table of what a model may and may not decide in the
 // coverage-analysis workflow. It is a literal on purpose: tests/p1a-ai-authority.test.mjs
-// proves it agrees with src/modules/ai-analysis/responsibility-matrix.js (task ownership),
-// src/modules/coverage-analysis/parameter-records.js (OBSERVATION_RESOLUTION_RULES and the
-// model resolution guards) and src/modules/coverage-analysis/agent-contracts.js (envelope
+// proves it agrees with src/features/ai-analysis/responsibility-matrix.js (task ownership),
+// src/features/coverage-analysis/parameter-records.js (OBSERVATION_RESOLUTION_RULES and the
+// model resolution guards) and src/features/coverage-analysis/agent-contracts.js (envelope
 // evidence states). If any of those change, this table and the test must change together.
 //
 // Principle: a model may propose. Deterministic code (or a human reviewer through
@@ -47,6 +47,10 @@ export const AI_AUTHORITY_MATRIX = freezeAll({
     personal_cover_extraction: { authority: 'propose', workflowTaskKeys: ['personal'], recordsParameterObservations: true },
     evidence_synthesis: { authority: 'propose', workflowTaskKeys: ['primary'], recordsParameterObservations: false },
     question_drafting: { authority: 'propose', workflowTaskKeys: ['questions'], recordsParameterObservations: false },
+    // Document pipeline tasks (ADR 0006): not workflow tasks. Their readings are stored by
+    // PolicyStructuringRepository.commitStructuring, never above extracted_unverified or conflicting.
+    policy_structuring_extract: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-structuring', recordsParameterObservations: true },
+    policy_structuring_reconcile: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-structuring', recordsParameterObservations: false },
   },
 
   // Owner of every coverage-analysis workflow task (responsibility-matrix.js RUNTIME_RESPONSIBILITIES).

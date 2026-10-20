@@ -16,7 +16,8 @@ const inputs = [
   '2026-01-01T10:00:00.0005', '2026-01-01T10:00:00.9995', '2026-01-01T10:00:00.', '2026-01-01T10:00:00.5.5',
   '2026-01-01T10:00:00+05:30', '2026-01-01T10:00:00-05:30', '2026-01-01T10:00:00+14:59', '2026-01-01T10:00:00+15:00',
   '2026-01-01T10:00:00+05:60', '2026-01-01T10:00:00 +05:30', '2026-01-01T10:00:00.250+02:00', '2026-01-01T10:00:00,5',
-  '2026-01-01T24:00', '2026-01-01T24:01', '2026-01-01T25:00', '2026-01-01T10:60', '2026-01-01T10:00:60',
+  '2026-01-01T24:00', '2026-01-01T24:00:00', '2026-01-01T24:00:00.0', '2026-01-01T24:00:00.5', '2026-01-01T24:00:01',
+  '2026-01-01T24:00+05:30', '2026-12-31T24:00Z', '24:00:00', '24:00:01', '2026-01-01T24:01', '2026-01-01T25:00', '2026-01-01T10:60', '2026-01-01T10:00:60',
   '-4713-11-24', '-4713-11-24T12:00:00', '-4712-01-01', '-4714-01-01', '0000-01-01', '0001-01-01', '9999-12-31',
   '9999-12-31T23:59:59.999Z', '14711-12-31T23:59:59Z', '14712-01-01', '14712-12-31', '14712-12-31T23:59:59',
   '10:00', '10:00:00', '10:00:00.5', '10:00Z', '24:00', '25:00', '1:00', '10:00:00+01:00',
@@ -25,6 +26,21 @@ const inputs = [
   '2026-01-01\v10:00', '2026-01-01TT10:00', '2026-01-01  T 10:00',
 ];
 
+// SQLite 3.54 (Node 26.12) accepts hour 24 only as exactly 24:00:00; older SQLite also accepted
+// 24:01, 24:00:01 and 24:00:00.5. The port follows 3.54, so on an older SQLite those inputs are
+// expected to be NULL instead of what that SQLite returns.
+const HOUR_24_WITH_REMAINDER = /(?:^|[ T])24:(?:(?!00)\d{2}|00:(?!00)\d{2}|00:00\.\d*[1-9])/;
+const sqlite354Expected = (input, value) => (typeof input === 'string' && HOUR_24_WITH_REMAINDER.test(input) ? null : value);
+
+test('hour-24 rule matches SQLite 3.54 for the probe inputs', () => {
+  for (const input of ['2026-01-01T24:01', '2026-01-01T24:00:01', '2026-01-01T24:00:00.5', '24:00:01']) {
+    assert.equal(HOUR_24_WITH_REMAINDER.test(input), true, input);
+  }
+  for (const input of ['2026-01-01T24:00', '2026-01-01T24:00:00', '2026-01-01T24:00:00.0', '24:00:00', '2026-01-01T24:00+05:30']) {
+    assert.equal(HOUR_24_WITH_REMAINDER.test(input), false, input);
+  }
+});
+
 test('julianday(text) matches SQLite for every accepted and rejected input', postgresTestOptions(), async t => {
   const database = await useTestDatabase(t);
   const sqlite = new DatabaseSync(':memory:');
@@ -32,7 +48,7 @@ test('julianday(text) matches SQLite for every accepted and rejected input', pos
   const sqliteValue = sqlite.prepare('SELECT julianday(?) AS value');
   const differences = [];
   for (const input of inputs) {
-    const expected = sqliteValue.get(input).value;
+    const expected = sqlite354Expected(input, sqliteValue.get(input).value);
     const actual = (await database.pool.query('SELECT julianday($1::text) AS value', [input])).rows[0].value;
     const same = expected === null || actual === null
       ? expected === actual

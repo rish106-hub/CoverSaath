@@ -1,7 +1,7 @@
 # Answer-to-build map
 
 Updated 21 September 2026. Traceability between the eight Round 2 answers in
-[`docs/strategy/round2-answers.md`](../docs/strategy/round2-answers.md) and the build spec in
+[`product-answers-round-2.md`](product-answers-round-2.md) and the build spec in
 [`working.md`](working.md), [`planned-expense.md`](planned-expense.md) and
 [`insurance.md`](../building/insurance.md).
 

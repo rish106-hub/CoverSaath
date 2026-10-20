@@ -2,7 +2,7 @@
 
 - Status: Proposed (P1-A, branch `claude/p1-contracts`)
 - Date: 2026-10-15
-- Scope: `src/modules/coverage-analysis/{workflow-definition,agent-contracts,contracts}.js`, `src/contracts/{task-contracts,workflow-graph,execution-policy,error-codes,analysis-run-api}.js`
+- Scope: `src/features/coverage-analysis/{workflow-definition,agent-contracts,contracts}.js`, `src/contracts/{task-contracts,workflow-graph,execution-policy,error-codes,analysis-run-api}.js`
 
 ## Context
 

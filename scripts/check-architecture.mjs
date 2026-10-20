@@ -14,6 +14,7 @@ async function walk(directory) {
     const path = resolve(directory, entry.name);
     if (entry.isDirectory()) {
       if (!kebabDirectory.test(entry.name)) violations.push(`${relative(projectRoot, path)}: directory must use lowercase kebab-case.`);
+      if (directory === sourceRoot && entry.name === 'ui') violations.push('src/ui: active UI code is outside the backend-first repository boundary.');
       await walk(path);
     } else if (extname(entry.name) === '.js') {
       if (!kebabName.test(entry.name)) violations.push(`${relative(projectRoot, path)}: source file must use lowercase kebab-case.`);
@@ -43,14 +44,14 @@ for (const file of sourceFiles) {
     if (sourceArea === 'integrations' && targetArea && targetArea !== 'integrations') {
       violations.push(`${location}: integration code cannot import ${specifier}.`);
     }
-    if (sourceArea === 'agents' && ['backend', 'integrations', 'server', 'ui'].includes(targetArea)) {
+    if (sourceArea === 'ui') {
+      violations.push(`${location}: active UI code is outside the backend-first repository boundary.`);
+    }
+    if (sourceArea === 'agents' && ['backend', 'integrations', 'server'].includes(targetArea)) {
       violations.push(`${location}: agent code cannot import ${specifier}.`);
     }
-    if (sourceArea === 'backend' && ['server', 'ui'].includes(targetArea)) {
+    if (sourceArea === 'backend' && targetArea === 'server') {
       violations.push(`${location}: backend code cannot import ${specifier}.`);
-    }
-    if (sourceArea === 'ui' && ['backend', 'integrations', 'server'].includes(targetArea)) {
-      violations.push(`${location}: UI code cannot import ${specifier}.`);
     }
     if (sourceArea !== 'integrations' && targetArea === 'integrations' && !target.endsWith(`${sep}integrations${sep}index.js`)) {
       violations.push(`${location}: import integrations through src/integrations/index.js, not ${specifier}.`);

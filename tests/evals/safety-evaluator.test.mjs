@@ -6,9 +6,9 @@ import {
   evaluateDataset,
   loadReferenceDataset,
 } from '../../src/evaluation/index.js';
-import { buildPromptContract } from '../../src/modules/ai-analysis/prompts.js';
-import { validateTaskOutput } from '../../src/modules/ai-analysis/schemas.js';
-import { COVERAGE_ANALYSIS_WORKFLOW } from '../../src/modules/coverage-analysis/workflow-definition.js';
+import { buildPromptContract } from '../../src/features/ai-analysis/prompts.js';
+import { validateTaskOutput } from '../../src/features/ai-analysis/schemas.js';
+import { COVERAGE_ANALYSIS_WORKFLOW } from '../../src/features/coverage-analysis/workflow-definition.js';
 
 test('versioned synthetic reference suite meets every offline threshold', async () => {
   const dataset = await loadReferenceDataset();

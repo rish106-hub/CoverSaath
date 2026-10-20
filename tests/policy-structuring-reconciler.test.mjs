@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { validateExtractedItems } from '../src/modules/policy-structuring/validator.js';
-import { decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from '../src/modules/policy-structuring/reconciler.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { validateExtractedItems } from '../src/features/policy-structuring/validator.js';
+import { decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from '../src/features/policy-structuring/reconciler.js';
 
 // Synthetic only: fictional insurer and numbers. Items go through the real validator.
 const chunks = [
@@ -46,7 +46,8 @@ test('cross-subject differences involving the policy subject are disagreements; 
       item(sheet, 'd.room_rent_limit', '1% of SI', 'Room rent 1% of SI')], { chunk: sheet, registryVersion }).accepted,
   ];
   const conflicts = deterministicConflicts(groupItems(items, []));
-  assert.deepEqual(conflicts.map(conflict => [conflict.groupId, conflict.reasonCode]), [['registry:f.ped_waiting_period|*', 'model_observations_conflict']]);
+  // A plan label is not an insured member, so its readings group under the key with the policy readings.
+  assert.deepEqual(conflicts.map(conflict => [conflict.groupId, conflict.reasonCode]), [['registry:f.ped_waiting_period|policy', 'model_observations_conflict']]);
   const decisions = decideStates({ accepted: items, conflicts });
   assert.deepEqual(decisions.map(decision => [decision.parameterKey, decision.state]), [['d.room_rent_limit', 'extracted_unverified'], ['f.ped_waiting_period', 'conflicting']]);
 });
@@ -111,7 +112,7 @@ test('a subject the model invents is not a printed subject, so a contradiction i
 });
 
 test('per-subject variation is reported as a variation and never counted as a conflict', async () => {
-  const { buildCoverageReport, scoreStructuring } = await import('../src/modules/policy-structuring/coverage-report.js');
+  const { buildCoverageReport, scoreStructuring } = await import('../src/features/policy-structuring/coverage-report.js');
   const conflicts = deterministicConflicts(groupItems(accepted, []));
   const report = buildCoverageReport({ sectioned: { chunks: [] }, extraction: {}, reconciliation: { conflicts } });
   assert.deepEqual([report.conflicts.total, report.variations.perSubject], [2, 1]);

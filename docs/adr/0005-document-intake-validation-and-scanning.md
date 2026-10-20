@@ -2,7 +2,7 @@
 
 - Status: Accepted (owner chose ClamAV clamd, an encrypted local store and a 15 MiB cap, before S3.2, on 2026-10-18)
 - Date: 2026-10-18
-- Scope: Block 1 (`src/modules/document-intake/`), see [block-1-input.md](../architecture/block-1-input.md)
+- Scope: Block 1 (`src/features/input/`), see [block-1-input.md](../architecture/block-1-input.md)
 - Builds on: ADR 0002 (persistence port)
 
 ## Context

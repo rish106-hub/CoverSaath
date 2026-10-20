@@ -4,7 +4,7 @@ import { CoverageParameterRepository } from './coverage-parameter-repository.js'
 import {
   getPolicyParameterDefinition,
   getPolicyParameterRegistry,
-} from '../../modules/coverage-analysis/policy-parameter-registry.js';
+} from '../../features/coverage-analysis/policy-parameter-registry.js';
 
 // Storage for policy document structuring (ADR 0006, SQLite migration 011, PostgreSQL 007).
 // Models propose, deterministic code decides: this repository only records decisions already
@@ -43,6 +43,10 @@ const defaultProposalLimit = 100;
 const maximumProposalLimit = 500;
 const maximumRunParameters = 1000;
 const maximumObservations = 500;
+
+const MAX_SKIPPED_CHUNKS = 40;
+const reasonPattern = /^[a-z][a-z0-9_]{0,47}$/;
+const COVERAGE_CHUNK_KEYS = ['total', 'stored', 'proposed', 'skipped', 'unaccounted'];
 
 function coded(code, message, statusCode) {
   return Object.assign(new Error(message), { code, statusCode });
@@ -208,6 +212,32 @@ function mapProposal(row) {
   });
 }
 
+const JOB_FINISHED_STATUSES = new Set(['committed', 'failed', 'interrupted']);
+const JOB_OUTCOMES = new Set(['complete', 'partial_review_required', 'failed']);
+const errorCodePattern = /^[A-Z][A-Z0-9_]{1,63}$/;
+const MAX_JOB_ATTEMPTS = 1000;
+
+function mapJob(row) {
+  if (!row) return null;
+  return Object.freeze({
+    id: row.id,
+    householdId: row.household_id,
+    workflowRunId: row.workflow_run_id,
+    documentId: row.document_id,
+    sourceVersion: row.source_version,
+    pipelineVersion: row.pipeline_version,
+    status: row.status,
+    evidenceOutcome: row.evidence_outcome,
+    errorCode: row.error_code,
+    attempt: Number(row.attempt),
+    startedAt: row.started_at,
+    updatedAt: row.updated_at,
+    finishedAt: row.finished_at,
+    structuringRunId: row.structuring_run_id,
+    erasedAt: row.erased_at,
+  });
+}
+
 function mapRun(row) {
   if (!row) return null;
   return Object.freeze({
@@ -221,6 +251,59 @@ function mapRun(row) {
     erasedAt: row.erased_at,
     erasureReasonCode: row.erasure_reason_code,
   });
+}
+
+const count = (value, name) => {
+  if (!Number.isInteger(value) || value < 0 || value > 1_000_000_000) throw invalid(`${name} must be a count.`);
+  return value;
+};
+
+// Counts-only coverage of one structuring run, stored with the run so skipped chunks stay visible after
+// the in-process run ends. Reasons are codes, never document text; the skipped list is bounded.
+function validateCoverage(coverage) {
+  if (coverage === null || coverage === undefined) return null;
+  if (!isPlainObject(coverage) || !isPlainObject(coverage.chunks) || !isPlainObject(coverage.usage)) throw invalid('coverage is invalid.');
+  const chunks = Object.fromEntries(COVERAGE_CHUNK_KEYS.map(key => [key, count(coverage.chunks[key], `coverage.chunks.${key}`)]));
+  const skipped = Array.isArray(coverage.skippedChunks) ? coverage.skippedChunks : [];
+  const skippedChunks = skipped.slice(0, MAX_SKIPPED_CHUNKS).map((entry, index) => {
+    if (!isPlainObject(entry) || typeof entry.reason !== 'string' || !reasonPattern.test(entry.reason)) throw invalid(`coverage.skippedChunks[${index}] is invalid.`);
+    if (!Number.isInteger(entry.page) || entry.page < 1 || entry.page > 10_000) throw invalid(`coverage.skippedChunks[${index}].page is invalid.`);
+    return { page: entry.page, reason: entry.reason };
+  });
+  const reasons = coverage.rejectedReasons ?? {};
+  if (!isPlainObject(reasons) || Object.keys(reasons).length > 20) throw invalid('coverage.rejectedReasons is invalid.');
+  const rejectedReasons = Object.fromEntries(Object.entries(reasons).map(([reason, value]) => {
+    if (!reasonPattern.test(reason)) throw invalid('coverage.rejectedReasons is invalid.');
+    return [reason, count(value, `coverage.rejectedReasons.${reason}`)];
+  }));
+  const costUsd = coverage.costUsd ?? 0;
+  if (!Number.isFinite(costUsd) || costUsd < 0 || costUsd > 1_000) throw invalid('coverage.costUsd is invalid.');
+  return {
+    chunks,
+    skippedChunks,
+    skippedTruncated: skipped.length > MAX_SKIPPED_CHUNKS,
+    rejectedReasons,
+    calls: count(coverage.calls, 'coverage.calls'),
+    usage: { inputTokens: count(coverage.usage.inputTokens, 'coverage.usage.inputTokens'), outputTokens: count(coverage.usage.outputTokens, 'coverage.usage.outputTokens') },
+    costUsd: Math.round(costUsd * 1e6) / 1e6,
+  };
+}
+
+// Stored evidence outcome (counts and codes only). A failed outcome is never committed.
+const STORED_OUTCOMES = new Set(['complete', 'partial_review_required']);
+const MAX_OUTCOME_REASONS = 10;
+function validateOutcome(outcome) {
+  if (outcome === null || outcome === undefined) return null;
+  if (!isPlainObject(outcome) || !STORED_OUTCOMES.has(outcome.evidenceOutcome)) throw invalid('outcome is invalid.');
+  const { reasons = [], missingCriticalKeys = [] } = outcome;
+  if (!Array.isArray(reasons) || reasons.length > MAX_OUTCOME_REASONS || reasons.some(reason => typeof reason !== 'string' || !reasonPattern.test(reason))) {
+    throw invalid('outcome.reasons is invalid.');
+  }
+  if (!Array.isArray(missingCriticalKeys) || missingCriticalKeys.length > 40
+    || missingCriticalKeys.some(key => typeof key !== 'string' || !parameterKeyPattern.test(key))) {
+    throw invalid('outcome.missingCriticalKeys is invalid.');
+  }
+  return { evidenceOutcome: outcome.evidenceOutcome, reasons: [...reasons], missingCriticalKeys: [...missingCriticalKeys] };
 }
 
 export class PolicyStructuringRepository {
@@ -290,7 +373,7 @@ export class PolicyStructuringRepository {
    */
   commitStructuring({
     householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
-    decisions = [], proposals = [], consentCheck, at = this.clock().toISOString(),
+    decisions = [], proposals = [], coverage = null, outcome = null, consentCheck, at = this.clock().toISOString(),
   } = {}) {
     requireBounded(householdId, 'householdId');
     requireBounded(workflowRunId, 'workflowRunId');
@@ -304,11 +387,13 @@ export class PolicyStructuringRepository {
     if (typeof consentCheck !== 'function') throw invalid('consentCheck is required.');
     const checkedDecisions = validateDecisions(decisions);
     const checkedProposals = validateProposals(proposals);
+    const checkedCoverage = validateCoverage(coverage);
+    const checkedOutcome = validateOutcome(outcome);
 
     try {
       return this.#commit({
         householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
-        decisions: checkedDecisions, proposals: checkedProposals, consentCheck, at,
+        decisions: checkedDecisions, proposals: checkedProposals, coverage: checkedCoverage, outcome: checkedOutcome, consentCheck, at,
       });
     } catch (error) {
       throw clientSafe(error);
@@ -317,7 +402,7 @@ export class PolicyStructuringRepository {
 
   #commit({
     householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
-    decisions: checkedDecisions, proposals: checkedProposals, consentCheck, at,
+    decisions: checkedDecisions, proposals: checkedProposals, coverage, outcome, consentCheck, at,
   }) {
     return this.#atomic(() => {
       const scope = this.#scope({ householdId, workflowRunId, documentId, requireActive: true });
@@ -416,7 +501,7 @@ export class PolicyStructuringRepository {
         (id, household_id, case_id, workflow_run_id, document_id, source_version, pipeline_version, counts_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
         structuringRunId, householdId, scope.case_id, workflowRunId, documentId, sourceVersion, pipelineVersion,
-        JSON.stringify(counts), at,
+        JSON.stringify({ ...counts, ...(coverage ? { coverage } : {}), ...(outcome ? { outcome } : {}) }), at,
       );
       const insertProposal = this.database.prepare(`INSERT INTO proposed_parameters
         (id, structuring_run_id, household_id, document_id, source_page_id, registry_version, proposed_key,
@@ -440,15 +525,19 @@ export class PolicyStructuringRepository {
     });
   }
 
-  /** Unredacted proposals of one document, household-scoped and bounded. */
-  listProposals({ householdId, documentId, limit } = {}) {
+  /**
+   * Unredacted proposals of one structuring run of one document, household-scoped and bounded.
+   * The run id is required: another run on the same document never contributes proposals.
+   */
+  listProposals({ householdId, documentId, structuringRunId, limit } = {}) {
     requireBounded(householdId, 'householdId');
     requireBounded(documentId, 'documentId');
+    requireBounded(structuringRunId, 'structuringRunId');
     const bound = requireLimit(limit, defaultProposalLimit, maximumProposalLimit);
     this.#requireDocumentInHousehold(householdId, documentId);
     return this.database.prepare(`SELECT * FROM proposed_parameters
-      WHERE document_id = ? AND household_id = ? AND redacted_at IS NULL
-      ORDER BY page, block_index, id LIMIT ?`).all(documentId, householdId, bound).map(mapProposal);
+      WHERE structuring_run_id = ? AND document_id = ? AND household_id = ? AND redacted_at IS NULL
+      ORDER BY page, block_index, id LIMIT ?`).all(structuringRunId, documentId, householdId, bound).map(mapProposal);
   }
 
   /** The most recent structuring run (counts only) of one document for one run, or null. */
@@ -463,10 +552,93 @@ export class PolicyStructuringRepository {
   }
 
   /**
+   * Durable job state (SQLite 013, PostgreSQL 010): records a new running attempt for one document and
+   * one run, numbered after the previous attempt. Identifiers and codes only. A second active attempt for
+   * the same key is refused by the partial unique index and reported as STRUCTURING_ALREADY_RUNNING.
+   */
+  startJob({ householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, consentGrantId, at = this.clock().toISOString() } = {}) {
+    requireBounded(householdId, 'householdId');
+    requireBounded(workflowRunId, 'workflowRunId');
+    requireBounded(documentId, 'documentId');
+    requireBounded(sourceVersion, 'sourceVersion', { pattern: null });
+    if (typeof pipelineVersion !== 'string' || !pipelineVersionPattern.test(pipelineVersion)) throw invalid('pipelineVersion is invalid.');
+    requireBounded(consentGrantId, 'consentGrantId');
+    requireTimestamp(at, 'at');
+    try {
+      return this.#atomic(() => {
+        const scope = this.#scope({ householdId, workflowRunId, documentId, requireActive: true });
+        const previous = this.database.prepare(`SELECT max(attempt) AS attempt FROM policy_structuring_jobs
+          WHERE workflow_run_id = ? AND document_id = ?`).get(workflowRunId, documentId)?.attempt;
+        const attempt = Number(previous ?? 0) + 1;
+        if (attempt > MAX_JOB_ATTEMPTS) throw coded('STRUCTURING_ATTEMPTS_EXHAUSTED', 'Too many structuring attempts for this document.', 409);
+        const jobId = id('structuring-job');
+        this.database.prepare(`INSERT INTO policy_structuring_jobs
+          (id, household_id, case_id, workflow_run_id, document_id, source_version, pipeline_version, status, attempt,
+           consent_grant_id, started_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)`).run(
+          jobId, householdId, scope.case_id, workflowRunId, documentId, sourceVersion, pipelineVersion, attempt, consentGrantId, at, at,
+        );
+        return mapJob(this.database.prepare('SELECT * FROM policy_structuring_jobs WHERE id = ?').get(jobId));
+      });
+    } catch (error) {
+      if (/UNIQUE constraint failed|duplicate key/i.test(String(error?.message))) {
+        throw coded('STRUCTURING_ALREADY_RUNNING', 'A structuring attempt is already running.', 409);
+      }
+      throw clientSafe(error);
+    }
+  }
+
+  /** Finishes a running attempt with codes only. A finished attempt is final (database guard). */
+  finishJob({ jobId, status, evidenceOutcome = null, errorCode = null, structuringRunId = null, at = this.clock().toISOString() } = {}) {
+    requireBounded(jobId, 'jobId');
+    if (!JOB_FINISHED_STATUSES.has(status)) throw invalid('status is invalid.');
+    if (evidenceOutcome !== null && !JOB_OUTCOMES.has(evidenceOutcome)) throw invalid('evidenceOutcome is invalid.');
+    if (errorCode !== null && (typeof errorCode !== 'string' || !errorCodePattern.test(errorCode))) throw invalid('errorCode is invalid.');
+    if (structuringRunId !== null) requireBounded(structuringRunId, 'structuringRunId');
+    requireTimestamp(at, 'at');
+    const changes = this.database.prepare(`UPDATE policy_structuring_jobs
+      SET status = ?, evidence_outcome = ?, error_code = ?, structuring_run_id = ?, finished_at = ?, updated_at = ?
+      WHERE id = ? AND status IN ('queued', 'running')`).run(status, evidenceOutcome, errorCode, structuringRunId, at, at, jobId).changes;
+    return Number(changes) === 1;
+  }
+
+  /**
+   * Startup recovery: attempts left running by a previous process become interrupted. Nothing is
+   * re-dispatched; a new paid attempt needs an explicit restart request. One counts-only audit event.
+   */
+  interruptRunningJobs({ at = this.clock().toISOString() } = {}) {
+    requireTimestamp(at, 'at');
+    return this.#atomic(() => {
+      const jobs = Number(this.database.prepare(`UPDATE policy_structuring_jobs
+        SET status = 'interrupted', error_code = 'STRUCTURING_INTERRUPTED', finished_at = ?, updated_at = ?
+        WHERE status IN ('queued', 'running')`).run(at, at).changes);
+      if (jobs > 0) {
+        this.audit.append({
+          action: 'policy_structuring.jobs_interrupted', resourceType: 'policy_structuring_jobs', resourceId: 'process_start',
+          actorId: 'policy-structuring-repository', payload: { jobs },
+        });
+      }
+      return jobs;
+    });
+  }
+
+  /** The latest attempt of one document for one run (household-scoped), or null. */
+  latestJob({ householdId, workflowRunId, documentId } = {}) {
+    requireBounded(householdId, 'householdId');
+    requireBounded(workflowRunId, 'workflowRunId');
+    requireBounded(documentId, 'documentId');
+    this.#scope({ householdId, workflowRunId, documentId, requireActive: false });
+    return mapJob(this.database.prepare(`SELECT * FROM policy_structuring_jobs
+      WHERE workflow_run_id = ? AND document_id = ? AND household_id = ?
+      ORDER BY attempt DESC LIMIT 1`).get(workflowRunId, documentId, householdId));
+  }
+
+  /**
    * Erasure path for structuring output. For the given documents (household-scoped when
    * `householdId` is given) and workflow runs: proposals are redacted (label and value nulled),
    * observations written by those structuring runs are redacted, and the structuring runs are
-   * stamped erased. One counts-only audit event. Idempotent. Joins the caller's transaction.
+   * structuring runs and jobs are stamped erased. One counts-only audit event. Idempotent. Joins the
+   * caller's transaction.
    */
   eraseDerived({
     householdId = null, documentIds = [], workflowRunIds = [], reasonCode, caseId = null,
@@ -505,6 +677,19 @@ export class PolicyStructuringRepository {
             (SELECT workflow_run_id FROM policy_structuring_runs WHERE id = ?))`);
       const stampRun = this.database.prepare(`UPDATE policy_structuring_runs
         SET erased_at = ?, erasure_reason_code = ? WHERE id = ? AND erased_at IS NULL`);
+      // Jobs hold identifiers and codes only; they are stamped erased (status kept) so an erased attempt
+      // never asks for a restart.
+      const stampJobsOfDocument = this.database.prepare(`UPDATE policy_structuring_jobs
+        SET erased_at = ?, erasure_reason_code = ? WHERE document_id = ? AND erased_at IS NULL AND (? IS NULL OR household_id = ?)`);
+      const stampJobsOfRun = this.database.prepare(`UPDATE policy_structuring_jobs
+        SET erased_at = ?, erasure_reason_code = ? WHERE workflow_run_id = ? AND erased_at IS NULL`);
+      let jobs = 0;
+      for (const documentId of new Set(documentIds)) {
+        jobs += Number(stampJobsOfDocument.run(at, reasonCode, documentId, householdId, householdId).changes);
+      }
+      for (const workflowRunId of new Set(workflowRunIds)) {
+        jobs += Number(stampJobsOfRun.run(at, reasonCode, workflowRunId).changes);
+      }
       for (const documentId of new Set(documentIds)) {
         proposals += Number(redactProposalsOfDocument.run(at, reasonCode, documentId, householdId, householdId).changes);
       }
@@ -513,8 +698,8 @@ export class PolicyStructuringRepository {
         observations += Number(redactObservations.run(at, reasonCode, runId, runId).changes);
         runs += Number(stampRun.run(at, reasonCode, runId).changes);
       }
-      const counts = Object.freeze({ proposals, observations, runs });
-      if (proposals > 0 || observations > 0 || runs > 0) {
+      const counts = Object.freeze({ proposals, observations, runs, jobs });
+      if (proposals > 0 || observations > 0 || runs > 0 || jobs > 0) {
         this.audit.append({
           householdId,
           caseId,

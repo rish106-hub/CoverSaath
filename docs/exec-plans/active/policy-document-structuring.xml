@@ -16,9 +16,9 @@
     <read>docs/adr/0003-ai-authority.md</read>
     <read>docs/adr/0006-policy-document-structuring.md</read>
     <read>docs/iterations/LATEST.md</read>
-    <read>src/modules/ai-analysis/eval-extractor.js (current 18-field regex extractor, eval only)</read>
-    <read>src/modules/ai-analysis/field-adjudicator.js (Gemini caller, verbatim-quote rule, consent grant check)</read>
-    <read>src/modules/coverage-analysis/parameter-records.js and policy-parameter-registry.js (138 keys, sections A to K)</read>
+    <read>src/features/ai-analysis/eval-extractor.js (current 18-field regex extractor, eval only)</read>
+    <read>src/features/ai-analysis/field-adjudicator.js (Gemini caller, verbatim-quote rule, consent grant check)</read>
+    <read>src/features/coverage-analysis/parameter-records.js and policy-parameter-registry.js (138 keys, sections A to K)</read>
     <read>scripts/eval-parse.mjs and src/integrations/sarvam/doc-ai-transport.js (normalized page shape)</read>
     <note>Run repomap impact before editing shared files. Check for a closer AGENTS.md in each directory changed.</note>
   </start_here>
@@ -86,7 +86,7 @@
 
   <scope>
     <in>
-      <path>src/modules/policy-structuring/ (sectioner.js, extractor.js, reconciler.js, validator.js, coverage-report.js, index.js)</path>
+      <path>src/features/policy-structuring/ (sectioner.js, extractor.js, reconciler.js, validator.js, coverage-report.js, index.js)</path>
       <path>Repository methods and migration for proposed_parameters (SQLite first, PostgreSQL parity test per ADR 0004)</path>
       <path>Erasure hook for observations and proposed_parameters on consent revocation</path>
       <path>Feature flag POLICY_STRUCTURING_ENABLED, default off</path>

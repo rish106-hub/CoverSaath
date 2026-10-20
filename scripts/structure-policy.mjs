@@ -14,14 +14,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
-import { FIELD_NAMES, extractFields } from '../src/modules/ai-analysis/eval-extractor.js';
-import { createGeminiCaller } from '../src/modules/ai-analysis/field-adjudicator.js';
-import { GEMINI_MODEL_RECIPIENT } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
-import { getPolicyParameterDefinition } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
+import { FIELD_NAMES, extractFields } from '../src/features/ai-analysis/eval-extractor.js';
+import { createGeminiCaller } from '../src/features/ai-analysis/field-adjudicator.js';
+import { GEMINI_MODEL_RECIPIENT } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { getPolicyParameterDefinition } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import {
   POLICY_STRUCTURING_VERSION, STRUCTURING_LIMITS, documentGrantCheck, gateChunks, isConflict, scoreStructuring,
   sectionDocument, structurePolicyDocument,
-} from '../src/modules/policy-structuring/index.js';
+} from '../src/features/policy-structuring/index.js';
 
 const OUT = resolve('.local/eval');
 const REGISTRY = 'policy-parameters/v1';
@@ -157,9 +157,11 @@ function readStored({ database, services }) {
         WHERE parameter_record_id = ? AND redacted_at IS NULL ORDER BY created_at, id`).all(record.id)
         .map(row => ({ value: JSON.parse(row.value_json), page: row.page })),
     }));
-  const proposals = services.policyStructuring.listProposals({ householdId: 'household-local', documentId: 'document-local', limit: 500 });
-  const counts = services.policyStructuring.getStructuringRun({ householdId: 'household-local', workflowRunId: 'run-local', documentId: 'document-local' })?.counts;
-  return { records, proposals, counts };
+  const stored = services.policyStructuring.getStructuringRun({ householdId: 'household-local', workflowRunId: 'run-local', documentId: 'document-local' });
+  const proposals = stored
+    ? services.policyStructuring.listProposals({ householdId: 'household-local', documentId: 'document-local', structuringRunId: stored.id, limit: 500 })
+    : [];
+  return { records, proposals, counts: stored?.counts };
 }
 
 async function main() {
@@ -180,11 +182,11 @@ async function main() {
   const backend = flags.store !== undefined ? freshBackend(await readJson('normalized.json'), at) : null;
   // With --store the grant lives in the database and is re-checked before each call and inside the commit.
   const consentCheck = backend
-    ? documentGrantCheck({ consents: backend.services.consents, grantId: 'consent-local', subjectAdultId: 'adult-local', documentId: 'document-local' })
+    ? documentGrantCheck({ consents: backend.services.consents, grantId: 'consent-local', subjectAdultId: 'adult-local', documentId: 'document-local', householdId: 'household-local' })
     : () => { if (!consent.has('gemini')) throw Object.assign(new Error('Gemini grant missing.'), { code: 'CONSENT_REQUIRED' }); };
-  const commit = backend ? async ({ decisions, proposals }) => backend.services.policyStructuring.commitStructuring({
+  const commit = backend ? async ({ decisions, proposals, coverage, outcome }) => backend.services.policyStructuring.commitStructuring({
     householdId: 'household-local', workflowRunId: 'run-local', documentId: 'document-local', sourceVersion: backend.sourceVersion,
-    pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion: REGISTRY, recordedBy: 'policy-structuring', decisions, proposals, consentCheck,
+    pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion: REGISTRY, recordedBy: 'policy-structuring', decisions, proposals, coverage, outcome, consentCheck,
   }) : null;
   const started = Date.now();
   const result = await structurePolicyDocument({
@@ -201,7 +203,7 @@ async function main() {
     backend.database.close();
   }
   const { chunks, items, conflicts, calls, usage } = result.report;
-  console.log(JSON.stringify({ chunks, items: { accepted: items.accepted, proposals: items.proposals, rejected: items.rejected, rejectedReasons: items.rejectedReasons }, conflicts, calls, usage, stored: result.commit, score: score && { keyRecall: score.keyRecall, hallucinationRate: score.hallucinationRate, conflictRecall: score.conflictRecall } }));
+  console.log(JSON.stringify({ chunks, items: { accepted: items.accepted, proposals: items.proposals, rejected: items.rejected, rejectedReasons: items.rejectedReasons }, conflicts, calls, usage, outcome: result.outcome, stored: result.commit, score: score && { keyRecall: score.keyRecall, hallucinationRate: score.hallucinationRate, conflictRecall: score.conflictRecall } }));
 }
 
 main().catch(error => { console.error(`structure-policy failed: ${error.code ?? 'ERROR'}`); process.exit(1); });

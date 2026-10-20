@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { EXTRACTION_SCHEMA, extractChunks, registryCatalog, STRUCTURING_LIMITS } from '../src/modules/policy-structuring/extractor.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { EXTRACTION_SCHEMA, extractChunks, registryCatalog, STRUCTURING_LIMITS } from '../src/features/policy-structuring/extractor.js';
 
 // Synthetic only: fictional insurer and numbers. `call` is a fake provider.
 const chunk = (id, page, text, blockIndexes = [0]) => ({ id, page, blockIndexes, kind: 'text', title: null, text });

@@ -15,13 +15,23 @@
 - Discover commands and runtime facts from `package.json`, its lockfile, CI and code. Do not invent them.
 
 ## Sources of truth
-- Product behaviour and acceptance criteria: `working/` and `building/`. `research/` is historical.
+- Product behaviour and acceptance criteria: `working/` and `building/`.
 - Architecture and decisions: `docs/architecture/` and `docs/adr/`.
 - Operations and recovery: `docs/runbooks/`.
 - Active risky work: `docs/exec-plans/active/`.
 - Executable truth: tests, contracts, migrations, CI and runtime configuration.
 - No capacity numbers exist. Do not make scale claims without measured workload evidence.
 - If sources conflict, stop and report the conflict.
+
+## Repository layout
+- `src/features/input/`: document validation, protected storage, scanning and OCR.
+- `src/features/`: business capabilities. Keep feature code behind each feature's `index.js` where practical.
+- `src/backend/`: persistence, services and durable state.
+- `src/server/`: API composition, routes and response policies.
+- `src/integrations/`: provider adapters. Import them through `src/integrations/index.js`.
+- `src/contracts/`: shared API, workflow, authority and persistence contracts.
+- No active UI exists. Do not add frontend tooling or browser code without an accepted task.
+- Use lowercase kebab-case. Put categories in directories instead of filename suffixes.
 
 ## Commands
 ```bash
@@ -34,7 +44,7 @@ npm run db:init
 npm run dev
 git diff --check
 ```
-Runtime: Node 25 or later, npm and Vite. CI uses Node 26. SQLite is still the application runtime. PostgreSQL schema and tests exist under ADR 0004. No deployment target exists.
+Runtime: Node 25 or later and npm. CI uses Node 26. SQLite is still the application runtime. PostgreSQL schema and tests exist under ADR 0004. No deployment target exists.
 
 ## Working loop
 1. Restate the user outcome, scope, non-goals and acceptance criteria.

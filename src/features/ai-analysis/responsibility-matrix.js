@@ -1,0 +1,74 @@
+export const AI_TASKS = Object.freeze([
+  'profile_extraction',
+  'group_cover_extraction',
+  'personal_cover_extraction',
+  'evidence_synthesis',
+  'question_drafting',
+  'policy_structuring_extract',
+  'policy_structuring_reconcile',
+]);
+
+export const DETERMINISTIC_TASKS = Object.freeze([
+  'consent_check',
+  'source_authorization',
+  'coverage_graph',
+  'deterministic_classification',
+  'policy_arithmetic',
+  'evidence_review',
+  'privacy_review',
+  'safety_review',
+  'state_transition',
+  'external_action_authorization',
+  'deterministic_release_gate',
+]);
+
+export const AI_CONTRACT_VERSION = 'knowvia-ai-contract-v1';
+
+export const RUNTIME_RESPONSIBILITIES = Object.freeze({
+  profile: Object.freeze({ owner: 'model_assist', modelTask: 'profile_extraction' }),
+  group: Object.freeze({ owner: 'model_assist', modelTask: 'group_cover_extraction' }),
+  personal: Object.freeze({ owner: 'model_assist', modelTask: 'personal_cover_extraction' }),
+  coverage: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  documentIdentity: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  continuity: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  enrolment: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  financialRules: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  benefits: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  exclusions: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  hospitalAccess: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  claimsProcess: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  renewalChange: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  serviceResearch: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  decision: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  householdAction: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  evidence: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  privacy: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  safety: Object.freeze({ owner: 'deterministic', modelTask: null }),
+  questions: Object.freeze({ owner: 'model_assist', modelTask: 'question_drafting' }),
+  primary: Object.freeze({ owner: 'model_assist', modelTask: 'evidence_synthesis' }),
+  release: Object.freeze({ owner: 'deterministic', modelTask: null }),
+});
+
+export const RUNTIME_AI_TASK_KEYS = Object.freeze(Object.entries(RUNTIME_RESPONSIBILITIES)
+  .filter(([, responsibility]) => responsibility.owner === 'model_assist')
+  .map(([key]) => key));
+
+export function assertModelTask(task) {
+  if (!AI_TASKS.includes(task)) {
+    const error = new Error(`Task ${task} is not allowed to use a model.`);
+    error.code = DETERMINISTIC_TASKS.includes(task) ? 'deterministic_task_protected' : 'unsupported_ai_task';
+    throw error;
+  }
+  return task;
+}
+
+export const AI_RESPONSIBILITY_MATRIX = Object.freeze({
+  profile_extraction: 'Extract only requested profile fields from authorised source excerpts.',
+  group_cover_extraction: 'Extract group policy wording and preserve applicability as unknown unless the source states it.',
+  personal_cover_extraction: 'Extract personal policy wording and preserve conflicts and missing facts.',
+  evidence_synthesis: 'Summarise already extracted evidence without making a decision or changing a fact.',
+  question_drafting: 'Draft questions for the named authority. Never send them.',
+  policy_structuring_extract: 'Propose registry readings from privacy-gated policy chunks, each with a verbatim quote. Code validates and decides.',
+  policy_structuring_reconcile: 'Flag disagreeing readings and propose which quoted reading applies. Code accepts only grounded selections of real contradictions.',
+  deterministic: 'Code owns consent, authorization, graph construction, arithmetic, classification, review, state, external actions and release.',
+});

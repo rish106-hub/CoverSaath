@@ -10,8 +10,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
-import { createGeminiCoverageRegistryFactory } from '../src/modules/ai-analysis/index.js';
-import { createPersistentCoverageAnalysisService } from '../src/modules/coverage-analysis/index.js';
+import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/index.js';
+import { createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import { liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
 const KNOWN_NAME = 'Zorblax Quimby';

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { extractFields, normalizeValue } from '../src/modules/ai-analysis/eval-extractor.js';
-import { classify, scoreFields } from '../src/modules/ai-analysis/eval-scorer.js';
-import { adjudicate, selectDisputes, acceptVerdict, buildRequest } from '../src/modules/ai-analysis/field-adjudicator.js';
+import { extractFields, normalizeValue } from '../src/features/ai-analysis/eval-extractor.js';
+import { classify, scoreFields } from '../src/features/ai-analysis/eval-scorer.js';
+import { adjudicate, selectDisputes, acceptVerdict, buildRequest } from '../src/features/ai-analysis/field-adjudicator.js';
 
 // Synthetic only: no real person, insurer record or policy number.
 const table = rows => `<table>${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}</table>`;

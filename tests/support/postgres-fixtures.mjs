@@ -81,6 +81,10 @@ const defaults = {
   policy_structuring_runs: id => ({
     id, source_version: 'version-1', pipeline_version: 'policy-structuring/v1', counts_json: '{"proposals":1}', created_at: at,
   }),
+  policy_structuring_jobs: id => ({
+    id, source_version: 'version-1', pipeline_version: 'policy-structuring/v2', status: 'running', attempt: 1,
+    started_at: at, updated_at: at,
+  }),
   proposed_parameters: id => ({
     id, registry_version: 'policy-parameters/v1', proposed_key: 'synthetic_benefit', category: 'unassigned',
     label: 'Synthetic benefit', value_json: '{"text":"Rs. 100","normalized":null,"subject":"policy","evidenceQuote":"Rs. 100"}',

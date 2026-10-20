@@ -4,12 +4,12 @@ import {
   createCoverageAnalysisFixtureInput,
   createCoverageAnalysisRuntime,
   decomposePolicySection,
-} from '../src/modules/coverage-analysis/index.js';
+} from '../src/features/coverage-analysis/index.js';
 import {
   MODEL_EXTRACTED_UNVERIFIED,
   createTaskOutputEnvelope,
   validateTaskOutputEnvelope,
-} from '../src/modules/coverage-analysis/agent-contracts.js';
+} from '../src/features/coverage-analysis/agent-contracts.js';
 import { setupLiveCase, startLiveServer } from './support/live-analysis-scenario.mjs';
 
 const MODEL_TASK_KINDS = ['profile_intake', 'group_cover_analysis', 'personal_cover_analysis', 'question_drafting', 'bounded_synthesis'];

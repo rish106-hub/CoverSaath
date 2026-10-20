@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AI_RESPONSIBILITY_MATRIX, buildPromptContract, createGeminiCoverageRegistryFactory, validateTaskOutput } from '../src/modules/ai-analysis/index.js';
-import { sanitizeEvidenceForModel } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+import { AI_RESPONSIBILITY_MATRIX, buildPromptContract, createGeminiCoverageRegistryFactory, validateTaskOutput } from '../src/features/ai-analysis/index.js';
+import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { RESTRICTED_PROBES, TOKENIZED_PROBES } from './support/privacy-probes.mjs';
 import { liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 

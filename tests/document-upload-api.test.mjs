@@ -800,7 +800,7 @@ test('guarded document transitions never resurrect a rejected or deleted documen
 
 test('a failed insert removes stored bytes and a failed store writes no row', async t => {
   const { createBackendServices, createDocumentUploadService } = await import('../src/backend/services/index.js');
-  const { createEncryptedLocalByteStorage } = await import('../src/modules/document-intake/index.js');
+  const { createEncryptedLocalByteStorage } = await import('../src/features/input/index.js');
   const h = harness(t);
   const database = openDatabase({ path: h.databasePath });
   const app = await start({ database, env: h.env });
@@ -831,7 +831,7 @@ test('a failed insert removes stored bytes and a failed store writes no row', as
 
 async function serviceHarness(t, { scanner = null, cancelOcrJob = null, now = Date.now() } = {}) {
   const { createBackendServices, createDocumentUploadService } = await import('../src/backend/services/index.js');
-  const { createEncryptedLocalByteStorage } = await import('../src/modules/document-intake/index.js');
+  const { createEncryptedLocalByteStorage } = await import('../src/features/input/index.js');
   const h = harness(t);
   const database = openDatabase({ path: h.databasePath });
   const app = await start({ database, env: h.env });

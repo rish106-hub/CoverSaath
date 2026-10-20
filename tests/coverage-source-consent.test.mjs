@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createCoverageAnalysisPort } from '../src/backend/services/coverage-analysis-port.js';
-import { GEMINI_MODEL_RECIPIENT } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+import { GEMINI_MODEL_RECIPIENT } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 
 const at = '2026-10-09T10:00:00.000Z';
 
