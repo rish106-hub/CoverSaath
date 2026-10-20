@@ -296,7 +296,8 @@ const EXCLUSION_TEXT = Object.freeze({
 });
 
 /** Code assembles the answer from validated findings. There is no verdict: only cited evidence and unknowns. */
-export function assembleAnswer({ question, gatedQuestion = question, findings, overrides, context, checklist, rejected, sweepCompleted, documentIds, completeness, storedText = null }) {
+export function assembleAnswer({ gatedQuestion, findings, overrides, context, checklist, rejected, sweepCompleted, documentIds, completeness, storedText = null }) {
+  if (typeof gatedQuestion !== 'string' || !gatedQuestion.trim()) fail('INVESTIGATION_INPUT_INVALID', 'The answer needs the gated question, never the raw one.');
   const clauseById = new Map(context.clauses.map(clause => [clause.clauseId, clause]));
   const covered = [];
   const limited = [];
@@ -382,7 +383,8 @@ export function assembleAnswer({ question, gatedQuestion = question, findings, o
   const overridesChecked = checklist.map(kind => ({ kind, clauseIds: context.clauses.filter(clause => clause.kind === kind).map(clause => clause.clauseId) }));
   overridesChecked.push({ kind: 'override_sweep', status: sweepCompleted ? 'completed' : 'not_completed' });
   const answer = {
-    question, state, covered, limited_or_excluded: limited, conditions, overrides_checked: overridesChecked, unknowns,
+    // The gated question: the stored and returned answer never carries what the privacy gate redacted.
+    question: gatedQuestion, state, covered, limited_or_excluded: limited, conditions, overrides_checked: overridesChecked, unknowns,
     calculations: [], sources, documentIds, contextPath: context.path, completeness, pipelineVersion: INVESTIGATION_VERSION, legalReview: 'required',
   };
   const errors = validateAnswer(answer);
@@ -501,7 +503,7 @@ export async function investigate({ question, clauses, search = () => [], call, 
     sweepOverBudget,
   };
   const answer = assembleAnswer({
-    question: question.trim(), gatedQuestion, findings: parsed.findings, overrides, context: { ...context, clauses: read }, checklist,
+    gatedQuestion, findings: parsed.findings, overrides, context: { ...context, clauses: read }, checklist,
     rejected: parsed.rejected + sweepRejected, sweepCompleted, documentIds, completeness,
     storedText: new Map(clauses.map(clause => [clause.clauseId, clause.text])),
   });

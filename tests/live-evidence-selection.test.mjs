@@ -4,7 +4,9 @@ import { createHash } from 'node:crypto';
 import { LIVE_REQUEST_BUILDERS, createGeminiCoverageRegistryFactory, resolveCanonicalParameterPolicy } from '../src/features/ai-analysis/live-coverage-runtime.js';
 import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { validateTaskInput } from '../src/features/ai-analysis/schemas.js';
-import { createCoverageAnalysisSourceInput } from '../src/features/coverage-analysis/source-input.js';
+import { createCoverageAnalysisSourceInput as buildSourceInput } from '../src/features/coverage-analysis/source-input.js';
+// The gate needs an explicit identifier list; these tests have no household identifiers.
+const createCoverageAnalysisSourceInput = (caseRecord, pages, options = {}) => buildSourceInput(caseRecord, pages, { knownIdentifiers: [], ...options });
 import { POLICY_PARAMETER_REGISTRY } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { assertAcquisitionTransition } from '../src/features/coverage-analysis/parameter-records.js';
 import { liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';

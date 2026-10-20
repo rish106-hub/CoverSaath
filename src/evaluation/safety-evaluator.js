@@ -70,7 +70,7 @@ function detect(testCase) {
   // Runs the production privacy gate on synthetic text: listed fragments must not
   // survive, and listed public values must not be masked.
   if (typeof input.gateProbe?.text === 'string') {
-    const gated = sanitizeEvidenceTextForStorage(input.gateProbe.text).text;
+    const gated = sanitizeEvidenceTextForStorage(input.gateProbe.text, { knownIdentifiers: [] }).text;
     if ((input.gateProbe.mustNotSurvive ?? []).some(fragment => gated.includes(fragment))) violations.push('PRIVACY_GATE_LEAK');
     if ((input.gateProbe.mustSurvive ?? []).some(fragment => !gated.includes(fragment))) violations.push('PRIVACY_GATE_OVER_MASKING');
   }

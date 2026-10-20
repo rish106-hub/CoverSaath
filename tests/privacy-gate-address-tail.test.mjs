@@ -3,10 +3,8 @@
 // Every value below is synthetic. No network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  sanitizeEvidenceForModel,
-  sanitizeEvidenceTextForStorage,
-} from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { sanitizeEvidenceTextForStorage } from './support/storage-gate.mjs';
 
 const policy = () => ({ dataClass: 'CONFIDENTIAL', modelExtraction: { allowed: true }, registryVersion: 'policy-parameters/v1' });
 const toModelText = text => sanitizeEvidenceForModel({

@@ -2,12 +2,8 @@
 // Every value below is synthetic. No network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  PRIVACY_EVIDENCE_GATE_VERSION,
-  PRIVACY_GATE_SCAN_CAP_BYTES,
-  sanitizeEvidenceForModel,
-  sanitizeEvidenceTextForStorage,
-} from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { PRIVACY_EVIDENCE_GATE_VERSION, PRIVACY_GATE_SCAN_CAP_BYTES, sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { sanitizeEvidenceTextForStorage } from './support/storage-gate.mjs';
 import {
   N1_CARD_PROBES,
   N1_WHITESPACE_PROBES,
@@ -77,7 +73,7 @@ test('N2: label, honorific, date, phone, licence, list and member-row variants a
     assert.ok(stored.reasonCodes.length > 0, label);
     assertNoFragments(`${label} (model)`, JSON.stringify(toModel(text).input), fragments);
     // Re-sanitising stored text is idempotent.
-    assert.equal(sanitizeEvidenceTextForStorage(stored.text).text, stored.text, `${label} must be idempotent`);
+    assert.equal(sanitizeEvidenceTextForStorage(stored.text, { regate: true }).text, stored.text, `${label} must be idempotent`);
   }
 });
 
@@ -189,13 +185,12 @@ test('known identifiers: placeholders are consistent across sources, upstream, p
   assert.equal(sanitizeEvidenceTextForStorage('DOB: 01/02/1990. Born: 1 Feb 1990.').text, 'DOB: <DOB_1>. Born: <DOB_1>.');
 });
 
-test('known identifiers: omitted, null or empty keeps the previous behaviour', () => {
+test('known identifiers: an empty list is the explicit "none" and keeps the previous behaviour', () => {
   const texts = [MEMBER_TABLE, ...N5_POLICY_WORDING, ...N2_VARIANT_PROBES.map(([, text]) => text), ...Object.values(TOKENIZED_PROBES).map(([text]) => text)];
   for (const text of texts) {
-    const baseline = sanitizeEvidenceTextForStorage(text);
-    for (const knownIdentifiers of [undefined, null, []]) {
-      assert.deepEqual(sanitizeEvidenceTextForStorage(text, { knownIdentifiers }), baseline, text);
-    }
+    // Storage needs the list explicitly (omitting or nulling it is refused); an empty list is the explicit "none".
+    const baseline = sanitizeEvidenceTextForStorage(text, { regate: true });
+    assert.deepEqual(sanitizeEvidenceTextForStorage(text, { knownIdentifiers: [], regate: true }), baseline, text);
   }
   const baseline = toModel(MEMBER_TABLE);
   assert.deepEqual(toModel(MEMBER_TABLE, { knownIdentifiers: [] }), baseline);
@@ -311,10 +306,10 @@ test('round-4 worst-case inputs at the scan cap finish in bounded time', () => {
     knownNameTokens: fill('Kavya Placeholder Ravi '),
     knownDigits: fill('9 8 7 6 5 '),
   };
-  for (const knownIdentifiers of [undefined, KNOWN, manyKnown]) sanitizeEvidenceTextForStorage('warm up Insured Persons: Kavya, Ravi 98765 43210 01/02/1990', { knownIdentifiers });
+  for (const knownIdentifiers of [[], KNOWN, manyKnown]) sanitizeEvidenceTextForStorage('warm up Insured Persons: Kavya, Ravi 98765 43210 01/02/1990', { knownIdentifiers });
   const timings = {};
   for (const [label, text] of Object.entries(inputs)) {
-    for (const knownIdentifiers of [undefined, KNOWN, manyKnown]) {
+    for (const knownIdentifiers of [[], KNOWN, manyKnown]) {
       const key = `${label}/${knownIdentifiers === undefined ? 'none' : knownIdentifiers.length}`;
       // Fastest of three runs: super-linear backtracking is slow every time, a scheduler stall under load is not.
       // The 200 ms bound below is unchanged.

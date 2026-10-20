@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeEvidenceTextForStorage } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { sanitizeEvidenceTextForStorage } from './support/storage-gate.mjs';
 
 // Synthetic Luhn-valid numbers generated here; no real identifier.
 function withLuhn(body) {

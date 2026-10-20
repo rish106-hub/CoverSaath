@@ -73,7 +73,7 @@ test('fake-caller journey stores observations and proposals and accounts for eve
   const { database, services } = open(t);
   const gemini = fakeGemini();
   const check = grantCheck(services);
-  const result = await structurePolicyDocument({ pages, call: gemini.call, consentCheck: check, commit: commitWith(services, check), env: enabled });
+  const result = await structurePolicyDocument({ pages, call: gemini.call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled });
 
   assert.equal(result.report.chunks.unaccounted, 0);
   assert.deepEqual(result.report.skippedReasons, { none_returned: 1 }, "the title-only chunk is accounted, not dropped");
@@ -93,12 +93,12 @@ test('fake-caller journey stores observations and proposals and accounts for eve
     WHERE recorded_by = 'policy-structuring' AND value_json LIKE '%Individual%'`).get().value_json);
   assert.deepEqual([stored.evidenceQuote, Number.isInteger(stored.blockIndex)], ['Policy type | Individual', true], 'quote and block kept for review');
 
-  const again = await structurePolicyDocument({ pages, call: fakeGemini().call, consentCheck: check, commit: commitWith(services, check), env: enabled });
+  const again = await structurePolicyDocument({ pages, call: fakeGemini().call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled });
   assert.equal(again.commit.replayed, true);
   assert.equal(database.prepare('SELECT count(*) AS count FROM proposed_parameters').get().count, 1);
 
   const unpaid = fakeGemini();
-  const skipped = await structurePolicyDocument({ pages, call: unpaid.call, consentCheck: check, env: enabled,
+  const skipped = await structurePolicyDocument({ pages, call: unpaid.call, consentCheck: check, knownIdentifiers: [], env: enabled,
     alreadyStored: () => services.policyStructuring.getStructuringRun({ householdId: 'household-parameters', workflowRunId: run, documentId: document }) !== null });
   assert.equal(skipped.replayed, true);
   assert.equal(unpaid.calls.length, 0, 'an already structured document makes no provider call');
@@ -112,7 +112,7 @@ test('section titles are privacy-gated like chunk text before any call', async (
   ] }];
   const sent = [];
   const call = async ({ payload }) => { sent.push(JSON.stringify(payload)); return { json: payload.chunks ? { items: [] } : { conflicts: [] }, usage: {} }; };
-  await structurePolicyDocument({ pages: leaky, call, consentCheck: () => {}, env: enabled });
+  await structurePolicyDocument({ pages: leaky, call, consentCheck: () => {}, knownIdentifiers: [], env: enabled });
   assert.ok(sent.length > 0);
   for (const payload of sent) {
     for (const raw of ['9876543210', 'synth.person@example.com']) assert.equal(payload.includes(raw), false, `${raw} reached the provider`);
@@ -134,13 +134,13 @@ test('consent withdrawn between extraction and commit stores nothing', async t =
   let allowed = true;
   const check = () => { if (!allowed) throw Object.assign(new Error('revoked'), { code: 'CONSENT_REQUIRED' }); return grantCheck(services)(); };
   const call = async args => { const answer = await fakeGemini().call(args); if (!args.payload.chunks) allowed = false; return answer; };
-  await assert.rejects(structurePolicyDocument({ pages, call, consentCheck: check, commit: commitWith(services, check), env: enabled }), { code: 'CONSENT_REQUIRED' });
+  await assert.rejects(structurePolicyDocument({ pages, call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled }), { code: 'CONSENT_REQUIRED' });
   assert.equal(database.prepare("SELECT count(*) AS count FROM coverage_parameter_observations WHERE recorded_by = 'policy-structuring'").get().count, 0);
   assert.equal(database.prepare('SELECT count(*) AS count FROM proposed_parameters').get().count, 0);
 });
 
 test('the pipeline is off unless POLICY_STRUCTURING_ENABLED is true, before any call', async () => {
   const gemini = fakeGemini();
-  await assert.rejects(structurePolicyDocument({ pages, call: gemini.call, consentCheck: () => {}, env: {} }), { code: 'STRUCTURING_DISABLED' });
+  await assert.rejects(structurePolicyDocument({ pages, call: gemini.call, consentCheck: () => {}, knownIdentifiers: [], env: {} }), { code: 'STRUCTURING_DISABLED' });
   assert.equal(gemini.calls.length, 0);
 });

@@ -2,12 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import {
-  PRIVACY_GATE_SCAN_CAP_BYTES,
-  opaqueSourceId,
-  sanitizeEvidenceForModel,
-  sanitizeEvidenceTextForStorage,
-} from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { PRIVACY_GATE_SCAN_CAP_BYTES, opaqueSourceId, sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { sanitizeEvidenceTextForStorage } from './support/storage-gate.mjs';
 import { RESTRICTED_PROBES } from './support/privacy-probes.mjs';
 import { setupLiveCase, startLiveServer } from './support/live-analysis-scenario.mjs';
 
@@ -135,12 +131,12 @@ test('G2: placeholders are per-request indices with no value-derived hash', () =
 
   // Idempotent: stored placeholders are never rescanned; new ones do not collide.
   const stored = sanitizeEvidenceTextForStorage('Mobile: 98765 43210.');
-  assert.equal(sanitizeEvidenceTextForStorage(stored.text).text, stored.text);
-  const extended = sanitizeEvidenceTextForStorage(`${stored.text} Second 91234 56789.`).text;
+  assert.equal(sanitizeEvidenceTextForStorage(stored.text, { regate: true }).text, stored.text);
+  const extended = sanitizeEvidenceTextForStorage(`${stored.text} Second 91234 56789.`, { regate: true }).text;
   assert.equal(extended, `${stored.text} Second <PHONE_2>.`);
 
   // Legacy v1 hash tokens are replaced so their digests never reach a model.
-  const legacy = sanitizeEvidenceTextForStorage('Earlier <PHONE:0123456789abcdef> and <NAME:fedcba9876543210>.');
+  const legacy = sanitizeEvidenceTextForStorage('Earlier <PHONE:0123456789abcdef> and <NAME:fedcba9876543210>.', { regate: true });
   assert.doesNotMatch(legacy.text, /[a-f0-9]{16}/);
   assert.match(legacy.text, /^Earlier <PHONE_1> and <NAME_1>\.$/);
 });

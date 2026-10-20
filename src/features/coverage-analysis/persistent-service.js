@@ -14,6 +14,10 @@ import {
 const terminal = new Set(['completed', 'blocked', 'failed', 'cancelled', 'revoked', 'interrupted']);
 const stable = value => JSON.stringify(value, Object.keys(value).sort());
 const digest = value => createHash('sha256').update(stable(value)).digest('hex');
+const TASK_FAILURE_MESSAGES = Object.freeze({
+  MODEL_DISPATCH_AUTHORIZATION_FAILED: 'Current evidence authorization could not be verified before model dispatch.',
+  PARAMETER_OBSERVATION_FAILED: 'Model-extracted values could not be recorded as parameter evidence.',
+});
 
 function portContract(port) {
   const methods = [
@@ -159,7 +163,8 @@ export function createPersistentCoverageAnalysisService({
           await port.failTask(outcome.task.id, {
             workerId,
             code: outcome.error?.code ?? 'ANALYSIS_TASK_FAILED',
-            message: outcome.error instanceof Error ? outcome.error.message : 'Analysis task failed.',
+            // Only fixed text is stored: a thrown error's own message can echo provider or document content.
+            message: TASK_FAILURE_MESSAGES[outcome.error?.code] ?? 'Analysis task failed.',
           });
         } else {
           await port.completeTask(outcome.task.id, { output: outcome.output, workerId });
