@@ -1,0 +1,23 @@
+src/features/policy-structuring/coverage-report.js
+  s_c52538788cad78::t_ee83a7b84bd24c 191
+src/features/ai-analysis/eval-scorer.js
+  s_c52538788cad78::t_ee83a7b84bd24c 26
+docs/iterations/LATEST.md
+  s_c52538788cad78::t_521107271fa903 3-11,14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "61f796631b96c3a3621f2f5579bce0f55488778e",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
