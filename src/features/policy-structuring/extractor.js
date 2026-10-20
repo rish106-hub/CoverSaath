@@ -9,7 +9,7 @@ import {
 
 export { EXTRACTION_SCHEMA };
 
-export const EXTRACTOR_VERSION = 'policy-structuring-extractor/v3';
+export const EXTRACTOR_VERSION = 'policy-structuring-extractor/v4';
 export const STRUCTURING_LIMITS = Object.freeze({
   maxCallsPerDocument: 30, maxChunksPerCall: 3, maxCharsPerCall: 9000,
   maxInputTokensPerDocument: 250000, maxOutputTokensPerDocument: 150000, maxItemsPerChunk: 80,

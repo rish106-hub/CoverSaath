@@ -6,6 +6,8 @@ export const AI_TASKS = Object.freeze([
   'question_drafting',
   'policy_structuring_extract',
   'policy_structuring_reconcile',
+  'policy_evidence_investigate',
+  'policy_evidence_override_sweep',
 ]);
 
 export const DETERMINISTIC_TASKS = Object.freeze([
@@ -70,5 +72,7 @@ export const AI_RESPONSIBILITY_MATRIX = Object.freeze({
   question_drafting: 'Draft questions for the named authority. Never send them.',
   policy_structuring_extract: 'Propose registry readings from privacy-gated policy chunks, each with a verbatim quote. Code validates and decides.',
   policy_structuring_reconcile: 'Flag disagreeing readings and propose which quoted reading applies. Code accepts only grounded selections of real contradictions.',
+  policy_evidence_investigate: 'Find cited findings in privacy-gated policy clauses for one question. Code validates ids and quotes; the model decides nothing.',
+  policy_evidence_override_sweep: 'Find clauses that limit, exclude, waive or override first-pass findings. Code validates ids and quotes.',
   deterministic: 'Code owns consent, authorization, graph construction, arithmetic, classification, review, state, external actions and release.',
 });

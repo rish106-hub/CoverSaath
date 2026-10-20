@@ -1,5 +1,32 @@
 # Latest iteration
 
+## Direction change: Phase A S0/S1/S2/S7 and Phase B B0/B1 start (2026-10-20)
+
+Plan: [direction-change.md](../exec-plans/active/direction-change.md). ADR: [0008](../adr/0008-evidence-first-reasoning.md) (Proposed).
+Uncommitted on `codex/backend-first-layout`.
+
+- S0: `correct_unknown` outcome for golden "unknown"; a single duration inside a clause matches.
+- S1: gate v5. Identifier-labelled or non-network-shaped lone digit runs are minimised; card-labelled and real
+  network-shaped runs are still rejected. Existing gate tests unchanged except the version string.
+- S2: exactly one target per item; valid registry key wins over a filled proposal; forbidden key never accepted.
+  Extractor version v4.
+- S7: relative DB path resolves against cwd (no more `.local/.local/`); legacy copy raises `DATABASE_LEGACY_PATH`.
+  Upload metadata field renamed `pageObjectCount` (inspector over-count).
+- B0: ADR 0008, `src/contracts/policy-evidence.js`. Question consent uses `derive` + `insurance_question`
+  (no `answer` action: CHECK rebuild blocked by U2). Wording needs legal review.
+- B1: clause builder, `policy_clauses` + `policy_answers` (SQLite 015, PostgreSQL 012), `ClauseRepository`, erasure on
+  consent revocation (including question-only grants), document erasure and a DB safety-net trigger.
+- B2: FTS5 `policy_clauses_fts` (SQLite 016, trigger-maintained; parity test ignores it; PostgreSQL tsvector deferred).
+- B3: `investigate.js` (checklist, whole-policy or FTS context, privacy gate per clause, mandatory override sweep, code-assembled answer).
+  Two new model tasks registered in the AI authority matrix.
+- B4: `POST/GET /api/v1/cases/:caseId/questions`, `POLICY_EVIDENCE_ENABLED` (default off), idempotent, 404 across households.
+- Not done: B5 recall eval (needs owner-written golden questions and approval for paid calls); S1 eval:safety cases;
+  S3-S6, S8 (deferred by owner); independent read-only review of S1, B3, B4 (required by AGENTS.md).
+- Checks: with a local PostgreSQL 17 (`TEST_DATABASE_URL`) `npm run check` 734 tests, 724 pass, 0 fail, 10 skipped (live services);
+  without it 681 pass, 52 skipped. `eval:safety` pass, `check:architecture` pass, `git diff --check` clean.
+- No live Gemini or Sarvam call was made. Retrieval recall, cost per question and accuracy are unmeasured.
+- Action for owner: live DB sits at `.local/.local/knowvia.sqlite`; the server will refuse to start until moved (runbook).
+
 ## Policy structuring hardening S1 to S5 (2026-10-20)
 
 Active plan: [policy-structuring-hardening.xml](../exec-plans/active/policy-structuring-hardening.xml). Decisions:

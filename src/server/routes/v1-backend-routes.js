@@ -193,7 +193,7 @@ function requireOwnedDocument({ services, documentUploads, principal, documentId
   }
 }
 
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -331,6 +331,28 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const caseRecord = services.access.requireCase(principal, caseMatch[1]);
       responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.caseSummary });
       return { status: 200, body: caseSummaryDto(caseRecord) };
+    }
+    // Evidence-first questions (ADR 0008): a cited conditional answer, never a coverage verdict. The case is
+    // looked up with the document-route rule: a missing and a foreign-household case answer the same 404.
+    const questionsMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/questions(?:\/([^/]+))?$/);
+    if (questionsMatch) {
+      const caseRecord = requireDocumentCase(services, principal, questionsMatch[1], { write: req.method === 'POST' });
+      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      if (req.method === 'POST' && !questionsMatch[2]) {
+        const body = await readBody(req);
+        const stored = await getEvidenceService().ask({
+          caseRecord,
+          subjectAdultId: principal.adultId,
+          question: requiredString(body.question, 'question', { max: 2000 }),
+          consentGrantId: requiredString(body.consentGrantId, 'consentGrantId'),
+          idempotencyKey: idempotencyKey(req),
+        });
+        return { status: stored.replayed ? 200 : 201, body: { answerId: stored.answerId, replayed: stored.replayed, answer: stored.answer } };
+      }
+      if (req.method === 'GET' && questionsMatch[2]) {
+        const stored = getEvidenceService().get({ caseRecord, answerId: questionsMatch[2] });
+        return { status: 200, body: { answerId: stored.answerId, answer: stored.answer } };
+      }
     }
     const sourcePackMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/source-pack$/);
     if (req.method === 'GET' && sourcePackMatch) {

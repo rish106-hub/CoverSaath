@@ -96,7 +96,8 @@ export function createDocumentIntakeService({ repository, storage, mode = 'live'
         await storage.remove({ storageKey });
         throw error;
       }
-      return safeMetadata(inspection?.pageCount ? { ...record, pageCount: inspection.pageCount } : record);
+      // The inspector counts raw page objects and can only over-count; segmentation holds the real page count.
+      return safeMetadata(inspection?.pageCount ? { ...record, pageObjectCount: inspection.pageCount } : record);
     },
 
     async recordMalwareScan({ documentId, status, scannerReference = null }) {

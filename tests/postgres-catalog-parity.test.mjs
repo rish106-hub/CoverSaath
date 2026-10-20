@@ -18,8 +18,12 @@ const POSTGRES_ONLY_TRIGGERS = new Set([
   'proposed_parameters_no_truncate',
 ]);
 
+// SQLite-only objects: the FTS5 clause index (migration 016) and its shadow tables have no PostgreSQL counterpart yet.
+const SQLITE_ONLY = /^policy_clauses_fts(?:_|$)/;
+
 function sqliteCatalog(database) {
-  const objects = database.prepare("SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all();
+  const objects = database.prepare("SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all()
+    .filter(item => !SQLITE_ONLY.test(item.name));
   const tables = objects.filter(item => item.type === 'table').map(item => item.name).sort();
   const catalog = { tables: {}, views: {}, triggers: {}, indexes: {} };
   for (const table of tables) {
@@ -208,5 +212,5 @@ test('seed rows equal the SQLite seed rows', postgresTestOptions(), async t => {
 test('the PostgreSQL migrations record exactly the immutable migration files', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const versions = (await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows.map(row => row.version);
-  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql']);
+  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql']);
 });

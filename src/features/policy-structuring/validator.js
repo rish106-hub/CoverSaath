@@ -126,15 +126,19 @@ function registryKeySet(registry) {
   return keys;
 }
 
-function checkTarget(item, registry, reservedKeys) {
-  if (present(item.registry_key) === present(item.proposed)) return { reason: 'ambiguous_target' };
-  if (present(item.registry_key)) {
-    const definition = typeof item.registry_key === 'string' ? registry.parameters.find(entry => entry.key === item.registry_key) : null;
-    if (!definition) return { reason: 'unknown_registry_key' };
-    if (definition.modelExtraction?.allowed !== true) return { reason: 'model_extraction_not_permitted' };
-    return { definition };
-  }
-  const proposed = item.proposed;
+// An empty proposed object ({proposed_key: "", ...}) is what a model sends for "no proposal"; it counts as absent.
+const proposedFilled = proposed => !!proposed && typeof proposed === 'object' && !Array.isArray(proposed)
+  ? Object.values(proposed).some(present)
+  : present(proposed);
+
+function checkRegistryKey(item, registry) {
+  const definition = typeof item.registry_key === 'string' ? registry.parameters.find(entry => entry.key === item.registry_key) : null;
+  if (!definition) return { reason: 'unknown_registry_key' };
+  if (definition.modelExtraction?.allowed !== true) return { reason: 'model_extraction_not_permitted' };
+  return { definition };
+}
+
+function checkProposed(proposed, reservedKeys) {
   if (!proposed || typeof proposed !== 'object' || Array.isArray(proposed)) return { reason: 'invalid_proposed_key' };
   const proposedKey = typeof proposed.proposed_key === 'string' ? proposed.proposed_key : '';
   if (!PROPOSED_KEY_PATTERN.test(proposedKey) || reservedKeys.has(proposedKey)) return { reason: 'invalid_proposed_key' };
@@ -142,6 +146,20 @@ function checkTarget(item, registry, reservedKeys) {
   const label = text(proposed.label);
   if (!label || label.length > VALIDATOR_LIMITS.maxLabelChars) return { reason: 'label_invalid' };
   return { proposed: { proposedKey, category: proposed.category, label } };
+}
+
+// Exactly one target. When both are filled, a valid allowed registry key wins and the proposal is dropped (counted
+// in the note); a forbidden or unknown registry key is never accepted, and a valid proposal then stands alone.
+function checkTarget(item, registry, reservedKeys) {
+  const hasKey = present(item.registry_key);
+  const hasProposal = proposedFilled(item.proposed);
+  if (!hasKey && !hasProposal) return { reason: 'ambiguous_target' };
+  if (!hasProposal) return checkRegistryKey(item, registry);
+  if (!hasKey) return checkProposed(item.proposed, reservedKeys);
+  const registryTarget = checkRegistryKey(item, registry);
+  if (registryTarget.definition) return { ...registryTarget, proposalDropped: true };
+  const proposalTarget = checkProposed(item.proposed, reservedKeys);
+  return proposalTarget.proposed ? proposalTarget : registryTarget;
 }
 
 // The value must be grounded in its own quote, not only the quote in the chunk: the value text appears in
@@ -179,6 +197,7 @@ function checkItem(item, chunk, registry, reservedKeys) {
   const note = {
     confidence: ['high', 'medium', 'low'].includes(item.confidence) ? item.confidence : null,
     rationale: text(item.rationale).slice(0, VALIDATOR_LIMITS.maxRationaleChars) || null,
+    ...(target.proposalDropped ? { proposalDroppedRegistryMatch: true } : {}),
   };
   // A subject counts as named by the document only when it is printed in the chunk we sent, as whole words;
   // a model's own label ("Schedule", "Policy wording") or a fragment of a word ("a", "in") cannot turn a

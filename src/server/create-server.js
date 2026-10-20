@@ -4,7 +4,7 @@ import { prepareJsonResponse, sendJson } from './http/request.js';
 import { assertLocalRequest } from './http/security.js';
 import { createRateLimiter } from '../shared/http/index.js';
 import { openDatabase } from '../backend/database/index.js';
-import { createBackendServices, createCoverageAnalysisPort, createDocumentUploadService, createPolicyStructuringService } from '../backend/services/index.js';
+import { createBackendServices, createCoverageAnalysisPort, createDocumentUploadService, createPolicyEvidenceService, createPolicyStructuringService } from '../backend/services/index.js';
 import {
   createClamdScanner,
   createDocumentScanWorker,
@@ -88,6 +88,17 @@ export function createApiServer({
     });
     return structuringService;
   };
+  // Question-time Gemini use (ADR 0008) goes through the same gateway, budget and privacy gate as structuring.
+  let evidenceService = null;
+  const getEvidenceService = () => {
+    evidenceService ||= createPolicyEvidenceService({
+      services: getBackend().services,
+      loadKnownIdentifiers: caseId => createCoverageAnalysisPort(getBackend()).loadKnownIdentifiers(caseId),
+      createModelCall: createStructuringModelCall,
+      env,
+    });
+    return evidenceService;
+  };
   const ownsDatabase = !injectedDatabase;
   let database = injectedDatabase ?? null;
   let services = backendServices ?? null;
@@ -154,7 +165,7 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory, getOcrService, getStructuringService });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');

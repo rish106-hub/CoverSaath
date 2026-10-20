@@ -6,3 +6,4 @@ export * from './execution-policy.js';
 export * from './persistence-ports.js';
 export * from './task-contracts.js';
 export * from './workflow-graph.js';
+export * from './policy-evidence.js';

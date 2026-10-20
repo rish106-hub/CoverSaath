@@ -78,6 +78,15 @@ const defaults = {
     id, version: 'version-1', page: '2', extraction_method: 'document_extraction', review_status: 'not_reviewed',
     value_json: '{"amountMinor":500000}', source_digest: hex('c'), observed_at: at, recorded_by: 'extractor', created_at: at,
   }),
+  policy_clauses: id => ({
+    id, household_id: 'household-a', case_id: 'case-a', document_id: 'document-a', source_version: 'version-1', page: 1,
+    block_indexes_json: '[0]', title: null, kind: 'benefit', text: 'Synthetic clause text.', digest: 'c'.repeat(64), created_at: at,
+  }),
+  policy_answers: id => ({
+    id, household_id: 'household-a', case_id: 'case-a', requested_by_adult_id: 'adult-a', idempotency_key: `idem-${id}`,
+    request_digest: 'd'.repeat(64), question: 'Synthetic question?', state: 'conditional', document_ids_json: '["document-a"]',
+    answer_json: '{}', created_at: at,
+  }),
   policy_structuring_runs: id => ({
     id, source_version: 'version-1', pipeline_version: 'policy-structuring/v1', counts_json: '{"proposals":1}', created_at: at,
   }),

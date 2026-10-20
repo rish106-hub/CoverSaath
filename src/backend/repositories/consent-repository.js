@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { PolicyStructuringRepository } from './policy-structuring-repository.js';
+import { ClauseRepository } from './clause-repository.js';
 import { GEMINI_MODEL_RECIPIENT } from '../../features/ai-analysis/privacy-evidence-gate.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
@@ -13,7 +14,7 @@ const RUN_SCAN_BATCH_SIZE = 100;
 const MAX_ERASURE_RUNS = 5_000;
 
 export class ConsentRepository {
-  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null, clauses = null } = {}) {
     this.database = database;
     this.clock = clock;
     this.audit = audit;
@@ -22,6 +23,8 @@ export class ConsentRepository {
     // injection never leaves proposals behind (the repository needs only the database to erase).
     this.policyStructuring = policyStructuring
       ?? (database?.prepare && database?.exec ? new PolicyStructuringRepository(database, { clock, ...(audit ? { audit } : {}), ...(coverageParameters ? { coverageParameters } : {}) }) : null);
+    // Clauses and answers are derived stores too (ADR 0008): the same rule, erasure always has a path.
+    this.clauses = clauses ?? (database?.prepare && database?.exec ? new ClauseRepository(database, { clock, ...(audit ? { audit } : {}) }) : null);
   }
 
   grant({ id: grantId = id('consent'), householdId, subjectAdultId, grantedToActor = 'knowvia-local', purpose, noticeVersion = 'v1', evidenceMethod = 'typed', expiresAt = null, scopes = [] }) {
@@ -240,6 +243,14 @@ export class ConsentRepository {
           householdId: document.household_id, documentIds: [document.id], reasonCode: ERASURE_MARKER,
           resourceType: 'consent_grant', resourceId: grantId, actorType: 'adult_user', actorId: revokedByAdultId, at,
         });
+        // Question-time grants (ADR 0008): clauses, their FTS rows and answers citing the document go too.
+        if (!this.clauses) {
+          throw Object.assign(new Error('Policy evidence erasure is not configured.'), { code: 'ERASURE_NOT_CONFIGURED', statusCode: 503 });
+        }
+        this.clauses.eraseDerived({
+          householdId: document.household_id, documentIds: [document.id], reasonCode: ERASURE_MARKER,
+          resourceType: 'consent_grant', resourceId: grantId, actorType: 'adult_user', actorId: revokedByAdultId,
+        });
       }
       // Stored OCR blocks are page text in another shape and are erased with it.
       const redactPages = this.database.prepare(`UPDATE source_pages SET extracted_text = NULL, extraction_status = 'failed',
@@ -410,6 +421,15 @@ export class ConsentRepository {
         caseId, resourceType, resourceId, actorType, actorId, at,
       });
     }
+    let evidence = { clauses: 0, answers: 0 };
+    if (documents.size > 0) {
+      if (!this.clauses) {
+        throw Object.assign(new Error('Policy evidence erasure is not configured.'), { code: 'ERASURE_NOT_CONFIGURED', statusCode: 503 });
+      }
+      evidence = this.clauses.eraseDerived({
+        householdId, documentIds: [...documents], reasonCode: redactionReason, caseId, resourceType, resourceId, actorType, actorId,
+      });
+    }
     if (runs > 0) {
       const graphCounts = graphs || graphNodes || graphEdges ? { graphs, graphNodes, graphEdges } : {};
       this.audit?.append({
@@ -464,6 +484,7 @@ export class ConsentRepository {
     return Object.freeze({
       runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers,
       structuringProposals: structuring.proposals, structuringRuns: structuring.runs,
+      policyClauses: evidence.clauses, policyAnswers: evidence.answers,
     });
   }
 }
