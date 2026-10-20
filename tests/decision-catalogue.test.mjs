@@ -305,3 +305,48 @@ test('answer adapter: facts come from stored clauses, quotes are not copied, mix
   assert.equal(candidates[0].topic, 'room rent');
   assert.ok(!JSON.stringify(candidates).includes('SECRET QUOTE'));
 });
+
+test('B3-8: a disease-specific sublimit and waiting period surface in the policy layer and are not hidden by the general rule', () => {
+  const facts = build([
+    fact({ factType: 'sum_insured', topic: '', value: { amountMinor: 50000000, currency: 'INR' } }),
+    fact({ factType: 'sublimit', topic: 'cataract', value: { kind: 'amount', amountMinor: 300000, currency: 'INR' } }),
+    fact({ factType: 'waiting_period', topic: 'hernia', value: { months: 24 } }),
+  ]);
+  const layer = separatePolicies([{ policyId: 'P1', kind: 'personal', coverBasis: 'individual' }], facts, { asOf: '2026-06-01' }).layers[0];
+  const find = (rule, topic) => layer.rules.find(r => r.rule === rule && r.topic === topic);
+  assert.equal(find('sum_insured', '').result.status, 'known');
+  assert.equal(find('sublimit', 'cataract').result.value.amountMinor, 300000);
+  assert.equal(find('waiting_period', 'hernia').result.value.months, 24);
+  // The general rule is still reported, and stays unknown rather than borrowing the disease-specific value.
+  assert.equal(find('sublimit', '').result.status, 'unknown');
+  assert.equal(find('waiting_period', '').result.status, 'unknown');
+});
+
+test('B3-3: identity, enrolment, claim-document and portability rules; network status is never permanently known', () => {
+  const facts = build([
+    fact({ factType: 'policy_identity', value: { insurer: 'Synthetic Insurer', productName: 'Synthetic Plan' } }),
+    fact({ factType: 'member_enrolment', topic: '', value: { status: 'enrolled' }, subject: { memberId: 'm1' } }),
+    fact({ factType: 'network_status', topic: 'synthetic hospital', value: { provider: 'Synthetic Hospital', status: 'network' } }),
+    fact({ factType: 'claim_documents', value: { documents: ['discharge summary'] } }),
+    fact({ factType: 'renewal_portability', value: { portable: true } }),
+    fact({ factType: 'claim_documents', topic: 'bad', value: { documents: [] } }),
+  ]);
+  const rules = evaluateRules(facts, { policyId: 'P1', memberId: 'm1', asOf: '2026-06-01' });
+  const one = (id, topic = '') => rules.find(r => r.rule === id && r.topic === topic).result;
+  assert.equal(one('policy_identity').status, 'known');
+  assert.equal(one('member_enrolment').status, 'known');
+  assert.equal(one('claim_documents').status, 'known');
+  assert.equal(one('renewal_portability').status, 'known');
+  assert.equal(one('network_status', 'synthetic hospital').status, 'dynamic');
+  assert.equal(one('network_status', 'synthetic hospital').value, null);
+  assert.equal(one('claim_documents', 'bad').status, 'unverified', 'malformed value never becomes a known empty list');
+  // Another member's enrolment is not this member's.
+  assert.equal(evaluateRules(facts, { policyId: 'P1', memberId: 'm2' }, ['member_enrolment'])[0].result.status, 'unknown');
+});
+
+test('B3-5: the curated catalogue ships empty and every entry must pass the validator', async () => {
+  const { CURATED_OFFICIAL_SOURCES } = await import('../src/features/decision-catalogue/index.js');
+  assert.ok(Object.isFrozen(CURATED_OFFICIAL_SOURCES));
+  for (const record of CURATED_OFFICIAL_SOURCES) assert.equal(validateOfficialSource(record, { today: '2026-10-20' }).valid, true);
+  assert.deepEqual(CURATED_OFFICIAL_SOURCES, []);
+});
