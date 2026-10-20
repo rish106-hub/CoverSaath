@@ -985,6 +985,35 @@ test('policy clauses and answers stay scoped, immutable and erase with their doc
   proves('policy_evidence_erase_on_document_erasure');
 });
 
+test('catalogue reviews need an active grant, stay immutable and erase with their document', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const scope = 'catalogue review must match an active document, case, household and active reviewer grant';
+  // The grant trigger: a household confirmer must hold a role in that household.
+  await insert(pool, 'adult_users', { id: 'adult-outsider' });
+  await rejects(insert(pool, 'catalogue_reviewer_grants', { id: 'grant-outsider', household_id: a.household, adult_user_id: 'adult-outsider' }), 'a household confirmer must hold a role in the household');
+  await insert(pool, 'catalogue_reviewer_grants', { id: 'grant-independent', household_id: a.household, adult_user_id: 'adult-outsider', kind: 'independent_reviewer', granted_by: 'operator:test' });
+  await insert(pool, 'catalogue_reviewer_grants', { id: 'grant-a', household_id: a.household, adult_user_id: a.adult });
+  proves('catalogue_reviewer_grants_scope_insert');
+
+  await rejects(insert(pool, 'catalogue_reviews', { id: 'cr-foreign', household_id: b.household, case_id: b.case, document_id: a.document }), scope);
+  await rejects(insert(pool, 'catalogue_reviews', { id: 'cr-wrong-authority', document_id: a.document, authority: 'independent' }), scope);
+  await pool.query("UPDATE catalogue_reviewer_grants SET status = 'revoked' WHERE id = 'grant-a'");
+  await rejects(insert(pool, 'catalogue_reviews', { id: 'cr-revoked', document_id: a.document }), scope);
+  await pool.query("UPDATE catalogue_reviewer_grants SET status = 'active' WHERE id = 'grant-a'");
+  await insert(pool, 'catalogue_reviews', { id: 'cr-1', document_id: a.document });
+  proves('catalogue_reviews_scope_insert');
+  await rejects(pool.query("UPDATE catalogue_reviews SET decision = 'rejected' WHERE id = 'cr-1'"), 'catalogue reviews are immutable; erasure deletes them');
+  assert.equal((await pool.query("UPDATE catalogue_reviews SET decision = 'rejected' WHERE false")).rowCount, 0, 'row-level: no row, no fire');
+  proves('catalogue_reviews_immutable');
+
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['quarantined', a.document]);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM catalogue_reviews')).n, 1, 'quarantine is not erasure');
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['deletion_requested', a.document]);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM catalogue_reviews')).n, 0);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM catalogue_reviewer_grants')).n, 2, 'grants are not content and survive');
+  proves('catalogue_reviews_erase_on_document_erasure');
+});
+
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const catalog = (await pool.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname")).rows.map(row => row.tgname);
