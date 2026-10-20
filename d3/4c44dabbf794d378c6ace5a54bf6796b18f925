@@ -1,0 +1,30 @@
+src/features/ai-analysis/privacy-evidence-gate.js
+  s_a2ce4c6a4ba23f::t_642191288c4311 14,1165-1271,1290
+src/evaluation/safety-evaluator.js
+  s_a2ce4c6a4ba23f::t_642191288c4311 2,4,70-75
+  s_a2ce4c6a4ba23f::t_9b21faff6c5543 76
+tests/evals/safety-evaluator.test.mjs
+  s_a2ce4c6a4ba23f::t_642191288c4311 22
+tests/privacy-gate-address-tail.test.mjs
+  s_a2ce4c6a4ba23f::t_642191288c4311 1-99
+tests/privacy-gate-r4.test.mjs
+  s_a2ce4c6a4ba23f::t_642191288c4311 44-46
+src/evaluation/fixtures/safety-reference-v1.json
+  s_a2ce4c6a4ba23f::t_642191288c4311 2,117-140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d34c44dabbf794d378c6ace5a54bf6796b18f925",
+  "prompts": {},
+  "sessions": {
+    "s_a2ce4c6a4ba23f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adf7af64-23ea-45b8-b5ea-6114b780b0a7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
