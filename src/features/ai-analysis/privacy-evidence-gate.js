@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 // closed on ID-shaped cells and whole-cell dates. Headers split over two rows are
 // read as one header; tab-separated tables (two or more tab rows) are refused as
 // restricted, because collapsing tabs loses the cell boundaries a header needs.
-export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v5';
+export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v6';
 export const EVIDENCE_DATA_CLASSES = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
 // The consent-scope recipient that names the live model provider. A document's
 // derive scope must name this exact recipient before its evidence may be sent
@@ -1162,6 +1162,113 @@ function redactSegment(segment, state, reasons) {
   return value;
 }
 
+// ---------------------------------------------------------------------------
+// Address tails
+// ---------------------------------------------------------------------------
+
+// The address clause stops at a full stop, ';' or a line end, so a locality,
+// "CITY-PIN", state or masked phone can follow <ADDRESS_n>. The placeholder
+// absorbs that tail, but only when it is anchored by an Indian PIN or a
+// partially masked phone, so unrelated prose and public insurer numbers stay.
+const ADDRESS_TOKEN = /<ADDRESS_[1-9][0-9]{0,5}>/g;
+const TAIL_MAX_LINES = 4;
+const TAIL_MAX_WORDS = 24;
+const TAIL_PIN = '(?<![\\d\\u20B9])[1-9]\\d{2} ?\\d{3}(?!\\d|[,.]\\d)';
+const TAIL_MASKED_PHONE = '(?:\\+?\\d{1,2}[ -]?)?[Xx*\\u2022]{3,}(?:[ -][Xx*\\u2022]+)*[ -]?\\d{2,5}(?!\\d)';
+const TAIL_ANCHOR = new RegExp(`${TAIL_PIN}|${TAIL_MASKED_PHONE}`, 'gu');
+const TAIL_PHONE_LABEL = '(?:(?:mobile|mob|phone|ph|tel|telephone|contact|cell)(?:\\s*(?:no\\.?|number|#))?[\\s.:=-]*)?';
+const TAIL_MASKED_PHONE_FIELD = new RegExp(`^[\\s,;]*${TAIL_PHONE_LABEL}${TAIL_MASKED_PHONE}`, 'iu');
+const TAIL_STATE_WORD = /^[ ,-]+(\p{L}[\p{L}\p{M}]*)/u;
+const TAIL_FUNCTION_WORDS = /^(?:and|or|the|a|an|of|to|in|on|at|for|with|by|from|as|if|not|all|any)$/iu;
+
+// Up to three plain words after the PIN (the state), stopping at policy wording.
+function stateWordsAfter(rest) {
+  let length = 0;
+  for (let count = 0; count < 3; count += 1) {
+    const word = rest.slice(length).match(TAIL_STATE_WORD);
+    if (!word || TAIL_FUNCTION_WORDS.test(word[1]) || TAIL_POLICY_WORDING.test(word[1])) break;
+    length += word[0].length;
+  }
+  return length;
+}
+// A field label ("Policy No:", "Email -") starts a new field and ends the tail.
+const TAIL_LABEL = /(?:^|[\s,])[\p{L}][\p{L}\p{N}. /&-]{0,30}[:=]/u;
+const TAIL_SENTENCE_END = /[.;](?:\s|$)/u;
+// Policy wording and amounts are not address text.
+const TAIL_POLICY_WORDING = /(?:[₹]|\b(?:rs|inr|sum|insured|premium|limit|cover|covered|coverage|policy|claim|benefit|waiting|period|days|years|per|is|are|will|shall|stamp|duty|helpline|toll|free|customer|care|call|centre|center|number|no|uin)\b)/iu;
+const TAIL_START_WORD = /^[\p{L}\p{M}\d#]/u;
+
+// Returns how many characters of `line` belong to an address tail and whether
+// the tail reached an anchor ("anchored") and the end of the line ("open").
+function addressTailInLine(line) {
+  const lead = line.match(/^[ \t,;.–—-]*/u)[0].length;
+  let body = line.slice(lead, lead + 200);
+  const ends = [body.indexOf('<'), body.search(TAIL_LABEL), body.search(TAIL_SENTENCE_END)].filter(index => index >= 0);
+  const cut = ends.length > 0 ? Math.min(...ends) : -1;
+  const open = cut < 0 && lead + 200 >= line.length;
+  if (cut >= 0) body = body.slice(0, cut);
+  if (body.trim() === '') return { end: 0, anchored: false, open: cut < 0, plain: true };
+  if (!TAIL_START_WORD.test(body) || TAIL_POLICY_WORDING.test(body) || body.split(/\s+/).length > TAIL_MAX_WORDS) {
+    return { end: 0, anchored: false, open: false, plain: false };
+  }
+  let anchorEnd = -1;
+  for (const match of body.matchAll(TAIL_ANCHOR)) anchorEnd = match.index + match[0].length;
+  if (anchorEnd < 0) return { end: lead + body.length, anchored: false, open, plain: true };
+  let end = lead + anchorEnd + stateWordsAfter(body.slice(anchorEnd));
+  const phone = line.slice(end).match(TAIL_MASKED_PHONE_FIELD);
+  if (phone) end += phone[0].length;
+  return { end, anchored: true, open: false, plain: true };
+}
+
+const TAIL_STATE_LINE = /^[ \t]*\p{Lu}[\p{L}]*(?: \p{Lu}[\p{L}]*){0,2}[ \t]*$/u;
+
+function absorbTailTrailers(text, lineEnd) {
+  let end = lineEnd;
+  for (let extra = 0; extra < 2 && end < text.length; extra += 1) {
+    const newline = text.indexOf('\n', end + 1);
+    const nextEnd = newline < 0 ? text.length : newline;
+    const next = text.slice(end + 1, nextEnd);
+    const phone = next.match(TAIL_MASKED_PHONE_FIELD);
+    const isPhone = phone && phone[0].length === next.trimEnd().length;
+    const isState = TAIL_STATE_LINE.test(next) && !TAIL_POLICY_WORDING.test(next);
+    if (!isPhone && !isState) break;
+    end = nextEnd;
+  }
+  return end;
+}
+
+// Walks the text after each <ADDRESS_n>: the rest of its line, then up to a few
+// short continuation lines, and drops the tail only if an anchor is reached.
+function absorbAddressTails(text) {
+  if (!text.includes('<ADDRESS_')) return text;
+  let out = '';
+  let cursor = 0;
+  for (const match of text.matchAll(ADDRESS_TOKEN)) {
+    const tokenEnd = match.index + match[0].length;
+    if (tokenEnd < cursor) continue;
+    let position = tokenEnd;
+    let consumedTo = -1;
+    for (let lineNumber = 0; lineNumber < TAIL_MAX_LINES && position <= text.length; lineNumber += 1) {
+      const newline = text.indexOf('\n', position);
+      const lineEnd = newline < 0 ? text.length : newline;
+      const result = addressTailInLine(text.slice(position, lineEnd));
+      if (result.anchored) {
+        consumedTo = position + result.end;
+        // The PIN or phone ended its line: a bare state line or a masked phone
+        // line can still follow.
+        if (consumedTo >= lineEnd) consumedTo = absorbTailTrailers(text, lineEnd);
+        break;
+      }
+      if (!result.plain || !result.open || newline < 0) break;
+      position = newline + 1;
+    }
+    if (consumedTo < 0) continue;
+    out += text.slice(cursor, tokenEnd);
+    cursor = consumedTo;
+  }
+  return out + text.slice(cursor);
+}
+
 function redactText(value, state) {
   rejectTabTables(value);
   const prepared = prepareText(value);
@@ -1180,7 +1287,7 @@ function redactText(value, state) {
   // member-table rows), then the per-segment pattern rules.
   const known = redactKnownIdentifiers(withoutLegacy, state.known, swap);
   const lined = redactLineStructures(known, swap);
-  const text = outsideTokens(lined, segment => redactSegment(segment, state, reasons));
+  const text = absorbAddressTails(outsideTokens(lined, segment => redactSegment(segment, state, reasons)));
   return { text, reasons: [...reasons].sort() };
 }
 
