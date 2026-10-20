@@ -1,5 +1,17 @@
 # Latest iteration
 
+## Address residuals R1-R3 and review gaps: privacy gate v9 (2026-10-20)
+
+Uncommitted on `codex/backend-first-layout`. No provider call.
+
+- Gate `knowvia-privacy-evidence-v9` (v8 plus the review-gap fixes below). R1: a capitalised place word right before a contiguous 6-digit PIN ("Sample Nagar, Testville 560001") is an address. R2/R3: `redactAddressFragments` redacts a comma-chained run of address-shaped pieces that holds a house-number start (Flat/House/Door/H.No; Plot/Shop need 3+ pieces), a landmark with a place noun (Near ... Temple), a locality/street name (Nagar, Colony, Road, Heights...) or a bare number start with 3+ pieces. A state line after a run is absorbed.
+- Decision: a standalone state or city name is kept (zone and territorial wording needs it; it does not identify a person). Not legal review.
+- Version pins edited in `privacy-gate-address-closure` and `privacy-gate-r4` tests (v7 to v9). No control weakened.
+- Independent read-only review: no blocker. v9 closes most of its gaps: an inline pass (`redactInlineLocalities`) redacts a locality name inside a sentence or on a long comma-less line (Nagar, Colony, Heights, Gali, Mohalla...; optional house number before and up to two capitalised place words after); hospital/insurer wording is judged per piece, and only a cell or line that OPENS with it (first two words, e.g. "Registered Office:") stays whole, so "Admitted at Sample Hospital, Sample Nagar, Testville" loses the locality; `;` splits runs like `,`; "Sector N, City" qualifies; Gali/Mohalla/Bazaar/Bazar added; a bare house-number line above a redacted address goes with it. Trade-off: an insurer address that does not open with public wording is now redacted (safe side).
+- v9 second pass (same gate version): lowercase/OCR-lowercase lines get a stricter rule (strong suffix or house keyword + number + comma piece; only on lines with no capital letter); Devanagari locality words (नगर, कॉलोनी, विहार, मार्ग, गली...) with optional house keyword/number; spaced PIN "Testville 560 001" (not when amount or benefit words like copay/limit/sum/premium sit in the run); comma-less "Flat 12 Example Apartments Testville"; glued suffixes (Samplepur, ...halli) count only in a 3+ piece run that also holds a digit, because bare city names (Hyderabad, Ahmedabad) must stay for zone wording.
+- Still open (fail-open, by design or unsolved): a comma-less line with no suffix word, no house keyword and no PIN ("12 Foo Bar Testville") is indistinguishable from prose; a bare city or glued-suffix locality with no digit in the run; mixed-case OCR lines with lowercase localities; Devanagari addresses without a listed locality word. Known false positive: "Basic Plan 123456" is redacted.
+- Checks: `npm run check` 881 tests, 828 pass, 0 fail; `eval:safety` 0 failures, `check:architecture`, `git diff --check` clean. The G4 timing test sits near its 200 ms limit under full-suite load (flaked once at ~500 ms from a real O(n^2) in the new inline regex, fixed with a word-start lookbehind; later runs pass).
+
 ## Block 2 delta close-out: privacy v7, answer guards, retrieval tuning (2026-10-20)
 
 Uncommitted on `codex/backend-first-layout`, base `d34c44d`. No provider call, no commit.
