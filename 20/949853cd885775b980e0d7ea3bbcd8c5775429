@@ -1,0 +1,31 @@
+src/features/decision-catalogue/index.js
+  s_c52538788cad78::t_e2f8863e160db9 11
+src/backend/services/decision-catalogue-service.js
+  s_c52538788cad78::t_0045a8b6b839b4 3,37-49,55,96,107,109,111-112
+tests/catalogue-review-api.test.mjs
+  s_c52538788cad78::t_85b82f26c2e350 20
+tests/decision-catalogue-api.test.mjs
+  s_c52538788cad78::t_85b82f26c2e350 20,236-240
+src/features/decision-catalogue/association.js
+  s_c52538788cad78::t_e2f8863e160db9 1-49
+tests/decision-catalogue-association.test.mjs
+  s_c52538788cad78::t_e2f8863e160db9 1-54
+docs/iterations/LATEST.md
+  s_c52538788cad78::t_5a8b90bcea8de5 3-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "20949853cd885775b980e0d7ea3bbcd8c5775429",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
