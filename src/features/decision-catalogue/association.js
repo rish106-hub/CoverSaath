@@ -18,7 +18,7 @@ export function extractPolicyNumbers(text) {
   return [...found];
 }
 
-export const logicalPolicyId = number => `pol-${createHash('sha256').update(`coversaath-policy:${number}`).digest('hex').slice(0, 24)}`;
+export const logicalPolicyId = number => `pol-${createHash('sha256').update(`policy-association/v1:${number}`).digest('hex').slice(0, 24)}`;
 
 /**
  * @param clauseRows   ClauseRepository rows (documentId, text)
