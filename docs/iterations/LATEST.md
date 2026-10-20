@@ -1,5 +1,32 @@
 # Latest iteration
 
+## Block 2 close-out: baseline audit and document boundaries D1, D1a, D1b, D2, D3 (2026-10-20)
+
+Base: HEAD `5b31739`, equal to `origin/main` `fee77db`.
+Audit: [block-2-closeout-audit.md](../exec-plans/active/block-2-closeout-audit.md). Block 2 decision: **NO-GO**.
+
+Owner decisions applied (all "recommended" options):
+- D1/D1a: a question reads only the latest active version of each logical document. The version is household-wide
+  (`DocumentRepository.latestActiveVersions`), so a newer version in another case still supersedes. Authorised
+  superseded versions are reported (`superseded_version`) and never read. A bad version number or a case over
+  1,000 documents fails closed.
+- D2: with more than one current authorised document, POST must carry `documentIds` (1 to 10). Otherwise it fails
+  with 409 `POLICY_EVIDENCE_DOCUMENTS_REQUIRED`. Every named document must be active in the case (404), granted (403)
+  and current (409). The answer carries `documentAssociation {basis: requester_named, verified: false}`. Granted
+  documents that were not named are reported (`not_named`). `documentIds` is part of the idempotency digest.
+- D3: answers store `access` (grant, subject, read documents) in `answer_json`. It is never returned. Replay and GET
+  re-check the question grant (expired: `CONSENT_REQUIRED`). A row without `access` is never served.
+- D1b: a replay whose documents are no longer active or current gives 409 `POLICY_EVIDENCE_ANSWER_STALE`, with no
+  model call. GET returns `current: false`. Currency is also re-checked at commit, as consent already is.
+- Owner questions from review: a household member may read another adult's answer through the case (pre-existing).
+  An older version becomes current again if the newer one is removed. Pre-change answer rows are refused
+  (no live rows exist: the live DB lacks migration 015).
+- Not done: live question journey, retrieval recall (no golden file), DB still at `.local/.local/`. PostgreSQL has
+  no `latestActiveVersions` (SQLite runtime only).
+- Checks: `npm run check` 782 tests, 729 pass, 0 fail, 53 skipped (PostgreSQL without `TEST_DATABASE_URL`, live
+  services). `eval:safety` 23/23. `git diff --check` clean. Two independent read-only reviews: no blocker. No provider call made.
+- Commits `523ccd1` and `5b31739` (grounding, sweep, budgets, completeness, discoverability) are on `main`.
+
 ## Evidence-first review fixes (2026-10-20)
 
 Uncommitted on `codex/backend-first-layout`.

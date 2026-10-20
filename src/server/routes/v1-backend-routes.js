@@ -346,12 +346,13 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
           question: requiredString(body.question, 'question', { max: 2000 }),
           consentGrantId: requiredString(body.consentGrantId, 'consentGrantId'),
           idempotencyKey: idempotencyKey(req),
+          documentIds: body.documentIds,
         });
         return { status: stored.replayed ? 200 : 201, body: { answerId: stored.answerId, replayed: stored.replayed, answer: stored.answer } };
       }
       if (req.method === 'GET' && questionsMatch[2]) {
         const stored = getEvidenceService().get({ caseRecord, answerId: questionsMatch[2] });
-        return { status: 200, body: { answerId: stored.answerId, answer: stored.answer } };
+        return { status: 200, body: { answerId: stored.answerId, current: stored.current, answer: stored.answer } };
       }
     }
     const sourcePackMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/source-pack$/);

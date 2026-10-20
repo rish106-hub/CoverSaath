@@ -142,27 +142,31 @@ function serviceWorld({ total, granted, incomplete = new Set() }) {
     return { json: { overrides: [] } };
   }, { maxInputBytes: 64_000 });
   const service = createPolicyEvidenceService({ services, loadKnownIdentifiers: async () => [], createModelCall, env: { POLICY_EVIDENCE_ENABLED: 'true' } });
-  const askService = () => service.ask({ caseRecord: { id: 'c', household_id: 'h' }, subjectAdultId: 'a', question: QUESTION, consentGrantId: 'g', idempotencyKey: 'idem-key-0001' });
+  const askService = documentIds => service.ask({ caseRecord: { id: 'c', household_id: 'h' }, subjectAdultId: 'a', question: QUESTION, consentGrantId: 'g', idempotencyKey: 'idem-key-0001', documentIds });
   return { askService, payloads };
 }
 
-test('S1: 12 authorised documents read 10 and report 2 excluded; the answer is never evidence_found', async () => {
+// D2 (2026-10-20): several current documents are read together only when the request names them (at most 10).
+test('S1: several authorised documents need documentIds; 10 named documents are all read', async () => {
   const { askService, payloads } = serviceWorld({ total: 14, granted: new Set(Array.from({ length: 12 }, (_, index) => `doc-${index + 2}`)) });
-  const { answer } = await askService();
+  await assert.rejects(askService(), { code: 'POLICY_EVIDENCE_DOCUMENTS_REQUIRED' });
+  assert.equal(payloads.length, 0, 'nothing is sent without a named document set');
+  await assert.rejects(askService(['doc-0', 'doc-2']), { code: 'CONSENT_SCOPE_REQUIRED' }, 'an unauthorised named document fails the request');
+  const { answer } = await askService(Array.from({ length: 10 }, (_, index) => `doc-${index + 2}`));
   const sentDocuments = new Set(payloads[0].payload.clauses.map(clause => clause.document_id));
   assert.equal(sentDocuments.size, 10);
   assert.ok(!sentDocuments.has('doc-0') && !sentDocuments.has('doc-1'), 'unauthorised documents are never read');
   assert.equal(answer.completeness.documentsAuthorised, 12, 'unauthorised documents are not counted');
   assert.equal(answer.completeness.documentsRead, 10);
-  assert.deepEqual(answer.completeness.documentsExcluded, [{ reason: 'over_document_limit', count: 2 }]);
-  assert.ok(answer.unknowns.some(text => /^2 authorised document\(s\) were not read/.test(text)));
+  assert.deepEqual(answer.completeness.documentsExcluded, [{ reason: 'not_named', count: 2 }]);
+  assert.ok(answer.unknowns.some(text => /^2 authorised document\(s\) were not read because the request did not name them/.test(text)));
   assert.equal(answer.state, 'conditional');
   assert.doesNotMatch(answer.unknowns.join(' '), /doc-/, 'no document identifiers in unknowns');
 });
 
 test('S1: an authorised document without complete stored text is reported, not skipped silently', async () => {
   const { askService } = serviceWorld({ total: 2, granted: new Set(['doc-0', 'doc-1']), incomplete: new Set(['doc-1']) });
-  const { answer } = await askService();
+  const { answer } = await askService(['doc-0', 'doc-1']);
   assert.deepEqual(answer.completeness.documentsExcluded, [{ reason: 'ocr_incomplete', count: 1 }]);
   assert.equal(answer.completeness.documentsAuthorised, 2);
   assert.equal(answer.completeness.documentsRead, 1);

@@ -1,0 +1,121 @@
+# Block 2 final close-out: baseline audit (A1)
+
+Phase B2-0, read-only. Date 2026-10-20. No code, data or provider was touched to produce this report.
+Counts and identifiers only; no policy text, member data or provider payloads appear here.
+
+## Repository state
+
+| Item | Value |
+|---|---|
+| Branch | `codex/backend-first-layout` |
+| HEAD | `5b31739` (evidence retrieval hardening) |
+| `origin/main` | `fee77db` = merge of `5b31739` (the brief's baseline). No newer remote commits. |
+| Working tree | clean before this file |
+| Node | v26.11.1 |
+
+## Checks run (local, offline, no provider calls)
+
+| Command | Result |
+|---|---|
+| `npm run check` (architecture + test + build) | PASS. 761 tests, 708 pass, 0 fail, 53 skipped |
+| Skips | PostgreSQL suites (no `TEST_DATABASE_URL`) and opt-in live Sarvam/Gemini tests |
+| `npm run eval:safety` | PASS. 23 cases, `failures: []`. Synthetic regression only |
+
+## Live evidence that already exists (not re-run)
+
+`.local/live-backend-run-2026-10-20T04-15-44-884Z/run-summary.json` (local, mode 700):
+
+- One real 20-page policy (sanitised derivative) went through the backend: upload, Sarvam OCR (6 HTTP calls), Gemini
+  **structuring** (15 calls, 50.6k in / 66.7k out tokens, $0.288, 464 s wall clock incl. resume).
+- 20 of 20 pages stored, all with layout blocks. 0 known names in the Gemini trace; 0 secrets in the provider trace.
+- This is the old registry-structuring path. **No question-time (evidence) call has ever run live.**
+- The run DB is the legacy `.local/.local/knowvia.sqlite`: 14 migrations, no `policy_clauses`, no question consent scope.
+
+## Status by phase
+
+| Phase | Implemented | Tested offline | Live / measured | Status |
+|---|---|---|---|---|
+| B2-1 OCR completeness | Yes (10-page segments, remap, fail-closed partials, durable jobs, revocation) | Yes (1/10/11/47/100-page splits, partial/dup/reorder) | 1 doc, 20/20 pages | PASS offline; live corpus NOT TESTED |
+| B2-2 Canonical evidence | Yes (deterministic clauses, digests, FTS triggers, erasure) | Yes | Not run | FAIL: superseded-version defect (D1) |
+| B2-3 Retrieval / investigation | Yes (whole-policy vs FTS, budgets, sweep, grounding, completeness) | Yes, fixture provider | Not run | NOT TESTED live; recall unmeasured |
+| B2-4 Policy identity | Unknown-note only when >1 document | Partial | n/a | FAIL (D1, D2); ADR 0007 blocked by U2 |
+| B2-5 Golden corpus | Evaluator exists (`recall-eval.js`, `eval:retrieval`) | Yes | No golden file (`.local/eval/retrieval-golden.json` absent) | BLOCKED: owner data |
+| B2-6 Live journey | Routes exist | Mocked API tests | Never run | BLOCKED: approval, DB move |
+| B2-7 Security / lifecycle | Consent, gate, household scope, erasure on revoke/delete | Yes | Not run | Open question D3 |
+| B2-8 Close-out | — | — | — | NO-GO today |
+
+## Defects and open findings
+
+**D1. Superseded document versions are read as current (B2-2, B2-4). Severity: high (can mislead).**
+Uploads carry `logicalDocumentId` + `version`; `findVersion` only blocks an exact duplicate
+(`document-intake-service.js:71`). Version 1 stays `active` when version 2 is uploaded. The question service reads
+every active document the grant names (`policy-evidence-service.js:72`), with no logical-version filter. Both versions
+reach the model; the answer only says "2 documents were read together", never "one is superseded". Evidence: code
+path; no test covers it (`grep` of `tests/policy-evidence-*`). Reproducing test to be written first.
+
+*D1 fixed 2026-10-20 (uncommitted).* `policy-evidence-service.js` reads only the latest active version per logical
+document in the case, even when the grant names only an older one. Authorised superseded versions are reported as
+`documentsExcluded` reason `superseded_version` and in `unknowns`, and do not use document-limit slots. All
+authorised documents superseded gives `POLICY_EVIDENCE_SUPERSEDED` (409). A non-integer version gives
+`POLICY_EVIDENCE_VERSION_INVALID`, and a case listing over 1,000 rows gives `POLICY_EVIDENCE_CASE_TOO_LARGE`. Both fail closed.
+Tests: `tests/policy-evidence-document-versions.test.mjs` (8; 3 red before the fix). Service-level with stubs, not
+through the real API. Independent read-only review: no consent or household bypass. Open items from the review:
+- **D1a (gap):** `logicalDocumentId` is household-scoped, so a v2 uploaded to another case does not supersede v1 in
+  this case. Needs a household-wide version lookup or an owner decision.
+- **D1b (gap):** answer replay is keyed on case, question and grant only. A replayed answer can predate a newer version.
+  Same family as D3.
+- **D1c (accepted):** a newer active version the grant does not name still supersedes the old one. The 409 and the
+  unknown reveal that it exists. It is the same household's own case document, already listable by them.
+
+**D1a, D1b, D2, D3 fixed 2026-10-20** per owner decisions (all recommended options); see `LATEST.md` for behaviour.
+Tests: `tests/policy-evidence-document-versions.test.mjs` (19, service level), persistence round trip of `access`
+and `latestActiveVersions` on SQLite, and API assertions (`current`, no access leak). Second independent review: no
+blocker. Fixes applied from it: fail-closed version lookup, case check on currency, `not_named` completeness, and
+currency re-checked at commit. Owner questions remain on cross-adult reads and version rollback.
+
+**D2. Multi-document answers merge findings with a warning only (B2-4). Severity: medium.**
+`assembleAnswer` (`investigate.js:244-245`) adds one unknown when >1 document is read but still pools findings from
+documents whose policy association is unknown. Not silent, and state is forced to `conditional`, but a schedule of
+policy A plus wording of policy B in one case yields one combined answer. Conservative MVP option: answer per
+document, or refuse >1 unassociated logical document unless the request names one.
+
+**D3. Answers survive consent expiry (B2-7). Owner decision, not yet a defect.**
+Revocation and document erasure delete answers (`consent-repository.js:250,429`). Expiry does not: the replay
+(`policy-evidence-service.js:66-68`) and `GET` read stored answers without a consent check. No data reaches a provider
+on replay, so it is retention, not disclosure. Needs a rule: erase on expiry, block reads after expiry, or keep.
+
+**D4. Docs out of date.** `LATEST.md` has no entry for commits `523ccd1`/`5b31739` and says `/docs` is gitignored
+while the files are tracked (the ignore rule only stops new files). `direction-change.md:20` has stray text in a
+heading. `pipeline-blocks.md` Block 2 section predates ADR 0008. `block-2-sarvam-document-ai.md` says no live call
+was made; the 2026-10-20 run did make one.
+
+**D5. Ops blocker.** Live DB at `.local/.local/knowvia.sqlite`; the server refuses to start (`DATABASE_LEGACY_PATH`).
+Moving it is a manual, owner-approved step (runbook `local-database.md`). Migrations 015/016 then need `db:init`.
+
+No defect found in: page limits (500 everywhere, 10-page Sarvam segments), FTS query construction (operators
+stripped, `clause-repository.js:24`), household scoping of clause and answer reads, prompt-injection instructions
+(`structuring-contract.js:27,37`), gate on every clause and on the question.
+
+## Blocked on the owner
+
+1. **Golden corpus (B2-5).** 3 to 5 real policy sets and 30 to 50 human-verified questions with required clauses and
+   overrides. I can draft candidate questions from stored clause ids, but human verification cannot be done by me.
+2. **Paid calls (B2-6).** Question-time Gemini on the stored 20-page policy: estimate about $0.01 to $0.03 per question
+   (about 17k input tokens whole-policy, unmeasured). 15 to 50 questions: under $2. Needs explicit approval and a budget.
+   No new Sarvam call is needed for the existing document; new corpus documents each need OCR (paid).
+3. **DB move** (D5) and a document-specific `insurance_question` grant for the test household.
+4. **Decision on D2 and D3.**
+
+## Proposed execution order (smallest path to GO)
+
+1. D1: red test (v1 + v2 same logical id, both active, grant names both) then filter to the latest active version per
+   logical document and report superseded versions in `completeness`. Narrow tests, independent review.
+2. D2: implement the chosen conservative boundary. Red test first.
+3. D3: implement the chosen expiry rule if any.
+4. Docs: LATEST, Block 2 plan status, pipeline-blocks.
+5. With approval: move DB, `db:init`, run the live question journey (B2-6) on the stored policy with owner-written
+   questions; record tokens, cost, latency, citations checked by the owner.
+6. With the owner's corpus: `npm run eval:retrieval`, recall report (A4).
+7. Close-out report (A7) with GO/NO-GO.
+
+Today's decision: **NO-GO.** Live question journey never run, recall unmeasured, D1 open.

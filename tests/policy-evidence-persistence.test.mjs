@@ -39,6 +39,7 @@ const count = (database, table) => database.prepare(`SELECT count(*) AS count FR
 const answer = (extra = {}) => ({ question: 'cataract?', covered: [], limited_or_excluded: [], conditions: [], overrides_checked: [], unknowns: ['x'], calculations: [], sources: [{ documentId, page: 2, quote: 'q' }], state: 'conditional', legalReview: 'required', ...extra });
 const saveAnswer = (services, key = 'idem-key-0001', digest = 'a'.repeat(64)) => services.clauses.saveAnswer({
   householdId: household, caseId, requestedByAdultId: 'adult-parameters', idempotencyKey: key, requestDigest: digest, question: 'cataract?', answer: answer(),
+  access: { consentGrantId: 'grant-question', subjectAdultId: 'adult-parameters', documentIds: [documentId] },
 });
 
 test('B1: clauses persist, replay as no-ops and list in page order', t => {
@@ -121,4 +122,27 @@ test('B4 storage: answers replay on the same key and digest and conflict on a di
   assert.equal(replay.answerId, first.answerId);
   assert.throws(() => saveAnswer(services, 'idem-key-0001', 'b'.repeat(64)), { code: 'IDEMPOTENCY_KEY_REUSED' });
   assert.equal(count(database, 'policy_answers'), 1);
+});
+
+test('answer access metadata round-trips beside the answer, never inside it', t => {
+  const { services } = open(t);
+  const saved = saveAnswer(services);
+  assert.deepEqual(saved.access, { consentGrantId: 'grant-question', subjectAdultId: 'adult-parameters', documentIds: [documentId] });
+  assert.equal(Object.hasOwn(saved.answer, 'access'), false);
+  const read = services.clauses.getAnswer({ householdId: household, caseId, answerId: saved.answerId });
+  assert.deepEqual(read.access, saved.access);
+  assert.equal(Object.hasOwn(read.answer, 'access'), false);
+  assert.throws(() => services.clauses.saveAnswer({
+    householdId: household, caseId, requestedByAdultId: 'adult-parameters', idempotencyKey: 'idem-key-0002', requestDigest: 'c'.repeat(64), question: 'cataract?', answer: answer(),
+  }), { code: 'CLAUSE_INPUT_INVALID' });
+});
+
+test('latest active version per logical document is household-scoped and fails closed on a bad version', t => {
+  const { database, services } = open(t);
+  database.prepare("UPDATE document_uploads SET logical_document_id = 'logical-wording', source_version = '3' WHERE id = ?").run(documentId);
+  assert.deepEqual([...services.documents.latestActiveVersions(household, ['logical-wording', 'logical-absent'])], [['logical-wording', 3]]);
+  assert.equal(services.documents.latestActiveVersions('household-other', ['logical-wording']).size, 0);
+  database.prepare("UPDATE document_uploads SET source_version = 'v3' WHERE id = ?").run(documentId);
+  assert.ok(Number.isNaN(services.documents.latestActiveVersions(household, ['logical-wording']).get('logical-wording')));
+  assert.equal(services.documents.latestActiveVersions(household, []).size, 0);
 });

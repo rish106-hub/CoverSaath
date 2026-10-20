@@ -170,6 +170,25 @@ export class DocumentRepository {
       ORDER BY uploaded_at, id LIMIT ?`).all(caseId, householdId, limit).map(toRecord);
   }
 
+  // Highest active version per logical document across the household: a newer version may sit in another case.
+  // A version that is not a positive integer is returned as NaN so the caller fails closed.
+  latestActiveVersions(householdId, logicalDocumentIds) {
+    const ids = [...new Set(logicalDocumentIds)];
+    if (ids.length > 1_000) throw coded('DOCUMENT_INPUT_INVALID', 'Too many logical documents.', 400);
+    const latest = new Map();
+    if (!ids.length) return latest;
+    const rows = this.database.prepare(`SELECT logical_document_id, source_version FROM document_uploads
+      WHERE household_id = ? AND lifecycle_state = 'active' AND logical_document_id IN (${ids.map(() => '?').join(',')})`)
+      .all(householdId, ...ids);
+    for (const row of rows) {
+      const parsed = /^[1-9][0-9]*$/.test(row.source_version) ? Number(row.source_version) : Number.NaN;
+      const version = Number.isSafeInteger(parsed) ? parsed : Number.NaN;
+      const current = latest.get(row.logical_document_id);
+      latest.set(row.logical_document_id, Number.isNaN(version) || Number.isNaN(current) ? Number.NaN : Math.max(current ?? 0, version));
+    }
+    return latest;
+  }
+
   // Work for the background worker. Deletion work (revocation, malware hits) always comes first
   // so a backlog of deferred scans can never starve erasure. Scans are due when next_scan_at has
   // passed; a scanner outage pushes next_scan_at forward instead of stranding the row.
