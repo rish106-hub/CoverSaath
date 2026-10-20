@@ -19,7 +19,7 @@ test('versioned synthetic reference suite meets every offline threshold', async 
   assert.equal(report.score, 1);
   assert.equal(report.networkCalls, 0);
   assert.equal(report.estimatedCostInr, 0);
-  assert.equal(report.results.length, 23);
+  assert.equal(report.results.length, 26);
   assert.match(report.limitation, /does not measure model accuracy/i);
   assert.ok(Object.values(report.byDimension).every(dimension => dimension.passed));
 });

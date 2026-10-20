@@ -1,5 +1,13 @@
 # Latest iteration
 
+## 2026-10-20 — Privacy finding P1 (address tail)
+
+- Privacy gate `knowvia-privacy-evidence-v6`: `<ADDRESS_n>` now absorbs the locality, "CITY-PIN", state and partially masked phone that follow it (same line and up to four continuation lines), but only when anchored by a 6-digit PIN or masked phone. Public insurer numbers (UIN, helplines, stamp references) and policy wording are kept. The change only removes text after a placeholder; it never adds raw data.
+- Evidence: `tests/privacy-gate-address-tail.test.mjs` (red first), three `eval:safety` cases (dataset `2026-10-20.1`, 26 cases), `npm run check` 753 pass, `check:architecture`, `git diff --check`.
+- Existing test edits (pins only, no control weakened): version assertion in `tests/privacy-gate-r4.test.mjs` v5 to v6; case count 23 to 26 in `tests/evals/safety-evaluator.test.mjs`.
+- Independent read-only review found one blocking item (exponential backtracking in the masked-phone pattern); fixed with a regression test.
+- Known residual (not fixed, fail-open recall gaps): tails with no PIN or masked-phone anchor, Devanagari tails, PIN with odd spacing, table-cell tails, tails over 24 words or five lines. Not legal review. No live provider call made.
+
 ## Block 2 close-out: baseline audit and document boundaries D1, D1a, D1b, D2, D3 (2026-10-20)
 
 Base: HEAD `5b31739`, equal to `origin/main` `fee77db`.
