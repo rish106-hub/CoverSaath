@@ -23,6 +23,7 @@ import { parameterAt, parameterIds, seedParameterWorld } from '../tests/support/
 const argument = name => { const index = process.argv.indexOf(name); return index > -1 ? process.argv[index + 1] : undefined; };
 const maxInputBytes = argument('--max-input-bytes') === undefined ? undefined : Number(argument('--max-input-bytes'));
 const findingsPath = argument('--findings');
+const tuning = argument('--tuning') === undefined ? undefined : JSON.parse(argument('--tuning'));
 const firstPassFindings = findingsPath ? JSON.parse(await readFile(resolve(findingsPath), 'utf8')) : null;
 const golden = JSON.parse(await readFile(resolve('.local/eval/retrieval-golden.json'), 'utf8'));
 const database = openDatabase({ path: ':memory:' });
@@ -34,6 +35,6 @@ try {
   const { clauses } = buildClauses(stored, { documentId, sourceVersion: 'eval-v1' });
   services.clauses.saveClauses({ householdId, caseId, documentId, clauses });
   const search = ({ query, kinds, limit }) => services.clauses.searchClauses({ householdId, caseId, documentIds: [documentId], query, kinds, limit });
-  const report = evaluateRecall({ clauses: services.clauses.listClauses({ householdId, caseId, documentIds: [documentId] }), search, golden: golden.questions, maxInputBytes, firstPassFindings });
+  const report = evaluateRecall({ clauses: services.clauses.listClauses({ householdId, caseId, documentIds: [documentId] }), search, golden: golden.questions, maxInputBytes, firstPassFindings, tuning });
   console.log(JSON.stringify(report, null, 2));
 } finally { database.close(); }

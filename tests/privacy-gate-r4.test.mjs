@@ -41,9 +41,9 @@ function assertNoFragments(label, body, fragments) {
   for (const fragment of fragments) assert.ok(!body.includes(fragment), `${label}: "${fragment}" survived in ${body}`);
 }
 
-test('gate version is v6', () => {
-  assert.equal(PRIVACY_EVIDENCE_GATE_VERSION, 'knowvia-privacy-evidence-v6');
-  assert.equal(toModel('Room rent limit is 5000.').audit.gateVersion, 'knowvia-privacy-evidence-v6');
+test('gate version is v7', () => {
+  assert.equal(PRIVACY_EVIDENCE_GATE_VERSION, 'knowvia-privacy-evidence-v7');
+  assert.equal(toModel('Room rent limit is 5000.').audit.gateVersion, 'knowvia-privacy-evidence-v7');
 });
 
 test('N1: whitespace runs do not defeat identifier detection (storage and model)', () => {

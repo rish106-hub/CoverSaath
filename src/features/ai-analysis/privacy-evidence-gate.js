@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 // closed on ID-shaped cells and whole-cell dates. Headers split over two rows are
 // read as one header; tab-separated tables (two or more tab rows) are refused as
 // restricted, because collapsing tabs loses the cell boundaries a header needs.
-export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v6';
+export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v7';
 export const EVIDENCE_DATA_CLASSES = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
 // The consent-scope recipient that names the live model provider. A document's
 // derive scope must name this exact recipient before its evidence may be sent
@@ -1171,9 +1171,11 @@ function redactSegment(segment, state, reasons) {
 // absorbs that tail, but only when it is anchored by an Indian PIN or a
 // partially masked phone, so unrelated prose and public insurer numbers stay.
 const ADDRESS_TOKEN = /<ADDRESS_[1-9][0-9]{0,5}>/g;
-const TAIL_MAX_LINES = 4;
-const TAIL_MAX_WORDS = 24;
-const TAIL_PIN = '(?<![\\d\\u20B9])[1-9]\\d{2} ?\\d{3}(?!\\d|[,.]\\d)';
+const TAIL_MAX_LINES = 8;
+const TAIL_MAX_WORDS = 60;
+const TAIL_WINDOW = 240;
+// A PIN may be spaced or hyphenated irregularly ("560 001", "56 0001", "5 6 0 0 0 1", "560-001").
+const TAIL_PIN = '(?<![\\d\\u20B9])[1-9](?:[ -]?\\d){5}(?!\\d|[,.]\\d)';
 const TAIL_MASKED_PHONE = '(?:\\+?\\d{1,2}[ -]?)?[Xx*\\u2022]{3,}(?:[ -][Xx*\\u2022]+)*[ -]?\\d{2,5}(?!\\d)';
 const TAIL_ANCHOR = new RegExp(`${TAIL_PIN}|${TAIL_MASKED_PHONE}`, 'gu');
 const TAIL_PHONE_LABEL = '(?:(?:mobile|mob|phone|ph|tel|telephone|contact|cell)(?:\\s*(?:no\\.?|number|#))?[\\s.:=-]*)?';
@@ -1196,24 +1198,51 @@ const TAIL_LABEL = /(?:^|[\s,])[\p{L}][\p{L}\p{N}. /&-]{0,30}[:=]/u;
 const TAIL_SENTENCE_END = /[.;](?:\s|$)/u;
 // Policy wording and amounts are not address text.
 const TAIL_POLICY_WORDING = /(?:[₹]|\b(?:rs|inr|sum|insured|premium|limit|cover|covered|coverage|policy|claim|benefit|waiting|period|days|years|per|is|are|will|shall|stamp|duty|helpline|toll|free|customer|care|call|centre|center|number|no|uin)\b)/iu;
+// "Plot No 5", "Flat No. 12", "Door #3" are house numbers, not the word "no" in policy wording.
+const HOUSE_NUMBER = /\b(?:plot|flat|door|house|shop|room|unit|block|sector|ward|survey|h)\.?\s*(?:no\.?|number|#)/giu;
+const maskHouseNumbers = text => text.replace(HOUSE_NUMBER, match => ' '.repeat(match.length));
+const hasPolicyWording = text => TAIL_POLICY_WORDING.test(maskHouseNumbers(text));
 const TAIL_START_WORD = /^[\p{L}\p{M}\d#]/u;
+
+// A PIN label ("PIN:", "Pin Code -") belongs to the address, not to a new field.
+const PIN_LABEL = /\b(?:pin|zip)(?: ?code)?\s*[:=]/giu;
+const ADDRESS_WORDS = new Set(['near', 'opp', 'opposite', 'behind', 'beside', 'nr', 'off', 'road', 'rd', 'cross', 'main', 'po', 'ps', 'dist', 'via', 'and', 'of', 'the', 'at', 'post', 'pin', 'code', 'taluk', 'tehsil', 'nagar', 'colony', 'street', 'lane', 'layout', 'phase', 'extn', 'extension']);
+const ADDRESS_TOKEN_SHAPE = /^[\p{Lu}\p{Lo}\p{N}#(][\p{L}\p{M}\p{N}/.,()#&:-]*$/u;
+const isAddressLike = text => {
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  return tokens.length > 0 && tokens.every(token => ADDRESS_TOKEN_SHAPE.test(token) || ADDRESS_WORDS.has(token.toLowerCase().replace(/[.,]+$/u, '')));
+};
 
 // Returns how many characters of `line` belong to an address tail and whether
 // the tail reached an anchor ("anchored") and the end of the line ("open").
+// `like` marks address-shaped text with no anchor, `strong` such text with a
+// comma or digit, and `overflow` a line longer than the scan window.
 function addressTailInLine(line) {
   const lead = line.match(/^[ \t,;.–—-]*/u)[0].length;
-  let body = line.slice(lead, lead + 200);
-  const ends = [body.indexOf('<'), body.search(TAIL_LABEL), body.search(TAIL_SENTENCE_END)].filter(index => index >= 0);
+  let body = line.slice(lead, lead + TAIL_WINDOW);
+  const scan = body.replace(PIN_LABEL, match => ' '.repeat(match.length));
+  const ends = [body.indexOf('<'), scan.search(TAIL_LABEL), body.search(TAIL_SENTENCE_END)].filter(index => index >= 0);
   const cut = ends.length > 0 ? Math.min(...ends) : -1;
-  const open = cut < 0 && lead + 200 >= line.length;
+  const overflow = cut < 0 && lead + TAIL_WINDOW < line.length;
+  const open = cut < 0 && !overflow;
   if (cut >= 0) body = body.slice(0, cut);
   if (body.trim() === '') return { end: 0, anchored: false, open: cut < 0, plain: true };
-  if (!TAIL_START_WORD.test(body) || TAIL_POLICY_WORDING.test(body) || body.split(/\s+/).length > TAIL_MAX_WORDS) {
+  // Policy wording after the PIN ("... 56 0001 and cataract surgery is capped ...") ends the tail at the PIN.
+  const wording = maskHouseNumbers(body).search(TAIL_POLICY_WORDING);
+  if (wording >= 0) {
+    let lastAnchor = -1;
+    for (const match of body.slice(0, wording).matchAll(TAIL_ANCHOR)) lastAnchor = match.index + match[0].length;
+    if (lastAnchor >= 0) body = body.slice(0, lastAnchor + stateWordsAfter(body.slice(lastAnchor, wording)));
+  }
+  if (!TAIL_START_WORD.test(body) || hasPolicyWording(body) || body.split(/\s+/).length > TAIL_MAX_WORDS) {
     return { end: 0, anchored: false, open: false, plain: false };
   }
   let anchorEnd = -1;
   for (const match of body.matchAll(TAIL_ANCHOR)) anchorEnd = match.index + match[0].length;
-  if (anchorEnd < 0) return { end: lead + body.length, anchored: false, open, plain: true };
+  if (anchorEnd < 0) {
+    const like = isAddressLike(body);
+    return { end: lead + body.trimEnd().length, anchored: false, open, plain: like, like, strong: like && /[,\d]/.test(body), overflow: overflow && like };
+  }
   let end = lead + anchorEnd + stateWordsAfter(body.slice(anchorEnd));
   const phone = line.slice(end).match(TAIL_MASKED_PHONE_FIELD);
   if (phone) end += phone[0].length;
@@ -1238,7 +1267,10 @@ function absorbTailTrailers(text, lineEnd) {
 }
 
 // Walks the text after each <ADDRESS_n>: the rest of its line, then up to a few
-// short continuation lines, and drops the tail only if an anchor is reached.
+// short continuation lines. The tail goes when an anchor (PIN, masked phone) is
+// reached, or when address-shaped text with a comma or digit follows, or two or
+// more address-shaped lines follow. Address-shaped text that runs past the scan
+// limits cannot be judged, so the text is refused rather than sent.
 function absorbAddressTails(text) {
   if (!text.includes('<ADDRESS_')) return text;
   let out = '';
@@ -1248,10 +1280,12 @@ function absorbAddressTails(text) {
     if (tokenEnd < cursor) continue;
     let position = tokenEnd;
     let consumedTo = -1;
+    const pending = [];
     for (let lineNumber = 0; lineNumber < TAIL_MAX_LINES && position <= text.length; lineNumber += 1) {
       const newline = text.indexOf('\n', position);
       const lineEnd = newline < 0 ? text.length : newline;
       const result = addressTailInLine(text.slice(position, lineEnd));
+      if (result.overflow) fail('PRIVACY_ADDRESS_UNCERTAIN', 'Text after an address cannot be judged and is withheld.');
       if (result.anchored) {
         consumedTo = position + result.end;
         // The PIN or phone ended its line: a bare state line or a masked phone
@@ -1259,14 +1293,80 @@ function absorbAddressTails(text) {
         if (consumedTo >= lineEnd) consumedTo = absorbTailTrailers(text, lineEnd);
         break;
       }
-      if (!result.plain || !result.open || newline < 0) break;
+      if (!result.plain) break;
+      if (result.end > 0) {
+        if (!result.like) break;
+        pending.push({ end: position + result.end, strong: result.strong });
+      }
+      if (!result.open || newline < 0) break;
+      if (lineNumber === TAIL_MAX_LINES - 1 && result.like) fail('PRIVACY_ADDRESS_UNCERTAIN', 'Text after an address cannot be judged and is withheld.');
       position = newline + 1;
     }
+    // Any address-shaped text straight after a labelled address is part of it; a heading that is mistaken for one is
+    // lost, which is the safe side.
+    if (consumedTo < 0 && pending.length > 0) consumedTo = pending[pending.length - 1].end;
     if (consumedTo < 0) continue;
     out += text.slice(cursor, tokenEnd);
     cursor = consumedTo;
   }
   return out + text.slice(cursor);
+}
+
+// Addresses with no label ("Flat 12, Example Heights, Testville - 560001"): a
+// PIN preceded by comma-separated address text on the same line or table cell.
+// Insurer, hospital and branch lines are public details and stay.
+const PUBLIC_ADDRESS_LINE = /\b(?:hospital|clinic|insurer|insurance|assurance|ltd|limited|corporate|registered|head\s+office|tpa|grievance|ombudsman)\b/iu;
+const ADDRESS_COMPONENT_LABEL = /\b(?:ward|sector|block|phase|plot|flat|door|house|po|ps|dist|district|tehsil|taluk|village|vill|near)\s*$/iu;
+const UNLABELLED_PIN = /(?<![\d₹.])[1-9](?:[ -]?\d){5}(?![\d]|[,.]\d)/gu;
+
+function redactUnlabelledAddresses(value, swap) {
+  if (!/[1-9](?:[ -]?\d){5}/u.test(value)) return value;
+  const lines = value.split('\n');
+  const hasDigit = line => /\d/u.test(line);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (PUBLIC_ADDRESS_LINE.test(line)) continue;
+    let rebuilt = '';
+    let from = 0;
+    for (const pin of line.matchAll(UNLABELLED_PIN)) {
+      if (pin.index < from) continue;
+      // Look back at most 400 characters, so the work per PIN is bounded however long the line is.
+      const windowStart = Math.max(from, pin.index - 400);
+      const windowText = line.slice(windowStart, pin.index);
+      // A field label ends at ':' unless the colon follows an address component ("Ward: 4").
+      let colon = windowText.lastIndexOf(':');
+      while (colon > 0 && ADDRESS_COMPONENT_LABEL.test(windowText.slice(Math.max(0, colon - 12), colon))) colon = windowText.lastIndexOf(':', colon - 1);
+      const start = windowStart + Math.max(windowText.lastIndexOf('|'), colon) + 1;
+      // Only the address-shaped run directly before the PIN is taken, so a long OCR run-on line is judged by its tail.
+      const before = line.slice(start, pin.index);
+      const pieces = before.split(/(\s+)/u).filter(piece => piece !== '');
+      let runStart = pieces.length;
+      while (runStart > 0 && (/^\s+$/u.test(pieces[runStart - 1]) || /^[,–—-]+$/u.test(pieces[runStart - 1]) || isAddressLike(pieces[runStart - 1]))) runStart -= 1;
+      const candidate = pieces.slice(runStart).join('').slice(-220);
+      const candidateStart = pin.index - candidate.length;
+      const trimmed = candidate.trim();
+      if (trimmed.length < 6 || trimmed.length > 220 || !/,/u.test(trimmed) || hasPolicyWording(trimmed)
+        || !isAddressLike(trimmed.replace(/[,–—-]+(?=\s|$)/gu, ' '))) continue;
+      // Lines directly above that carry a house or plot number belong to the same address.
+      let top = index;
+      while (top > 0 && index - top < 3 && lines[top - 1].trim() && lines[top - 1].length < 120 && !/<[A-Z]+_\d+>/u.test(lines[top - 1])
+        && !PUBLIC_ADDRESS_LINE.test(lines[top - 1]) && !hasPolicyWording(lines[top - 1]) && isAddressLike(lines[top - 1].replace(/[,–—-]+(?=\s|$)/gu, ' '))) top -= 1;
+      let first = -1;
+      for (let above = top; above < index; above += 1) if (hasDigit(lines[above])) { first = above; break; }
+      // A list of plan or benefit names before an amount is not an address: the PIN needs a "CITY - PIN" dash, an
+      // internal separator ("560 001"), or a house number in the text or just above, and a round amount ("500000")
+      // is never a PIN.
+      const glued = /[–—-]\s*$/u.test(candidate) || /[ -]/u.test(pin[0]);
+      if ((!glued && !/\d/u.test(trimmed) && first < 0) || (!/[ -]/u.test(pin[0]) && /000$/u.test(pin[0]))) continue;
+      const end = pin.index + pin[0].length + stateWordsAfter(line.slice(pin.index + pin[0].length));
+      const leading = candidate.length - candidate.trimStart().length;
+      rebuilt += line.slice(from, candidateStart + leading) + swap('ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS', line.slice(candidateStart + leading, end));
+      from = end;
+      if (first >= 0) for (let above = first; above < index; above += 1) lines[above] = swap('ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS', lines[above]);
+    }
+    lines[index] = rebuilt ? rebuilt + line.slice(from) : line;
+  }
+  return lines.join('\n');
 }
 
 function redactText(value, state) {
@@ -1287,7 +1387,10 @@ function redactText(value, state) {
   // member-table rows), then the per-segment pattern rules.
   const known = redactKnownIdentifiers(withoutLegacy, state.known, swap);
   const lined = redactLineStructures(known, swap);
-  const text = absorbAddressTails(outsideTokens(lined, segment => redactSegment(segment, state, reasons)));
+  const labelled = absorbAddressTails(outsideTokens(lined, segment => redactSegment(segment, state, reasons)));
+  // Unlabelled addresses run after labelled ones, so a labelled address keeps its own tail rule; a second pass lets a
+  // masked phone line after an unlabelled address go too.
+  const text = absorbAddressTails(outsideTokens(labelled, segment => redactUnlabelledAddresses(segment, swap)));
   return { text, reasons: [...reasons].sort() };
 }
 

@@ -6,6 +6,7 @@ import { sanitizeEvidenceTextForStorage } from '../ai-analysis/privacy-evidence-
 import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, FINDING_EFFECTS, INVESTIGATE_SCHEMA, STRUCTURING_INSTRUCTIONS, SWEEP_SCHEMA } from '../ai-analysis/structuring-contract.js';
 import { validateAnswer, validateFinding } from '../../contracts/policy-evidence.js';
 import { classifyClause } from './clauses.js';
+import { RETRIEVAL_TUNING, shapeQuery } from './retrieval-terms.js';
 
 export const INVESTIGATION_VERSION = 'policy-evidence-investigation/v2';
 // maxInputBytes is only the fallback when the caller's gateway does not state its limit; it matches
@@ -66,7 +67,7 @@ export function clauseBudget(skeleton, { maxInputBytes, payloadMarginBytes = INV
  * and schedule clauses, then FTS hits interleaved by rank (`search` is household-scoped): a search over every clause
  * first, then one per checklist kind as a boost, then 'other'. Kind ranks; it never decides what can be found.
  */
-export function selectContext({ gated, checklist, question, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall }) {
+export function selectContext({ gated, checklist, question, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall, tuning = RETRIEVAL_TUNING }) {
   const total = gated.reduce((sum, clause) => sum + clauseBytes(clause), 0);
   if (total <= budgetBytes && gated.length <= maxClauses) return { clauses: gated, path: 'whole_policy', truncated: false };
   const byId = new Map(gated.map((clause, index) => [clause.clauseId, { clause, index }]));
@@ -76,12 +77,18 @@ export function selectContext({ gated, checklist, question, search, budgetBytes,
     const entry = byId.get(clause.clauseId);
     if (entry && !seen.has(clause.clauseId)) { seen.add(clause.clauseId); ordered.push(entry); }
   };
-  gated.filter(clause => clause.kind === 'endorsement' || clause.kind === 'schedule_fact').forEach(take);
+  const fixed = gated.filter(clause => clause.kind === 'endorsement' || clause.kind === 'schedule_fact');
+  // `searchFirst`: the number of search ranks read ahead of the always-read endorsement and schedule clauses (true: all).
+  const ranksFirst = tuning.searchFirst === true ? INVESTIGATION_LIMITS.ftsPerKind : Math.max(0, Number(tuning.searchFirst) || 0);
+  const query = shapeQuery(question, tuning);
   const lists = [
-    search({ query: question, kinds: null, limit: INVESTIGATION_LIMITS.ftsPerKind }),
-    ...[...new Set([...checklist, 'other'])].map(kind => search({ query: question, kinds: [kind], limit: INVESTIGATION_LIMITS.ftsPerKind })),
+    search({ query, kinds: null, limit: INVESTIGATION_LIMITS.ftsPerKind }),
+    ...[...new Set([...checklist, 'other'])].map(kind => search({ query, kinds: [kind], limit: INVESTIGATION_LIMITS.ftsPerKind })),
   ];
-  for (let rank = 0; rank < INVESTIGATION_LIMITS.ftsPerKind; rank += 1) for (const hits of lists) if (hits[rank]) take(hits[rank]);
+  const takeRanks = (from, to) => { for (let rank = from; rank < to; rank += 1) for (const hits of lists) if (hits[rank]) take(hits[rank]); };
+  takeRanks(0, ranksFirst);
+  fixed.forEach(take);
+  takeRanks(ranksFirst, INVESTIGATION_LIMITS.ftsPerKind);
   const kept = [];
   let used = 0;
   let truncated = false;
@@ -165,7 +172,7 @@ const SWEEP_TERMS = 'exclusion excluded waiver waived override notwithstanding l
  * next (the cross-page exclusion a first retrieval missed), then sweep-relevant kinds, then the rest of the first-pass
  * context. `dropped` counts first-pass clauses left out; `truncated` is true when any candidate did not fit.
  */
-export function selectSweepContext({ context, gated, findings, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall }) {
+export function selectSweepContext({ context, gated, findings, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall, tuning = RETRIEVAL_TUNING }) {
   const gatedById = new Map(gated.map(clause => [clause.clauseId, clause]));
   const inContext = new Set(context.clauses.map(clause => clause.clauseId));
   const cited = new Set(findings.flatMap(finding => finding.clauseIds ?? []));
@@ -175,7 +182,8 @@ export function selectSweepContext({ context, gated, findings, search, budgetByt
   context.clauses.filter(clause => cited.has(clause.clauseId)).forEach(take);
   if (context.path !== 'whole_policy') {
     const queries = [...new Set([SWEEP_TERMS, ...findings.flatMap(finding => [finding.subject, `${finding.subject} ${SWEEP_TERMS}`, finding.quote])])].slice(0, 12);
-    for (const query of queries) {
+    for (const raw of queries) {
+      const query = shapeQuery(raw, tuning);
       // Sweep kinds are a boost; the unfiltered search then reaches a clause of any kind.
       for (const kinds of [SWEEP_KINDS, null]) {
         for (const hit of search({ query, kinds, limit: INVESTIGATION_LIMITS.ftsPerKind })) take(gatedById.get(hit.clauseId));
@@ -213,6 +221,55 @@ const entryOf = (finding, clauseById) => ({
 // (untrusted policy text can steer the label). It is routed to conditions instead.
 const LIMITING_QUOTE = /\b(?:not\s+(?:covered|payable|admissible|eligible)|excluded?|exclusions?|capped|sub-?limits?|waiting\s+period|limited\s+to|shall\s+not|no\s+cover)\b/i;
 
+// An explicit opt-out or exclusion printed in the policy is deterministic evidence; a model label never outranks it.
+// Stored clause text is one table row per line with cells joined by " | " (raw `<tr>` markup is also read).
+const OPT_OUT_CELL = /^(?:not\s+(?:opted|selected|chosen|taken|purchased)(?:\s+for)?|opted\s+out|declined)$/i;
+const LABEL_NOISE = new Set('sum insured premium benefit benefits cover covers coverage rider addon plan name applicable proposer only person persons optional details opted'.split(' '));
+const cellText = html => html.replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+const wordsOf = text => new Set((String(text).toLowerCase().match(/[a-z]{4,}/g) ?? []).filter(word => !LABEL_NOISE.has(word)));
+
+function rowsOf(text) {
+  const rows = [];
+  for (const line of text.split(/<\/tr>|\n/)) {
+    const isTable = /<td|\|/.test(line);
+    // A prose line is judged one sentence at a time, so "At Actuals. ... Not Covered." never shares a verdict.
+    for (const raw of isTable ? [line] : line.split(/(?<=\.)\s+(?=[A-Z])/)) {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      const html = [...trimmed.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(match => cellText(match[1]));
+      const cells = html.length ? html : trimmed.split('|').map(cell => cellText(cell));
+      rows.push({ raw: trimmed, cells, readable: cells.join(' | ') });
+    }
+  }
+  return rows;
+}
+
+/**
+ * Why a "covers" finding must not stand as covered: its own row states a restriction, or another row read says the
+ * thing it names was not opted. Returns the row to cite, or null.
+ */
+function restrictionFor(finding, context) {
+  const named = wordsOf(`${finding.subject} ${finding.quote}`);
+  // An opt-out row for the thing the finding names is the most decisive, wherever in the policy it is printed.
+  if (named.size) {
+    for (const clause of context.clauses) {
+      for (const row of rowsOf(clause.text)) {
+        const at = row.cells.findIndex(cell => OPT_OUT_CELL.test(cell));
+        if (at <= 0) continue;
+        const label = wordsOf(row.cells.slice(0, at).join(' '));
+        if (label.size && [...label].every(word => named.has(word))) return { clause, row };
+      }
+    }
+  }
+  for (const id of finding.clauseIds) {
+    const clause = context.clauses.find(entry => entry.clauseId === id);
+    for (const row of clause ? rowsOf(clause.text) : []) {
+      if (row.raw.includes(finding.quote) && (LIMITING_QUOTE.test(row.readable) || row.cells.some(cell => OPT_OUT_CELL.test(cell)))) return { clause, row };
+    }
+  }
+  return null;
+}
+
 // Words that name no policy subject. Conservative: a word missing from this list can only add an unknown, never remove one.
 const GENERIC_TERMS = new Set(`about above after also analysis answer any are authorised be been before benefit benefits both can cannot claim claims clause
 cost costs could cover covered covers coverage cashless does done each eligible for from get give have how include included insurance insured insurer into
@@ -244,10 +301,17 @@ export function assembleAnswer({ question, gatedQuestion = question, findings, o
   const covered = [];
   const limited = [];
   const conditions = [];
+  const rowCites = [];
   for (const finding of findings) {
     // The validated effect picks the bucket. The clause's keyword kind is a ranking hint and says nothing about a
     // finding quoted from a large mixed clause (a benefits table labelled 'exclusion' for one "Not Covered" row).
-    if (finding.effect === 'covers' && !LIMITING_QUOTE.test(finding.quote)) covered.push(entryOf(finding, clauseById));
+    const restriction = finding.effect === 'covers' ? restrictionFor(finding, context) : null;
+    if (restriction) {
+      // The policy itself says not covered / not opted: the finding is a condition, and the row that says so is cited.
+      conditions.push({ subject: finding.subject, text: finding.quote, clauseIds: finding.clauseIds, effect: 'conditions' });
+      conditions.push({ subject: finding.subject, text: restriction.row.readable, clauseIds: [restriction.clause.clauseId], effect: 'excludes' });
+      rowCites.push({ clauseIds: [restriction.clause.clauseId], quote: restriction.row.raw });
+    } else if (finding.effect === 'covers' && !LIMITING_QUOTE.test(finding.quote)) covered.push(entryOf(finding, clauseById));
     else if (finding.effect === 'limits' || finding.effect === 'excludes') limited.push(entryOf(finding, clauseById));
     else conditions.push({ subject: finding.subject, text: finding.quote, clauseIds: finding.clauseIds, effect: finding.effect === 'covers' ? 'conditions' : finding.effect });
     for (const condition of finding.conditions) conditions.push({ subject: finding.subject, text: condition, clauseIds: finding.clauseIds });
@@ -311,6 +375,7 @@ export function assembleAnswer({ question, gatedQuestion = question, findings, o
     for (const claim of [...finding.conditions, ...finding.exceptions]) cite(finding.clauseIds, claim);
   });
   overrides.forEach(override => cite(override.clauseIds, override.quote));
+  rowCites.forEach(entry => cite(entry.clauseIds, entry.quote));
 
   const hasQualifiers = limited.length > 0 || conditions.length > 0 || findings.some(finding => finding.exceptions.length > 0);
   const state = !sources.length ? 'insufficient_evidence' : hasQualifiers || !sweepCompleted || unknowns.length ? 'conditional' : 'evidence_found';
