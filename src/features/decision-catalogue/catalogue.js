@@ -2,6 +2,7 @@
 // source or erasing a document removes its facts from the next build and nothing is left to erase.
 import { CATALOGUE_VERSION, deepFreeze, isIsoDate, text } from './contracts.js';
 import { ingestFacts } from './facts.js';
+import { RULES } from './rules.js';
 import { separatePolicies } from './cross-policy.js';
 import { resolveApplicable } from './applicability.js';
 import { validateOfficialSource } from './official-sources.js';
@@ -37,7 +38,7 @@ export function buildDecisionCatalogue({ householdId, batches, clauseRows, polic
   }
   const layout = separatePolicies(policies, facts, { asOf, memberId });
   const policyIds = new Set(policies.map(policy => policy.policyId));
-  const unresolvedConflicts = layout.layers.flatMap(layer => layer.rules.filter(rule => rule.result.status === 'conflict').map(rule => ({ policyId: layer.policyId, rule: rule.rule, conflicting: rule.result.conflicting })));
+  const unresolvedConflicts = layout.layers.flatMap(layer => layer.rules.filter(rule => rule.result.status === 'conflict' && !(rule.rule === 'add_on' && rule.topic !== '')).map(rule => ({ policyId: layer.policyId, rule: rule.rule, conflicting: rule.result.conflicting })));
   const riders = layout.layers.flatMap(layer => facts
     .filter(fact => fact.policyId === layer.policyId && fact.factType === 'add_on')
     .map(fact => fact.topic)
@@ -50,7 +51,7 @@ export function buildDecisionCatalogue({ householdId, batches, clauseRows, polic
     coordination: layout.coordination,
     combinedConfirmedCover: layout.combinedConfirmedCover,
     facts,
-    openEndedFacts: facts.filter(fact => !['sum_insured', 'room_rent_limit', 'icu_limit', 'copay', 'deductible', 'sublimit', 'waiting_period', 'exclusion', 'add_on', 'restoration', 'bonus', 'policy_period'].includes(fact.factType)),
+    openEndedFacts: facts.filter(fact => !RULES.some(rule => rule.factType === fact.factType)),
     riders,
     conflicts: [...unresolvedConflicts, ...riders.filter(rider => rider.status === 'conflict').map(rider => ({ policyId: rider.policyId, rule: `add_on/${rider.rider}`, conflicting: null }))],
     unassociatedFacts: facts.filter(fact => !fact.policyId || !policyIds.has(fact.policyId)).map(fact => fact.factId),

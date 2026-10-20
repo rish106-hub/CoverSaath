@@ -6,3 +6,4 @@ export { separatePolicies } from './cross-policy.js';
 export { validateOfficialSource, SOURCE_AUTHORITIES } from './official-sources.js';
 export { buildDecisionCatalogue, buildEvidenceIndex } from './catalogue.js';
 export { answerToCandidates } from './from-answer.js';
+export { CURATED_OFFICIAL_SOURCES } from './curated-sources.js';

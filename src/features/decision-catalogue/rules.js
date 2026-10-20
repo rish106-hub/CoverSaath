@@ -3,7 +3,7 @@
 import { deepFreeze, isIsoDate, isMinor, isRecord, text } from './contracts.js';
 import { resolveApplicable } from './applicability.js';
 
-const money = v => isRecord(v) && isMinor(v.amountMinor) && v.currency === 'INR' && Object.keys(v).every(k => ['amountMinor', 'currency', 'basis', 'type'].includes(k));
+const money = v => isRecord(v) && isMinor(v.amountMinor) && v.currency === 'INR' && Object.keys(v).every(k => ['amountMinor', 'currency', 'basis', 'type', 'kind'].includes(k));
 const bps = v => Number.isInteger(v) && v >= 0 && v <= 10000;
 const limitShape = v => isRecord(v) && (
   (v.kind === 'amount' && money(v)) || (v.kind === 'percent_of_sum_insured' && bps(v.basisPoints)) ||
@@ -21,6 +21,11 @@ export const RULES = deepFreeze([
   { id: 'add_on', group: 'E', factType: 'add_on', valid: v => isRecord(v) && !!text(v.name, 120) },
   { id: 'restoration', group: 'D', factType: 'restoration', valid: v => isRecord(v) },
   { id: 'bonus', group: 'D', factType: 'bonus', valid: v => isRecord(v) },
+  { id: 'policy_identity', group: 'A', factType: 'policy_identity', valid: v => isRecord(v) && !!text(v.insurer, 200) && !!text(v.productName, 200) },
+  { id: 'member_enrolment', group: 'C', factType: 'member_enrolment', valid: v => isRecord(v) && ['enrolled', 'not_enrolled'].includes(v.status) },
+  { id: 'network_status', group: 'G', factType: 'network_status', dynamic: true, valid: v => isRecord(v) && !!text(v.provider, 200) && ['network', 'non_network'].includes(v.status) },
+  { id: 'claim_documents', group: 'H', factType: 'claim_documents', valid: v => isRecord(v) && Array.isArray(v.documents) && v.documents.length > 0 && v.documents.length <= 40 && v.documents.every(item => !!text(item, 200)) },
+  { id: 'renewal_portability', group: 'I', factType: 'renewal_portability', valid: v => isRecord(v) && (v.portable === undefined || typeof v.portable === 'boolean') && (v.renewalTerms === undefined || !!text(v.renewalTerms, 400)) },
   { id: 'policy_period', group: 'B', factType: 'policy_period', valid: v => isRecord(v) && isIsoDate(v.start) && isIsoDate(v.end) && v.start <= v.end },
 ]);
 
@@ -38,7 +43,9 @@ export function evaluateRule(facts, rule, query) {
   if (decision.status === 'known' && !rule.valid(decision.value)) {
     result = { ...decision, status: 'unverified', value: null, candidateValue: null, reason: 'value_malformed' };
   }
-  const out = { rule: rule.id, group: rule.group, result, boundaries: BOUNDARIES };
+  // Network and cashless information changes without notice, so it is never a permanent known value.
+  if (rule.dynamic && result.status === 'known') result = { ...result, status: 'dynamic', candidateValue: result.value, value: null, reason: 'needs_current_confirmation' };
+  const out = { rule: rule.id, group: rule.group, topic: query.topic ?? '', result, boundaries: BOUNDARIES };
 
   if (rule.id === 'waiting_period') {
     // Completion needs a verified policy start date and an as-of date. Anything less stays unknown, never "0 months".
@@ -53,5 +60,13 @@ export function evaluateRule(facts, rule, query) {
 
 export function evaluateRules(facts, query, ruleIds = RULES.map(rule => rule.id)) {
   if (!query || !text(query.policyId, 128)) throw new TypeError('A policyId is required.');
-  return RULES.filter(rule => ruleIds.includes(rule.id)).map(rule => evaluateRule(facts, rule, query));
+  // The general (topic '') result always comes first and never borrows a topic-specific value. Each topic that has a
+  // fact of the rule's type in this policy is evaluated on its own, so a disease-specific sublimit or waiting period
+  // is reported beside, not hidden behind, the general rule.
+  // A caller that names a topic gets exactly that topic.
+  return RULES.filter(rule => ruleIds.includes(rule.id)).flatMap(rule => {
+    if (query.topic != null) return [evaluateRule(facts, rule, query)];
+    const topics = [...new Set(facts.filter(fact => fact.factType === rule.factType && fact.policyId === query.policyId && fact.topic !== '').map(fact => fact.topic))].sort();
+    return ['', ...topics].map(topic => evaluateRule(facts, rule, { ...query, topic }));
+  });
 }
