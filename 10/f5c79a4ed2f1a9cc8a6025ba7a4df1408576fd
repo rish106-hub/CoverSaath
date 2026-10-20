@@ -1,0 +1,25 @@
+tests/policy-evidence-quote-form.test.mjs
+  s_a2ce4c6a4ba23f::t_a720641c629ac8 1-31
+  s_a2ce4c6a4ba23f::t_124231e4c4a3a6 32-44
+src/features/policy-evidence/investigate.js
+  s_a2ce4c6a4ba23f::t_35ea86d42b0ba1 223,273-277,413
+  s_a2ce4c6a4ba23f::t_521fc728c18be7 242-247
+docs/iterations/LATEST.md
+  s_a2ce4c6a4ba23f::t_4a7e16bd38beb2 8-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "10f5c79a4ed2f1a9cc8a6025ba7a4df1408576fd",
+  "prompts": {},
+  "sessions": {
+    "s_a2ce4c6a4ba23f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adf7af64-23ea-45b8-b5ea-6114b780b0a7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
