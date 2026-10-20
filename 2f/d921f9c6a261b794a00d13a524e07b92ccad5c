@@ -1,0 +1,38 @@
+src/features/ai-analysis/privacy-evidence-gate.js
+  s_6bf8a020876c5e::t_16e8e739d44fa5 14,1165-1176,1178,1194-1197,1200-1209,1211-1216,1221-1222,1240-1254,1262-1271,1290
+  s_6bf8a020876c5e::t_ba55f4158af371 1181-1193,1217
+  s_6bf8a020876c5e::t_5e5497893901cb 1223-1239,1255-1261
+  s_6bf8a020876c5e::t_537ef32b37badc 1179-1180,1210,1218-1220
+  s_6bf8a020876c5e::t_1c5b7ad362cf41 1177,1198-1199
+tests/evals/safety-evaluator.test.mjs
+  s_6bf8a020876c5e::t_caa4af415437d0 22
+tests/privacy-gate-r4.test.mjs
+  s_6bf8a020876c5e::t_537ef32b37badc 44-46
+src/evaluation/safety-evaluator.js
+  s_6bf8a020876c5e::t_caa4af415437d0 2,4,70-75
+  s_6bf8a020876c5e::t_c9fe1c0a85bdf3 76
+tests/privacy-gate-address-tail.test.mjs
+  s_6bf8a020876c5e::t_1c5b7ad362cf41 81-99
+  s_6bf8a020876c5e::t_da1be41de4a7d6 1-80
+src/evaluation/fixtures/safety-reference-v1.json
+  s_6bf8a020876c5e::t_5d3f389e1c4b73 120,128,136
+  s_6bf8a020876c5e::t_caa4af415437d0 2,117-119,121-127,129-135,137-140
+docs/iterations/LATEST.md
+  s_6bf8a020876c5e::t_44a8a63e3e194b 3-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2fd921f9c6a261b794a00d13a524e07b92ccad5c",
+  "prompts": {},
+  "sessions": {
+    "s_6bf8a020876c5e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aadb3056-b6aa-4b8c-9135-171410c8e158",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
