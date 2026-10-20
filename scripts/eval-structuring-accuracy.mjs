@@ -41,7 +41,7 @@ const summary = {
     parameters: runs[index].parameters.length,
     contradictions: runs[index].contradictions.length,
     skippedChunks: runs[index].skippedChunks?.length ?? null,
-    skippedReasons: (runs[index].skippedChunks ?? []).reduce((counts, entry) => ({ ...counts, [entry.reason]: (counts[entry.reason] ?? 0) + 1 }), {}),
+    skippedReasons: Object.fromEntries((runs[index].skippedChunks ?? []).reduce((counts, entry) => counts.set(String(entry.reason), (counts.get(String(entry.reason)) ?? 0) + 1), new Map())),
     calls: runs[index].structuringRun.counts.coverage?.calls ?? null,
     usage: runs[index].structuringRun.counts.coverage?.usage ?? null,
     costUsd: runs[index].structuringRun.counts.coverage?.costUsd ?? null,
