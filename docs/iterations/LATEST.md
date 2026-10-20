@@ -3,7 +3,7 @@
 ## Block 2 close-out: baseline audit and document boundaries D1, D1a, D1b, D2, D3 (2026-10-20)
 
 Base: HEAD `5b31739`, equal to `origin/main` `fee77db`.
-Audit: [block-2-closeout-audit.md](../exec-plans/active/block-2-closeout-audit.md). Block 2 decision: **NO-GO**.
+Audit: [block-2-closeout-audit.md](../exec-plans/active/block-2-closeout-audit.md). Block 2 decision: **NO-GO** for freeze; single-policy live pipeline PASS.
 
 Live findings fixed (first live question run, 2026-10-20):
 - Every source carries `verbatim`. The model reads gated text, so a quote can hold privacy placeholders (and the
@@ -11,8 +11,10 @@ Live findings fixed (first live question run, 2026-10-20):
 - Clause-kind "absence" unknowns are no longer emitted when the whole policy was read. On the retrieved path they say
   only that no clause with that keyword label was retrieved. Kinds are ranking hints, never evidence of absence.
 - Ops: the local DB was backed up (`.local/backups/`), moved from `.local/.local/` to `.local/knowvia.sqlite` and
-  migrated to 16 migrations (valid). The live question run on the one local policy is in progress; results are
-  pending in the close-out audit.
+  migrated to 16 migrations (valid).
+- Live question run (Gemini live, Sarvam not called, about $1.56): 34 of 34 answered on one real policy. 56 of 62
+  expected quotes exact; 60 of 62 clause-equivalent. 0 fabricated citations in 191. Consent expiry blocks replay and
+  GET (403). 0 names in prompts. p50 38 s. Draft questions are not owner-verified. Detail: audit, section A5.
 - Open from live review: F-B, a finding bucketed by its cited clause's keyword label (the benefits table is labelled
   `exclusion`, so "At Actuals" lands in `limited_or_excluded`). P1, the privacy gate leaves locality and PIN after
   a masked address.
