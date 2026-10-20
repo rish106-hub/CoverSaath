@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { DocumentIntakeError } from './contracts.js';
+import { OCR_BLOCKS_VERSION } from './ocr-blocks.js';
 import { OCR_OUTPUT_VERSION, assertOcrProvider, assertOcrRepository, validateOcrOutput } from './ocr-contracts.js';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const OCR_REQUEST_MODES = new Set(['standard', 'blocks_upgrade']);
 
 function assertAuthorization(value, document, provider, mode) {
   const expectedConsent = mode === 'live' ? document.providerConsentGrantId : document.consentGrantId;
@@ -53,9 +55,13 @@ export function createOcrService({
       outputContractVersion: OCR_OUTPUT_VERSION,
       createdAt: completedAt,
     }));
+    // The job records the output contract the provider returned (v2 when it carried blocks); page text
+    // keeps the v1 text contract. A blocks upgrade attaches blocks to the stored pages instead of inserting.
+    const complete = job.authorization?.blocksUpgrade === true ? repository.attachUpgradeBlocks.bind(repository) : repository.completeJob.bind(repository);
     try {
-      return await repository.completeJob(job.id, pages, {
+      return await complete(job.id, pages, {
         status: 'succeeded',
+        contractVersion: normalized.schemaVersion,
         providerJobRef: normalized.provider.jobRef,
         result: normalized,
         resultDigest: digest(normalized),
@@ -73,7 +79,14 @@ export function createOcrService({
   }
 
   return Object.freeze({
-    async start({ documentId, authorization, retryFailed = false }) {
+    /**
+     * mode 'blocks_upgrade' (explicit, paid): re-reads a knowvia.ocr.v1 document whose stored pages have no
+     * blocks and attaches blocks to the same pages when the text matches. Refused before any provider call
+     * unless the upgrade is needed and acknowledgeProviderCharge is exactly true.
+     */
+    async start({ documentId, authorization, retryFailed = false, mode: requestMode = 'standard', acknowledgeProviderCharge = false }) {
+      if (!OCR_REQUEST_MODES.has(requestMode)) throw new DocumentIntakeError('OCR_MODE_INVALID', 'OCR mode must be standard or blocks_upgrade.');
+      const upgrade = requestMode === 'blocks_upgrade';
       const disclosure = mode === 'live' ? {
         consentGrantId: authorization?.consentGrantId,
         requestedByAdultId: authorization?.requestedByAdultId,
@@ -85,17 +98,29 @@ export function createOcrService({
         throw new DocumentIntakeError('OCR_UNSUPPORTED_MEDIA_TYPE', 'Live OCR currently accepts PDF documents only.');
       }
       const safeAuthorization = assertAuthorization(authorization, document, provider, mode);
+      if (upgrade) {
+        if (typeof repository.getBlocksUpgradeState !== 'function' || typeof repository.attachUpgradeBlocks !== 'function'
+          || provider.outputContractVersion !== OCR_BLOCKS_VERSION) {
+          throw new DocumentIntakeError('OCR_UPGRADE_UNSUPPORTED', 'This OCR provider cannot return stored blocks.');
+        }
+        if (!(await repository.getBlocksUpgradeState(document.documentId)).needed) {
+          throw new DocumentIntakeError('OCR_UPGRADE_NOT_NEEDED', 'The stored pages already have blocks or cannot be upgraded.');
+        }
+        if (acknowledgeProviderCharge !== true) {
+          throw new DocumentIntakeError('OCR_UPGRADE_CHARGE_UNACKNOWLEDGED', 'A blocks upgrade is a new paid provider call; set acknowledgeProviderCharge to true.');
+        }
+      }
       const requestedAt = now().toISOString();
       const claimed = await repository.createOrGetJob({
         id: `ocr-${randomUUID()}`,
         documentUploadId: document.documentId,
         provider: provider.name,
         status: 'queued',
-        contractVersion: OCR_OUTPUT_VERSION,
-        authorization: safeAuthorization,
+        contractVersion: upgrade ? OCR_BLOCKS_VERSION : provider.outputContractVersion ?? OCR_OUTPUT_VERSION,
+        authorization: upgrade ? { ...safeAuthorization, blocksUpgrade: true, providerChargeAcknowledged: true } : safeAuthorization,
         requestedAt,
         updatedAt: requestedAt,
-      }, { retryFailed });
+      }, { retryFailed: upgrade ? false : retryFailed, anyContract: !upgrade });
       let job = claimed.job;
       if (claimed.retryBlocked) {
         throw new DocumentIntakeError(

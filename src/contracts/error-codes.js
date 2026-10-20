@@ -121,6 +121,11 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   OCR_JOB_ALREADY_COMPLETED: entry(409, 'conflict', false),
   OCR_PAGES_ALREADY_EXIST: entry(409, 'conflict', false),
   OCR_PERSISTENCE_FAILED: entry(500, 'storage', false),
+  OCR_MODE_INVALID: entry(400, 'request', false),
+  OCR_UPGRADE_NOT_NEEDED: entry(409, 'conflict', false),
+  OCR_UPGRADE_CHARGE_UNACKNOWLEDGED: entry(409, 'conflict', false),
+  OCR_UPGRADE_UNSUPPORTED: entry(409, 'conflict', false),
+  OCR_UPGRADE_TEXT_CHANGED: entry(409, 'conflict', false),
   // Scanner and storage codes seen by the document worker (never returned to clients).
   SCANNER_UNAVAILABLE: entry(null, 'task_failure', true),
   SCANNER_ERROR: entry(null, 'task_failure', true),

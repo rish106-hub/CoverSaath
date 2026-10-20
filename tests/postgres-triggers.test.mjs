@@ -865,6 +865,49 @@ test('policy structuring runs and proposals stay scoped, append only and erase w
   proves('proposed_parameters_active_document_insert');
 });
 
+test('policy structuring jobs stay scoped, start active, keep identity and final status, and erase with their document', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const job = (id, extra = {}) => insert(pool, 'policy_structuring_jobs', {
+    id, household_id: a.household, case_id: a.case, workflow_run_id: a.run, document_id: a.document, consent_grant_id: a.consent, ...extra,
+  });
+  const scope = 'policy structuring job must start active and match its case, household, document and grant';
+  await rejects(job('job-other-household', { household_id: b.household }), scope);
+  await rejects(job('job-other-document', { document_id: b.document }), scope);
+  await rejects(job('job-other-grant', { consent_grant_id: b.consent }), scope);
+  await rejects(job('job-finished', { status: 'committed', finished_at: at }), scope);
+  await rejects(job('job-erased', { erased_at: later, erasure_reason_code: 'consent_revoked' }), scope);
+  await job('job-1');
+  proves('policy_structuring_jobs_scope_insert');
+  // One active attempt per (workflow run, document); attempts are unique.
+  await assert.rejects(job('job-second-running', { attempt: 2 }), error => error.code === '23505');
+
+  const appendOnly = 'policy structuring jobs are append only';
+  await rejects(pool.query("UPDATE policy_structuring_jobs SET attempt = 5 WHERE id = 'job-1'"), appendOnly);
+  await rejects(pool.query(`UPDATE policy_structuring_jobs SET document_id = '${b.document}' WHERE id = 'job-1'`), appendOnly);
+  await pool.query(`UPDATE policy_structuring_jobs SET status = 'interrupted', finished_at = '${later}', updated_at = '${later}' WHERE id = 'job-1'`);
+  await rejects(pool.query(`UPDATE policy_structuring_jobs SET status = 'running', finished_at = NULL WHERE id = 'job-1'`), appendOnly);
+  await rejects(pool.query("UPDATE policy_structuring_jobs SET error_code = 'CHANGED' WHERE id = 'job-1'"), appendOnly);
+  await pool.query(`UPDATE policy_structuring_jobs SET erased_at = '${later}', erasure_reason_code = 'consent_revoked' WHERE id = 'job-1'`);
+  await rejects(pool.query(`UPDATE policy_structuring_jobs SET erased_at = '${at}', erasure_reason_code = 'consent_revoked' WHERE id = 'job-1'`), appendOnly);
+  await rejects(pool.query("DELETE FROM policy_structuring_jobs WHERE id = 'job-1'"), appendOnly);
+  await rejects(pool.query('TRUNCATE policy_structuring_jobs'), appendOnly);
+  proves('policy_structuring_jobs_no_update', 'policy_structuring_jobs_no_delete', 'policy_structuring_jobs_no_truncate');
+
+  await job('job-2', { attempt: 2 });
+  await insert(pool, 'policy_structuring_jobs', {
+    id: 'job-b', household_id: b.household, case_id: b.case, workflow_run_id: b.run, document_id: b.document, consent_grant_id: b.consent,
+  });
+  await pool.query("UPDATE document_uploads SET lifecycle_state = 'quarantined' WHERE id = $1", [a.document]);
+  assert.equal((await one(pool, "SELECT erased_at FROM policy_structuring_jobs WHERE id = 'job-2'")).erased_at, null, 'quarantine is not erasure');
+  await pool.query("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = $1", [a.document]);
+  const erased = await one(pool, "SELECT status, erasure_reason_code FROM policy_structuring_jobs WHERE id = 'job-2'");
+  assert.deepEqual(erased, { status: 'running', erasure_reason_code: 'document_erasure' }, 'status kept, stamp set');
+  assert.equal((await one(pool, "SELECT erasure_reason_code FROM policy_structuring_jobs WHERE id = 'job-1'")).erasure_reason_code,
+    'consent_revoked', 'an earlier erasure stamp is kept');
+  assert.equal((await one(pool, "SELECT erased_at FROM policy_structuring_jobs WHERE id = 'job-b'")).erased_at, null, 'other documents untouched');
+  proves('policy_structuring_jobs_erase_on_document_erasure');
+});
+
 test('stored OCR blocks need page text and a live document, are immutable and erase with text or document', postgresTestOptions(), async t => {
   const { pool, a } = await worlds(t);
   const blocks = page => serializeStoredBlocks(page, buildStoredBlocks([{ text: `text ${page}`, tag: 'paragraph', readingOrder: 1 }], `text ${page}`));
@@ -884,7 +927,21 @@ test('stored OCR blocks need page text and a live document, are immutable and er
   await rejects(pool.query("UPDATE source_pages SET blocks_json = $1 WHERE id = 'pb-1'", [blocks(12)]), immutable);
   await rejects(pool.query("UPDATE source_pages SET blocks_json = $1 WHERE id = 'pb-v1'", [blocks(13)]), immutable);
   await pool.query("UPDATE source_pages SET blocks_json = blocks_json WHERE id = 'pb-1'");
-  proves('source_pages_blocks_immutable');
+  // Narrowed (014/011): a v1 page takes blocks once, only from a succeeded knowvia.ocr.v2 upgrade job of
+  // the same document version, with its text unchanged; the upgrade job is set once with the blocks.
+  await pool.query("UPDATE document_uploads SET source_version = 'version-blocks' WHERE id = $1", [a.document]);
+  await insert(pool, 'ocr_jobs', { id: 'ocr-upgrade-running', document_upload_id: a.document, status: 'processing', contract_version: 'knowvia.ocr.v2' });
+  await insert(pool, 'ocr_jobs', { id: 'ocr-upgrade', document_upload_id: a.document, status: 'succeeded', contract_version: 'knowvia.ocr.v2' });
+  const upgradeJob = 'source page blocks upgrade job is set once with its blocks';
+  const fill = (job, id = 'pb-v1') => pool.query('UPDATE source_pages SET blocks_json = $1, blocks_upgrade_job_id = $2 WHERE id = $3', [blocks(13), job, id]);
+  await rejects(fill(a.ocr), immutable);
+  await rejects(fill('ocr-upgrade-running'), immutable);
+  await rejects(pool.query("UPDATE source_pages SET blocks_upgrade_job_id = 'ocr-upgrade' WHERE id = 'pb-v1'"), upgradeJob);
+  await rejects(pool.query("UPDATE source_pages SET blocks_json = $1, blocks_upgrade_job_id = 'ocr-upgrade', extracted_text = 'changed' WHERE id = 'pb-v1'", [blocks(13)]), immutable);
+  await fill('ocr-upgrade');
+  await rejects(pool.query("UPDATE source_pages SET blocks_json = $1 WHERE id = 'pb-v1'", [blocks(12)]), immutable);
+  await rejects(pool.query("UPDATE source_pages SET blocks_upgrade_job_id = 'ocr-upgrade-running' WHERE id = 'pb-v1'"), upgradeJob);
+  proves('source_pages_blocks_immutable', 'source_pages_blocks_upgrade_job_immutable');
 
   await pool.query("UPDATE source_pages SET extracted_text = NULL WHERE id = 'pb-1'");
   assert.equal((await one(pool, "SELECT blocks_json FROM source_pages WHERE id = 'pb-1'")).blocks_json, null);

@@ -1,5 +1,5 @@
 import { createProviderBoundary, ProviderAuthorizationError } from '../shared/index.js';
-import { createSarvamDocAiTransport } from './doc-ai-transport.js';
+import { SARVAM_OCR_OUTPUT_VERSION, createSarvamDocAiTransport } from './doc-ai-transport.js';
 
 const TRANSPORT_METHODS = Object.freeze(['createJob', 'getJob', 'cancelJob', 'normalizeResult']);
 
@@ -39,6 +39,8 @@ export function createSarvamOcrProvider({ env = process.env, transport = null, s
   return {
     name: 'sarvam',
     mode: 'live',
+    // The output contract a completed job returns: pages with stored layout blocks.
+    outputContractVersion: SARVAM_OCR_OUTPUT_VERSION,
     limits: Object.freeze({
       contract: 'verified_transport_required',
       maxPagesPerRequest: 10,

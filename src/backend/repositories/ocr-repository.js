@@ -43,8 +43,9 @@ export class OcrRepository {
       FROM document_uploads WHERE id = ?`).get(job.documentUploadId);
     if (!document) return;
     const actorId = job.authorization?.requestedByAdultId ?? 'local-backend';
-    const action = previousStatus === null ? 'ocr.job_created'
-      : job.status === 'succeeded' ? 'ocr.job_succeeded'
+    const upgrade = job.authorization?.blocksUpgrade === true;
+    const action = previousStatus === null ? (upgrade ? 'ocr.blocks_upgrade_requested' : 'ocr.job_created')
+      : job.status === 'succeeded' ? (upgrade ? 'ocr.blocks_upgrade_completed' : 'ocr.job_succeeded')
         : job.status === 'failed' ? 'ocr.job_failed'
           : job.status === 'cancelled' ? 'ocr.job_cancelled'
             : 'ocr.job_status_changed';
@@ -125,21 +126,25 @@ export class OcrRepository {
     });
   }
 
-  createOrGetJob(value, { retryFailed = false } = {}) {
+  // anyContract: a normal request reuses any live or succeeded job of the document whatever contract it
+  // recorded, so recording a newer contract never starts a silent paid rerun. A blocks upgrade is keyed by
+  // its own contract (knowvia.ocr.v2), so a stored v1 success does not block it and a repeat request
+  // returns the same job.
+  createOrGetJob(value, { retryFailed = false, anyContract = false } = {}) {
     this.database.exec('BEGIN IMMEDIATE');
     try {
       const existing = mapJob(this.database.prepare(`SELECT * FROM ocr_jobs
-        WHERE document_upload_id = ? AND provider = ? AND contract_version = ?
+        WHERE document_upload_id = ? AND provider = ? AND (? OR contract_version = ?)
           AND status IN ('queued', 'submitted', 'processing', 'succeeded')
-        ORDER BY requested_at, id LIMIT 1`).get(value.documentUploadId, value.provider, value.contractVersion));
+        ORDER BY requested_at, id LIMIT 1`).get(value.documentUploadId, value.provider, anyContract ? 1 : 0, value.contractVersion));
       if (existing) {
         this.database.exec('COMMIT');
         return { created: false, job: existing };
       }
       const failed = mapJob(this.database.prepare(`SELECT * FROM ocr_jobs
-        WHERE document_upload_id = ? AND provider = ? AND contract_version = ? AND status = 'failed'
+        WHERE document_upload_id = ? AND provider = ? AND (? OR contract_version = ?) AND status = 'failed'
         ORDER BY requested_at DESC, id DESC LIMIT 1`).get(
-        value.documentUploadId, value.provider, value.contractVersion,
+        value.documentUploadId, value.provider, anyContract ? 1 : 0, value.contractVersion,
       ));
       const safeToRetry = failed && !failed.providerJobRef && SAFE_PRE_DISPATCH_RETRY_CODES.has(failed.errorCode);
       if (failed && (!retryFailed || !safeToRetry)) {
@@ -280,6 +285,74 @@ export class OcrRepository {
       );
       if (updated.changes !== 1) throw new Error('OCR job changed before completion.');
       this.appendLifecycleAudit(this.getJob(jobId), current.status, { pageCount: pages.length });
+      this.database.exec('COMMIT');
+      return this.getJob(jobId);
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  /**
+   * Whether the document's current version needs a blocks upgrade: every page was stored with text by
+   * a succeeded job, at least one page has no blocks, and no page was upgraded or erased before.
+   */
+  getBlocksUpgradeState(documentId) {
+    const document = this.database.prepare(`SELECT source_version FROM document_uploads
+      WHERE id = ? AND lifecycle_state = 'active'`).get(documentId);
+    if (!document) return Object.freeze({ needed: false, pages: 0 });
+    const rows = this.database.prepare(`SELECT page.extracted_text IS NOT NULL AS has_text, page.blocks_json IS NULL AS missing,
+        page.blocks_upgrade_job_id IS NOT NULL AS upgraded, job.status AS job_status
+      FROM source_pages page LEFT JOIN ocr_jobs job ON job.id = page.ocr_job_id
+      WHERE page.document_upload_id = ? AND page.source_version = ?`).all(documentId, document.source_version);
+    const needed = rows.length > 0 && rows.every(row => row.has_text && !row.upgraded && row.job_status === 'succeeded')
+      && rows.some(row => row.missing);
+    return Object.freeze({ needed, pages: rows.length });
+  }
+
+  /**
+   * Completes a blocks upgrade job: in one transaction the job succeeds and each stored page of the same
+   * document version takes its blocks once, only when the new page text equals the stored text exactly
+   * (text_sha256). Any difference fails closed with OCR_UPGRADE_TEXT_CHANGED and changes no page; page
+   * ids and text never change, so existing observations keep their source page.
+   */
+  attachUpgradeBlocks(jobId, pages, changes) {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const current = this.getJob(jobId);
+      if (!current || current.authorization?.blocksUpgrade !== true) throw coded('OCR_UPGRADE_NOT_NEEDED', 'This OCR job is not a blocks upgrade.', 409);
+      if (!['queued', 'submitted', 'processing'].includes(current.status)) {
+        if (current.status === 'succeeded' && changes?.resultDigest === current.resultDigest) {
+          this.database.exec('COMMIT');
+          return current;
+        }
+        throw coded('OCR_JOB_ALREADY_COMPLETED', 'This OCR job is already completed.', 409);
+      }
+      const stored = this.database.prepare(`SELECT id, page_number, text_sha256, blocks_json, blocks_upgrade_job_id, extracted_text
+        FROM source_pages WHERE document_upload_id = ? AND source_version = ? ORDER BY page_number`)
+        .all(current.documentUploadId, pages[0]?.sourceVersion ?? '');
+      const byNumber = new Map(pages.map(page => [page.pageNumber, page]));
+      const matches = stored.length === pages.length && stored.every(row => row.extracted_text !== null && row.blocks_upgrade_job_id === null
+        && byNumber.get(row.page_number)?.textSha256 === row.text_sha256 && byNumber.get(row.page_number)?.blocks != null);
+      if (!matches) throw coded('OCR_UPGRADE_TEXT_CHANGED', 'The provider text differs from the stored page text; the stored pages are kept.', 409);
+      const next = { ...current, ...changes };
+      const updated = this.database.prepare(`UPDATE ocr_jobs SET
+        provider_job_ref = ?, status = ?, contract_version = ?, result_json = ?, result_digest = ?,
+        error_code = ?, error_message = ?, started_at = ?, completed_at = ?, updated_at = ?
+        WHERE id = ? AND status IN ('queued', 'submitted', 'processing')`).run(
+        next.providerJobRef, next.status, next.contractVersion,
+        next.result == null ? null : JSON.stringify(next.result), next.resultDigest,
+        next.errorCode, next.errorMessage, next.startedAt, next.completedAt, next.updatedAt, jobId,
+      );
+      if (updated.changes !== 1) throw new Error('OCR job changed before completion.');
+      const fill = this.database.prepare(`UPDATE source_pages SET blocks_json = ?, blocks_upgrade_job_id = ?
+        WHERE id = ? AND blocks_json IS NULL`);
+      for (const row of stored) {
+        if (row.blocks_json !== null) continue;
+        const page = byNumber.get(row.page_number);
+        fill.run(serializeStoredBlocks(page.pageNumber, page.blocks), jobId, row.id);
+      }
+      this.appendLifecycleAudit(this.getJob(jobId), current.status, { pageCount: stored.length });
       this.database.exec('COMMIT');
       return this.getJob(jobId);
     } catch (error) {

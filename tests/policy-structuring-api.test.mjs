@@ -232,7 +232,11 @@ test('W4: an uploaded policy is structured through the app and returns a human-r
   const result = await readResult(app, s);
   assert.equal(result.status, 200, JSON.stringify(result.data));
   const review = result.data.structuring;
-  assert.equal(review.status, 'completed');
+  assert.equal(review.status, 'finished');
+  assert.equal(review.processingStatus, 'finished');
+  assert.equal(review.evidenceOutcome, 'partial_review_required', 'critical keys are missing from the synthetic document');
+  assert.equal(review.requiresReview, true);
+  assert.ok(review.missingCriticalKeys.length > 0);
   const byKey = Object.fromEntries(review.parameters.map(parameter => [parameter.key, parameter]));
   assert.equal(byKey['d.room_rent_limit'].state, 'extracted_unverified');
   assert.equal(byKey['d.room_rent_limit'].readings[0].quote, 'Room rent limit: 5,000 per day');
@@ -264,7 +268,8 @@ test('W4: an uploaded policy is structured through the app and returns a human-r
   const calls = app.requests.length;
   const repeated = await startStructuring(app, s);
   assert.equal(repeated.status, 200);
-  assert.equal(repeated.data.structuring.status, 'completed');
+  assert.equal(repeated.data.structuring.status, 'finished');
+  assert.equal(repeated.data.structuring.evidenceOutcome, 'partial_review_required');
   assert.equal(app.requests.length, calls);
 
   // Another household cannot read or start it.
@@ -279,7 +284,7 @@ test('W4: an uploaded policy is structured through the app and returns a human-r
   assert.equal(revoked.status, 200, JSON.stringify(revoked.data));
   const afterRevoke = await readResult(app, s);
   assert.equal(afterRevoke.status, 200);
-  assert.notEqual(afterRevoke.data.structuring.status, 'completed', 'structured readings are not served after revocation');
+  assert.equal(afterRevoke.data.structuring.status, 'erased', 'structured readings are not served after revocation');
   const remaining = app.database.prepare(`SELECT COUNT(*) AS n FROM coverage_parameter_observations
     WHERE document_id = ? AND extraction_method = 'document_extraction' AND redacted_at IS NULL`).get(s.documentId).n;
   assert.equal(remaining, 0);
@@ -306,7 +311,7 @@ test('W4: an uploaded policy is structured through the app and returns a human-r
   assert.equal(rerun.status, 202, JSON.stringify(rerun.data));
   await app.server.structuring.settle(s.documentId, s.workflowRunId);
   const again = await readResult(app, s);
-  assert.equal(again.data.structuring.status, 'completed');
+  assert.equal(again.data.structuring.status, 'finished');
   assert.ok(again.data.structuring.parameters.some(parameter => parameter.key === 'd.room_rent_limit'));
 });
 
@@ -345,7 +350,47 @@ test('W4: consent revoked during the run stops further calls and stores nothing'
   await app.server.structuring.settle(s.documentId, s.workflowRunId);
   assert.equal(app.requests.length, 1, 'no provider call after the revocation');
   const result = await readResult(app, s);
-  assert.equal(result.data.structuring.status, 'failed');
+  assert.equal(result.data.structuring.status, 'erased', 'the revoked attempt is erased, never shown as a result');
   assert.match(result.data.structuring.errorCode, /^[A-Z][A-Z0-9_]+$/);
   assert.equal(app.database.prepare('SELECT COUNT(*) AS n FROM policy_structuring_runs WHERE document_id = ?').get(s.documentId).n, 0);
+});
+
+test('W4: a restart turns a running attempt interrupted; a new attempt and a blocks upgrade need explicit flags', async t => {
+  const app = await startApp(t);
+  const s = await scenario(app);
+  const ocrJobs = () => app.database.prepare('SELECT count(*) AS n FROM ocr_jobs WHERE document_upload_id = ?').get(s.documentId).n;
+  const sarvamGrantId = app.database.prepare(`SELECT consent_grant_id AS id FROM consent_scopes WHERE recipient = 'sarvam' AND resource_id = ?`).get(s.documentId).id;
+  const jobsBefore = ocrJobs();
+
+  // OCR: a repeat normal request reuses the stored success; an upgrade of a document with blocks is refused.
+  const ocrPath = `/api/v1/documents/${s.documentId}/ocr-jobs`;
+  const repeat = await app.call(ocrPath, { method: 'POST', token: s.token, body: { consentGrantId: sarvamGrantId } });
+  assert.equal(repeat.status, 200);
+  assert.equal(repeat.data.job.outputContractVersion, 'knowvia.ocr.v2');
+  const notNeeded = await app.call(ocrPath, { method: 'POST', token: s.token, body: { consentGrantId: sarvamGrantId, mode: 'blocks_upgrade', acknowledgeProviderCharge: true } });
+  assert.deepEqual([notNeeded.status, notNeeded.data.error.code], [409, 'OCR_UPGRADE_NOT_NEEDED']);
+  const badMode = await app.call(ocrPath, { method: 'POST', token: s.token, body: { consentGrantId: sarvamGrantId, mode: 'rerun' } });
+  assert.deepEqual([badMode.status, badMode.data.error.code], [400, 'OCR_MODE_INVALID']);
+  assert.equal(ocrJobs(), jobsBefore, 'no new OCR job, so no provider charge');
+
+  // A running attempt left by a previous process (the structuring service starts on first use).
+  const sourceVersion = app.database.prepare('SELECT source_version FROM document_uploads WHERE id = ?').get(s.documentId).source_version;
+  app.database.prepare(`INSERT INTO policy_structuring_jobs (id, household_id, case_id, workflow_run_id, document_id, source_version,
+    pipeline_version, status, attempt, consent_grant_id, started_at, updated_at)
+    VALUES ('job-previous-process', ?, ?, ?, ?, ?, 'policy-structuring/v2', 'running', 1, ?, '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z')`)
+    .run(s.householdId, s.caseId, s.workflowRunId, s.documentId, sourceVersion, s.geminiGrantId);
+  const shown = await readResult(app, s);
+  assert.equal(shown.data.structuring.processingStatus, 'interrupted');
+  const refused = await startStructuring(app, s);
+  assert.deepEqual([refused.status, refused.data.error.code], [409, 'STRUCTURING_RESTART_REQUIRED']);
+  const invalid = await app.call(structuringPath(s), { method: 'POST', token: s.token, body: { workflowRunId: s.workflowRunId, consentGrantId: s.geminiGrantId, restart: 'yes' } });
+  assert.deepEqual([invalid.status, invalid.data.error.code], [400, 'VALIDATION_ERROR']);
+  assert.equal(app.requests.length, 0, 'no model call without restart: true');
+  const restarted = await app.call(structuringPath(s), { method: 'POST', token: s.token, body: { workflowRunId: s.workflowRunId, consentGrantId: s.geminiGrantId, restart: true } });
+  assert.equal(restarted.status, 202, JSON.stringify(restarted.data));
+  await app.server.structuring.settle(s.documentId, s.workflowRunId);
+  const finished = await readResult(app, s);
+  assert.equal(finished.data.structuring.processingStatus, 'finished');
+  assert.deepEqual(app.database.prepare('SELECT status, attempt FROM policy_structuring_jobs WHERE document_id = ? ORDER BY attempt').all(s.documentId)
+    .map(row => [row.status, row.attempt]), [['interrupted', 1], ['committed', 2]]);
 });

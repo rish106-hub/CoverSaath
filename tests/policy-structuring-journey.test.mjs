@@ -85,7 +85,7 @@ test('fake-caller journey stores observations and proposals and accounts for eve
   });
   assert.equal(resolution(services, 'a.policy_type').resolutionState, 'extracted_unverified');
   assert.equal(resolution(services, 'f.ped_waiting_period').resolutionState, 'conflicting', '3 Years vs 36 months is surfaced, no winner');
-  assert.deepEqual(services.policyStructuring.listProposals({ householdId: 'household-parameters', documentId: document })
+  assert.deepEqual(services.policyStructuring.listProposals({ householdId: 'household-parameters', documentId: document, structuringRunId: result.commit.structuringRunId })
     .map(item => [item.proposedKey, item.status]), [['synthetic_daily_cash', 'pending_review']]);
   assert.equal(JSON.stringify(result.report).includes('Individual'), false, 'the coverage report carries counts, not text');
 

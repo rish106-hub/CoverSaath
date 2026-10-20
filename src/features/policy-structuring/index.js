@@ -7,12 +7,17 @@ import { sectionDocument } from './sectioner.js';
 import { STRUCTURING_LIMITS, extractChunks } from './extractor.js';
 import { decideStates, reconcile } from './reconciler.js';
 import { buildCoverageReport } from './coverage-report.js';
+import { decideOutcome, structuringCriticalKeys } from './outcome.js';
 
 export { STRUCTURING_DROPPED_TAGS, sectionDocument, sectionStoredDocument } from './sectioner.js';
 export { normalizeValue, validateExtractedItems } from './validator.js';
 export { EXTRACTOR_VERSION, STRUCTURING_LIMITS, extractChunks, registryCatalog } from './extractor.js';
 export { RECONCILER_VERSION, SHORT_VALUE_CHARS, decideStates, deterministicConflicts, groupItems, isConflict, reconcile } from './reconciler.js';
 export { CRITICAL_FIELD_KEYS, buildCoverageReport, readingMatches, scoreCriticalFields, scoreStructuring } from './coverage-report.js';
+export {
+  EVIDENCE_OUTCOMES, MAX_SKIPPED_SHARE, MIN_ACCEPTED_ITEMS, OUTCOME_THRESHOLDS, PROCESSING_STATUSES,
+  decideOutcome, storedOutcome, structuringCriticalKeys,
+} from './outcome.js';
 
 export const POLICY_STRUCTURING_VERSION = 'policy-structuring/v2';
 const GATE_MAX_BYTES = 16_000;
@@ -67,9 +72,10 @@ export function gateChunks(chunks, { knownIdentifiers, sanitize = sanitizeEviden
 /**
  * pages: [{ page, blocks: [{ text, tag }] }]. consentCheck: async, throws when the document-specific
  * Gemini grant is no longer current; called before the run, before every model call and before commit.
- * commit: optional async ({ decisions, proposals, coverage }) => counts; coverage is counts-only (chunk outcomes,
- * skipped pages and reasons, calls, tokens); it must re-check consent inside its own
+ * commit: optional async ({ decisions, proposals, coverage, outcome }) => counts; coverage is counts-only (chunk
+ * outcomes, skipped pages and reasons, calls, tokens); it must re-check consent inside its own
  * transaction (PolicyStructuringRepository.commitStructuring does).
+ * outcome (decideOutcome, counts only): a `failed` evidence outcome is never committed.
  */
 export async function structurePolicyDocument({
   pages, call, consentCheck, commit = null, alreadyStored = null, knownIdentifiers, limits,
@@ -90,18 +96,20 @@ export async function structurePolicyDocument({
     limits: { maxInputTokens: Math.max(0, caps.maxInputTokensPerDocument - extraction.usage.inputTokens) },
   });
   const decisions = decideStates({ accepted: extraction.accepted, conflicts: reconciliation.conflicts });
+  const before = buildCoverageReport({ sectioned, extraction, reconciliation });
+  const outcome = decideOutcome(before, { criticalKeys: structuringCriticalKeys(registryVersion), presentKeys: decisions.map(decision => decision.parameterKey) });
   let committed = null;
-  if (commit) {
+  if (commit && outcome.evidenceOutcome !== 'failed') {
     await consentCheck();
-    const before = buildCoverageReport({ sectioned, extraction, reconciliation });
     const coverage = {
       chunks: before.chunks, calls: before.calls, usage: before.usage, rejectedReasons: before.items.rejectedReasons,
       skippedChunks: before.perChunk.filter(entry => entry.outcome === 'skipped').map(entry => ({ page: entry.page, reason: entry.reason })),
     };
-    committed = await commit({ decisions, proposals: extraction.proposals, coverage });
+    committed = await commit({ decisions, proposals: extraction.proposals, coverage, outcome });
   }
   return {
     version: POLICY_STRUCTURING_VERSION,
+    outcome,
     decisions,
     proposals: extraction.proposals,
     conflicts: reconciliation.conflicts,
