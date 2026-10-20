@@ -1,0 +1,39 @@
+src/features/coverage-analysis/source-input.js
+  s_e8a7e264bec9ca::t_f6b5ba871313f6 216-217
+tests/privacy-gate-v9-final-review.test.mjs
+  s_e8a7e264bec9ca::t_0947cd54e705ef 37
+  s_e8a7e264bec9ca::t_d411ebe861d9ac 18
+  s_e8a7e264bec9ca::t_b604f08e650b2f 22
+  s_e8a7e264bec9ca::t_f6b5ba871313f6 1-17,19-21,23-36,38
+  s_e8a7e264bec9ca::t_fd70564dbe5ec2 39-44
+src/features/ai-analysis/privacy-evidence-gate.js
+  s_e8a7e264bec9ca::t_f6b5ba871313f6 257,260,265,782,1056-1057
+  s_e8a7e264bec9ca::t_b604f08e650b2f 788
+  s_e8a7e264bec9ca::t_fd70564dbe5ec2 254,258-259
+docs/iterations/LATEST.md
+  s_e8a7e264bec9ca::t_a9def8a03ce83a 5,12
+src/backend/services/decision-catalogue-service.js
+  s_e8a7e264bec9ca::t_9897df153580b3 28
+src/features/decision-catalogue/catalogue.js
+  s_e8a7e264bec9ca::t_8b2b3842cc6655 22
+src/features/decision-catalogue/facts.js
+  s_e8a7e264bec9ca::t_59341a2e89f560 81,89,115
+tests/decision-catalogue-handoff.test.mjs
+  s_e8a7e264bec9ca::t_525006cea9bddd 8-9,110-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be69363bae9f509aee7a954e6a3423a305910848",
+  "prompts": {},
+  "sessions": {
+    "s_e8a7e264bec9ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "013a202c-046a-4155-a656-174c664d7bb5",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
