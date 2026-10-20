@@ -9,3 +9,4 @@ export { answerToCandidates } from './from-answer.js';
 export { CURATED_OFFICIAL_SOURCES } from './curated-sources.js';
 export { typedTwin, typedTwins } from './typed-candidates.js';
 export { associateDocuments, extractPolicyNumbers, logicalPolicyId } from './association.js';
+export { toHandoff, assertHandoffContract, HANDOFF_VERSION, HANDOFF_STATES } from './handoff.js';
