@@ -15,7 +15,7 @@ function validateModelName(model) {
   if (typeof model !== 'string') return null;
   const trimmed = model.trim();
   // Allow known-safe model identifier characters only.
-  if (!/^[A-Za-z0-9._-]+$/.test(trimmed)) return null;
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(trimmed)) return null;
   // Explicitly block path/control patterns.
   if (trimmed.includes('/') || trimmed.includes('\\') || trimmed.includes('..')) return null;
   return trimmed;
@@ -56,13 +56,6 @@ if (!API_KEY || !MODEL) {
   }
 }
 
-function validateModelName(model) {
-  // Allow typical Gemini model IDs (e.g. gemini-2.5-flash-exp)
-  // and block path/query/control characters.
-  const MODEL_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
-  return typeof model === 'string' && MODEL_PATTERN.test(model);
-}
-
 async function smokeTest() {
   console.log('🔬 Google Gemini API Smoke Test');
   console.log('==============================\n');
@@ -90,7 +83,7 @@ async function smokeTest() {
     process.exit(1);
   }
 
-  console.log('✅ API Key found (masked):', API_KEY.slice(0, 8) + '...' + API_KEY.slice(-4));
+  console.log('✅ API key found');
   console.log('🤖 Model:', MODEL);
   console.log('');
 
@@ -109,11 +102,11 @@ async function smokeTest() {
       process.exit(1);
     }
     const requestUrl = new URL(`${API_BASE}/${safeModel}:generateContent`);
-    requestUrl.searchParams.set('key', API_KEY);
     const response = await fetch(requestUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': API_KEY, // header, not the URL: query strings end up in logs
       },
       body: JSON.stringify({
         contents: [{
