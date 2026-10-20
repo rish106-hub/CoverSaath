@@ -1,0 +1,8 @@
+export { CATALOGUE_VERSION, CatalogueError, FACT_STATES, POLICY_KINDS } from './contracts.js';
+export { ingestFacts, establishState } from './facts.js';
+export { resolveApplicable } from './applicability.js';
+export { RULES, evaluateRule, evaluateRules, wholeMonthsBetween } from './rules.js';
+export { separatePolicies } from './cross-policy.js';
+export { validateOfficialSource, SOURCE_AUTHORITIES } from './official-sources.js';
+export { buildDecisionCatalogue, buildEvidenceIndex } from './catalogue.js';
+export { answerToCandidates } from './from-answer.js';

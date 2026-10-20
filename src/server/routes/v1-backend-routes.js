@@ -193,7 +193,7 @@ function requireOwnedDocument({ services, documentUploads, principal, documentId
   }
 }
 
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -354,6 +354,18 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         const stored = getEvidenceService().get({ caseRecord, answerId: questionsMatch[2] });
         return { status: 200, body: { answerId: stored.answerId, current: stored.current, answer: stored.answer } };
       }
+    }
+    // Decision catalogue (Block 3): facts derived on read from one stored answer. No model call and no write.
+    // Gated by the source-pack field, same as /questions. Whether that consent purpose is right for coverage facts is pending legal review.
+    const catalogueMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/decision-catalogue$/);
+    if (req.method === 'GET' && catalogueMatch) {
+      const caseRecord = requireDocumentCase(services, principal, catalogueMatch[1], { write: false });
+      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      const built = getCatalogueService().build({
+        caseRecord, answerId: url.searchParams.get('answerId'),
+        asOf: url.searchParams.get('asOf'), memberId: url.searchParams.get('memberId'),
+      });
+      return { status: 200, body: built };
     }
     const sourcePackMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/source-pack$/);
     if (req.method === 'GET' && sourcePackMatch) {
