@@ -1,0 +1,57 @@
+src/features/policy-evidence/investigate.js
+  s_6e15b274ff2b2b::t_7d4827a08722c1 211-216,218-219,221,246-251,253,282,289-300,312-314,320-321,349,353-354,357,378-382,388,390,392-396,398,400-401
+  s_6e15b274ff2b2b::t_fa9724bfa5af39 375-376
+  s_6e15b274ff2b2b::t_e6c7fd6ffc1970 13,15,69,71,90,166,190,315,355
+  s_6e15b274ff2b2b::t_dbbe7c17b596cd 11-12,53-54,57-58,60-65,68,70,89,161-164,168-176,183-189,191-194,196-201
+  s_6e15b274ff2b2b::t_cc7a08a0135f0d 334-340
+  s_6e15b274ff2b2b::t_465609ef02c7e5 8,217,252,307-309,330-333,350,358-361,372,383-387,389,391,397
+  s_6e15b274ff2b2b::t_5728c151c074a3 66-67,80-84,157,177-180
+src/backend/services/policy-evidence-service.js
+  s_6e15b274ff2b2b::t_0b17b01e1375ef 95,106-108
+  s_6e15b274ff2b2b::t_802000fac8fb97 14,82-88,98,116
+src/features/policy-evidence/clauses.js
+  s_6e15b274ff2b2b::t_5728c151c074a3 3-4
+  s_6e15b274ff2b2b::t_465609ef02c7e5 16-17
+src/features/policy-evidence/index.js
+  s_6e15b274ff2b2b::t_e6c7fd6ffc1970 2
+tests/policy-evidence-discoverability.test.mjs
+  s_6e15b274ff2b2b::t_30796bb6a57fe0 1-17,19-29,31-41,45-49,51-69,71-72,75-76
+  s_6e15b274ff2b2b::t_c5d2dcc2d0a2eb 73
+  s_6e15b274ff2b2b::t_44d3ef91b6c71f 18,30,42-44,50,74
+  s_6e15b274ff2b2b::t_189b2f283f12b6 70
+tests/policy-evidence-recall.test.mjs
+  s_6e15b274ff2b2b::t_4a05aa126d7ecc 19,27-38,44-74
+src/features/ai-analysis/structuring-runtime.js
+  s_6e15b274ff2b2b::t_802000fac8fb97 30-31,64-65,77
+scripts/eval-retrieval-recall.mjs
+  s_6e15b274ff2b2b::t_4a05aa126d7ecc 4,8-12,23-26,37
+src/features/policy-evidence/recall-eval.js
+  s_6e15b274ff2b2b::t_1ffd9c0252d032 4-9,12,14-30,32-33,36-39,41-47,49,51-52,54-61,64-80
+tests/policy-evidence-budget.test.mjs
+  s_6e15b274ff2b2b::t_cadb422226fb21 65
+  s_6e15b274ff2b2b::t_5728c151c074a3 56,69,98,106
+  s_6e15b274ff2b2b::t_76d2cde112a130 193,209,211-212
+  s_6e15b274ff2b2b::t_a46c6a42e12a2d 1-55,57-64,66-68,70-97,99-105,107-176
+  s_6e15b274ff2b2b::t_9186b323df22bf 188,192
+  s_6e15b274ff2b2b::t_fa9724bfa5af39 203
+  s_6e15b274ff2b2b::t_44d3ef91b6c71f 177-187,189-191,194-202,204-208,210,213-231
+tests/policy-evidence-investigate.test.mjs
+  s_6e15b274ff2b2b::t_5728c151c074a3 139,173
+  s_6e15b274ff2b2b::t_14639c496b653c 3,53-57,140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b31739150de280b0228d62b279223b2d3f33137",
+  "prompts": {},
+  "sessions": {
+    "s_6e15b274ff2b2b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "776ac7e6-ef3e-442c-9e87-b23bf54552c1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
