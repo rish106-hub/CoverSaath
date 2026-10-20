@@ -1,0 +1,49 @@
+src/backend/database/migrations/017_catalogue_reviews.sql
+  s_c52538788cad78::t_6a0e2e9bfa95a0 1-92
+src/backend/database/postgres/migrations/013_catalogue_reviews.sql
+  s_c52538788cad78::t_6a0e2e9bfa95a0 1-110
+tests/database-integrity-v2.test.mjs
+  s_c52538788cad78::t_6a0e2e9bfa95a0 94
+src/backend/services/decision-catalogue-service.js
+  s_c52538788cad78::t_4ceb4970407d06 138-146
+  s_c52538788cad78::t_3f65b672634fb8 1-2,5-8,11-23,29-48,50-137
+src/server/routes/v1-backend-routes.js
+  s_c52538788cad78::t_ab0c21c86b789a 358-382
+  s_c52538788cad78::t_4ceb4970407d06 387-392
+src/backend/repositories/clause-repository.js
+  s_c52538788cad78::t_2ec3860542d982 207,212-213,215,219-220
+src/backend/services/backend-services.js
+  s_c52538788cad78::t_2ec3860542d982 1,16,26
+tests/evidence-completion-persistence.test.mjs
+  s_c52538788cad78::t_6a0e2e9bfa95a0 83
+tests/catalogue-review-api.test.mjs
+  s_c52538788cad78::t_8162165bef32db 1-227,229-235,237-349
+  s_c52538788cad78::t_2fad5ebc2b3b75 228,236
+src/backend/repositories/index.js
+  s_c52538788cad78::t_2ec3860542d982 13
+src/backend/database/database.js
+  s_c52538788cad78::t_6a0e2e9bfa95a0 73
+src/backend/repositories/catalogue-review-repository.js
+  s_c52538788cad78::t_2fad5ebc2b3b75 38,103
+  s_c52538788cad78::t_2ec3860542d982 1-37,39-102,104-125
+docs/iterations/LATEST.md
+  s_c52538788cad78::t_44ed3b44925fdf 3-11
+tests/database-schema.test.mjs
+  s_c52538788cad78::t_deecadb2121d5a 35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea3813a994ec37c564cc40e8ffb81fbbcbaf6d11",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
