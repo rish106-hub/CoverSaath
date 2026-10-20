@@ -255,3 +255,12 @@ Open work includes:
 - Retention policy and legal review of consent wording.
 - A future UI, only after backend contracts and production boundaries are accepted.
 - Block 3 close-out: handoff/adversarial tests added (`tests/decision-catalogue-handoff.test.mjs`), CodeQL baseline recorded in `docs/architecture/decision-catalogue.md` (11 pre-existing alerts, none in Block 3). Reviewer role/storage and Block 4 consumption remain unbuilt, pending an ADR.
+
+## Curated insurer products and reviewer view audit (2026-10-20)
+
+- Research: [docs/research/2026-10-20-source-data-catalogue-reviewer-access.md](../research/2026-10-20-source-data-catalogue-reviewer-access.md). Most circular details there are secondary-sourced and need a read of the IRDAI primaries.
+- Built: `src/features/decision-catalogue/curated-products.js`. Strict record (UIN, wording version, https URL, SHA-256, retrieval and check dates, page and quote per fact, curator and a different checker). Loads fail closed. `compareToCurated` compares a household's own facts with the curated terms for the one UIN its document prints; output is `curatedComparison` (informs only, never changes a fact or rule result). Tests: `tests/curated-products.test.mjs`.
+- Decision: no migration. Curated records are public product data, not household data, so they live as reviewed code in `curated-sources.js` (git history and PR review are the audit trail). A DB table can come later if records need runtime editing.
+- `CURATED_PRODUCT_RECORDS` is still empty. Nothing was seeded: that needs a person to read each insurer's wording and a second to check it, plus a terms-of-use check per insurer.
+- Independent-reviewer reads now write a `catalogue_reviewer.viewed` audit event before serving (no case content). If the audit write fails the read fails.
+- Not done: redacted evidence packet for reviewers, staff access model, legal review of the reviewer purpose, change-detection fetcher.

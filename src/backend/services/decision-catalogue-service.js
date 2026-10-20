@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { CONTRACTUAL_SOURCES, isIsoDate } from '../../features/decision-catalogue/contracts.js';
-import { CURATED_OFFICIAL_SOURCES, answerToCandidates, associateDocuments, buildDecisionCatalogue, typedTwins } from '../../features/decision-catalogue/index.js';
+import { CURATED_OFFICIAL_SOURCES, CURATED_PRODUCT_RECORDS, loadCuratedProducts, answerToCandidates, associateDocuments, buildDecisionCatalogue, typedTwins } from '../../features/decision-catalogue/index.js';
 
 // Builds the Block 3 decision catalogue from one stored policy answer (ADR 0008) and, since ADR 0009 part 2, the
 // authenticated reviews recorded against its facts. Read paths are derived on every call: revoking consent or erasing a
@@ -53,11 +53,14 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   }
 
   const evidenceRows = rows => rows.map(row => ({ id: row.clauseId, documentId: row.documentId, sourceVersion: row.sourceVersion, page: row.page, digest: row.digest }));
-  const compose = (ctx, batches, { asOf, memberId }) => buildDecisionCatalogue({
+  const compose = (ctx, batches, { asOf, memberId }) => {
+    const today = new Date().toISOString().slice(0, 10);
+    return buildDecisionCatalogue({
     householdId: ctx.householdId, clauseRows: evidenceRows(ctx.clauseRows), batches,
     policies: ctx.policyIds.map(policyId => ({ policyId, kind: 'unresolved', coverBasis: 'unknown' })), asOf, memberId,
-    officialSources: CURATED_OFFICIAL_SOURCES, today: new Date().toISOString().slice(0, 10),
-  });
+    officialSources: CURATED_OFFICIAL_SOURCES, curatedProducts: loadCuratedProducts(CURATED_PRODUCT_RECORDS, { today }), today,
+    });
+  };
   const modelBatch = candidates => ({ origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates });
 
   function checkQuery({ asOf, memberId }) {
@@ -157,7 +160,13 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
     if (!independentEnabled || !reviews || typeof caseId !== 'string') return null;
     const caseRecord = services.access.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId);
     const grant = caseRecord && activeHousehold(caseRecord.household_id) && reviews.activeGrant(caseRecord.household_id, principal.adultId);
-    return grant?.kind === 'independent_reviewer' ? caseRecord : null;
+    if (grant?.kind !== 'independent_reviewer') return null;
+    // Every independent read is audited before it is served. If the audit write fails the read fails: no unaudited view.
+    services.audit.append({
+      householdId: caseRecord.household_id, caseId: caseRecord.id, actorType: 'human_reviewer', actorId: principal.adultId,
+      action: 'catalogue_reviewer.viewed', resourceType: 'service_case', resourceId: caseRecord.id,
+    });
+    return caseRecord;
   }
 
   /** The household source-pack field gate for a household confirmer's write, matching the read route. Returns the case. */

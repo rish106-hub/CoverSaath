@@ -4,3 +4,8 @@
 import { deepFreeze } from './contracts.js';
 
 export const CURATED_OFFICIAL_SOURCES = deepFreeze([]);
+
+// Curated insurer products (see curated-products.js). Empty on purpose: nothing may be added until a person has read
+// the insurer's own published wording and a second person has checked it. Never add a record from a model, an
+// aggregator or memory.
+export const CURATED_PRODUCT_RECORDS = deepFreeze([]);

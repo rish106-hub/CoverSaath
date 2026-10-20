@@ -444,3 +444,17 @@ test('Phase 7 journey: upload, OCR, question, typed candidate, independent revie
   assert.equal(rows(app, 'catalogue_reviews'), 0, 'revocation erased the reviews that cited the document');
   assert.equal(rows(app, 'policy_clauses'), 0);
 });
+
+test('reviewer controls: every independent read is audited with no case content, and a denied read leaves no view event', async t => {
+  const { app, s, reviewer } = await independent(t);
+  const { answerId } = await answered(app, s);
+  const views = () => app.database.prepare("SELECT actor_type, actor_id, event_payload_json FROM audit_events WHERE action = 'catalogue_reviewer.viewed'").all();
+  assert.equal(views().length, 0);
+  assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 200);
+  assert.equal(views().length, 1);
+  assert.equal(views()[0].actor_type, 'human_reviewer');
+  assert.ok(!JSON.stringify(views()[0]).includes('Rs'), 'view audit holds no fact content');
+  app.database.prepare("UPDATE households SET status = 'closed' WHERE id = ?").run(s.householdId);
+  assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 404);
+  assert.equal(views().length, 1, 'a denied read is not logged as a view');
+});
