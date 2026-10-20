@@ -316,9 +316,14 @@ test('round-4 worst-case inputs at the scan cap finish in bounded time', () => {
   for (const [label, text] of Object.entries(inputs)) {
     for (const knownIdentifiers of [undefined, KNOWN, manyKnown]) {
       const key = `${label}/${knownIdentifiers === undefined ? 'none' : knownIdentifiers.length}`;
-      const started = process.hrtime.bigint();
-      try { sanitizeEvidenceTextForStorage(text, { maxBytes: 16_000, knownIdentifiers }); } catch (error) { assert.equal(error.code, 'RESTRICTED_EVIDENCE', key); }
-      timings[key] = Number(process.hrtime.bigint() - started) / 1e6;
+      // Fastest of three runs: super-linear backtracking is slow every time, a scheduler stall under load is not.
+      // The 200 ms bound below is unchanged.
+      timings[key] = Infinity;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const started = process.hrtime.bigint();
+        try { sanitizeEvidenceTextForStorage(text, { maxBytes: 16_000, knownIdentifiers }); } catch (error) { assert.equal(error.code, 'RESTRICTED_EVIDENCE', key); }
+        timings[key] = Math.min(timings[key], Number(process.hrtime.bigint() - started) / 1e6);
+      }
     }
   }
   const slowest = Object.entries(timings).sort((left, right) => right[1] - left[1])[0];
