@@ -1,0 +1,66 @@
+src/features/policy-evidence/retrieval-terms.js
+  s_c48248e98baff3::t_c535551aa74908 43
+  s_c48248e98baff3::t_a90914bde266c6 44-50
+  s_c48248e98baff3::t_2fbae851216455 1-42
+src/backend/services/policy-evidence-service.js
+  s_c48248e98baff3::t_969cb9fed7db95 3,108-109
+scripts/eval-retrieval-recall.mjs
+  s_c48248e98baff3::t_0db2d0bc1018b7 26
+  s_c48248e98baff3::t_2fbae851216455 38
+tests/privacy-gate-address-closure.test.mjs
+  s_c48248e98baff3::t_7acae4ec40e6f7 1-11,13-23,25-26,35-61,75-100,102-105
+  s_c48248e98baff3::t_481778c0e40c17 12,24,101
+  s_c48248e98baff3::t_c175f32026a863 27-34,62-74
+tests/privacy-gate-address-tail.test.mjs
+  s_c48248e98baff3::t_9f5ebd1be8805b 86-87
+tests/policy-evidence-answer-regression.test.mjs
+  s_c48248e98baff3::t_6a78b4b27618c6 1-43,45-77,79-81,103-117,119-126,128-156,160
+  s_c48248e98baff3::t_8f81ef4818458d 44,78,118,127
+  s_c48248e98baff3::t_969cb9fed7db95 157-159
+  s_c48248e98baff3::t_c175f32026a863 82-102
+src/features/policy-evidence/investigate.js
+  s_c48248e98baff3::t_8af1812cc80fc9 81-82,88-91
+  s_c48248e98baff3::t_8f81ef4818458d 225
+  s_c48248e98baff3::t_18399b119c8ba4 224,227-232,243-252,264-272,304,308-314,378
+  s_c48248e98baff3::t_969cb9fed7db95 253-263
+  s_c48248e98baff3::t_c535551aa74908 9,70,175
+  s_c48248e98baff3::t_516aacf6dd2078 226,238
+  s_c48248e98baff3::t_2fbae851216455 80,83,85-86,185-186
+  s_c48248e98baff3::t_4a67d84e7f0004 233-237,239-242
+src/features/ai-analysis/privacy-evidence-gate.js
+  s_c48248e98baff3::t_cca20d99cfaa12 14,1174-1178
+  s_c48248e98baff3::t_3a0ecd47387f38 1342
+  s_c48248e98baff3::t_8a7cc2f34b961c 1390-1393
+  s_c48248e98baff3::t_5e86f543ccef3d 1207-1215,1218-1219,1222-1224,1226-1227,1242-1245,1270-1273,1283,1288,1296-1302,1315-1317,1321-1322,1324-1327,1329-1332,1347,1350-1352,1354-1355,1365-1369
+  s_c48248e98baff3::t_c94036b49c7f8b 1349
+  s_c48248e98baff3::t_17b76e54a6a03d 1333-1335,1337-1339
+  s_c48248e98baff3::t_481778c0e40c17 1230,1232-1236
+  s_c48248e98baff3::t_516aacf6dd2078 1201-1204,1231,1237,1305-1307,1318-1319,1323,1328,1336,1348,1353
+  s_c48248e98baff3::t_39a87271de40fc 1356-1362,1364
+  s_c48248e98baff3::t_ba5049d33c5752 1320
+  s_c48248e98baff3::t_9d3d1bfe42ae64 1340-1341,1343-1346,1363
+  s_c48248e98baff3::t_01131b37df2c4b 1370-1371
+tests/privacy-gate-r4.test.mjs
+  s_c48248e98baff3::t_eaf80a115a13ce 44-46
+src/features/policy-evidence/recall-eval.js
+  s_c48248e98baff3::t_2fbae851216455 43,49
+  s_c48248e98baff3::t_c535551aa74908 28
+docs/iterations/LATEST.md
+  s_c48248e98baff3::t_c6da904f09e310 3-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b816069ca682367faa50cb7f914b36202d0f612c",
+  "prompts": {},
+  "sessions": {
+    "s_c48248e98baff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "768976a8-9dc5-49a3-b0f9-89bbfaa6224f",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
