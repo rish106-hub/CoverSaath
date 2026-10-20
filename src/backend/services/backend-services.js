@@ -1,4 +1,4 @@
-import { AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, HouseholdRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
+import { AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, HouseholdRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { TenantAccessService } from './tenant-access-service.js';
 
@@ -13,6 +13,7 @@ export function createBackendServices(database, options = {}) {
   // Revocation and document erasure also erase structuring proposals and runs (counts-only audit).
   // Clauses and answers are derived stores (ADR 0008) erased by the same paths.
   const clauses = new ClauseRepository(database, shared);
+  const catalogueReviews = new CatalogueReviewRepository(database, shared);
   const consents = new ConsentRepository(database, { ...shared, coverageParameters, policyStructuring, clauses });
   const cases = new CaseRepository(database, shared);
   const workflows = new WorkflowRepository(database, shared);
@@ -22,7 +23,7 @@ export function createBackendServices(database, options = {}) {
   const access = new TenantAccessService(database, { auth, households, consents, env: options.env ?? {} });
 
   return {
-    access, audit, auth, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, documents,
+    access, audit, auth, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, documents,
     emergencyInstruction,
     requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {
       return consents.requireActive(consentGrantId, {

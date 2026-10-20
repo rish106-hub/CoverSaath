@@ -10,3 +10,4 @@ export { CoverageParameterRepository } from './coverage-parameter-repository.js'
 export { DocumentRepository } from './document-repository.js';
 export { PolicyStructuringRepository } from './policy-structuring-repository.js';
 export { ClauseRepository } from './clause-repository.js';
+export { CatalogueReviewRepository } from './catalogue-review-repository.js';
