@@ -1,0 +1,19 @@
+tests/privacy-gate-r4.test.mjs
+  s_a2ce4c6a4ba23f::t_e988fecafb9235 319-326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8af42bc575fd5bde33b4048d88d314feee7d261f",
+  "prompts": {},
+  "sessions": {
+    "s_a2ce4c6a4ba23f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adf7af64-23ea-45b8-b5ea-6114b780b0a7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
