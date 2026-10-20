@@ -1,0 +1,88 @@
+src/backend/services/decision-catalogue-service.js
+  s_e8a7e264bec9ca::t_09225991815239 1,17
+  s_e8a7e264bec9ca::t_e841e0fe692f33 2-16,18-31,34-36
+  s_e8a7e264bec9ca::t_aed8bd9f0e8895 32-33
+src/features/decision-catalogue/index.js
+  s_e8a7e264bec9ca::t_95cc1ee8fbde8f 8
+  s_e8a7e264bec9ca::t_9aa9bcec6b334f 1-7
+src/features/decision-catalogue/contracts.js
+  s_e8a7e264bec9ca::t_d8ef4558929bf8 1-11,13-41,45
+  s_e8a7e264bec9ca::t_95cc1ee8fbde8f 12
+  s_e8a7e264bec9ca::t_09225991815239 42-44
+src/features/decision-catalogue/facts.js
+  s_e8a7e264bec9ca::t_660558e85bad9c 1-2,49-50
+  s_e8a7e264bec9ca::t_2413a51b9c9eed 3-12,15-18,20-23,26,32,34-35,37-42,44-47,54-56,58-61,63-73,77-80,82-94,96-100,104-111,113-117,119,121-125
+  s_e8a7e264bec9ca::t_19719df1ab74c0 13-14,19,24-25,27-31,33,36,48,51-52,57,74-76,95,101-103,118,120
+  s_e8a7e264bec9ca::t_900dc001416094 81
+  s_e8a7e264bec9ca::t_aed8bd9f0e8895 112
+  s_e8a7e264bec9ca::t_60ad39277c5265 43
+  s_e8a7e264bec9ca::t_9c3a93274dbecb 53,62
+src/features/decision-catalogue/catalogue.js
+  s_e8a7e264bec9ca::t_9aa9bcec6b334f 1-15,22-26,28,38-52,54,56-57,60-64
+  s_e8a7e264bec9ca::t_19719df1ab74c0 17-21,27,29-37
+  s_e8a7e264bec9ca::t_9833a380e31c06 16,53,55,58-59
+src/features/decision-catalogue/applicability.js
+  s_e8a7e264bec9ca::t_b7b99e13711f9d 64
+  s_e8a7e264bec9ca::t_aed8bd9f0e8895 73
+  s_e8a7e264bec9ca::t_5c4893f85253ea 1-2,4-5,7-24,29-34,37-39,45-52,56-60,63,65-67,70-72,74-81,84-85
+  s_e8a7e264bec9ca::t_19719df1ab74c0 3,6,25,40-44,55
+  s_e8a7e264bec9ca::t_3298e498f76ebc 26-28,35-36,53-54,61-62,68-69,82-83
+src/features/decision-catalogue/from-answer.js
+  s_e8a7e264bec9ca::t_660558e85bad9c 41-43
+  s_e8a7e264bec9ca::t_95cc1ee8fbde8f 1-10,12-20,23-32,34,39-40,44,46-52
+  s_e8a7e264bec9ca::t_aed8bd9f0e8895 11,21-22,33,35-38,45
+src/server/create-server.js
+  s_e8a7e264bec9ca::t_e841e0fe692f33 7,102-106,173
+src/backend/services/policy-evidence-service.js
+  s_e8a7e264bec9ca::t_e841e0fe692f33 225-236,238-239
+  s_e8a7e264bec9ca::t_aed8bd9f0e8895 237
+src/server/routes/v1-backend-routes.js
+  s_e8a7e264bec9ca::t_e841e0fe692f33 196,358,360-368
+  s_e8a7e264bec9ca::t_03a973f5f1207c 359
+  s_e8a7e264bec9ca::t_e2c9fe17be01a3 369
+tests/decision-catalogue-api.test.mjs
+  s_e8a7e264bec9ca::t_367b2bca79e568 1-258
+src/backend/services/index.js
+  s_e8a7e264bec9ca::t_e841e0fe692f33 6
+tests/decision-catalogue.test.mjs
+  s_e8a7e264bec9ca::t_aed8bd9f0e8895 298-304
+  s_e8a7e264bec9ca::t_e8b589d9b465b2 1-2,4-15,41,43-115,117,119-120,122-164,166-168,170-171,173-176,178-189,191-207,274
+  s_e8a7e264bec9ca::t_33615ab01b8ec8 21-23,121,237,240
+  s_e8a7e264bec9ca::t_2c1abf996fe8f1 3,279-297,305-306
+  s_e8a7e264bec9ca::t_38bc963b01cbb1 208-209,231-235,238,250-252,262-264,266-271
+  s_e8a7e264bec9ca::t_d33cfcf4a6b809 177,210-211,213-230,241-249,253-261,265,272-273
+  s_e8a7e264bec9ca::t_8afb5f68d4abab 212
+  s_e8a7e264bec9ca::t_f7872e2924fa9f 16-20,24-40,42,116,118,165,169,172,190,236,239
+  s_e8a7e264bec9ca::t_09225991815239 275-278,307
+src/features/decision-catalogue/cross-policy.js
+  s_e8a7e264bec9ca::t_c49235d418852d 1-29
+src/features/decision-catalogue/official-sources.js
+  s_e8a7e264bec9ca::t_c49235d418852d 1-20,22-24,27-38
+  s_e8a7e264bec9ca::t_19719df1ab74c0 21
+  s_e8a7e264bec9ca::t_dc5868f3013c52 25-26
+src/features/decision-catalogue/rules.js
+  s_e8a7e264bec9ca::t_c49235d418852d 1-48,50-57
+  s_e8a7e264bec9ca::t_660558e85bad9c 49
+tests/decision-catalogue-handoff.test.mjs
+  s_e8a7e264bec9ca::t_2ea6c30c9de4af 1-89,94,98,100-101
+  s_e8a7e264bec9ca::t_660558e85bad9c 102-109
+  s_e8a7e264bec9ca::t_d76a75a72c2049 90-93,95-97,99
+docs/iterations/LATEST.md
+  s_e8a7e264bec9ca::t_66382bf07adb8e 3-13,213
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea53fb35e84bd573567e356ce05c9e0283df3095",
+  "prompts": {},
+  "sessions": {
+    "s_e8a7e264bec9ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "013a202c-046a-4155-a656-174c664d7bb5",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
