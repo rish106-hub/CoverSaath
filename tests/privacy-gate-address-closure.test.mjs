@@ -2,7 +2,8 @@
 // Every value is synthetic. No network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PRIVACY_EVIDENCE_GATE_VERSION, sanitizeEvidenceTextForStorage } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { PRIVACY_EVIDENCE_GATE_VERSION } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { sanitizeEvidenceTextForStorage } from './support/storage-gate.mjs';
 import { buildClauses, investigate } from '../src/features/policy-evidence/index.js';
 
 const storage = text => sanitizeEvidenceTextForStorage(text).text;

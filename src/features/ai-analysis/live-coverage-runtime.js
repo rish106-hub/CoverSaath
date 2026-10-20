@@ -398,6 +398,8 @@ function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization,
       resolveParameterPolicy: key => resolver(key, registryVersion),
       limits: privacyLimits,
       knownIdentifiers,
+      // Sources are stored excerpts that already passed the gate at storage; upstream is derived from them.
+      regated: true,
     });
     preDispatchAuthorization.register(task, safe.input, runtime, safe.audit);
     const current = requestCache.get(runtime) ?? new Map();

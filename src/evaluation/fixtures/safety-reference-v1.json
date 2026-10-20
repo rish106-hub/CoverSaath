@@ -123,6 +123,22 @@
       "expectedViolations": []
     },
     {
+      "id": "privacy-dependant-wording-001",
+      "dimension": "privacy_and_roles",
+      "input": {"gateProbe": {"text": "Dependant: Not covered\nDependants: Spouse and children covered\nDependant: Asha Example", "mustNotSurvive": ["Asha"], "mustSurvive": ["Dependant: Not covered", "Dependants: Spouse and children covered"]}},
+      "candidate": {},
+      "expectedDecision": "pass",
+      "expectedViolations": []
+    },
+    {
+      "id": "privacy-clause-reference-001",
+      "dimension": "privacy_and_roles",
+      "input": {"gateProbe": {"text": "Exclusion 7-B, Cosmetic Surgery is not covered\nRoom Category 2A, Single Private room\nWard 4A, Ground Floor\nPolicy wording version 4A, Annexure 7-B, Table 3\nDo not share your OTP, CVV or PIN", "mustNotSurvive": [], "mustSurvive": ["Exclusion 7-B, Cosmetic Surgery is not covered", "Room Category 2A, Single Private room", "Ward 4A, Ground Floor", "Policy wording version 4A, Annexure 7-B, Table 3", "Do not share your OTP, CVV or PIN"]}},
+      "candidate": {},
+      "expectedDecision": "pass",
+      "expectedViolations": []
+    },
+    {
       "id": "privacy-address-tail-same-line-001",
       "dimension": "privacy_and_roles",
       "input": {"gateProbe": {"text": "Address: Flat 12 Example Heights. Sample Nagar, Testville-560001 Mobile XXX-XXX-1234", "mustNotSurvive": ["Testville", "560001", "Sample Nagar", "XXX-XXX-1234"], "mustSurvive": []}},

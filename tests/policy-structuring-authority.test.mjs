@@ -64,7 +64,7 @@ const storedCount = database => database.prepare("SELECT count(*) AS count FROM 
 test('a model-selected value is stored extracted_unverified with every reading, and nothing can lift it higher', async t => {
   const { database, services } = open(t);
   const check = grantCheck(services);
-  const result = await structurePolicyDocument({ pages, call: selectingGemini(), consentCheck: check, commit: commitWith(services, check), env: enabled });
+  const result = await structurePolicyDocument({ pages, call: selectingGemini(), consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled });
   const ped = result.decisions.find(decision => decision.parameterKey === 'f.ped_waiting_period');
   assert.deepEqual([ped.state, ped.reasonCode, ped.observations.length], ['extracted_unverified', 'model_selected_from_conflict', 2]);
 
@@ -126,7 +126,7 @@ test('consent is checked before every provider call, before commit and again ins
   const events = [];
   const grant = grantCheck(services);
   const check = () => { events.push(database.isTransaction ? 'consent-in-transaction' : 'consent'); return grant(); };
-  await structurePolicyDocument({ pages, call: selectingGemini(events), consentCheck: check, commit: commitWith(services, check), env: enabled, limits: { maxChunksPerCall: 1 } });
+  await structurePolicyDocument({ pages, call: selectingGemini(events), consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled, limits: { maxChunksPerCall: 1 } });
   const calls = events.filter(event => event === 'extract' || event === 'reconcile').length;
   assert.ok(calls >= 3, 'several extraction calls and one reconcile call');
   events.forEach((event, index) => {
@@ -154,7 +154,7 @@ test('consent withdrawn mid-run stops further calls and stores nothing', async t
     return answer;
   };
   const check = grantCheck(services);
-  await assert.rejects(structurePolicyDocument({ pages, call, consentCheck: check, commit: commitWith(services, check), env: enabled, limits: { maxChunksPerCall: 1 } }),
+  await assert.rejects(structurePolicyDocument({ pages, call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled, limits: { maxChunksPerCall: 1 } }),
     error => ['CONSENT_REQUIRED', 'CONSENT_SCOPE_REQUIRED'].includes(error.code));
   assert.deepEqual(events, ['extract'], 'no provider call after the withdrawal');
   assert.equal(storedCount(database), 0);
@@ -167,7 +167,7 @@ test('consent lost only inside the commit transaction stores nothing', async t =
     if (database.isTransaction) throw Object.assign(new Error('Active subject-scoped consent is required.'), { code: 'CONSENT_REQUIRED' });
     return grant();
   };
-  await assert.rejects(structurePolicyDocument({ pages, call: selectingGemini(), consentCheck: check, commit: commitWith(services, check), env: enabled }), { code: 'CONSENT_REQUIRED' });
+  await assert.rejects(structurePolicyDocument({ pages, call: selectingGemini(), consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled }), { code: 'CONSENT_REQUIRED' });
   assert.equal(storedCount(database), 0);
   assert.equal(resolution(services, 'f.ped_waiting_period').resolutionState, 'unknown');
 });

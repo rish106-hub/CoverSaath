@@ -103,7 +103,7 @@ async function structure(t, { keys = criticalKeys, fail } = {}) {
   const check = grantCheck(services);
   const commits = [];
   const result = await structurePolicyDocument({
-    pages: pagesFor(keys), call: gemini.call, consentCheck: check, commit: commitWith(services, check, commits), env: enabled,
+    pages: pagesFor(keys), call: gemini.call, consentCheck: check, commit: commitWith(services, check, commits), knownIdentifiers: [], env: enabled,
     limits: { maxChunksPerCall: 1 },
   });
   return { database, services, gemini, commits, result };
