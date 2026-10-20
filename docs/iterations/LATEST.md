@@ -1,5 +1,13 @@
 # Latest iteration
 
+## Closeout status (2026-10-20, `main`)
+
+- Pushed to `main` with CI green (PostgreSQL 17 suite included: migration 013, parity, runner, trigger tests).
+- Done: obfuscated-email privacy fix; typed twins; Phase 3 candidate association; Phase 4 reviewer grants and review API with an independent review (fixed); Phase 5 rules; Phase 7 handoff and journeys; CodeQL script fixes (`smoke-test-gemini` no longer logs key fragments or puts the key in the URL, duplicate function removed; null-prototype score maps).
+- CodeQL workflow still fails: "advanced configurations cannot be processed when the default setup is enabled". Fix needs a repository setting (disable default setup, or delete `.github/workflows/codeql.yml`). Not changed without approval. Remaining alerts are in dev scripts, `migrate.js` (runs repo-owned SQL files) and test support; none were dismissed. Status: CODEQL_PARTIALLY_RESOLVED.
+- Phase 6: `curated-sources.js` stays empty. No official IRDAI or insurer record was independently verified (no external access used). Nothing invented.
+- Still open: fresh independent review of the final privacy gate (BLOCK2_QA_PENDING), holdout evaluation on untouched real policies, multi-insurer accuracy, legal review of consent wording, staff access model for the independent reviewer, full Block 4 engine (out of scope).
+
 ## Phase 5: deterministic rule completion (2026-10-20)
 
 - Waiting-period completion needs a verified `continuous_cover` fact (`since`, `uninterrupted`, optional `creditedPriorCover`), a known waiting period and an as-of date. A policy start date, model-reported continuity, an interrupted record or a missing piece gives `unknown` with a reason (`continuity_not_evidenced`, `cover_interrupted`, `as_of_date_missing`, `waiting_period_not_established`). The contract month-counting rule is still unverified.
