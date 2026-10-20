@@ -19,7 +19,7 @@ export function buildEvidenceIndex(clauseRows, householdId) {
     if ('householdId' in row && row.householdId !== householdId) continue;
     if ('status' in row && row.status !== 'active') continue;
     if ('lifecycleState' in row && row.lifecycleState !== 'active') continue;
-    index.set(id, { householdId, documentId, sourceVersion, page: row.page, live: true });
+    index.set(id, { householdId, documentId, sourceVersion, page: row.page, digest: typeof row.digest === 'string' ? row.digest : null, live: true });
   }
   return index;
 }

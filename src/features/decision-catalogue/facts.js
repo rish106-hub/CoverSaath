@@ -78,6 +78,7 @@ export function ingestFacts(candidates, { householdId, evidenceIndex, origin, re
     const clauseIds = Array.isArray(c.clauseIds) && c.clauseIds.length <= MAX_CLAUSES ? [...new Set(c.clauseIds.map(id => text(id, 128)))].sort() : null;
     if (!clauseIds || clauseIds.includes(null)) return rejected.push(reject('FACT_EVIDENCE_MALFORMED', index));
     let page = null;
+    const sourceDigests = [];
     if (clauseIds.length) {
       for (const id of clauseIds) {
         const evidence = evidenceIndex.get(id);
@@ -85,6 +86,7 @@ export function ingestFacts(candidates, { householdId, evidenceIndex, origin, re
         if (evidence.householdId !== householdId) return rejected.push(reject('EVIDENCE_OUT_OF_SCOPE', index));
         if (evidence.documentId !== documentId || evidence.sourceVersion !== sourceVersion) return rejected.push(reject('EVIDENCE_SOURCE_MISMATCH', index));
         page ??= evidence.page;
+        sourceDigests.push(evidence.digest ?? null);
       }
     }
     if (!clauseIds.length) return rejected.push(reject('FACT_EVIDENCE_REQUIRED', index));
@@ -110,7 +112,7 @@ export function ingestFacts(candidates, { householdId, evidenceIndex, origin, re
       policyId, association, documentId, sourceVersion,
       familyId: text(c.familyId, 128) ?? documentId,
       sourceType, declaredSourceType: text(c.declaredSourceType, 60), contractual: sourceType in CONTRACTUAL_SOURCES,
-      clauseIds, page, factType, topic,
+      clauseIds, sourceDigests, page, factType, topic,
       registryKey: text(c.registryKey, 80),
       subject: { memberId, scope },
       selection, value: core.value, unit: text(c.unit, 40),

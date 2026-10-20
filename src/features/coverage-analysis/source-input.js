@@ -213,6 +213,8 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryV
     const documentId = opaque(page.document_upload_id);
     try {
       const stored = sanitizeEvidenceTextForStorage(page.extracted_text, { maxBytes: PAGE_STORAGE_BYTES, ...gateOptions });
+      // A cut page may end mid-identifier, and the cut tail was never scanned. Refuse it, as the model path does.
+      if (stored.truncated) throw Object.assign(new Error('Page text exceeds the storage limit.'), { code: 'EVIDENCE_SOURCE_LIMIT' });
       const pageKeys = matchedKeys(stored.text, matchers).slice(0, MAX_KEYS_PER_PAGE);
       const selected = selectExcerpt(stored.text, matchers);
       // The excerpt is re-sanitised: dropping lines must not make the remainder restricted.

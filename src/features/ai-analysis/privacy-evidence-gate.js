@@ -251,14 +251,18 @@ const RESTRICTED_PATTERNS = Object.freeze([
   /(?<![\p{L}\p{N}])(?:password|passwd|pwd|pass[_ -]?phrase|api[_ -]?key|api[_ -]?secret|secret[_ -]?key|client[_ -]?secret|private[_ -]?key|access[_ -]?key(?:[_ -]?id)?|access[_ -]?token|refresh[_ -]?token|auth[_ -]?token|session[_ -]?token|id[_ -]?token|bearer[_ -]?token|secret|token)(?![\p{L}\p{N}_])["']?\s*[=:]\s*["']?[^\s,"'}]{6,}/iu,
   // One-time codes, card verification values and PINs. The separator forms are
   // alternatives (not adjacent optional runs) so the match is linear.
-  /(?<![\p{L}\p{N}])(?:otp|one[_ -]?time[_ -]?(?:password|passcode|code)|verification[_ -]?code|security[_ -]?code|cvv2?|cvc2?|card[_ -]?verification[_ -]?(?:value|code)|upi[_ -]?pin|m-?pin|atm[_ -]?pin|card[_ -]?pin)(?![\p{L}_])["']?[\s:=-]*(?:(?:is|are|was|code|for|your|the|login|transaction|no|number|sent|to|you|my)(?![\p{L}_])[\s:=-]*){0,4}["']?\d(?:[ -]?\d){2,7}(?!\d)/iu,
+  /(?<![\p{L}\p{N}])(?:otp|one[_ -]?time[_ -]?(?:password|passcode|code)|verification[_ -]?code|security[_ -]?code|cvv2?|cvc2?|card[_ -]?verification[_ -]?(?:value|code)|upi[_ -]?pin|m-?pin|atm[_ -]?pin|card[_ -]?pin|(?:my|your|new|old|secret|login)\s+pin(?![\s_-]*code)|pin\s+(?:number|no\.?))(?![\p{L}_])["']?[\s:=-]*(?:(?:is|are|was|code|for|your|the|login|transaction|no|number|sent|to|you|my)(?![\p{L}_])[\s:=-]*){0,4}["']?\d(?:[ -]?\d){2,7}(?!\d)/iu,
   // Credential keys with a prefix: camelCase ("dbPassword"), snake_case ("my_secret_value"), dotted ("user.access_token").
   /(?<![A-Za-z0-9_.-])[A-Za-z0-9_.-]{0,40}?(?:(?<=[_.-])(?:[Pp]assword|[Pp]asswd|[Pp]wd|[Aa]pi_?[Kk]ey|[Ss]ecret|[Tt]oken|[Pp]rivate_?[Kk]ey|[Aa]ccess_?[Kk]ey)|(?<=[a-z0-9])(?:Password|Passwd|Pwd|ApiKey|Secret|Token|PrivateKey|AccessKey)|(?<![A-Za-z0-9])(?:apiKey|accessKey|privateKey))(?![a-z])[A-Za-z0-9_.-]{0,60}["']?\s*[=:]\s*["']?[^\s,"'}]{6,}/u,
+  // Natural-language forms: "the password is hunter22", "password hunter22", "client secret abc123def456".
+  /(?<![\p{L}\p{N}])(?:password|passwd|pwd|passcode|pass)(?![\p{L}\p{N}_])["']?(?:\s*[=:]\s*["']?[^\s,"'}]{6,}|\s+(?:is|are|was)\s+["']?(?=[^\s,"'}]*\d)[^\s,"'}]{6,})/iu,
+  /(?<![\p{L}\p{N}])(?:password|passwd|pwd|passcode|(?:api|client)[_ -]?secret|secret[_ -]?key|api[_ -]?key|access[_ -]?token)\s+["']?(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{6,}/iu,
+  /\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}/,
   /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i,
   /\bBasic\s+[A-Za-z0-9+/]{16,}={0,2}/,
   // Well-known provider credential formats.
   /\bAIza[0-9A-Za-z_-]{35}/,
-  /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/,
+  /\b(?:AKIA|ASIA)[0-9A-Z]{16,}\b/,
   /\bsk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}/,
   /\bgh[pousr]_[A-Za-z0-9]{36,}/,
   /\bgithub_pat_[A-Za-z0-9_]{22,}/,
@@ -775,13 +779,13 @@ function redactMemberRow(line, swap) {
 // Placeholder (Self), Ravi Synthetic (Spouse)".
 const LIST_LABELS = [
   '(?:insured|covered|family)\\s+(?:persons?|members?|lives)(?:\\s+names?)?', 'members?\\s+(?:covered|insured|names?)', 'members',
-  'nominees', 'beneficiaries', 'dependants', 'dependents', 'insured\\s+names', 'names\\s+of\\s+(?:the\\s+)?(?:insured(?:\\s+persons)?|members)',
+  'nominees?', 'proposers?', 'insured', 'patient\\s+names?', 'name\\s+of\\s+(?:the\\s+)?insured', 'beneficiaries', 'dependants', 'dependents', 'insured\\s+names', 'names\\s+of\\s+(?:the\\s+)?(?:insured(?:\\s+persons)?|members)',
 ].join('|');
 const LIST_LABEL = new RegExp(`${LABEL_START}(${LIST_LABELS})${LABEL_END}${STRICT_SEP}`, 'iu');
 const LIST_SEPARATOR = /( ?(?:[,&|/]| and ) ?)/i;
 
 function redactListItem(piece, swap) {
-  if (startsWithPolicyWording(piece) || AMOUNT_START.test(piece.trim())) return piece;
+  if (startsWithPolicyWording(piece) || AMOUNT_START.test(piece.trim()) || piece.trim().length <= 2) return piece;
   let start = -1;
   let end = -1;
   let count = 0;
@@ -1049,8 +1053,8 @@ function compileKnownIdentifiers(entries) {
     if (entry.kind === 'NAME') {
       const tokens = value.split(/[\s.,]+/u).filter(Boolean);
       if (!tokens.some(token => /\p{L}/u.test(token))) knownMalformed('A known name must contain letters.');
-      const forward = tokens.map(escapeRegExp).join('[\\s.,]+');
-      const variants = tokens.length > 1 ? [forward, [...tokens].reverse().map(escapeRegExp).join('[\\s.,]+')] : [forward];
+      const forward = tokens.map(escapeRegExp).join('[\\s.,]*');
+      const variants = tokens.length > 1 ? [forward, [...tokens].reverse().map(escapeRegExp).join('[\\s.,]*')] : [forward];
       names.push({ owner: value, variants, weight: value.length });
       for (const token of tokens) {
         const lower = token.toLowerCase();
