@@ -1,0 +1,117 @@
+tests/policy-structuring-journey.test.mjs
+  s_3cd52a4170c35a::t_8b2d848d481ceb 88
+src/features/policy-structuring/index.js
+  s_3cd52a4170c35a::t_57c1b83c484816 10,17-20,75-76,78,99-100,102,108,112
+src/backend/services/policy-structuring-service.js
+  s_3cd52a4170c35a::t_9d9e60cfba2c60 9-11,54-66,71-72,110-111,113,116,119-124,126-127,134-146,148-155,158-162,178-182
+  s_3cd52a4170c35a::t_7721dcf06392db 131-133
+  s_3cd52a4170c35a::t_7e58f35c3cdceb 184-186
+  s_3cd52a4170c35a::t_8b2d848d481ceb 217-218,223-224,229
+  s_3cd52a4170c35a::t_c0d91369d33c08 4,38-51,99,102,109,118,147,156,163,227
+tests/support/postgres-fixtures.mjs
+  s_3cd52a4170c35a::t_e14d3ef7bc2c52 84-87
+src/backend/database/postgres/migrations/010_policy_structuring_jobs.sql
+  s_3cd52a4170c35a::t_5bd91cafaf1033 1-148
+src/backend/database/database.js
+  s_3cd52a4170c35a::t_20453636b81e15 135,151
+  s_3cd52a4170c35a::t_6d20c489c93330 115,144
+  s_3cd52a4170c35a::t_ceb5e7e844d43a 73,116-117
+tests/postgres-runner.test.mjs
+  s_3cd52a4170c35a::t_6d20c489c93330 15,43
+tests/ocr-pipeline.test.mjs
+  s_3cd52a4170c35a::t_5774e74dd21c92 90
+src/integrations/sarvam/ocr-provider.js
+  s_3cd52a4170c35a::t_7721dcf06392db 2,42-43
+src/features/input/fixture-ocr-provider.js
+  s_3cd52a4170c35a::t_7721dcf06392db 13
+tests/postgres-triggers.test.mjs
+  s_3cd52a4170c35a::t_6d20c489c93330 930-944
+  s_3cd52a4170c35a::t_e14d3ef7bc2c52 868-910
+src/backend/database/migrations/014_source_page_blocks_upgrade.sql
+  s_3cd52a4170c35a::t_f91326ef384500 1-53
+src/backend/repositories/ocr-repository.js
+  s_3cd52a4170c35a::t_e293375f639e0b 46-48,129-133,137,139,145,147,293-355
+  s_3cd52a4170c35a::t_2cca871ee93f8b 356-360
+scripts/eval-structuring-accuracy.mjs
+  s_3cd52a4170c35a::t_7612b310651534 27-28
+docs/runbooks/policy-structuring.md
+  s_3cd52a4170c35a::t_06d85de5b05b41 27-35,39-55,66-71
+src/backend/database/migrations/013_policy_structuring_jobs.sql
+  s_3cd52a4170c35a::t_63bb91dad2e4d8 1-135
+src/contracts/error-codes.js
+  s_3cd52a4170c35a::t_7721dcf06392db 124-128
+tests/postgres-catalog-parity.test.mjs
+  s_3cd52a4170c35a::t_ceb5e7e844d43a 16
+  s_3cd52a4170c35a::t_6d20c489c93330 211
+src/backend/database/postgres/migrations/011_source_page_blocks_upgrade.sql
+  s_3cd52a4170c35a::t_5f87fb4a71dd0b 1-48
+tests/database-integrity-v2.test.mjs
+  s_3cd52a4170c35a::t_6d20c489c93330 91
+  s_3cd52a4170c35a::t_e14d3ef7bc2c52 90
+src/features/policy-structuring/outcome.js
+  s_3cd52a4170c35a::t_8391b7adfe4748 1-62
+tests/policy-structuring-outcome.test.mjs
+  s_3cd52a4170c35a::t_3f7a200150d5ae 1-232
+tests/policy-structuring-api.test.mjs
+  s_3cd52a4170c35a::t_c0d91369d33c08 235-239,271-272,287,314
+  s_3cd52a4170c35a::t_7e58f35c3cdceb 353
+  s_3cd52a4170c35a::t_868e4d4794ff27 357-396
+src/backend/repositories/policy-structuring-repository.js
+  s_3cd52a4170c35a::t_8b2d848d481ceb 528-532,535,539-540
+  s_3cd52a4170c35a::t_57c1b83c484816 292-308,376,391,396,405,504
+  s_3cd52a4170c35a::t_d1dbc846d3cb90 215-240,554-634,680-692,701-702
+  s_3cd52a4170c35a::t_5451ec9670022d 640-641
+  s_3cd52a4170c35a::t_da82f8db968147 635
+tests/policy-structuring-jobs.test.mjs
+  s_3cd52a4170c35a::t_c38b980d9ea9a3 1-186
+src/server/routes/v1-backend-routes.js
+  s_3cd52a4170c35a::t_9d9e60cfba2c60 436
+  s_3cd52a4170c35a::t_c0d91369d33c08 438
+  s_3cd52a4170c35a::t_7721dcf06392db 393-395
+src/features/input/ocr-service.js
+  s_3cd52a4170c35a::t_ad9497f3163ffd 3,7,58-60,62,64,82-89,101-112,119-120,123
+docs/adr/0006-policy-document-structuring.md
+  s_3cd52a4170c35a::t_06d85de5b05b41 155-202
+tests/ocr-blocks-upgrade.test.mjs
+  s_3cd52a4170c35a::t_ad9497f3163ffd 195
+  s_3cd52a4170c35a::t_b0f10592e76d7a 216
+  s_3cd52a4170c35a::t_f0be392c1e40e9 178-179
+  s_3cd52a4170c35a::t_04ee01540450b2 1-177,180-194,196-215,217-231
+tests/database-schema.test.mjs
+  s_3cd52a4170c35a::t_6d20c489c93330 35
+src/backend/database/postgres/validate-schema.js
+  s_3cd52a4170c35a::t_ceb5e7e844d43a 15
+tests/evidence-completion-persistence.test.mjs
+  s_3cd52a4170c35a::t_e14d3ef7bc2c52 79
+  s_3cd52a4170c35a::t_6d20c489c93330 80
+tests/policy-structuring-persistence.test.mjs
+  s_3cd52a4170c35a::t_b78d71d24c9f18 5,106,148-181,183-200,218-221,348-349
+  s_3cd52a4170c35a::t_b543be22e1c804 182
+docs/iterations/LATEST.md
+  s_3cd52a4170c35a::t_1367814fe3b6bd 3-36
+scripts/structure-policy.mjs
+  s_3cd52a4170c35a::t_8fe45a70b76605 187,189,206
+  s_3cd52a4170c35a::t_8b2d848d481ceb 160-164
+tests/policy-structuring-critical-fields.test.mjs
+  s_3cd52a4170c35a::t_d08b219642c2a5 28
+  s_3cd52a4170c35a::t_2a8d4b4a11cb48 48-49
+  s_3cd52a4170c35a::t_5945c8b373fe7f 36-47,50-62
+src/features/policy-structuring/coverage-report.js
+  s_3cd52a4170c35a::t_e8ed2f73fee479 5,119-137,139-149,153-163,167-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ef357153afa8656c82a550f6fb2c63aba8055f9a",
+  "prompts": {},
+  "sessions": {
+    "s_3cd52a4170c35a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "91d095f0-ed55-4e07-9563-5ef8eb438936",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
