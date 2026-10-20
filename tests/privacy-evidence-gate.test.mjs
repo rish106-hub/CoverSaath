@@ -1,11 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/live-coverage-runtime.js';
-import {
-  PRIVACY_EVIDENCE_GATE_VERSION,
-  sanitizeEvidenceForModel,
-  sanitizeEvidenceTextForStorage,
-} from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { PRIVACY_EVIDENCE_GATE_VERSION, sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { sanitizeEvidenceTextForStorage } from './support/storage-gate.mjs';
 import { RESTRICTED_PROBES, TOKENIZED_PROBES } from './support/privacy-probes.mjs';
 
 const policy = (overrides = {}) => ({
@@ -93,14 +90,13 @@ test('privacy gate rejects restricted classification, credentials, payment cards
 });
 
 test('privacy gate bounds excerpts and rejects source, upstream, and total byte overflow', () => {
-  const truncated = sanitizeEvidenceForModel(rawInput({
+  // A truncated source is refused: a cut can leave an identifier as an unrecognisable fragment.
+  assert.throws(() => sanitizeEvidenceForModel(rawInput({
     sources: [{ ...rawInput().sources[0], text: 'A'.repeat(100) }],
   }), {
     resolveParameterPolicy: () => policy(),
     limits: { maxSourceBytes: 24 },
-  });
-  assert.equal(Buffer.byteLength(truncated.input.sources[0].text, 'utf8'), 24);
-  assert.ok(truncated.audit.sources[0].redactionReasonCodes.includes('TEXT_TRUNCATED'));
+  }), { code: 'EVIDENCE_SOURCE_LIMIT' });
 
   assert.throws(() => sanitizeEvidenceForModel(rawInput({ sources: [rawInput().sources[0], { ...rawInput().sources[0], id: 'page-2' }] }), {
     resolveParameterPolicy: () => policy(),
@@ -215,7 +211,7 @@ test('each direct-identifier probe is tokenized on its own, in storage and in st
     assert.ok(!stored.text.includes(raw), `${label} must be removed before storage`);
     assert.ok(stored.reasonCodes.length > 0, label);
     // Re-sanitising stored text is idempotent: tokens are never re-tokenized.
-    assert.equal(sanitizeEvidenceTextForStorage(stored.text).text, stored.text, `${label} must be idempotent`);
+    assert.equal(sanitizeEvidenceTextForStorage(stored.text, { regate: true }).text, stored.text, `${label} must be idempotent`);
   }
   const structured = sanitizeEvidenceForModel(rawInput({
     upstream: [{ patientName: 'Ravi Synthetic', diagnosis: 'synthetic asthma', passportNumber: 'K1234567', ifscCode: 'SBIN0001234', mobile: '9876543210', note: 'Name: Meera Testcase', factId: 'UNCLASSIFIED:case-raw-123' }],

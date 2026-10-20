@@ -170,6 +170,7 @@ const PLACEHOLDER_SOURCE = '<[A-Z]+(?:_[A-Z]+)*_[1-9][0-9]{0,5}>';
 const LEGACY_TOKEN_SOURCE = '<[A-Z_]+:[a-f0-9]{16}>';
 const PLACEHOLDER = new RegExp(`<([A-Z]+(?:_[A-Z]+)*)_([1-9][0-9]{0,5})>`, 'g');
 const ANY_TOKEN = new RegExp(`${PLACEHOLDER_SOURCE}|${LEGACY_TOKEN_SOURCE}`, 'g');
+const HAS_TOKEN = new RegExp(`${PLACEHOLDER_SOURCE}|${LEGACY_TOKEN_SOURCE}`);
 const LEGACY_TOKEN = new RegExp(`^<([A-Z_]+):[a-f0-9]{16}>$`);
 
 function createPlaceholderState(seedText = '', known = null) {
@@ -247,10 +248,12 @@ function outsideTokens(value, transform) {
 const RESTRICTED_PATTERNS = Object.freeze([
   /-----BEGIN(?: [A-Z]+)? PRIVATE KEY-----/i,
   // Labelled credentials, including JSON-quoted keys such as "apiKey": "...".
-  /\b(?:password|passwd|pwd|pass[_ -]?phrase|api[_ -]?key|api[_ -]?secret|secret[_ -]?key|client[_ -]?secret|private[_ -]?key|access[_ -]?key(?:[_ -]?id)?|access[_ -]?token|refresh[_ -]?token|auth[_ -]?token|session[_ -]?token|id[_ -]?token|bearer[_ -]?token|secret|token)\b["']?\s*[=:]\s*["']?[^\s,"'}]{6,}/i,
+  /(?<![\p{L}\p{N}])(?:password|passwd|pwd|pass[_ -]?phrase|api[_ -]?key|api[_ -]?secret|secret[_ -]?key|client[_ -]?secret|private[_ -]?key|access[_ -]?key(?:[_ -]?id)?|access[_ -]?token|refresh[_ -]?token|auth[_ -]?token|session[_ -]?token|id[_ -]?token|bearer[_ -]?token|secret|token)(?![\p{L}\p{N}_])["']?\s*[=:]\s*["']?[^\s,"'}]{6,}/iu,
   // One-time codes, card verification values and PINs. The separator forms are
   // alternatives (not adjacent optional runs) so the match is linear.
-  /\b(?:otp|one[_ -]?time[_ -]?password|cvv2?|cvc2?|card[_ -]?verification[_ -]?(?:value|code)|upi[_ -]?pin|m-?pin|atm[_ -]?pin|card[_ -]?pin)\b["']?(?:\s*(?:is|[=:])\s*|\s+)?["']?\d{3,8}\b/i,
+  /(?<![\p{L}\p{N}])(?:otp|one[_ -]?time[_ -]?(?:password|passcode|code)|verification[_ -]?code|security[_ -]?code|cvv2?|cvc2?|card[_ -]?verification[_ -]?(?:value|code)|upi[_ -]?pin|m-?pin|atm[_ -]?pin|card[_ -]?pin)(?![\p{L}_])["']?[\s:=-]*(?:(?:is|are|was|code|for|your|the|login|transaction|no|number|sent|to|you|my)(?![\p{L}_])[\s:=-]*){0,4}["']?\d(?:[ -]?\d){2,7}(?!\d)/iu,
+  // Credential keys with a prefix: camelCase ("dbPassword"), snake_case ("my_secret_value"), dotted ("user.access_token").
+  /(?<![A-Za-z0-9_.-])[A-Za-z0-9_.-]{0,40}?(?:(?<=[_.-])(?:[Pp]assword|[Pp]asswd|[Pp]wd|[Aa]pi_?[Kk]ey|[Ss]ecret|[Tt]oken|[Pp]rivate_?[Kk]ey|[Aa]ccess_?[Kk]ey)|(?<=[a-z0-9])(?:Password|Passwd|Pwd|ApiKey|Secret|Token|PrivateKey|AccessKey)|(?<![A-Za-z0-9])(?:apiKey|accessKey|privateKey))(?![a-z])[A-Za-z0-9_.-]{0,60}["']?\s*[=:]\s*["']?[^\s,"'}]{6,}/u,
   /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i,
   /\bBasic\s+[A-Za-z0-9+/]{16,}={0,2}/,
   // Well-known provider credential formats.
@@ -281,8 +284,9 @@ function luhnValid(digits) {
 
 // A maximal run of digit groups joined by single separators. Groups are only
 // ever combined inside one run; separate runs are never concatenated.
-const DIGIT_RUN = /(?<![\p{N}\p{L}_])(\+?)(\d+(?:[ .‐-―-]\d+)*)(?![\p{N}])/gu;
-const GROUP_SEPARATOR = /[ .‐-―-]/u;
+// Groups may be joined by a space, dot, dash, newline, underscore, slash or middle dot.
+const DIGIT_RUN = /(?<!\p{N})(\+?)(\d+(?:[ .‐-―\-\n_/·]\d+)*)(?![\p{N}])/gu;
+const GROUP_SEPARATOR = /[ .‐-―\-\n_/·]/u;
 // Printed card groupings: 4-4-4-4 (+1..3), 4-6-5 (Amex), 4-6-4 (Diners), 4-4-5.
 const CARD_SHAPES = Object.freeze([[4, 4, 4, 4], [4, 4, 4, 4, 1], [4, 4, 4, 4, 2], [4, 4, 4, 4, 3], [4, 6, 5], [4, 6, 4], [4, 4, 5]]);
 const CARD_LABEL = /(?:card|credit|debit|visa|master\s?card|rupay|amex|american\s+express|maestro|diners|discover|cvv|cvc|expiry|valid\s+thru|exp\.?\s*date)/i;
@@ -391,14 +395,44 @@ function scanRestricted(value) {
   return RESTRICTED_PATTERNS.some(pattern => pattern.test(value) || pattern.test(unescaped)) || containsPaymentCard(value);
 }
 
+// A placeholder can sit inside a value ("password=abc<NAME_1>xyz123456", "98765<PHONE_1>43210"). Gate-minted tokens
+// replace a whole matched value and never touch a digit, so a token with a digit straight before or after it is
+// foreign text trying to split a value: refused. Restricted patterns are also scanned with tokens deleted, so the
+// pieces on either side of a token read as one run.
+const TOKEN_NEXT_TO_DIGIT = new RegExp(`\\p{N}(?:${PLACEHOLDER_SOURCE}|${LEGACY_TOKEN_SOURCE})|(?:${PLACEHOLDER_SOURCE}|${LEGACY_TOKEN_SOURCE})\\p{N}`, 'u');
+
+// Three views with the tokens taken out: blanked (text on either side stays apart), spaced (a token and its
+// surrounding whitespace become one space, so "4111 1111 <NAME_1> 1111 1111" reads as a card) and joined (the token
+// and its whitespace vanish, so "12 <NAME_1> 3456" reads as one number).
+const TOKEN_WITH_SPACE = new RegExp(`\\s*(?:${PLACEHOLDER_SOURCE}|${LEGACY_TOKEN_SOURCE})\\s*`, 'g');
+
+function identifierRuns(text) {
+  const runs = new Set();
+  for (const match of text.matchAll(DIGIT_RUN)) {
+    const groups = match[2].split(GROUP_SEPARATOR);
+    if (isIndianPhone(match[1], groups) || isGovernmentId(groups)) runs.add(match[0]);
+  }
+  return runs;
+}
+
 function rejectRestrictedText(value) {
-  const scanned = value.replace(ANY_TOKEN, ' ');
-  let restricted = scanRestricted(scanned);
-  if (!restricted) {
-    for (const [blob] of scanned.matchAll(BASE64_BLOB)) {
-      const decoded = decodeReadableBase64(blob);
-      if (decoded && scanRestricted(normalizeText(decoded))) { restricted = true; break; }
+  let restricted = TOKEN_NEXT_TO_DIGIT.test(value);
+  const blanked = restricted ? '' : value.replace(ANY_TOKEN, ' ');
+  const views = restricted ? [] : [blanked, value.replace(TOKEN_WITH_SPACE, ' '), value.replace(TOKEN_WITH_SPACE, '')];
+  for (const scanned of views) {
+    restricted = scanRestricted(scanned);
+    // A phone or government id that exists only once a token is removed was split by that token.
+    if (!restricted && scanned !== blanked) {
+      const seen = identifierRuns(blanked);
+      restricted = [...identifierRuns(scanned)].some(run => !seen.has(run));
     }
+    if (!restricted) {
+      for (const [blob] of scanned.matchAll(BASE64_BLOB)) {
+        const decoded = decodeReadableBase64(blob);
+        if (decoded && scanRestricted(normalizeText(decoded))) { restricted = true; break; }
+      }
+    }
+    if (restricted) break;
   }
   if (restricted) fail('RESTRICTED_EVIDENCE', 'Restricted evidence cannot be sent to a model.');
 }
@@ -442,7 +476,7 @@ const ADDRESS_CLAUSE = '((?:[^\\n;.<]|\\.(?=\\S)|(?<=(?:^|[\\s,(])\\p{L}{1,3})\\
 const HEALTH_VALUE = '((?:[^\\n,;.<]|\\.(?=\\S)){2,120})';
 const HONORIFIC_ONLY = /^(?:mrs|mr|ms|miss|mx|dr|shri|sri|smt|kumari)$/i;
 const DATE_VALUE ='(\\d{1,4}[\\/. \\u2013\\u2014-]\\d{1,2}[\\/. \\u2013\\u2014-]\\d{1,4}|\\d{1,2}(?:st|nd|rd|th)?[ -]*\\p{L}{3,9}\\.?,?[ -]*\\d{2,4}|\\p{L}{3,9}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{2,4})';
-const PHONE_VALUE = '(\\+?\\d(?:[\\d()\\u2013\\u2014-]|[ .](?=[\\d(]))*\\d)';
+const PHONE_VALUE = '(\\+?\\d(?:[\\d()\\u2013\\u2014-]|[ ._/\\u00b7](?=[\\d(]))*\\d)';
 const ID_VALUE = '([A-Za-z0-9][A-Za-z0-9\\/._\\u2013\\u2014-]{0,39})';
 const GOV_ID_VALUE = '([\\dXx*\\u2022](?:[\\dXx*\\u2022]|[ .\\u2013\\u2014-](?=[\\dXx*\\u2022])){7,24})';
 
@@ -463,7 +497,7 @@ const NAME_LABELS = [
   'name\\s+of\\s+(?:the\\s+)?(?:insured|patient|proposer|member|policy\\s?holder|employee|nominee|beneficiary|claimant|life\\s+assured)',
   'proposer(?:\\s+name)?', 'nominee(?:\\s+name)?', 'beneficiary(?:\\s+name)?', 'employee\\s+name', 'spouse(?:\\s+name)?',
   "father(?:'s)?\\s+name", "mother(?:'s)?\\s+name", 'guardian(?:\\s+name)?', 'policy\\s?holder(?:\\s+name)?', 'claimant(?:\\s+name)?',
-  'applicant(?:\\s+name)?', 'customer\\s+name', 'account\\s+holder(?:\\s+name)?', 'attendant\\s+name',
+  'applicant(?:\\s+name)?', 'dependants?', 'contact\\s+person', 'customer\\s+name', 'account\\s+holder(?:\\s+name)?', 'attendant\\s+name',
 ].join('|');
 // Bare "name", "insured" and "patient" need an explicit ':' / '=' / dash
 // separator and are excluded after policy nouns, so wording such as "Plan name:
@@ -493,10 +527,24 @@ const STRUCTURED_IDENTITY_KEYS = [
   'policyNumber', 'passport', 'passportNumber', 'pan', 'panNumber', 'aadhaar', 'aadhaarNumber', 'phone', 'phoneNumber', 'mobile',
   'mobileNumber', 'email', 'emailAddress', 'ifsc', 'ifscCode', 'accountNumber', 'bankAccount', 'bankAccountNumber', 'upiId', 'vpa',
 ];
+// Keys are compared lower-cased with '_' and '-' removed, so patient_name, Patient-Name and patientName are one key.
+const STRUCTURED_EXTRA_IDENTITY_KEYS = [
+  'names', 'patient_name', 'member_name', 'contact_person', 'contactPerson', 'contactName', 'dependant', 'dependants', 'dependent', 'dependents',
+  'nominee', 'proposer', 'insured', 'surname', 'givenName', 'middleName', 'applicantName', 'claimantName', 'policyholderName', 'policyHolderName',
+  'accountHolderName', 'customerName', 'guardianName', 'attendantName', 'date_of_birth', 'birthDate', 'birthdate', 'born', 'dateOfBirth',
+  'landline', 'whatsapp', 'passportNo', 'aadhar', 'aadhaarNo', 'uid', 'vid', 'uhid', 'mrn',
+  'drivingLicence', 'drivingLicense', 'licenceNumber', 'licenseNumber', 'emailId',
+];
+const STRUCTURED_ADDRESS_KEYS = [
+  'pincode', 'pin', 'pin_code', 'postalCode', 'zip', 'zipCode', 'addressLine', 'addressLine1', 'addressLine2', 'street', 'locality', 'homeAddress',
+  'residentialAddress', 'permanentAddress', 'correspondenceAddress', 'mailingAddress',
+];
+const structuredKey = key => String(key).toLowerCase().replace(/[_-]/g, '');
 const STRUCTURED_HEALTH_KEYS = ['diagnosis', 'medicalCondition', 'condition', 'conditions', 'ailment', 'medicalHistory', 'icdCode', 'chiefComplaint'];
 const STRUCTURED_SENSITIVE_KEYS = new Map([
-  ...STRUCTURED_IDENTITY_KEYS.map(key => [key.toLowerCase(), ['IDENTIFIER', 'DIRECT_IDENTIFIER_LABELED_VALUE']]),
-  ...STRUCTURED_HEALTH_KEYS.map(key => [key.toLowerCase(), ['HEALTH', 'SENSITIVE_HEALTH_CONDITION']]),
+  ...[...STRUCTURED_IDENTITY_KEYS, ...STRUCTURED_EXTRA_IDENTITY_KEYS].map(key => [structuredKey(key), ['IDENTIFIER', 'DIRECT_IDENTIFIER_LABELED_VALUE']]),
+  ...STRUCTURED_ADDRESS_KEYS.map(key => [structuredKey(key), ['ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS']]),
+  ...STRUCTURED_HEALTH_KEYS.map(key => [structuredKey(key), ['HEALTH', 'SENSITIVE_HEALTH_CONDITION']]),
 ]);
 
 // Structured patterns tolerate backslash-escaped quotes (JSON nested in JSON).
@@ -582,8 +630,12 @@ const NAME_CLAUSE_END = new RegExp(` (?:(?:${RELATIONSHIP_WORDS.join('|')})(?![\
 
 // A colon-labelled name clause. Policy wording and amounts are not names; the
 // name ends before a relationship word or a word carrying digits.
+const RELATIONSHIP_SET = new Set(RELATIONSHIP_WORDS);
+
 function clauseNameSpan(value) {
   if (startsWithPolicyWording(value) || AMOUNT_START.test(value)) return null;
+  // "Dependant: Spouse and children covered" names a relationship, not a person.
+  if (RELATIONSHIP_SET.has(wordCore(value.trim().split(/\s+/u)[0] ?? ''))) return null;
   const cut = value.search(NAME_CLAUSE_END);
   const kept = (cut >= 0 ? value.slice(0, cut) : value).replace(/[\s.,]+$/u, '');
   return kept && /\p{L}/u.test(kept) && !HONORIFIC_ONLY.test(kept) ? kept : null;
@@ -612,6 +664,7 @@ const LABELLED_RULES = Object.freeze([
   [labelPattern(GOV_ID_LABELS, LOOSE_SEP, GOV_ID_VALUE), 'GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID', accepting(value => (value.match(/[\dXx*•]/g)?.length ?? 0) >= 8)],
   [labelPattern(DOB_LABELS, LOOSE_SEP, DATE_VALUE), 'DOB', 'DIRECT_IDENTIFIER_DATE_OF_BIRTH'],
   [labelPattern(DOB_LABELS, STRICT_SEP, '([^\\n,;<]{2,40})'), 'DOB', 'DIRECT_IDENTIFIER_DATE_OF_BIRTH', accepting(value => !startsWithPolicyWording(value) && !RANGE_OR_DURATION.test(value))],
+  [labelPattern('pin\\s?code|pin|postal\\s+code|zip\\s?code', LOOSE_SEP, '([1-9](?:[ -]?\\d){5})(?![\\d]|[,.]\\d)'), 'ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS'],
   [labelPattern(ADDRESS_LABELS, STRICT_SEP, ADDRESS_CLAUSE), 'ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS'],
   [labelPattern(ADDRESS_LABELS, '(\\s+)', `${ADDRESS_START}${ADDRESS_CLAUSE}`), 'ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS'],
   [labelPattern(ID_LABELS, LOOSE_SEP, ID_VALUE), 'IDENTIFIER', 'DIRECT_IDENTIFIER_LABELED_VALUE', accepting(value => /\d/.test(value))],
@@ -635,7 +688,7 @@ const UNLABELLED_RULES = Object.freeze([
 ]);
 
 // "+91 (987) 654-3210", "(022) 2345 6789": a bracketed group inside a phone.
-const BRACKETED_PHONE = /(?<![\p{N}\p{L}_])(\+?)((?:\d{1,4}[ .‐-―-]?)?\(\d{1,5}\)[ .‐-―-]?\d+(?:[ .‐-―-]\d+){0,3})(?![\p{N}])/gu;
+const BRACKETED_PHONE = /(?<!\p{N})(\+?)((?:\d{1,4}[ .‐-―-]?)?\(\d{1,5}\)[ .‐-―-]?\d+(?:[ .‐-―-]\d+){0,3})(?![\p{N}])/gu;
 
 const isMultipleOfFive = group => Number(group) % 5 === 0;
 const isConsecutiveRun = numbers => numbers.every((number, index) => index === 0 || number === numbers[index - 1] + 1)
@@ -1401,7 +1454,9 @@ const LOCALITY_NAME = new RegExp(`(?:\\p{Lu}[\\p{L}\\p{M}.']*\\s+){1,4}${LOCALIT
 const LANDMARK = /(?:^|[\s,(])(?:Near|Opp\.?|Opposite|Behind|Beside|Nr\.?)\s+(?:The\s+)?(?:\p{Lu}[\p{L}\p{M}.']*\s+){0,3}(?:Temple|Mall|Park|School|Church|Mosque|Masjid|Station|Stop|Circle|Signal|Market|Bank|Chowk|College|Gate|Hospital|Stadium)(?![\p{L}])/u;
 const HOUSE_KEYWORD_START = /^\s*(?:flat|house|door|h\.?\s?no)\b[^,]*\d/iu;
 const WEAK_HOUSE_START = /^\s*(?:plot|shop)\b[^,]*\d/iu;
-const HOUSE_NUMBER_ONLY = /^\s*#?\d{1,4}[A-Za-z]?(?:[/-]\d{1,4})?\s*$/u;
+const HOUSE_NUMBER_ONLY = /^\s*#?\d{1,4}[A-Za-z]?(?:[/-](?:\d{1,4}|[A-Za-z]))?\s*$/u;
+// "12/A", "7-B", "4A": a house number that carries a slash, dash or letter reads as an address start on its own.
+const HOUSE_NUMBER_MARKED = /^\s*#?\d{1,4}(?:[A-Za-z]|[/-](?:\d{1,4}|[A-Za-z]))\s*$/u;
 const FRAGMENT_PIECE_MAX = 80;
 
 function redactFragmentRun(text, swap) {
@@ -1421,6 +1476,8 @@ function redactFragmentRun(text, swap) {
     const run = pieces.slice(runStart, runEnd + 1);
     const qualifies = run.some(triggerAt) || (run.length >= 3 && WEAK_HOUSE_START.test(run[0].text)) || (run.length >= 3 && HOUSE_NUMBER_ONLY.test(run[0].text) && run.slice(1).some(piece => /\p{L}/u.test(piece.text)))
       || (run.length >= 2 && SECTOR_START.test(run[0].text))
+      || (run.length >= 2 && HOUSE_NUMBER_MARKED.test(run[0].text) && run.slice(1).every(piece => /\p{L}/u.test(piece.text))
+        && /^\s*\p{Lu}/u.test(pieces[runEnd + 1]?.text ?? ''))
       || (run.length >= 3 && run.some(piece => GLUED_LOCALITY.test(piece.text)) && run.some(piece => /\d/u.test(piece.text)));
     if (qualifies) {
       const startPiece = run[0];
@@ -1447,6 +1504,12 @@ function redactAddressFragments(value, swap) {
   return value.split('\n').map(line => (opensPublic(line) ? line : line.split('|').map(cell => (opensPublic(cell) ? cell : redactFragmentRun(cell, swap))).join('|'))).join('\n');
 }
 
+// "12/A, Shivaji Park" anywhere in a line, also at its end or after leading words ("Lives at 12/A, ..."): a house number
+// with a slash, dash or letter, then capitalised address words and up to two more comma pieces. Clause references
+// ("Clause 4/B, Gold Plan") are not addresses.
+const HOUSE_MARKED_INLINE = /(?<![\p{L}\p{M}\d.'/-])#?\d{1,4}(?:[A-Za-z]|[/-](?:\d{1,4}|[A-Za-z]))(?![\p{L}\d])\s*,\s*\p{Lu}[\p{L}\p{M}.']+(?:\s+\p{Lu}[\p{L}\p{M}.']+){0,3}(?:\s?,\s?\p{Lu}[\p{L}\p{M}]{2,}(?:\s\p{Lu}[\p{L}\p{M}]{2,})?){0,2}/gu;
+const CLAUSE_REFERENCE_BEFORE = /\b(?:exclusions?|category|ward|room|version|benefit|cover|code|no|class|type|clause|section|annexure|annex|table|page|schedule|item|article|rule|para|paragraph|point|note|figure|row|step|tier|plan|part|chapter|appendix)\s*$/iu;
+
 // A locality name inside a sentence ("resides at Sample Nagar, Testville and ...") or on a long comma-less line.
 function redactInlineLocalities(value, swap) {
   const sw = match => swap('ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS', match);
@@ -1454,6 +1517,8 @@ function redactInlineLocalities(value, swap) {
     if (PUBLIC_ADDRESS_LINE.test(line.trim().split(/\s+/u).slice(0, 2).join(' '))) return line;
     let out = line.replace(INLINE_LOCALITY, sw);
     out = out.replace(HOUSE_INLINE, match => sw(match.trimEnd()) + match.slice(match.trimEnd().length));
+    out = outsideTokens(out, segment => segment.replace(HOUSE_MARKED_INLINE, (match, offset, whole) => (
+      CLAUSE_REFERENCE_BEFORE.test(whole.slice(Math.max(0, offset - 16), offset)) || hasPolicyWording(match) || PUBLIC_ADDRESS_LINE.test(match) ? match : sw(match))));
     out = outsideTokens(out, segment => segment.replace(DEVA_LOCALITY, sw));
     if (!/\p{Lu}/u.test(out.replace(/<[A-Z]+_\d+>/gu, ''))) out = outsideTokens(out, segment => segment.replace(LOWER_LOCALITY, sw));
     return out;
@@ -1499,8 +1564,14 @@ function redactText(value, state) {
   return { text, reasons: [...reasons].sort() };
 }
 
-export function sanitizeEvidenceTextForStorage(text, { maxBytes = 4_000, knownIdentifiers } = {}) {
+// `knownIdentifiers` is required (an empty array is an explicit "none"): a caller that forgets the household's own names,
+// dates of birth, phones and emails would store them raw. `regate: true` is for text that already went through this gate
+// (stored pages, clauses): only then may gate-minted placeholders appear in the input. Raw input that carries
+// placeholder or legacy-token syntax is refused, so it cannot split a credential or phone across a fake token.
+export function sanitizeEvidenceTextForStorage(text, { maxBytes = 4_000, knownIdentifiers, regate = false } = {}) {
   if (typeof text !== 'string' || text.trim() === '') fail('PRIVACY_GATE_MALFORMED', 'Evidence text must be non-empty text.');
+  if (knownIdentifiers === undefined || knownIdentifiers === null) fail('PRIVACY_GATE_MALFORMED', 'Storage text needs its known identifiers list (empty when none).');
+  if (regate !== true && HAS_TOKEN.test(normalizeText(text))) fail('RESTRICTED_EVIDENCE', 'Restricted evidence cannot be sent to a model.');
   if (!Number.isInteger(maxBytes) || maxBytes <= 0 || maxBytes > 16_000) fail('PRIVACY_GATE_MALFORMED', 'Storage text byte limit is invalid.');
   if (Buffer.byteLength(text, 'utf8') > 64_000) fail('EVIDENCE_SOURCE_LIMIT', 'Evidence text exceeds its intake byte limit.');
   const known = compileKnownIdentifiers(knownIdentifiers);
@@ -1510,7 +1581,8 @@ export function sanitizeEvidenceTextForStorage(text, { maxBytes = 4_000, knownId
   if (excerpt.truncated) reasonCodes.add('TEXT_TRUNCATED');
   return Object.freeze({
     text: excerpt.text,
-    digest: digest(text),
+    // Digest of the minimised text: a hash of the raw text would let a guesser confirm a candidate identifier.
+    digest: digest(excerpt.text),
     reasonCodes: Object.freeze([...reasonCodes].sort()),
     truncated: excerpt.truncated || reasonCodes.has('TEXT_TRUNCATED'),
   });
@@ -1547,7 +1619,20 @@ function resolvePolicies(parameterKeys, resolveParameterPolicy) {
   });
 }
 
-function sanitizeStructured(value, state, key = '', depth = 0) {
+// Upstream keys are field names from a fixed list (the deterministic decision output and generic amount/count
+// fields), keys that name a sensitive value (the value is minimised), id-shaped keys, and any key under a sensitive
+// parent ("name": { "first": ... }). A key that is not one of these could carry a name or number, so it is refused.
+const STRUCTURED_FIELD_NAMES = new Set([
+  'class', 'reason', 'unresolvedcount', 'unknowns', 'score', 'route', 'rulesroute', 'probabilityofapproval', 'kind', 'immediacy',
+  'financialexposure', 'evidenceconfidence', 'evidence', 'dimensions', 'coveragedeficiency', 'continuityrisk', 'confirmedpayable', 'citedfactcount',
+  'boundary', 'amount', 'note', 'reference', 'contact', 'year', 'negative', 'waitingdays', 'copaypercent', 'suminsured', 'roomrent', 'premium',
+  'reviewemail', 'revieweremail', 'status', 'state', 'count', 'total', 'text', 'summary', 'questions', 'citations', 'authorityowner',
+].map(structuredKey));
+const fieldNameAllowed = (key, inherited) => inherited !== null || STRUCTURED_FIELD_NAMES.has(structuredKey(key)) || STRUCTURED_SENSITIVE_KEYS.has(structuredKey(key))
+  || /^(?:id|ids)$/i.test(key) || /(?:^|_)(?:id|ids)$/i.test(key) || /[a-z]Ids?$/.test(key);
+const STRUCTURED_KEY_SHAPE = /^[A-Za-z_][A-Za-z0-9_.:-]{0,99}$/;
+
+function sanitizeStructured(value, state, key = '', depth = 0, inherited = null) {
   if (depth > state.limits.maxStructuredDepth) fail('PRIVACY_GATE_MALFORMED', 'Structured evidence is too deeply nested.');
   state.items += 1;
   if (state.items > state.limits.maxStructuredItems) fail('PRIVACY_GATE_MALFORMED', 'Structured evidence has too many items.');
@@ -1558,9 +1643,10 @@ function sanitizeStructured(value, state, key = '', depth = 0) {
     // identifier or sensitive key the number is minimised like its text form;
     // elsewhere an integer is scanned as text and replaced only when a rule
     // minimises (or rejects) it, so amounts and counts stay numbers.
-    if (!identifierKey && !STRUCTURED_SENSITIVE_KEYS.has(key.toLowerCase())) {
+    if (!identifierKey && !STRUCTURED_SENSITIVE_KEYS.has(structuredKey(key)) && !inherited) {
       if (!Number.isInteger(value)) return value;
       const redacted = redactText(String(value), state.placeholders);
+      if (redacted.reasons.includes('TEXT_TRUNCATED')) fail('EVIDENCE_SOURCE_LIMIT', 'Structured evidence text exceeds its byte limit.');
       if (redacted.text === String(value)) return value;
       redacted.reasons.forEach(reason => state.reasons.add(reason));
       return redacted.text;
@@ -1572,9 +1658,11 @@ function sanitizeStructured(value, state, key = '', depth = 0) {
       state.reasons.add('DIRECT_IDENTIFIER_STRUCTURED_ID');
       return placeholder(state.placeholders, 'ID', value);
     }
-    const sensitive = STRUCTURED_SENSITIVE_KEYS.get(key.toLowerCase());
+    const sensitive = STRUCTURED_SENSITIVE_KEYS.get(structuredKey(key)) ?? inherited;
     if (sensitive) {
-      const prepared = prepareText(value).text;
+      const cut = prepareText(value);
+      if (cut.capped) fail('EVIDENCE_SOURCE_LIMIT', 'Structured evidence text exceeds its byte limit.');
+      const prepared = cut.text;
       rejectRestrictedText(prepared);
       state.reasons.add(sensitive[1]);
       // A value that is exactly one known identifier keeps that identifier's
@@ -1586,15 +1674,22 @@ function sanitizeStructured(value, state, key = '', depth = 0) {
       return placeholder(state.placeholders, sensitive[0], value);
     }
     const redacted = redactText(value, state.placeholders);
+    if (redacted.reasons.includes('TEXT_TRUNCATED')) fail('EVIDENCE_SOURCE_LIMIT', 'Structured evidence text exceeds its byte limit.');
     redacted.reasons.forEach(reason => state.reasons.add(reason));
     return redacted.text;
   }
-  if (Array.isArray(value)) return value.map(item => sanitizeStructured(item, state, key, depth + 1));
+  // Everything under a sensitive key ("name": { "first": ... }) is that kind of value.
+  const below = STRUCTURED_SENSITIVE_KEYS.get(structuredKey(key)) ?? inherited;
+  if (Array.isArray(value)) return value.map(item => sanitizeStructured(item, state, key, depth + 1, below));
   plainObject(value, 'Structured evidence value');
   const output = {};
   for (const [childKey, childValue] of Object.entries(value)) {
     if (['__proto__', 'prototype', 'constructor'].includes(childKey)) fail('PRIVACY_GATE_MALFORMED', 'Structured evidence contains an unsafe key.');
-    output[childKey] = sanitizeStructured(childValue, state, childKey, depth + 1);
+    // Keys are field names, never data: an odd shape, or a key the gate would minimise, is refused.
+    if (!STRUCTURED_KEY_SHAPE.test(childKey) || redactText(childKey, state.placeholders).text !== childKey || !fieldNameAllowed(childKey, below)) {
+      fail('PRIVACY_GATE_MALFORMED', 'Structured evidence contains a key that is not a plain field name.');
+    }
+    output[childKey] = sanitizeStructured(childValue, state, childKey, depth + 1, below);
   }
   return output;
 }
@@ -1611,7 +1706,9 @@ function limitsWithDefaults(limits = {}) {
   return Object.freeze(value);
 }
 
-export function sanitizeEvidenceForModel(input, { task = 'model_task', resolveParameterPolicy, limits, knownIdentifiers } = {}) {
+// `regated: true` marks input that already went through this gate (stored excerpts and what is derived from them): only
+// then may gate-minted placeholders appear. Raw input carrying placeholder syntax is refused.
+export function sanitizeEvidenceForModel(input, { task = 'model_task', resolveParameterPolicy, limits, knownIdentifiers, regated = false } = {}) {
   const bounded = limitsWithDefaults(limits);
   const known = compileKnownIdentifiers(knownIdentifiers);
   if (typeof task !== 'string' || !/^[a-z][a-z0-9_]{0,79}$/.test(task)) fail('PRIVACY_GATE_MALFORMED', 'Model task name is invalid.');
@@ -1641,6 +1738,7 @@ export function sanitizeEvidenceForModel(input, { task = 'model_task', resolvePa
   } catch {
     fail('PRIVACY_GATE_MALFORMED', 'Model evidence must be serialisable.');
   }
+  if (regated !== true && HAS_TOKEN.test(normalizeText(serialized))) fail('RESTRICTED_EVIDENCE', 'Restricted evidence cannot be sent to a model.');
   const placeholders = createPlaceholderState(serialized, known);
 
   const policyClasses = policies.map(policy => policy.dataClass);
@@ -1663,7 +1761,8 @@ export function sanitizeEvidenceForModel(input, { task = 'model_task', resolvePa
     const redactedText = redactText(source.text, placeholders);
     const excerpt = truncateUtf8(redactedText.text, bounded.maxSourceBytes);
     const textReasons = new Set(redactedText.reasons);
-    if (excerpt.truncated) textReasons.add('TEXT_TRUNCATED');
+    // A cut can split an identifier into an unrecognisable fragment, so a truncated source is refused, as storage drops it.
+    if (excerpt.truncated || textReasons.has('TEXT_TRUNCATED')) fail('EVIDENCE_SOURCE_LIMIT', 'Evidence source text exceeds its model byte limit.');
     const safeVersion = redactText(version, placeholders);
     if (textReasons.size > 0 || safeVersion.reasons.length > 0) dataClass = 'CONFIDENTIAL';
     const reasons = new Set([...textReasons, ...safeVersion.reasons]);
@@ -1671,7 +1770,7 @@ export function sanitizeEvidenceForModel(input, { task = 'model_task', resolvePa
     if (safeIds.has(safeId)) fail('PRIVACY_GATE_MALFORMED', 'Evidence source IDs must be unique.');
     safeIds.add(safeId);
     safeSources.push({ id: safeId, version: safeVersion.text, page: source.page, text: excerpt.text, status: source.status });
-    sourceAudit.push(Object.freeze({ sourceId: safeId, digest: digest(source.text), dataClass, page: source.page, version: safeVersion.text, redactionReasonCodes: [...reasons].sort(), inputBytes: Buffer.byteLength(source.text, 'utf8'), outputBytes: Buffer.byteLength(excerpt.text, 'utf8') }));
+    sourceAudit.push(Object.freeze({ sourceId: safeId, digest: digest(excerpt.text), dataClass, page: source.page, version: safeVersion.text, redactionReasonCodes: [...reasons].sort(), inputBytes: Buffer.byteLength(source.text, 'utf8'), outputBytes: Buffer.byteLength(excerpt.text, 'utf8') }));
   }
 
   if (!Array.isArray(input.upstream) || input.upstream.length > 20) fail('PRIVACY_GATE_MALFORMED', 'upstream must be a bounded array.');

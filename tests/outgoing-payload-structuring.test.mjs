@@ -140,7 +140,7 @@ test('every captured outgoing request has 0 sensitive-data matches in every cate
 
 test('the payload sweep holds without known identifiers, relying on labels and table headers alone', async () => {
   const provider = capturingProvider();
-  await structurePolicyDocument({ pages: PAGES, call: provider.call, consentCheck: () => {}, env: enabled });
+  await structurePolicyDocument({ pages: PAGES, call: provider.call, consentCheck: () => {}, knownIdentifiers: [], env: enabled });
   assert.ok(provider.requests.length > 0);
   for (const [index, body] of provider.requests.entries()) {
     const hits = sweep(body);
