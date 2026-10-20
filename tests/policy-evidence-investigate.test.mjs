@@ -34,9 +34,9 @@ const ids = (...pages) => pages.map(page => byPage(page).clauseId);
 
 const finding = (page, quote, extra = {}) => ({ clause_ids: ids(page), quote, subject: 'cataract surgery', conditions: [], exceptions: [], ...extra });
 const firstPass = { findings: [
-  finding(12, 'cataract surgery as a hospitalisation benefit'),
-  finding(38, 'capped at Rs. 40,000 per eye'),
-  finding(61, 'waiting period of 24 months'),
+  finding(12, 'cataract surgery as a hospitalisation benefit', { effect: 'covers' }),
+  finding(38, 'capped at Rs. 40,000 per eye', { effect: 'limits' }),
+  finding(61, 'waiting period of 24 months', { effect: 'limits' }),
 ] };
 const sweep = { overrides: [
   { clause_ids: ids(70), quote: 'waiting period is waived for members continuously insured for 2 years', effect: 'waives', target_finding_ids: ['f3'] },

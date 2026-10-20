@@ -46,6 +46,11 @@ surface. Live-run failures on 2026-10-20 were pipeline bugs, fixed in Phase A (S
 - Document boundaries (2026-10-20): only the latest active version per logical document (household-wide) is read.
   More than one current document needs a requester-named `documentIds` set, recorded as an unverified association.
   Stored answers are served only while the question grant is active and every read document is still current.
+- Finding `effect` (2026-10-20, live-run defects F-B/F-C): the first-pass model reports `effect` (covers, limits, excludes,
+  conditions, informs) per finding. Code validates it (unknown or missing becomes `conditions`, never `covers`) and buckets
+  by it instead of by the cited clause's keyword kind. It stays `extracted_unverified` display routing, not a coverage
+  decision. Task keys and authority (`propose`) are unchanged, so the AI authority matrix needs no new entry. Code also
+  adds an unknown when a subject word from the question appears in no clause read.
 - Unverified: no live Gemini call was made; recall (slice B5) is unmeasured.
 
 ## Consequences
