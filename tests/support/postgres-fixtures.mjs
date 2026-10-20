@@ -82,6 +82,14 @@ const defaults = {
     id, household_id: 'household-a', case_id: 'case-a', document_id: 'document-a', source_version: 'version-1', page: 1,
     block_indexes_json: '[0]', title: null, kind: 'benefit', text: 'Synthetic clause text.', digest: 'c'.repeat(64), created_at: at,
   }),
+  catalogue_reviewer_grants: id => ({
+    id, household_id: 'household-a', adult_user_id: 'adult-a', kind: 'household_confirmer', status: 'active', granted_by: 'adult-a', created_at: at, revoked_at: null,
+  }),
+  catalogue_reviews: id => ({
+    id, household_id: 'household-a', case_id: 'case-a', grant_id: 'grant-a', reviewer_adult_id: 'adult-a', authority: 'household', decision: 'accepted',
+    reason_code: 'matches_clause', idempotency_key: `idem-${id}`, request_digest: 'd'.repeat(64), document_id: 'document-a', source_version: 'version-1',
+    clause_ids_json: '["pc-1"]', source_digests_json: '["' + 'c'.repeat(64) + '"]', fact_key: 'f'.repeat(64), fact_json: '{}', created_at: at,
+  }),
   policy_answers: id => ({
     id, household_id: 'household-a', case_id: 'case-a', requested_by_adult_id: 'adult-a', idempotency_key: `idem-${id}`,
     request_digest: 'd'.repeat(64), question: 'Synthetic question?', state: 'conditional', document_ids_json: '["document-a"]',
