@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
-import { createCoverageAnalysisRuntime, createPersistentCoverageAnalysisService } from '../src/modules/coverage-analysis/index.js';
+import { createCoverageAnalysisRuntime, createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import {
   COVERAGE_ANALYSIS_PORT_METHODS,
   COVERAGE_PARAMETER_REPOSITORY_PORT_METHODS,

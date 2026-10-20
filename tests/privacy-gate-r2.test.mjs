@@ -7,7 +7,7 @@ import {
   opaqueSourceId,
   sanitizeEvidenceForModel,
   sanitizeEvidenceTextForStorage,
-} from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+} from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { RESTRICTED_PROBES } from './support/privacy-probes.mjs';
 import { setupLiveCase, startLiveServer } from './support/live-analysis-scenario.mjs';
 

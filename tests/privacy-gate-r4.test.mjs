@@ -7,7 +7,7 @@ import {
   PRIVACY_GATE_SCAN_CAP_BYTES,
   sanitizeEvidenceForModel,
   sanitizeEvidenceTextForStorage,
-} from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+} from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import {
   N1_CARD_PROBES,
   N1_WHITESPACE_PROBES,

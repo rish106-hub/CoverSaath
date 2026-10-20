@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { createSarvamOcrProvider } from '../src/integrations/index.js';
-import { createSandboxedPdfSegmenter } from '../src/modules/document-intake/index.js';
+import { createSandboxedPdfSegmenter } from '../src/features/input/index.js';
 
 const liveEnabled = process.env.RUN_SARVAM_LIVE === '1';
 const wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
@@ -66,7 +66,7 @@ test('opt-in live Sarvam Digitise returns and normalizes one synthetic source pa
   assert.equal(result?.status, 'succeeded', 'Sarvam live job did not succeed before the test deadline.');
 
   const normalized = provider.normalizeResult(result.result, source);
-  assert.equal(normalized.schemaVersion, 'knowvia.ocr.v1');
+  assert.equal(normalized.schemaVersion, 'knowvia.ocr.v2');
   assert.equal(normalized.document.id, source.documentId);
   assert.equal(normalized.document.sourceVersion, source.sourceVersion);
   assert.equal(normalized.document.contentSha256, source.contentSha256);

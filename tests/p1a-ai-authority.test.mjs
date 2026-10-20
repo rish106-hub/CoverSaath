@@ -10,21 +10,21 @@ import {
   RUNTIME_AI_TASK_KEYS,
   RUNTIME_RESPONSIBILITIES,
   assertModelTask,
-} from '../src/modules/ai-analysis/responsibility-matrix.js';
+} from '../src/features/ai-analysis/responsibility-matrix.js';
 import {
   OBSERVATION_RESOLUTION_RULES,
   PARAMETER_RESOLUTION_STATES,
   assertModelMayReplaceResolution,
   assertResolutionTransition,
   deriveResolutionAuthority,
-} from '../src/modules/coverage-analysis/parameter-records.js';
-import { MODEL_OBSERVATION_TASK_KEYS } from '../src/modules/coverage-analysis/model-observations.js';
-import { COVERAGE_ANALYSIS_WORKFLOW } from '../src/modules/coverage-analysis/workflow-definition.js';
+} from '../src/features/coverage-analysis/parameter-records.js';
+import { MODEL_OBSERVATION_TASK_KEYS } from '../src/features/coverage-analysis/model-observations.js';
+import { COVERAGE_ANALYSIS_WORKFLOW } from '../src/features/coverage-analysis/workflow-definition.js';
 import {
   EVIDENCE_STATES,
   createTaskOutputEnvelope,
   validateTaskOutputEnvelope,
-} from '../src/modules/coverage-analysis/agent-contracts.js';
+} from '../src/features/coverage-analysis/agent-contracts.js';
 
 const sorted = values => [...values].sort();
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -41,6 +41,10 @@ test('P1-A authority: task ownership agrees with the responsibility matrix and t
     const users = Object.entries(RUNTIME_RESPONSIBILITIES).filter(([, value]) => value.modelTask === modelTask).map(([key]) => key);
     assert.deepEqual(sorted(row.workflowTaskKeys), sorted(users), modelTask);
     assert.equal(row.authority, 'propose');
+    if (row.pipeline === 'policy-structuring') {
+      assert.deepEqual(row.workflowTaskKeys, [], modelTask);
+      continue;
+    }
     assert.equal(row.recordsParameterObservations, row.workflowTaskKeys.some(key => MODEL_OBSERVATION_TASK_KEYS.includes(key)), modelTask);
   }
   assert.deepEqual(sorted(Object.values(AI_AUTHORITY_MATRIX.modelTasks).flatMap(row => row.workflowTaskKeys)), sorted(RUNTIME_AI_TASK_KEYS));

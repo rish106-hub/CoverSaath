@@ -5,17 +5,17 @@ import assert from 'node:assert/strict';
 import {
   COVERAGE_ANALYSIS_WORKFLOW,
   validateCoverageWorkflowDefinition,
-} from '../src/modules/coverage-analysis/workflow-definition.js';
+} from '../src/features/coverage-analysis/workflow-definition.js';
 import {
   assertExecutableWorkflowVersion,
-} from '../src/modules/coverage-analysis/contracts.js';
+} from '../src/features/coverage-analysis/contracts.js';
 import {
   createTaskOutputEnvelope,
   unwrapDependencyOutputs,
   validateTaskInvocation,
   validateTaskOutputEnvelope,
-} from '../src/modules/coverage-analysis/agent-contracts.js';
-import { createCoverageAnalysisRuntime, createPersistentCoverageAnalysisService } from '../src/modules/coverage-analysis/index.js';
+} from '../src/features/coverage-analysis/agent-contracts.js';
+import { createCoverageAnalysisRuntime, createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import {
   TASK_DEFINITION_KEYS,
   TASK_INVOCATION_KEYS,

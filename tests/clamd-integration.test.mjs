@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createClamdScanner } from '../src/modules/document-intake/clamd-scanner.js';
+import { createClamdScanner } from '../src/features/input/clamd-scanner.js';
 
 // Opt-in: runs only against a real clamd configured per docs/runbooks/clamav.md.
 // CLAMD_TEST_HOST=127.0.0.1 CLAMD_TEST_PORT=3310 node --test tests/clamd-integration.test.mjs

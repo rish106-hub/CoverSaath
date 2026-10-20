@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createSarvamOcrProvider } from '../src/integrations/index.js';
-import { createSandboxedPdfSegmenter } from '../src/modules/document-intake/index.js';
+import { createSandboxedPdfSegmenter } from '../src/features/input/index.js';
 
 const DERIVED_FIELDS = new Set(['exclusions_present', 'add_ons_opted']);
 const OUT = resolve('.local/eval');
@@ -60,9 +60,9 @@ function rawPages(raw) {
 
 async function main() {
   if (command === 'digitise') return digitise(positional[0]);
-  const { draftCandidates, extractFields, flattenBlock } = await import('../src/modules/ai-analysis/eval-extractor.js');
-  const { scoreFields, adjudicationMetrics } = await import('../src/modules/ai-analysis/eval-scorer.js');
-  const { selectDisputes, adjudicate, createGeminiCaller, ADJUDICATOR_LIMITS } = await import('../src/modules/ai-analysis/field-adjudicator.js');
+  const { draftCandidates, extractFields, flattenBlock } = await import('../src/features/ai-analysis/eval-extractor.js');
+  const { scoreFields, adjudicationMetrics } = await import('../src/features/ai-analysis/eval-scorer.js');
+  const { selectDisputes, adjudicate, createGeminiCaller, ADJUDICATOR_LIMITS } = await import('../src/features/ai-analysis/field-adjudicator.js');
   const pages = rawPages(await readJson('sarvam-raw.json'));
   if (command === 'draft') {
     await writeJson('golden.draft.json', draftCandidates(pages));

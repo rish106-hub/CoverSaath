@@ -1,12 +1,12 @@
 import { readBody } from '../http/request.js';
 import { isLoopbackRequest, readBinaryBody } from '../../shared/http/index.js';
-import { MAX_DOCUMENT_BYTES } from '../../modules/document-intake/index.js';
+import { MAX_DOCUMENT_BYTES } from '../../features/input/index.js';
 import { documentDto } from '../../backend/services/index.js';
 import { validateSchema } from '../../backend/database/index.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
-import { COVERAGE_ANALYSIS_WORKFLOW } from '../../modules/coverage-analysis/index.js';
+import { COVERAGE_ANALYSIS_WORKFLOW } from '../../features/coverage-analysis/index.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
-import { createPersistentCoverageAnalysisService } from '../../modules/coverage-analysis/index.js';
+import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
 import {
   READ_FIELDS, analysisJobDto, analysisTaskDto, auditSummaryDto, caseSummaryDto,
   createReadResponsePolicy, sourcePackDto,
@@ -193,7 +193,7 @@ function requireOwnedDocument({ services, documentUploads, principal, documentId
   }
 }
 
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -390,13 +390,18 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const job = await getOcrService().start({
         documentId: record.id,
         retryFailed: body.retryFailed === true,
+        // Explicit, paid blocks upgrade for a knowvia.ocr.v1 document; refused unless acknowledged.
+        mode: body.mode ?? 'standard',
+        acknowledgeProviderCharge: body.acknowledgeProviderCharge === true,
         authorization: {
           authorized: true,
           consentGrantId: requiredString(body.consentGrantId, 'consentGrantId'),
           requestedByAdultId: principal.adultId,
           purpose: 'document_processing',
           recipient: 'sarvam',
-          settings: { language: body.language ?? 'en-IN', contentType: body.contentType ?? 'mixed' },
+          // Every uploadable kind is a printed insurer document. Measured on a real policy (2026-10-19):
+          // `printed` returned Sarvam's tagged blocks and tables; `mixed` returned one untagged block per page.
+          settings: { language: body.language ?? 'en-IN', contentType: body.contentType ?? 'printed' },
         },
       });
       return { status: ['succeeded', 'failed', 'cancelled'].includes(job.status) ? 200 : 202, body: { job: ocrJobDto(job) } };
@@ -416,6 +421,28 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         recipient: 'sarvam',
       } });
       return { status: 200, body: { job: ocrJobDto(job) } };
+    }
+    // Policy structuring (ADR 0006): start for an owned, OCR'd document and one analysis run of its case;
+    // read the human-reviewable result. Missing and foreign-household documents are indistinguishable.
+    const structuringMatch = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/structuring-runs$/);
+    if (req.method === 'POST' && structuringMatch) {
+      const record = requireOwnedDocument({ services, documentUploads, principal, documentId: structuringMatch[1], write: true });
+      const body = await readBody(req);
+      const started = getStructuringService().start({
+        document: record,
+        workflowRunId: requiredString(body.workflowRunId, 'workflowRunId'),
+        consentGrantId: requiredString(body.consentGrantId, 'consentGrantId'),
+        subjectAdultId: principal.adultId,
+        restart: body.restart ?? false,
+      });
+      return { status: started.status === 'finished' ? 200 : 202, body: { structuring: started } };
+    }
+    if (req.method === 'GET' && structuringMatch) {
+      const record = requireOwnedDocument({ services, documentUploads, principal, documentId: structuringMatch[1] });
+      // Readings quote the document, so the same field permission as reading the case's sources applies.
+      responses.requireCaseField({ principal, caseRecord: services.access.requireCase(principal, record.caseId), field: READ_FIELDS.sourcePack });
+      const workflowRunId = url.searchParams.get('workflowRunId');
+      return { status: 200, body: { structuring: getStructuringService().result({ document: record, workflowRunId: requiredString(workflowRunId, 'workflowRunId') }) } };
     }
     if (req.method === 'DELETE' && documentMatch) {
       // Missing and foreign-household ids are deliberately indistinguishable. Deletion does not

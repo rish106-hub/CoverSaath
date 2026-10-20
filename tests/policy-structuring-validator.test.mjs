@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
-import { comparisonKey, normalizeValue, validateExtractedItems } from '../src/modules/policy-structuring/validator.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { comparisonKey, normalizeValue, validateExtractedItems } from '../src/features/policy-structuring/validator.js';
 
 // Synthetic only: fictional insurer and numbers.
 const chunk = Object.freeze({
@@ -148,9 +148,13 @@ test('a value not grounded in its own quote is replaced by the verbatim quote, n
   assert.deepEqual([invented.value.text, invented.value.normalized, invented.note.valueSource], ['Sum Insured: Rs. 5,00,000', null, 'quote']);
   const [paraphrase] = run([{ ...proposal, value: 'Rs. 5,00,000' }]).proposals;
   assert.deepEqual([paraphrase.value.text, paraphrase.note.valueSource], ['Initial waiting period: 30 days.', 'quote']);
+  // A reformatted value that only normalises equal is grounded, but the printed quote is stored, not the
+  // model's wording; the normalised amount is the same either way.
   const [money] = run([{ ...sum, value: 'rs 500000', evidence_quote: 'Rs. 5,00,000' }]).accepted;
-  assert.deepEqual([money.value.text, money.note.valueSource], ['rs 500000', 'value'], 'same normalised money as the quote');
-  assert.equal(run([{ ...sum, value: 'Rs.5,00,000' }]).accepted[0].note.valueSource, 'value', 'spacing and commas are ignored');
+  assert.deepEqual([money.value.text, money.note.valueSource], ['Rs. 5,00,000', 'quote'], 'same normalised money as the quote');
+  assert.equal(money.value.normalized.amountMinor, 50_000_000);
+  assert.equal(run([{ ...sum, value: 'Rs.5,00,000' }]).accepted[0].note.valueSource, 'quote', 'respaced value is stored as printed');
+  assert.equal(run([{ ...sum, value: 'Rs. 5,00,000' }]).accepted[0].note.valueSource, 'value', 'a verbatim value is kept');
 });
 
 test('model confidence and rationale are kept as bounded review notes only', () => {

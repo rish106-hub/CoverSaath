@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
-import { POLICY_STRUCTURING_VERSION, documentGrantCheck, structurePolicyDocument } from '../src/modules/policy-structuring/index.js';
+import { POLICY_STRUCTURING_VERSION, documentGrantCheck, structurePolicyDocument } from '../src/features/policy-structuring/index.js';
 import { parameterAt as at, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 
 // Fake-caller journey (plan acceptance 2): block pages in, real sectioner, privacy gate, extractor,
@@ -61,7 +61,7 @@ function addScope(database, { id, documentId = null, recipient = 'google-gemini'
     VALUES (?, 'consent-parameters', 'document', ?, 'derive', 'insurance_document', ?, ?)`).run(id, documentId, recipient, at);
 }
 
-const grantCheck = services => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId: document });
+const grantCheck = services => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId: document, householdId: 'household-parameters' });
 const commitWith = (services, consentCheck) => async ({ decisions, proposals }) => services.policyStructuring.commitStructuring({
   householdId: 'household-parameters', workflowRunId: run, documentId: document, sourceVersion: 'version-1',
   pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion: 'policy-parameters/v1', recordedBy: 'policy-structuring',
@@ -85,7 +85,7 @@ test('fake-caller journey stores observations and proposals and accounts for eve
   });
   assert.equal(resolution(services, 'a.policy_type').resolutionState, 'extracted_unverified');
   assert.equal(resolution(services, 'f.ped_waiting_period').resolutionState, 'conflicting', '3 Years vs 36 months is surfaced, no winner');
-  assert.deepEqual(services.policyStructuring.listProposals({ householdId: 'household-parameters', documentId: document })
+  assert.deepEqual(services.policyStructuring.listProposals({ householdId: 'household-parameters', documentId: document, structuringRunId: result.commit.structuringRunId })
     .map(item => [item.proposedKey, item.status]), [['synthetic_daily_cash', 'pending_review']]);
   assert.equal(JSON.stringify(result.report).includes('Individual'), false, 'the coverage report carries counts, not text');
 
@@ -121,7 +121,7 @@ test('section titles are privacy-gated like chunk text before any call', async (
 
 test('the Gemini grant must name this document and the google-gemini recipient', t => {
   const { database, services } = open(t);
-  const check = documentId => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId });
+  const check = documentId => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId, householdId: 'household-parameters' });
   assert.doesNotThrow(check(document));
   addScope(database, { id: 'scope-any-document' });
   assert.throws(check('document-unnamed'), { code: 'CONSENT_SCOPE_REQUIRED' }, 'a scope without a document id is not document-specific');

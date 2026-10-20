@@ -1,7 +1,7 @@
 // Round-2 certainty filter findings S1 (false positives) and S2 (bypasses).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateTaskOutput } from '../src/modules/ai-analysis/schemas.js';
+import { validateTaskOutput } from '../src/features/ai-analysis/schemas.js';
 
 const KNOWN = 'source_aaaaaaaaaaaaaaaaaaaaaaaa';
 const UNKNOWN = 'source_bbbbbbbbbbbbbbbbbbbbbbbb';

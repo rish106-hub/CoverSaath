@@ -1,0 +1,338 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<implementation_prompt id="coversaath-block-2-closeout" version="1.0" created="2026-10-19" status="planned">
+  <title>Block 2 close-out: document-parsing pipeline from upload to human-reviewable result</title>
+
+  <base_branch>main (CI red at 39274770963 and CodeQL red at 39274771091 when this plan was written)</base_branch>
+  <target_acceptance_date>2026-10-28</target_acceptance_date>
+  <next_block_start>2026-10-29 (Block 3: insurance intelligence). Block 3 planning may proceed in parallel; Block 3 code may not.</next_block_start>
+
+  <persona>
+    <role>
+      Act as the Block 2 close-out owner: a senior engineer who finishes and proves existing work instead of
+      starting new work. You hold three hats in sequence and say which one you are wearing:
+      (1) integrator, wiring existing modules through the real application runtime;
+      (2) privacy and authority auditor, who assumes every outgoing payload leaks until a test proves otherwise;
+      (3) acceptance reviewer, who issues GO or NO-GO from evidence only.
+    </role>
+    <operating_style>
+      Feature freeze. Short PLAN, BUILD, FEEDBACK loops, one work item at a time, narrow checks after each slice.
+      Smallest reversible change. Evidence before claims. Terse reports with file:line references.
+      Models propose, deterministic code decides. Never weaken a consent, tenant, audit, privacy or authority
+      control to make a test pass. When a fix needs a new table, provider, dependency or service, stop and ask.
+    </operating_style>
+    <refuses>
+      Microservices, Redis, Kafka, queues, another OCR provider, new agents, a vector database, a rebuilt parser,
+      chasing all 138 registry parameters, Block 3 features, deployment.
+    </refuses>
+  </persona>
+
+  <start_here>
+    <read>AGENTS.md</read>
+    <read>docs/iterations/LATEST.md (sections: Whole-document policy structuring; Block 2 Sarvam Document AI)</read>
+    <read>docs/adr/0003-ai-authority.md, docs/adr/0004-*.md (PostgreSQL), docs/adr/0006-policy-document-structuring.md</read>
+    <read>docs/exec-plans/active/policy-document-structuring.xml, block-2-sarvam-document-ai.md, sarvam-gemini-parse-validation.xml</read>
+    <read>src/features/policy-structuring/index.js (structurePolicyDocument, gateChunks, documentGrantCheck, structuringEnabled)</read>
+    <read>src/features/ai-analysis/model-gateway.js and privacy-evidence-gate.js</read>
+    <read>src/features/input/ocr-service.js, ocr-contracts.js (OCR_OUTPUT_VERSION knowvia.ocr.v1)</read>
+    <read>src/integrations/sarvam/doc-ai-transport.js (normalised page and block shape)</read>
+    <read>src/backend/repositories/ocr-repository.js, policy-structuring-repository.js, consent-repository.js</read>
+    <read>src/server/routes/v1-backend-routes.js (OCR start and refresh routes, the pattern to mirror)</read>
+    <note>Run repomap impact before editing any shared file. Check for a closer AGENTS.md in each directory changed.</note>
+    <note>Section by section: finish each work item end to end before starting the next. Worktree subagents per item are allowed.</note>
+  </start_here>
+
+  <outcome>
+    <statement>
+      Through the real application (HTTP routes, application runtime, model gateway, SQLite backend), one household
+      uploads an insurance PDF and receives a human-reviewable result in which every stored value is backed by a
+      page, block and literal quote, and every missing, skipped or conflicting item is visible. No `.local/eval/`
+      script is in the path. CI and CodeQL are green. A final report gives GO or NO-GO with evidence.
+    </statement>
+    <target_flow>
+      <step n="1">User uploads an insurance PDF (existing upload route).</step>
+      <step n="2">Secure validation and scanning (existing intake checks).</step>
+      <step n="3">Sarvam reads the complete PDF (existing OCR start and refresh routes, document-specific sarvam grant).</step>
+      <step n="4">Structured blocks stored with provenance (work item 3).</step>
+      <step n="5">Privacy layer removes sensitive information (gate v4, revalidated in work item 2).</step>
+      <step n="6">Gemini extracts insurance information (extractor as a model-gateway task, work item 4).</step>
+      <step n="7">Deterministic code validates evidence (existing validator).</step>
+      <step n="8">Observations stored in the parameter registry (existing commitStructuring).</step>
+      <step n="9">Missing and conflicting values flagged (coverage report plus conflict states).</step>
+      <step n="10">Human-reviewable result generated (read route, work item 4).</step>
+    </target_flow>
+  </outcome>
+
+  <confirmed_facts>
+    <fact>CI run 39274770963 on main fails; LATEST.md records the PostgreSQL/SQLite julianday parity case for input `2026-01-01T24:01` (tests/postgres-julianday.test.mjs, port in src/backend/database/postgres/migrations/001_baseline_schema.sql).</fact>
+    <fact>CodeQL: `gh run list` shows both "dynamic" (default setup) and "push" (.github/workflows/codeql.yml) runs on main. The advanced workflow fails because GitHub rejects SARIF upload while default setup is on.</fact>
+    <fact>source_pages stores only extracted_text per page. Sarvam blocks, tables, layout tags and block indices are lost after OCR persistence.</fact>
+    <fact>No runtime route calls policy structuring. Only scripts/structure-policy.mjs does, with a direct Gemini caller.</fact>
+    <fact>The structuring extractor is not registered as a model-gateway.js task.</fact>
+    <fact>The final privacy gate v4 and conflict-selection changes were merged without npm run check, eval:safety, PostgreSQL tests or a re-review.</fact>
+    <fact>Last live run: 45 chunks, 7 skipped (5 restricted by the gate, 2 none returned), 181 observations on 57 parameters, 31 conflicting. Gemini confidence is always `high` and carries no signal. Run-to-run variance is large (145 versus 181 values).</fact>
+    <fact>Known gate gaps: tab-separated tables and table headers split over two lines. Known over-redaction: intermediary name and code row.</fact>
+    <fact>The Gemini conflict-selection prompt has never run against Gemini.</fact>
+    <fact>Sarvam exposes no cancellation or deletion endpoint. Provider-side deletion is unproven.</fact>
+  </confirmed_facts>
+
+  <assumptions>
+    <assumption>SQLite remains the runtime for this block. PostgreSQL parity is kept for every new migration (ADR 0004).</assumption>
+    <assumption>The OCR job pattern (durable job, start route, refresh route, restart resume) is the right shape for a structuring run. Verify before copying.</assumption>
+    <assumption>3 to 5 real policies can be supplied by the owner and kept only under .local/ (gitignored). Tests and fixtures stay synthetic.</assumption>
+  </assumptions>
+
+  <owner_decisions_needed>
+    <decision id="D1" blocks="W1">CodeQL: turn off GitHub default setup (repository setting, owner action) or delete .github/workflows/codeql.yml. Recommendation: keep the pinned advanced workflow and turn off default setup. Claude must not change repository settings.</decision>
+    <decision id="D2" blocks="W5">Owner supplies 3 to 5 policies and human-verifies the critical-field golden values for each.</decision>
+    <decision id="D3" blocks="W2,W5,W6">Approval for billable Sarvam and Gemini live runs, with a per-run cap on calls and tokens.</decision>
+    <decision id="D4" blocks="W4">Human-reviewable result surface: JSON read route only (recommended for this block) or also a minimal UI panel.</decision>
+    <decision id="D5" blocks="W6">Gemini retention: which API tier and data-use terms apply. Record facts, do not assume.</decision>
+  </owner_decisions_needed>
+
+  <work_items>
+
+    <item id="W1" priority="P0" due="2026-10-20" risk="infrastructure-sensitive">
+      <name>Fix CI and CodeQL</name>
+      <work>
+        <task>Reproduce locally with a throwaway PostgreSQL 17 and TEST_DATABASE_URL: run tests/postgres-julianday.test.mjs and record the exact SQLite and PostgreSQL values for `2026-01-01T24:01` and every other differing input.</task>
+        <task>Fix the PostgreSQL julianday(text) port to match SQLite. Merged migrations are immutable: ship the fix as a new forward PostgreSQL migration (next free number, 008) that replaces the function. Do not edit 001.</task>
+        <task>Do not loosen the parity test or delete inputs. Add any newly found differing input to the list.</task>
+        <task>CodeQL: apply D1. If the workflow file stays, no change to it is needed beyond confirmation.</task>
+        <task>Re-run the full suite, because main merged untested work: npm run check with and without TEST_DATABASE_URL, npm run eval:safety, git diff --check.</task>
+      </work>
+      <owned_paths>
+        <path>src/backend/database/postgres/migrations/008_*.sql</path>
+        <path>tests/postgres-julianday.test.mjs (add inputs only)</path>
+        <path>.github/workflows/codeql.yml (only if D1 chooses deletion)</path>
+      </owned_paths>
+      <success>
+        <criterion>GitHub CI, build, safety eval and CodeQL all green on the close-out branch and after merge on main, with run IDs recorded.</criterion>
+        <criterion>julianday parity test passes with 0 differences on PostgreSQL 17.</criterion>
+        <criterion>A mutation (revert the function body) makes the parity test fail.</criterion>
+      </success>
+      <failure>
+        <signal>Any red required check, or green reached by skipping, deleting or weakening a test.</signal>
+        <signal>An edited merged migration.</signal>
+        <signal>A CodeQL fix that disables analysis instead of removing the duplicate configuration.</signal>
+        <signal>Other pre-existing failures surface from the full-suite run: record each, fix if inside this item, otherwise stop and report.</signal>
+      </failure>
+    </item>
+
+    <item id="W2" priority="P0" due="2026-10-21" risk="security-sensitive, data-sensitive">
+      <name>Close privacy and model-guardrail issues</name>
+      <work>
+        <task>Outgoing-payload test harness: capture the exact request body every provider call would send (chunk text, section titles, prompt, registry catalog, reconcile input) at the gateway boundary with network disabled. Assert on that body, not on the PDF or the sanitised chunk.</task>
+        <task>PII sweep over captured payloads: names, name parts, dates of birth, member IDs, customer IDs, policy numbers, Aadhaar (full and tail), PAN, phone, email, address lines, ICD codes, condition names, loading reasons. Use synthetic fixtures in tests; run the same sweep locally over the real sample payloads and commit counts only.</task>
+        <task>Close or fail-closed the known gaps: tab-separated tables and headers split over two lines. If a fix is not small, the chunk must be refused as restricted, never sent.</task>
+        <task>Reconciliation: auto-selection (`model_selected_from_conflict`) only for genuinely contradictory, comparable readings of the same subject. Context differences (`context_differs`) and per-subject variations are never auto-selected and never collapsed to one value. Add tests for each path, including a model-invented subject and a model selecting a quote not in its group.</task>
+        <task>Authority: assert at the database and repository that no model-originated observation reaches proven, calculated, dynamic or verified. A model-selected value stays `extracted_unverified` and requires household confirmation.</task>
+        <task>Consent review: Gemini grant is document-specific, recipient `google-gemini`, checked before each call and re-checked inside the commit transaction. Revocation mid-run stores nothing. Consent and privacy wording is marked for legal review, not final.</task>
+        <task>One owner-approved live run (D3) on the sample with payload capture, sweep before dispatch, and the selection prompt exercised against Gemini. If not approved, mark the selection prompt unverified.</task>
+        <task>Independent read-only review (Opus) of gate v4, the second-round conflict changes and the consent path.</task>
+      </work>
+      <owned_paths>
+        <path>src/features/ai-analysis/privacy-evidence-gate.js</path>
+        <path>src/features/policy-structuring/reconciler.js, validator.js, index.js</path>
+        <path>tests/privacy-gate-*.test.mjs, tests/policy-structuring-*.test.mjs, tests/support/privacy-probes.mjs</path>
+        <path>A new tests/outgoing-payload-*.test.mjs</path>
+      </owned_paths>
+      <success>
+        <criterion>0 sensitive-data matches in every captured outgoing payload for all synthetic probes and for the real sample sweep (counts recorded).</criterion>
+        <criterion>No model-generated value stored above `extracted_unverified`; DB constraint and repository test both prove it.</criterion>
+        <criterion>Auto-selection fires only on contradictory, comparable, same-subject readings; tests prove context and per-subject differences are never selected.</criterion>
+        <criterion>Independent review PASS with no P0 or P1 open.</criterion>
+      </success>
+      <failure>
+        <signal>Any identifier or health datum in an outgoing payload, in any test or sweep. This blocks GO by itself.</signal>
+        <signal>A privacy fix that passes by narrowing the probe set or by testing the sanitised text instead of the sent body.</signal>
+        <signal>A model value recorded as proven or as a resolved winner without household confirmation.</signal>
+        <signal>Review FAIL with an open P0 or P1.</signal>
+      </failure>
+    </item>
+
+    <item id="W3" priority="P0" due="2026-10-22" risk="migration-sensitive, data-sensitive">
+      <name>Persist Sarvam's complete structured output</name>
+      <work>
+        <task>Define a versioned stored block shape from the existing normalised transport output: page number, block index, layout tag, reading order, text, table rows and cells when present. No raw provider payload, no image-block model descriptions, no coordinates unless already validated.</task>
+        <task>Store it with the page. Recommended smallest option: an expand-only nullable JSON column on source_pages written at page insert, under a new contract version (`knowvia.ocr.v2`), with a JSON validity CHECK and an application-level schema validator. Alternative if source_pages immutability or erasure makes this unsafe: a `source_page_blocks` table. Decide after reading the immutability and erasure triggers; record the choice in an ADR 0006 addendum.</task>
+        <task>SQLite migration 012 and PostgreSQL migration 009 (or the next free numbers), expand-only, catalog parity test updated.</task>
+        <task>Validate on write: fail closed on missing, duplicate or reordered blocks, unknown tags or oversize content. Treat block content as untrusted text.</task>
+        <task>Read path: the sectioner reads stored blocks through the repository. v1 pages without blocks still read and are reported as `blocks_unavailable`, never silently treated as complete.</task>
+        <task>Erasure: revocation and document erasure remove or redact the stored blocks with the page text. Add an erasure test and a trigger safety net matching existing patterns.</task>
+      </work>
+      <owned_paths>
+        <path>src/integrations/sarvam/doc-ai-transport.js (shape export only)</path>
+        <path>src/features/input/ocr-contracts.js, ocr-service.js</path>
+        <path>src/backend/repositories/ocr-repository.js, consent-repository.js (erasure)</path>
+        <path>src/backend/database/migrations/012_*.sql, src/backend/database/postgres/migrations/009_*.sql</path>
+        <path>src/features/policy-structuring/sectioner.js (read from stored blocks)</path>
+        <path>docs/adr/0006-policy-document-structuring.md (addendum)</path>
+      </owned_paths>
+      <success>
+        <criterion>Round-trip test: synthetic Sarvam output, persist, read back, sectioner output identical to sectioning the in-memory output.</criterion>
+        <criterion>Tables, layout tags, block indices and page references survive save and read on SQLite and PostgreSQL.</criterion>
+        <criterion>Revocation test proves stored blocks are erased; ownership test proves a cross-household read fails.</criterion>
+        <criterion>Mutation: removing the erasure step or the validator fails at least one test each.</criterion>
+      </success>
+      <failure>
+        <signal>Blocks stored but sectioner still reads page text only.</signal>
+        <signal>Raw provider payload or image-block model text persisted.</signal>
+        <signal>A derived store without an erasure path and test.</signal>
+        <signal>Migration that is not expand-only, or SQLite/PostgreSQL catalog drift.</signal>
+      </failure>
+    </item>
+
+    <item id="W4" priority="P0" due="2026-10-23" risk="security-sensitive, data-sensitive">
+      <name>Connect everything end to end through the application runtime</name>
+      <work>
+        <task>Register the structuring extractor and reconciler as model-gateway.js tasks with output schemas, so every Gemini call goes through the gateway's privacy gate, pre-dispatch consent validator, budget reservation, concurrency limit and audit. Remove the direct caller from any runtime path; the script may keep it behind its opt-in flag or move to the gateway too.</task>
+        <task>Structuring run service: starts only when the document's OCR job succeeded and blocks are stored, and when POLICY_STRUCTURING_ENABLED is true. Durable run row, idempotent start (duplicate start returns the existing run), resume or fail closed after restart, per-document call and token caps.</task>
+        <task>Routes, mirroring the OCR routes: POST /api/v1/documents/:id/structuring-runs to start, GET /api/v1/structuring-runs/:id to read status and the review result. Authenticated, household ownership checked, coded client-safe errors.</task>
+        <task>Review result (D4): per registry key the state, normalised value, subject, page, block, literal quote; conflicts with every reading; proposals pending review; coverage report listing stored, proposed and skipped chunks with reasons. No raw document text beyond the quotes already stored.</task>
+        <task>Journey test through create-server.js with mocked Sarvam and Gemini HTTP boundaries: upload, OCR start and refresh, structuring start, read result, then revoke and prove erasure. Include duplicate start, provider error, consent withdrawn before commit, wrong household.</task>
+        <task>One real household case run through the local app (D3), no .local/eval scripts in the path. Record counts, run IDs and timings only.</task>
+      </work>
+      <owned_paths>
+        <path>src/features/ai-analysis/model-gateway.js, schemas.js</path>
+        <path>src/features/policy-structuring/ (service wiring only)</path>
+        <path>src/backend/repositories/policy-structuring-repository.js</path>
+        <path>src/server/routes/v1-backend-routes.js, src/server/create-server.js, src/server/config.js</path>
+        <path>tests/policy-structuring-journey.test.mjs and a new route-level journey test</path>
+      </owned_paths>
+      <success>
+        <criterion>Route-level journey test passes from upload to review result and through revocation, with mocked provider boundaries.</criterion>
+        <criterion>One real household case completes through the running app with the flag on, without any .local/eval script.</criterion>
+        <criterion>Every Gemini call in that run is visible in gateway audit with consent decision and budget, and in no other code path.</criterion>
+        <criterion>Flag off: routes return a coded disabled error and no provider call happens.</criterion>
+      </success>
+      <failure>
+        <signal>Any runtime Gemini call that bypasses the gateway.</signal>
+        <signal>The real case needs a manual script, hand-edited database row or copied file to finish.</signal>
+        <signal>A protected read or write without a household ownership check.</signal>
+        <signal>A retry that re-sends a billable provider POST without proof it was not dispatched.</signal>
+      </failure>
+    </item>
+
+    <item id="W5" priority="P1" due="2026-10-27" risk="data-sensitive">
+      <name>Prove extraction accuracy</name>
+      <work>
+        <task>Define the critical-field set (about 15 to 20 keys, owner-confirmed): for example sum insured, policy period, deductible, co-pay, room rent limit, initial, PED and specific waiting periods, pre- and post-hospitalisation days, restore benefit, no-claim bonus, key sub-limits, maternity cover, exclusions presence. Everything else is best effort and reported, not gated.</task>
+        <task>Corpus: 3 to 5 policies from different insurers or product types (D2), stored only under .local/. Owner-verified golden values per critical field: value, or `absent`, with page.</task>
+        <task>Score each policy through the W4 runtime path: correct, explicitly unknown, explicitly conflicting, wrong, missed. Count quotes outside source. List every skipped chunk with reason and whether it held a critical field.</task>
+        <task>Repeatability: 3 runs per policy (within the D3 cap). Report per-field agreement across runs and the value-count spread.</task>
+        <task>Review every critical omission caused by a skipped or restricted chunk. A policy with an unreviewed critical omission is not "completely understood".</task>
+        <task>Commit an eval script and scoring code with synthetic fixtures; commit counts-only results. Real values and text stay under .local/.</task>
+      </work>
+      <owned_paths>
+        <path>scripts/ (one eval runner using the runtime path), src/features/policy-structuring/coverage-report.js (scoring)</path>
+        <path>tests/ (scoring unit tests on synthetic data)</path>
+        <path>.local/eval/ (real corpus and golden, never committed)</path>
+      </owned_paths>
+      <success>
+        <criterion>Across all corpus policies, 0 critical fields with a wrong value stored as `extracted_unverified`. Each critical field is correct, unknown or conflicting.</criterion>
+        <criterion>0 evidence quotes outside the source.</criterion>
+        <criterion>Every skipped chunk listed with reason; every critical omission reviewed and recorded.</criterion>
+        <criterion>Critical-field result is identical across the 3 repeat runs, or the variance is reported per field and treated as a NO-GO input.</criterion>
+      </success>
+      <failure>
+        <signal>Any wrong critical value presented as extracted, on any run.</signal>
+        <signal>Skipped chunks hidden or summarised away.</signal>
+        <signal>Golden values not verified by a human; accuracy claimed from a draft list.</signal>
+        <signal>Real policy content in a commit, test, fixture, log or prompt.</signal>
+      </failure>
+    </item>
+
+    <item id="W6" priority="P1" due="2026-10-28" risk="data-sensitive, infrastructure-sensitive">
+      <name>Final audit and GO/NO-GO</name>
+      <work>
+        <task>Cost: billed calls, input and output tokens per policy from the W4 and W5 runs, with Sarvam pages billed. Compute cost from current published prices with the date checked; mark estimate versus invoice.</task>
+        <task>Logs: grep server logs, audit rows and test output for document text, names, numbers and quotes. Expect counts and coded errors only.</task>
+        <task>Consent revocation: through the running app, revoke after a completed run and prove pages, blocks, observations, proposals, run excerpts and task outputs are erased or redacted, with the audit event.</task>
+        <task>Provider retention: record what Sarvam and Gemini (D5 tier) keep and for how long, citing the provider documents and their dates. State plainly what is unproven (Sarvam remote deletion).</task>
+        <task>Rollback drill: flag off on a database with structuring data; app still serves upload and OCR; new columns or tables are additive and ignored. Document the drop path.</task>
+        <task>Final report at docs/iterations/LATEST.md (summary) with checks, run IDs, evidence, failures, unverified items and an explicit GO or NO-GO per work item and overall.</task>
+        <task>Independent read-only review (Opus) of the full close-out diff.</task>
+      </work>
+      <owned_paths>
+        <path>docs/iterations/LATEST.md, docs/runbooks/ (rollback and revocation steps)</path>
+      </owned_paths>
+      <success>
+        <criterion>Report exists with evidence for every W1 to W5 criterion and an explicit GO or NO-GO.</criterion>
+        <criterion>No document content in logs; revocation proven live; rollback drill passes.</criterion>
+      </success>
+      <failure>
+        <signal>A GO with any P0 criterion unmet, unverified or waived without a written owner decision.</signal>
+        <signal>Retention or cost stated as fact without a source or measurement.</signal>
+      </failure>
+    </item>
+  </work_items>
+
+  <block_definition_of_done>
+    <go>
+      All P0 items (W1 to W4) meet every success criterion. W5 shows 0 wrong critical values and every omission visible.
+      W6 report complete. No open P0 or P1 review finding. npm run check, npm run eval:safety and git diff --check pass,
+      and GitHub CI and CodeQL are green on main.
+    </go>
+    <no_go>
+      Any sensitive datum in an outgoing payload; any model value above extracted_unverified; any runtime model call
+      outside the gateway; structured blocks not surviving save and read; the end-to-end case needing a script;
+      a wrong critical value presented as extracted; red CI. A NO-GO names the blocking items and a re-check date.
+    </no_go>
+    <conditional_go>
+      Allowed only with a written owner decision listing each accepted gap (for example a P1 accuracy gap with known
+      fields) and its follow-up. P0 gaps cannot be accepted.
+    </conditional_go>
+  </block_definition_of_done>
+
+  <schedule>
+    <day date="2026-10-20">W1 green. D1 decided.</day>
+    <day date="2026-10-21">W2 complete, review done.</day>
+    <day date="2026-10-22">W3 complete.</day>
+    <day date="2026-10-23">W4 complete, real case through the app.</day>
+    <day date="2026-10-24..25">Buffer for review findings. No new scope.</day>
+    <day date="2026-10-26..27">W5 corpus runs and scoring.</day>
+    <day date="2026-10-28">W6 audit and GO/NO-GO.</day>
+    <day date="2026-10-29">Block 3 implementation starts only on GO or conditional GO.</day>
+    <slip_rule>If a P0 item slips more than one day, report the cause and the new date; do not compress W5 or W6 to recover.</slip_rule>
+  </schedule>
+
+  <non_goals>
+    <item>Microservices, Redis, Kafka, queues, a vector database, new agents, another OCR provider.</item>
+    <item>Rebuilding or replacing the Sarvam parser.</item>
+    <item>Extracting all 138 parameters; only the critical-field set is gated.</item>
+    <item>Promoting proposals into the registry, coverage or eligibility decisions, Block 3 comparison features.</item>
+    <item>PostgreSQL runtime switch, deployment, final legal or consent wording.</item>
+  </non_goals>
+
+  <risks>
+    <risk name="payload leak through a new path (titles, catalog, reconcile input)" control="assert on the captured outgoing body at the gateway, not on sanitised text"/>
+    <risk name="silent winner on conflicts" control="selection only from the group's own quotes, stays extracted_unverified, household confirms"/>
+    <risk name="migration drift" control="expand-only, forward migrations, catalog parity tests, mutation checks"/>
+    <risk name="billable runaway" control="per-document call and token caps, D3 per-run cap, no POST retries"/>
+    <risk name="accuracy overclaim from one sample" control="3 to 5 policies, owner-verified golden, repeat runs, report variance"/>
+    <risk name="scope creep into Block 3" control="feature freeze; any new idea goes to a follow-up list"/>
+  </risks>
+
+  <data_handling>
+    Synthetic data in code, tests, fixtures and commits. Real policies, payload captures and golden values stay under
+    .local/ (gitignored). Logs and reports carry counts, run IDs and coded errors only. Do not commit, push, merge or
+    deploy unless the owner asks. Ask before billable runs, repository settings and destructive data changes.
+  </data_handling>
+
+  <rollback>
+    POLICY_STRUCTURING_ENABLED=false stops structuring routes and provider calls. New migrations are additive and
+    ignored by older code. The julianday fix is a function replacement; revert by a forward migration restoring the
+    previous body. CodeQL change is a single setting or file and is reversible.
+  </rollback>
+
+  <checks>
+    <per_slice>Narrow tests for the touched module, plus repomap impact on shared files.</per_slice>
+    <per_item>npm run check (with and without TEST_DATABASE_URL), npm run eval:safety, git diff --check.</per_item>
+    <reviews>Independent read-only Opus review for W2, W3, W4 and the final W6 diff (AI, consent, migration and security changes).</reviews>
+  </checks>
+
+  <report_format>
+    Per work item: changes, evidence (test counts, run IDs, mutation results), checks run, unverified items,
+    security and data impact, rollback, separate follow-ups. Final: GO, CONDITIONAL GO or NO-GO with reasons.
+  </report_format>
+</implementation_prompt>

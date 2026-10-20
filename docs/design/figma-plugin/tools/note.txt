@@ -1,9 +1,0 @@
-Knowvia: all designs. Exported from the Claude Design canvas on 13 October 2026. These boards are the approved design: build them exactly.
-
-Rows, top to bottom: landing page (desktop 1440, mobile 390), every landing state (hero and closing form states, permission viewer, mobile menu), onboarding O1 to O7 (future state), design system.
-
-Colours are bound to the 'Knowvia tokens' variables; type ramps are text styles; 'Shadow/lift' and 'Focus/ring' are effect styles. Motion is described on the Motion board and in docs/design/tokens.json. Line breaks in text are fixed to match the design.
-
-Copy, sources and rationale: docs/design/04-ia-and-copy-deck.md. Every number has an evidence ID. Quotes and story figures need a consent re-check before launch. Legal text slots are marked [LEGAL REVIEW]. Use the Tweaks panel to see each form state, the permission viewer and the mobile menu. Supporter logos (Lightspeed, Insurance Samadhan) are the official marks from their websites, tinted Tide: confirm permission and the words 'Supported by' before launch. Industry numbers are sourced on each card (LocalCircles 7 Mar 2026, Lok Sabha reply Feb 2025, National Health Accounts 2022-23).
-
-Onboarding is the designed future flow. The live landing page only collects early-list emails until Knowvia opens. Example values are illustrative. Press Play on O1 to click through.

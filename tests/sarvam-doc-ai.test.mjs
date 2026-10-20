@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createSarvamDocAiTransport, createSarvamOcrProvider } from '../src/integrations/index.js';
-import { validateOcrOutput } from '../src/modules/document-intake/index.js';
+import { validateOcrOutput } from '../src/features/input/index.js';
 
 const jsonResponse = (value, status = 200) => ({
   ok: status >= 200 && status < 300,
@@ -319,6 +319,12 @@ test('Sarvam page text joins blocks by reading order and keeps layout tags', () 
   }, { documentId: 'document-1', sourceVersion: '1', contentSha256: 'b'.repeat(64) });
   assert.equal(normalized.pages[0].text, 'first\nsecond');
   assert.deepEqual(normalized.pages[0].layoutTags, ['header', 'paragraph']);
+  // knowvia.ocr.v2 blocks: text, tag and reading order only; no block ids or coordinates.
+  assert.equal(normalized.schemaVersion, 'knowvia.ocr.v2');
+  assert.deepEqual(normalized.pages[0].blocks, [
+    { text: 'first', tag: 'header', readingOrder: 1 },
+    { text: 'second', tag: 'paragraph', readingOrder: 2 },
+  ]);
 });
 
 test('Sarvam rejects the legacy page_number/content shape and malformed blocks', () => {

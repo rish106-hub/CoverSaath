@@ -12,7 +12,7 @@ The earlier in-memory demo API was removed. The authenticated `/api/v1` API is t
 
 Pipeline block map and Block 1 design: [pipeline-blocks.md](pipeline-blocks.md), [block-1-input.md](block-1-input.md).
 
-## Module map (`src/`)
+## Source map (`src/`)
 
 | Area | Responsibility |
 |---|---|
@@ -22,15 +22,15 @@ Pipeline block map and Block 1 design: [pipeline-blocks.md](pipeline-blocks.md),
 | `backend/repositories/` | Persistence per aggregate: household, auth, consent, case, workflow, OCR, evidence, coverage parameters, audit. |
 | `backend/services/` | `backend-services.js` composes repositories; `tenant-access-service.js` authenticates and checks household ownership; `coverage-analysis-port.js` is the SQLite port the analysis runtime uses (source selection, dispatch check, revocation stop). |
 | `backend/state/` | Case state machine (`case-state-machine.js`). |
-| `modules/coverage-analysis/` | Workflow definition (v6), task registry, envelopes, parameter registry (`policy-parameters/v1`), persistent service and fixture runtime. |
-| `modules/ai-analysis/` | Model eligibility matrix, prompts, output schemas, privacy evidence gate, model gateway, Gemini runtime. |
-| `modules/document-intake/` | File validation, AES-256-GCM local byte storage, sandboxed PDF inspection and splitting, OCR contracts and service, in-memory fixtures. Upload and OCR lifecycle routes compose these modules. |
-| `modules/insurance-rules/` | Deterministic policy, continuity, cash-exposure and route rules. |
+| `features/coverage-analysis/` | Workflow definition (v6), task registry, envelopes, parameter registry (`policy-parameters/v1`), persistent service and fixture runtime. |
+| `features/ai-analysis/` | Model eligibility matrix, prompts, output schemas, privacy evidence gate, model gateway, Gemini runtime. |
+| `features/input/` | File validation, AES-256-GCM local byte storage, sandboxed PDF inspection and splitting, OCR contracts and service, in-memory fixtures. Upload and OCR lifecycle routes compose this feature. |
+| `features/insurance-rules/` | Deterministic policy, continuity, cash-exposure and route rules. |
+| `features/policy-structuring/` | Deterministic sectioning, bounded extraction, reconciliation and validation. |
 | `agents/` | Domain specialists the fixture task registry calls: profile, group health, personal health, decision. `coverage-orchestrator.js` (`buildCoverageGraph`) has no runtime caller since the legacy engine was removed; only its own test uses it. |
 | `contracts/` | Frozen cross-module contracts: task shapes, workflow graph and checksum, execution policy, error codes, API schemas, persistence ports, AI authority. |
 | `integrations/` | Sarvam modern Document AI transport plus fail-closed Gnani voice, Pine Labs payment and email boundaries. Sarvam remains off unless explicitly enabled. |
 | `evaluation/` | Offline safety evaluator and reference dataset (`npm run eval:safety`). |
-| `ui/` | Browser workspace: `api/` client, `state/` controller, `components/`, `app.js`. |
 
 ## Enforced import boundaries
 
@@ -39,14 +39,13 @@ Pipeline block map and Block 1 design: [pipeline-blocks.md](pipeline-blocks.md),
 - Any `src/` directory or `.js` file name that is not lowercase kebab-case (`index.js` allowed).
 - `shared/` importing anything outside `shared/`.
 - `integrations/` importing anything outside `integrations/`.
-- `agents/` importing `backend`, `integrations`, `server` or `ui`.
-- `backend/` importing `server` or `ui`.
-- `ui/` importing `backend`, `integrations` or `server`.
+- `agents/` importing `backend`, `integrations` or `server`.
+- `backend/` importing `server`.
 - Code outside `integrations/` importing it other than through `src/integrations/index.js`.
 
 Not covered by the check:
 
-- `modules/`, `contracts/`, `evaluation/` and `server/` as importers have no rule. `backend/` importing `modules/` is allowed and happens (`coverage-analysis-port.js`).
+- `features/`, `contracts/`, `evaluation/` and `server/` as importers have no rule. `backend/` importing `features/` is allowed and happens (`coverage-analysis-port.js`).
 - Bare side-effect imports (`import './x.js'`) and non-relative specifiers are not inspected. Only `from '...'` (including re-exports) and `import('...')` are matched.
 - Files outside `src/` (`tests/`, `scripts/`) and non-`.js` files are not scanned.
 - Behaviour boundaries (consent, tenancy, model authority) are enforced by code and tests, not by this script.
@@ -66,15 +65,15 @@ Not covered by the check:
 
 ## Workflow version and graph
 
-- `COVERAGE_ANALYSIS_WORKFLOW` is name `coverage-analysis`, version `6`, 22 tasks (`src/modules/coverage-analysis/workflow-definition.js`). The module refuses to load if the graph, schema ids or model ownership violate ADR 0001 rules.
+- `COVERAGE_ANALYSIS_WORKFLOW` is name `coverage-analysis`, version `6`, 22 tasks (`src/features/coverage-analysis/workflow-definition.js`). The module refuses to load if the graph, schema ids or model ownership violate ADR 0001 rules.
 - Graph checksum `39384121ec4e1002c1dc9820ffd0ee49143fecf8566307b1e2c421812e0e9fa1` is computed by `src/contracts/workflow-graph.js` and pinned in `tests/p1a-workflow-contracts.test.mjs`. It covers key, kind, owner, model task, dependencies and schema ids, not the retry policy.
 - Runs pinned to another version stay readable but are not executed; v5 output is refused with `WORKFLOW_VERSION_MISMATCH` (ADR 0001).
 - Lease 60 s, 5 attempts, retry only on lease expiry, a thrown task error is terminal (`src/contracts/execution-policy.js`, which documents behaviour and does not drive it).
 
 ## Runtime and deployment
 
-- Node `>=25.0.0` (`package.json` engines; CI and staging use Node 26), `node:sqlite`, Vite 8.3.0 for the UI build; `ai` and `@ai-sdk/google` are the runtime dependencies. Node 25 is the floor because the PDF inspection child must deny network access.
-- One process. `src/server/server.js` listens on `127.0.0.1:8787` only; `npm run dev` also starts Vite on `127.0.0.1:5173` and proxies `/api`.
+- Node `>=25.0.0` (`package.json` engines; CI uses Node 26), `node:sqlite`, `ai` and `@ai-sdk/google`. Node 25 is the floor because the PDF inspection child must deny network access.
+- One backend process. `src/server/server.js` listens on `127.0.0.1:8787` only. No active UI or frontend build exists.
 - Storage is one local SQLite file. Analysis work runs inside the API process; there is no queue, worker fleet, cache or container.
 - No deployment target, infrastructure code, hosting, observability stack or capacity numbers exist. CI (`.github/workflows/`) only checks and scans. Scale claims are unsupported (`AGENTS.md`).
 - PostgreSQL schema migrations, validation, a migration runner and CI tests exist under ADR 0004. The application runtime still uses SQLite until S3.2 replaces the synchronous database layer.

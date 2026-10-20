@@ -7,11 +7,11 @@ import { createHash } from 'node:crypto';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/index.js';
 import { CoverageParameterRepository } from '../src/backend/repositories/coverage-parameter-repository.js';
-import { opaqueSourceId } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
-import { MODEL_EXTRACTED_UNVERIFIED } from '../src/modules/coverage-analysis/agent-contracts.js';
-import { modelObservationCandidates } from '../src/modules/coverage-analysis/model-observations.js';
-import { CANONICAL_KEY_CRITERIA, POLICY_DECOMPOSITION, decomposePolicySection } from '../src/modules/coverage-analysis/policy-decomposition.js';
-import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterRegistry } from '../src/modules/coverage-analysis/policy-parameter-registry.js';
+import { opaqueSourceId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { MODEL_EXTRACTED_UNVERIFIED } from '../src/features/coverage-analysis/agent-contracts.js';
+import { modelObservationCandidates } from '../src/features/coverage-analysis/model-observations.js';
+import { CANONICAL_KEY_CRITERIA, POLICY_DECOMPOSITION, decomposePolicySection } from '../src/features/coverage-analysis/policy-decomposition.js';
+import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterRegistry } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { observationInput, parameterAt as at, parameterReviewerId, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 import { auditActions, setupLiveCase, startLiveServer } from './support/live-analysis-scenario.mjs';
 
@@ -268,13 +268,13 @@ test('F1: a stale worker whose lease moved records nothing; the holder records o
 });
 
 test('F1: the persistent worker skips a result whose lease was lost instead of failing the run', async t => {
-  const { MODEL_OBSERVATION_TASK_KEYS } = await import('../src/modules/coverage-analysis/model-observations.js');
+  const { MODEL_OBSERVATION_TASK_KEYS } = await import('../src/features/coverage-analysis/model-observations.js');
   assert.ok(MODEL_OBSERVATION_TASK_KEYS.includes('profile'));
   let completed = 0;
   let failed = 0;
   let recordCalls = 0;
   const leaseLost = Object.assign(new Error('lost'), { code: 'TASK_LEASE_LOST' });
-  const { createPersistentCoverageAnalysisService, COVERAGE_ANALYSIS_WORKFLOW } = await import('../src/modules/coverage-analysis/index.js');
+  const { createPersistentCoverageAnalysisService, COVERAGE_ANALYSIS_WORKFLOW } = await import('../src/features/coverage-analysis/index.js');
   const run = { id: 'run-f1', status: 'running', workflow_name: COVERAGE_ANALYSIS_WORKFLOW.name, workflow_version: COVERAGE_ANALYSIS_WORKFLOW.version, consent_grant_id: 'c', execution_mode: 'live', input_json: '{}' };
   const definition = COVERAGE_ANALYSIS_WORKFLOW.tasks.find(item => item.key === 'profile');
   let claimed = false;

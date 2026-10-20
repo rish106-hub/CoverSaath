@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeEvidenceTextForStorage } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+import { sanitizeEvidenceTextForStorage } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 
 // Synthetic only: fictional people, ids and conditions in the pipe-table shape OCR layout output prints.
 const gate = text => sanitizeEvidenceTextForStorage(text, { maxBytes: 16_000 }).text;

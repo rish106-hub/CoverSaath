@@ -4,7 +4,7 @@ import {
   analyzeInsuranceRules,
   classifyForDecisionAdapter,
   compareVersions,
-} from '../src/modules/insurance-rules/index.js';
+} from '../src/features/insurance-rules/index.js';
 
 const source = (overrides = {}) => ({
   type: 'issued_schedule',

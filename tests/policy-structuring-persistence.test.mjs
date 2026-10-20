@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
+import { createPolicyStructuringService } from '../src/backend/services/policy-structuring-service.js';
 import { parameterAt as at, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 
 // Storage for policy document structuring (SQLite migration 011, PostgreSQL 007) and its
@@ -102,7 +103,7 @@ test('commit records observations, resolutions and proposals in one transaction 
   assert.equal(observation.source_id, 'page-parameters');
   assert.equal(observation.source_digest, 'b'.repeat(64), 'the digest is the cited page digest');
 
-  const proposals = structuring.listProposals({ householdId: household, documentId: document });
+  const proposals = structuring.listProposals({ householdId: household, documentId: document, structuringRunId: result.structuringRunId });
   assert.deepEqual(proposals.map(item => [item.proposedKey, item.status, item.page, item.blockIndex]), [
     ['synthetic_daily_cash', 'pending_review', 2, 3], ['synthetic_wellness_credit', 'pending_review', 2, 5],
   ]);
@@ -144,6 +145,59 @@ test('a replayed commit returns the stored counts and writes nothing new', t => 
   assert.equal(structuringRuns(database), 2);
 });
 
+// Run-scoped proposals defect: proposals were listed by document only, so a second analysis run on the
+// same document showed the first run's proposals as its own.
+function seedSecondRun(database, services) {
+  database.prepare(`INSERT INTO workflow_runs
+    (id, case_id, workflow_name, workflow_version, execution_mode, status, input_digest, input_json, created_at)
+    VALUES ('run-second', 'case-parameters', 'coverage-reconstruction', 'v2', 'fixture', 'queued', ?, '{}', ?)`).run('e'.repeat(64), at);
+  services.coverageParameters.initializeRunParameters({ ...parameterScope(), workflowRunId: 'run-second', registryVersion: v1, updatedBy: 'test' });
+}
+
+test('listProposals returns only the proposals of the given structuring run (run-scoped proposals defect)', t => {
+  const { database, services, structuring } = open(t);
+  seedSecondRun(database, services);
+  const first = structuring.commitStructuring(input(services, { decisions: [] }));
+  const second = structuring.commitStructuring(input(services, {
+    workflowRunId: 'run-second', decisions: [], proposals: [proposal('synthetic_second_run_benefit')],
+  }));
+  const keys = structuringRunId => structuring.listProposals({ householdId: household, documentId: document, structuringRunId })
+    .map(item => [item.proposedKey, item.structuringRunId]);
+  assert.deepEqual(keys(first.structuringRunId), [
+    ['synthetic_daily_cash', first.structuringRunId], ['synthetic_wellness_credit', first.structuringRunId],
+  ]);
+  assert.deepEqual(keys(second.structuringRunId), [['synthetic_second_run_benefit', second.structuringRunId]]);
+  // Erase the older run and structure again: only the newest run's proposals are listed.
+  structuring.eraseDerived({ householdId: household, workflowRunIds: [run], reasonCode: 'data_subject_request' });
+  const again = structuring.commitStructuring(input(services, { decisions: [], proposals: [proposal('synthetic_rerun_benefit')] }));
+  assert.deepEqual(keys(again.structuringRunId), [['synthetic_rerun_benefit', again.structuringRunId]]);
+  assert.deepEqual(keys(first.structuringRunId), []);
+
+  const invalidInput = { code: 'STRUCTURING_INPUT_INVALID' };
+  assert.throws(() => structuring.listProposals({ householdId: household, documentId: document }), invalidInput, 'run id is required');
+  assert.throws(() => structuring.listProposals({ householdId: household, documentId: document, structuringRunId: "x' OR 1=1" }), invalidInput);
+  assert.throws(() => structuring.listProposals({ householdId: 'household-other', documentId: document, structuringRunId: first.structuringRunId }), notFound);
+});
+
+test('the review result lists only the proposals of its own run and carries provenance', t => {
+  const { database, services, structuring } = open(t);
+  seedSecondRun(database, services);
+  const first = structuring.commitStructuring(input(services, { decisions: [] }));
+  structuring.commitStructuring(input(services, { workflowRunId: 'run-second', decisions: [], proposals: [proposal('synthetic_second_run_benefit')] }));
+  const service = createPolicyStructuringService({ services, loadKnownIdentifiers: async () => [], createModelCall: () => () => {}, env: {} });
+  const owned = { id: document, householdId: household, caseId: 'case-parameters' };
+  const review = service.result({ document: owned, workflowRunId: run });
+  assert.equal(review.structuringRun.id, first.structuringRunId);
+  assert.equal(review.structuringRun.sourceVersion, 'version-1');
+  assert.deepEqual(review.proposals.map(item => item.proposedKey), ['synthetic_daily_cash', 'synthetic_wellness_credit']);
+  for (const item of review.proposals) {
+    assert.deepEqual([item.structuringRunId, item.pipelineVersion, item.registryVersion, item.sourceVersion],
+      [first.structuringRunId, pipelineVersion, v1, 'version-1']);
+  }
+  assert.throws(() => service.result({ document: owned, workflowRunId: undefined }), { code: 'VALIDATION_ERROR' });
+  assert.throws(() => service.result({ document: { ...owned, householdId: 'household-other' }, workflowRunId: run }), notFound);
+});
+
 test('every read and write is household-scoped with one coded error', t => {
   const { database, services, structuring } = open(t);
   structuring.commitStructuring(input(services));
@@ -161,9 +215,10 @@ test('every read and write is household-scoped with one coded error', t => {
   }
   assert.equal(consentCalls, 0, 'scope is checked before consent');
   assert.deepEqual({ obs: liveObservations(database), proposals: liveProposals(database), runs: structuringRuns(database) }, before);
-  assert.throws(() => structuring.listProposals({ householdId: 'household-other', documentId: document }), notFound);
-  assert.throws(() => structuring.listProposals({ householdId: household, documentId: 'document-foreign' }), notFound);
-  assert.throws(() => structuring.listProposals({ householdId: household, documentId: 'document-missing' }), notFound);
+  const { id: structuringRunId } = structuring.getStructuringRun({ householdId: household, workflowRunId: run, documentId: document });
+  assert.throws(() => structuring.listProposals({ householdId: 'household-other', documentId: document, structuringRunId }), notFound);
+  assert.throws(() => structuring.listProposals({ householdId: household, documentId: 'document-foreign', structuringRunId }), notFound);
+  assert.throws(() => structuring.listProposals({ householdId: household, documentId: 'document-missing', structuringRunId }), notFound);
   assert.throws(() => structuring.getStructuringRun({ householdId: 'household-other', workflowRunId: run, documentId: document }), notFound);
   assert.throws(() => structuring.getStructuringRun({ householdId: household, workflowRunId: 'run-foreign', documentId: document }), notFound);
   assert.throws(() => structuring.getStructuringRun({ householdId: household, workflowRunId: run, documentId: 'document-foreign' }), notFound);
@@ -290,7 +345,8 @@ test('consent revocation (document grant) empties both stores with a counts-only
   assert.equal(payload.proposals, 2);
   assert.equal(payload.runs, 1);
   assert.equal(JSON.stringify(event).includes('Synthetic benefit'), false);
-  assert.deepEqual(structuring.listProposals({ householdId: household, documentId: document }), []);
+  const { id: structuringRunId } = structuring.getStructuringRun({ householdId: household, workflowRunId: run, documentId: document });
+  assert.deepEqual(structuring.listProposals({ householdId: household, documentId: document, structuringRunId }), []);
   assert.ok(structuring.getStructuringRun({ householdId: household, workflowRunId: run, documentId: document }).erasedAt);
 });
 

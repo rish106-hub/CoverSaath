@@ -2,7 +2,7 @@
 
 - Status: Proposed
 - Date: 2026-10-19
-- Scope: new `src/modules/policy-structuring/`; reads `knowvia.ocr.v1` pages; writes parameter observations and a proposed-parameter store
+- Scope: new `src/features/policy-structuring/`; reads `knowvia.ocr.v1` pages; writes parameter observations and a proposed-parameter store
 - Plan: [policy-document-structuring.xml](../exec-plans/active/policy-document-structuring.xml)
 
 ## Context
@@ -11,9 +11,9 @@ Sarvam Document AI (Block 2) returns every page of a policy PDF with tables inta
 health policy schedule used for the parse eval (20 pages), Sarvam captured the Schedule of Benefits, premium and discount
 breakdown, loadings, ICD annexure, Customer Information Sheet and declaration page.
 
-The only consumer is `src/modules/ai-analysis/eval-extractor.js`: 18 hand-written regex fields, used by the
+The only consumer is `src/features/ai-analysis/eval-extractor.js`: 18 hand-written regex fields, used by the
 eval script and nothing at runtime. About 10% of the document is kept. The 138-key registry in
-`src/modules/coverage-analysis/policy-parameter-registry.js` (sections A to K) is never filled from a PDF.
+`src/features/coverage-analysis/policy-parameter-registry.js` (sections A to K) is never filled from a PDF.
 Anything outside the 18 fields is dropped, and cross-section conflicts (for example PED waiting period
 "3 Years" in the Schedule of Benefits versus "36 / 24 / 12 months" in the Customer Information Sheet) are
 invisible.
@@ -76,3 +76,127 @@ again before commit.
 - Consent and privacy-notice wording for the Gemini step is not final. Mark for legal review.
 - Gemini model choice, limits and billed cost are unmeasured.
 - Postgres parity for the new store follows ADR 0004; SQLite is the runtime today.
+
+## Addendum (2026-10-19): stored OCR blocks (Block 2 close-out W3)
+
+Status: accepted. Before this, `source_pages` kept only page text, so Sarvam's blocks, tables, layout tags and
+block indices were lost after OCR persistence and the sectioner could not run from stored data.
+
+Decision:
+
+- **Storage: a nullable `blocks_json` column on `source_pages`** (SQLite 012, PostgreSQL 009, expand-only), written
+  once at page insert. Chosen over a `source_page_blocks` table because the repository inserts pages once and
+  never replaces them, `source_pages` has no row-immutability trigger that a new column would conflict with, and
+  both erasure paths (consent revocation and document deletion) already redact the page row in one UPDATE. One
+  row keeps blocks and text together, so they cannot drift and need one erasure step.
+- **Shape (`knowvia.ocr.v2`)**: `{ version, page, blocks: [{ index, tag, readingOrder, text, rows?, textOmitted? }] }`.
+  `index` is the 0-based position in provider reading order and equals the sectioner's block index. `rows` holds
+  table cells parsed from the table text at write time. No provider payload, block ids, coordinates or
+  confidences. Blocks whose tag the sectioner drops as `model_description` (`image`, `image-caption`) keep index
+  and tag, but their text is replaced by `''` with `textOmitted: 'model_description'`.
+- **Versioning**: `knowvia.ocr.v2` is the OCR output and stored-blocks version. `ocr_jobs.contract_version` and
+  `source_pages.output_contract_version` stay `knowvia.ocr.v1` because they describe the page text contract,
+  which is unchanged. Changing them would drop every new page from coverage-analysis source selection (which
+  filters on v1) and break OCR job de-duplication (keyed on contract version), causing paid re-runs.
+- **Validation**: `src/features/input/ocr-blocks.js`. On write, provider blocks must rebuild the page
+  text exactly (missing, extra or reordered blocks fail), tags must be a known Sarvam section type, reading order
+  must be finite and non-decreasing, and text, block, row and stored sizes are bounded. The repository re-validates
+  before insert and on every read (indices must equal positions, rows must match the table text, no extra fields).
+  The database CHECK enforces a JSON object of at most 1,000,000 characters.
+- **Read path**: `OcrRepository.getDocumentBlockPages({ documentId, householdId })` returns household-scoped
+  pages of the active document version. Pages stored before v2 come back with `status: 'blocks_unavailable'`
+  and `blocks: null`; `sectionStoredDocument` refuses them (`STRUCTURING_BLOCKS_UNAVAILABLE`).
+- **Erasure**: revocation nulls `blocks_json` with the page text. Triggers are the safety net:
+  `source_pages_blocks_erase_with_text` (redacting page text clears blocks; this also covers document deletion)
+  and `source_pages_blocks_erase_on_document_erasure`. `source_pages_blocks_immutable` allows only clearing;
+  `source_pages_blocks_insert` refuses blocks without page text or for an erasing document. The job-level
+  `ocr_jobs.result_json` copy of the normalised output, which now includes blocks, is already nulled by both paths.
+
+Limits: existing v1 pages are not backfilled (the provider output is gone; a re-run is a paid, consented OCR
+call). The tag list comes from Sarvam's published section types; an unlisted tag fails OCR persistence closed
+and needs a code change. Page text still contains image descriptions, as before this addendum. `photograph`,
+`chart` and `diagram` blocks keep their text because the sectioner does not drop them; whether that text is
+model-written is unverified against real Sarvam output.
+
+## Addendum (2026-10-19): structuring in the application runtime (Block 2 close-out W4)
+
+Status: accepted.
+
+- **Model gateway only.** Extraction and reconciliation are model-gateway tasks (`policy_structuring_extract`,
+  `policy_structuring_reconcile`) registered in the responsibility matrix and `ai-authority.js` as `propose`
+  tasks of the `policy-structuring` pipeline. Their instructions and output schemas live once in
+  `src/features/ai-analysis/structuring-contract.js`. The gateway enforces the input cap, a per-call budget
+  reservation against a per-run budget and the project budget (shared with live analysis), a timeout, no
+  retries, and an output shape check. The runner re-checks the document-specific Gemini grant before every
+  dispatch; a refused check releases the reservation. `reservation_exceeded` and `budget_refused` stop every
+  further paid call for the document. The direct Gemini caller remains only in the opt-in eval script.
+- **Grant binding.** The Gemini grant must name this document, recipient `google-gemini`, belong to the
+  document's household and be held by the requesting adult. Grant creation refuses a document scope outside the
+  grant's household.
+- **Runtime.** `POST /api/v1/documents/:id/structuring-runs` (`workflowRunId`, `consentGrantId`) starts a run on
+  stored OCR blocks in this process; `GET ...?workflowRunId=` returns the human-reviewable result: every key with
+  state, readings (value, subject, page, block, verbatim quote), contradictions, variations, model selections,
+  missing keys, proposals and skipped chunks with reasons. In-progress state is in memory: an uncommitted run is
+  lost on restart and is started again. A committed run of the current pipeline version is replayed, never paid
+  twice; an erased or older-version run can be run again. Counts, skipped chunks, rejection reasons, calls,
+  tokens and cost are stored with the run (`counts_json`, bounded, counts and codes only).
+- **Revocation.** Revoking a grant that disclosed a document to Gemini erases that document's structuring output
+  (runs, proposals and the observations they wrote) under the document's own household. The document and its
+  OCR pages stay, because they rest on the upload and Sarvam grants.
+- **Values.** A value is stored as the model wrote it only when it is printed verbatim in its quote; otherwise
+  the quote is stored.
+- **OCR content type.** The OCR route defaults Sarvam `content_type` to `printed` (every uploadable kind is a
+  printed insurer document). On the real sample, `mixed` returned one untagged block per page and lost tables
+  and layout tags; `printed` returned the tagged blocks.
+
+Limits: one real policy measured. Gemini retention on the paid tier is "a limited period" for abuse monitoring
+(period unstated); the free tier may use content for training and human review, so live use requires a billed
+project. Consent wording for the Gemini step is not final and needs legal review.
+
+## Addendum (2026-10-20): structuring hardening S1 to S5
+
+Status: accepted. Plan: `docs/exec-plans/active/policy-structuring-hardening.xml`. S6 (document-to-policy
+association, ADR 0007) is blocked; see below.
+
+- **Typed accuracy evaluator (S1).** `readingMatches` compares by type through the validator normalisers:
+  money by `amountMinor` (and `per` when the golden has one), percentage, date (`iso`), duration (amount and unit;
+  no 30/365-day conversion), number and boolean by value, text by whole consecutive words. A typed golden with an
+  unparseable reading never matches. Accuracy reports made before this change are not comparable.
+- **Run-scoped proposals (S2).** Proposals are listed per structuring run; another run on the same document never
+  contributes. Each proposal in the result carries `structuringRunId`, `pipelineVersion`, `registryVersion` and
+  `sourceVersion`.
+- **Processing status and evidence outcome (S3).** `processingStatus` is `running`, `finished`,
+  `failed_processing` or `interrupted`; `evidenceOutcome` is decided by deterministic counts only
+  (`src/features/policy-structuring/outcome.js`): `complete` needs zero skipped or unaccounted chunks and a reading
+  for every model-allowed critical key; `partial_review_required` otherwise, when accepted items reach
+  `MIN_ACCEPTED_ITEMS` and the skipped share stays at most `MAX_SKIPPED_SHARE`; `failed` when no item is accepted,
+  a budget stop left more than half the chunks unread, or the skipped share is above the maximum. A failed outcome
+  is never committed. The thresholds (1 and 0.5) are provisional and unmeasured. The outcome, reason codes and
+  missing critical keys are stored in `counts_json`. Runs stored before this change read as
+  `partial_review_required` with reason `outcome_not_recorded`. The result never reports `completed`.
+- **Durable job state (S4, SQLite 013, PostgreSQL 010).** Each attempt is a `policy_structuring_jobs` row:
+  identifiers, statuses, an evidence outcome code, an error code and an attempt number, never text or values. One
+  queued or running attempt per run and document (partial unique index). On service start, running rows become
+  `interrupted` (one counts-only audit event); nothing is re-dispatched. After a failed or interrupted attempt a
+  new paid attempt needs `restart: true` (`409 STRUCTURING_RESTART_REQUIRED` otherwise). Erasure and document
+  deletion stamp the document's jobs erased (status kept); an erased attempt needs no restart.
+- **Explicit blocks upgrade (S5, SQLite 014, PostgreSQL 011).** A job now records the output contract it stored
+  (`knowvia.ocr.v2` when its pages carry blocks); page text keeps the `knowvia.ocr.v1` text contract. A normal OCR
+  request reuses any live or succeeded job of the document, whatever contract it recorded, so the change never
+  starts a silent paid rerun. `POST /api/v1/documents/:id/ocr-jobs` with `mode: "blocks_upgrade"`,
+  `acknowledgeProviderCharge: true` and the Sarvam grant re-reads a v1 document: refused before any provider call
+  with `409 OCR_UPGRADE_NOT_NEEDED` when every page has blocks (or a page was upgraded or erased) and with
+  `409 OCR_UPGRADE_CHARGE_UNACKNOWLEDGED` without the acknowledgement. The upgrade job is keyed by the v2 contract,
+  so a repeat request returns the same job. Blocks are attached to the stored pages only when every page's new
+  text hashes to its stored `text_sha256`; otherwise the job fails closed with `OCR_UPGRADE_TEXT_CHANGED` and the
+  v1 pages stay. The blocks immutability trigger is narrowed, not dropped: it allows exactly one NULL to blocks
+  fill by a succeeded v2 job of the same document version with unchanged text, recorded in
+  `source_pages.blocks_upgrade_job_id` (set once). Page ids and text never change, so existing observations keep
+  their source page. Audit: `ocr.blocks_upgrade_requested` and `ocr.blocks_upgrade_completed`, counts only.
+- **U1.** The Sarvam normaliser is deterministic: the same provider output yields the same page text in any block
+  order (synthetic replay test). Whether Sarvam returns the same output on a re-run is unknown without a paid
+  call, so the hash check decides per run.
+- **S6 blocked (U2).** Changing `coverage_parameter_records` uniqueness to (run, policy, key) needs a SQLite table
+  rebuild. The migration runner runs each file inside `BEGIN IMMEDIATE` with `foreign_keys` on, where
+  `PRAGMA foreign_keys = OFF` is a no-op; on a populated synthetic database a plain rebuild fails with
+  `FOREIGN KEY constraint failed` and a deferred rebuild fails on trigger references. Re-plan before Block 3.

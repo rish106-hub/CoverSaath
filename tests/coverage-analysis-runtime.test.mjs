@@ -9,8 +9,8 @@ import {
   createPersistentCoverageAnalysisService,
   decomposePolicySection,
   validateTaskOutputEnvelope,
-} from '../src/modules/coverage-analysis/index.js';
-import { sanitizeEvidenceForModel } from '../src/modules/ai-analysis/privacy-evidence-gate.js';
+} from '../src/features/coverage-analysis/index.js';
+import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { ANALYSIS_DAG } from '../src/server/routes/v1-backend-routes.js';
 
 const clone = value => structuredClone(value);

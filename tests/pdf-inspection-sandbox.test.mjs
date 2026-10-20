@@ -17,14 +17,14 @@ import {
   createMemoryDocumentRepository,
   createSandboxedPdfInspector,
   inspectPdf,
-} from '../src/modules/document-intake/index.js';
+} from '../src/features/input/index.js';
 import {
   PDF_SANDBOX_CHILD,
   PDF_SANDBOX_EXIT_CODES,
   buildSandboxArgs,
   createPdfSandboxRunner,
   permissionFlag,
-} from '../src/modules/document-intake/sandboxed-pdf-inspection.js';
+} from '../src/features/input/sandboxed-pdf-inspection.js';
 
 const NET_SCOPE = process.allowedNodeEnvironmentFlags.has('--allow-net');
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -130,7 +130,7 @@ test('sandbox denials: a probe child with the production flags cannot read, writ
       try { await fn(); results[name] = 'allowed'; } catch (error) { results[name] = error.code ?? error.name; }
     };
     await attempt('readRepoFile', () => readFileSync(${JSON.stringify(join(repoRoot, 'package.json'))}));
-    await attempt('readInspector', () => readFileSync(${JSON.stringify(join(repoRoot, 'src/modules/document-intake/pdf-inspection.js'))}));
+    await attempt('readInspector', () => readFileSync(${JSON.stringify(join(repoRoot, 'src/features/input/pdf-inspection.js'))}));
     await attempt('readSystemFile', () => readFileSync('/etc/hosts'));
     await attempt('writeTemp', () => writeFileSync(${JSON.stringify(join(fixtureDir, 'written.txt'))}, 'x'));
     await attempt('childProcess', async () => (await import('node:child_process')).spawnSync(process.execPath, ['-v']));

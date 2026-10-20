@@ -4,7 +4,7 @@ import { prepareJsonResponse, sendJson } from './http/request.js';
 import { assertLocalRequest } from './http/security.js';
 import { createRateLimiter } from '../shared/http/index.js';
 import { openDatabase } from '../backend/database/index.js';
-import { createBackendServices, createCoverageAnalysisPort, createDocumentUploadService } from '../backend/services/index.js';
+import { createBackendServices, createCoverageAnalysisPort, createDocumentUploadService, createPolicyStructuringService } from '../backend/services/index.js';
 import {
   createClamdScanner,
   createDocumentScanWorker,
@@ -12,7 +12,7 @@ import {
   createOcrService,
   createSandboxedPdfInspector,
   createSandboxedPdfSegmenter,
-} from '../modules/document-intake/index.js';
+} from '../features/input/index.js';
 import {
   createEmailProvider,
   createGnaniVoiceProvider,
@@ -21,7 +21,7 @@ import {
 } from '../integrations/index.js';
 import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
 import { readServerConfig } from './config.js';
-import { createGeminiCoverageRegistryFactory } from '../modules/ai-analysis/index.js';
+import { createGeminiCoverageRegistryFactory, createSharedProjectBudget, createStructuringModelCallFactory } from '../features/ai-analysis/index.js';
 
 export function createApiServer({
   env = process.env,
@@ -57,8 +57,11 @@ export function createApiServer({
   // Only the model driver (loadModel/createAgent) may be injected; there is no
   // option to replace the registry, the validator or the parameter policy.
   const modelDispatchValidator = request => createCoverageAnalysisPort(getBackend()).authorizeModelDispatch(request);
+  // Analysis and structuring share one project budget, so the configured cap bounds their total spend.
+  const projectBudget = createSharedProjectBudget();
   const liveRegistryFactory = createGeminiCoverageRegistryFactory({
     env,
+    projectBudget,
     ...(analysisLiveModelDriver?.loadModel ? { loadModel: analysisLiveModelDriver.loadModel } : {}),
     ...(analysisLiveModelDriver?.createAgent ? { createAgent: analysisLiveModelDriver.createAgent } : {}),
     preDispatchValidator: modelDispatchValidator,
@@ -66,6 +69,25 @@ export function createApiServer({
     // request and redacted by the privacy gate; a loader failure stops dispatch.
     knownIdentifierLoader: caseId => createCoverageAnalysisPort(getBackend()).loadKnownIdentifiers(caseId),
   });
+  // Policy structuring (ADR 0006) calls Gemini only through the model gateway with a document-specific
+  // consent check before every call. Same injectable model driver as live analysis, nothing else.
+  const createStructuringModelCall = createStructuringModelCallFactory({
+    env,
+    projectBudget,
+    ...(analysisLiveModelDriver?.loadModel ? { loadModel: analysisLiveModelDriver.loadModel } : {}),
+    ...(analysisLiveModelDriver?.createAgent ? { createAgent: analysisLiveModelDriver.createAgent } : {}),
+  });
+  let structuringService = null;
+  const getStructuringService = () => {
+    structuringService ||= createPolicyStructuringService({
+      services: getBackend().services,
+      loadKnownIdentifiers: caseId => createCoverageAnalysisPort(getBackend()).loadKnownIdentifiers(caseId),
+      createModelCall: createStructuringModelCall,
+      env,
+      onError: event => console.warn(JSON.stringify({ event: 'policy_structuring_failed', code: event.code })),
+    });
+    return structuringService;
+  };
   const ownsDatabase = !injectedDatabase;
   let database = injectedDatabase ?? null;
   let services = backendServices ?? null;
@@ -132,7 +154,7 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory, getOcrService });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory, getOcrService, getStructuringService });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');
@@ -185,5 +207,6 @@ export function createApiServer({
   if (pdfInspector) server.once('close', () => pdfInspector.close());
   // The database closes only after in-flight document work has finished.
   if (ownsDatabase) server.once('close', () => { workerStopped.then(() => database?.close()); });
+  server.structuring = { settle: (documentId, workflowRunId) => structuringService?.settle(documentId, workflowRunId) };
   return server;
 }

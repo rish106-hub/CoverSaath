@@ -21,9 +21,9 @@ Consent, privacy and household ownership cross every block. They are not a block
 ## Block 1: Input
 
 - Purpose: let an authenticated adult add a policy PDF to a case, store it encrypted, check it, and release it to Block 2 only when it is safe.
-- Owning paths: `src/modules/document-intake/` (`file-validation.js`, `encrypted-local-storage.js`, `document-intake-service.js`, `memory-document-repository.js`, `contracts.js`). This slice adds, in the same directory, `pdf-inspection.js`, `clamd-scanner.js` and `scan-worker.js`. Route and repository wiring live in `src/server/routes/v1-backend-routes.js`, `src/server/create-server.js`, `src/server/config.js` and `src/backend/repositories/`. The upload panel is under `src/ui/`.
+- Owning paths: `src/features/input/` (`file-validation.js`, `encrypted-local-storage.js`, `document-intake-service.js`, `memory-document-repository.js`, `contracts.js`, `pdf-inspection.js`, `clamd-scanner.js` and `scan-worker.js`). Route and repository wiring live in `src/server/routes/v1-backend-routes.js`, `src/server/create-server.js`, `src/server/config.js` and `src/backend/repositories/`.
 - Input seam: `POST /api/v1/cases/{caseId}/documents` (raw `application/pdf`, session auth, `Idempotency-Key`, `document_processing` consent). Detail in [block-1-input.md](block-1-input.md).
-- Output seam: `OcrRepository.getReadyDocument` (`src/backend/repositories/ocr-repository.js`) returns a document only when it is active, clean, encrypted and consented. This is the entry condition of `knowvia.ocr.v1` (`src/modules/document-intake/ocr-contracts.js`).
+- Output seam: `OcrRepository.getReadyDocument` (`src/backend/repositories/ocr-repository.js`) returns a document only when it is active, clean, encrypted and consented. This is the entry condition of `knowvia.ocr.v1` (`src/features/input/ocr-contracts.js`).
 - Status: real for upload, inspection, encrypted storage and listing (this slice). Scanning is real code but off by default, so documents stay quarantined. Classification beyond the user-supplied kind is missing.
 - Stub to real: set `DOCUMENT_SCAN_MODE=clamd` with a reachable clamd. Later: sandboxed inspection and object storage behind the byte-storage port.
 - Owning phase: Block 1 slices. S3.2 converts the repository to the async PostgreSQL port.
@@ -31,7 +31,7 @@ Consent, privacy and household ownership cross every block. They are not a block
 ## Block 2: Insurance parsing
 
 - Purpose: turn a clean document into immutable, page-level source text with provenance.
-- Owning paths: `src/modules/document-intake/ocr-contracts.js`, `ocr-service.js`, `fixture-ocr-provider.js`; `src/backend/repositories/ocr-repository.js`; `src/integrations/sarvam/`; `src/modules/coverage-analysis/policy-decomposition.js` (sections A-J) and `policy-parameter-registry.js` (129 keys).
+- Owning paths: `src/features/input/ocr-contracts.js`, `ocr-service.js`, `fixture-ocr-provider.js`; `src/backend/repositories/ocr-repository.js`; `src/integrations/sarvam/`; `src/features/coverage-analysis/policy-decomposition.js` (sections A-J) and `policy-parameter-registry.js` (129 keys).
 - Input seam: `OcrRepository.getReadyDocument`, version `knowvia.ocr.v1`.
 - Output seam: `source_pages` rows with `output_contract_version = 'knowvia.ocr.v1'`, read by `src/backend/services/coverage-analysis-port.js`. OCR pages are immutable once complete.
 - Status: local Block 1 to Block 2 journey is implemented and tested against a mocked modern Sarvam
@@ -43,7 +43,7 @@ Consent, privacy and household ownership cross every block. They are not a block
 ## Block 3: Decision catalogue
 
 - Purpose: deterministic rules, the pinned parameter registry and, later, insurer facts.
-- Owning paths: `src/modules/insurance-rules/`; `src/modules/coverage-analysis/policy-parameter-registry.js` and `parameter-records.js`. Registry version `policy-parameters/v1`.
+- Owning paths: `src/features/insurance-rules/`; `src/features/coverage-analysis/policy-parameter-registry.js` and `parameter-records.js`. Registry version `policy-parameters/v1`.
 - Input seam: parameter records and observations (`coverage_parameter_*` tables) with an authority and an evidence state.
 - Output seam: rule results used by `src/agents/decision-agent.js` and the workflow tasks.
 - Status: real for rules and the registry on synthetic data. Live insurer sources and treatment rules are missing.
@@ -53,21 +53,21 @@ Consent, privacy and household ownership cross every block. They are not a block
 ## Block 4: Analysis and reasoning
 
 - Purpose: run the 22-task workflow. Code decides. A model only reads and extracts, under consent and the privacy gate.
-- Owning paths: `src/modules/coverage-analysis/` (`workflow-definition.js`, `persistent-service.js`, `runtime.js`), `src/modules/ai-analysis/` (`live-coverage-runtime.js`, `model-gateway.js`, `privacy-evidence-gate.js`), `src/contracts/` (`workflow-graph.js`, `ai-authority.js`, `persistence-ports.js`), `src/agents/`.
+- Owning paths: `src/features/coverage-analysis/` (`workflow-definition.js`, `persistent-service.js`, `runtime.js`), `src/features/ai-analysis/` (`live-coverage-runtime.js`, `model-gateway.js`, `privacy-evidence-gate.js`), `src/contracts/` (`workflow-graph.js`, `ai-authority.js`, `persistence-ports.js`), `src/agents/`.
 - Input seam: source pages through the coverage-analysis port. Contract `knowvia-agent-contract-v1`. Workflow `coverage-analysis` version 6 (ADR 0001). Privacy gate `knowvia-privacy-evidence-v3`.
 - Output seam: parameter states and a release-gated decision. Model values are `extracted_unverified`, `conflicting` or `unknown` only (ADR 0003).
-- Status: real, with fixture mode and a consent-gated live mode. No UI grants document `derive` scope for `google-gemini` yet (P2-D).
-- Stub to real: already real. Remaining work is the consent UI and the live Block 2 feed.
+- Status: real, with fixture mode and a consent-gated live mode. API clients must grant document `derive` scope for `google-gemini`.
+- Stub to real: already real. A later UI must use the existing consent API without broadening it.
 - Owning phase: Phase 1 done. P2-D open.
 
 ## Block 5: Output
 
-- Purpose: show the household a source-linked answer and allow export.
-- Owning paths: `src/server/policies/read-response-policy.js` (redacted read DTOs), `src/ui/` (`components/household-workspace.js`, `api/v1-client.js`, `state/workspace-controller.js`).
+- Purpose: return a source-linked answer through the backend contract. Presentation and export are deferred.
+- Owning paths: `src/server/policies/read-response-policy.js` (redacted read DTOs).
 - Input seam: redacted job and parameter DTOs from `/api/v1`.
 - Output seam: the API response. There is no four-layer answer screen and no export.
-- Status: API responses plus a thin workspace. This slice adds a document upload panel.
-- Stub to real: build the answer layers on the existing DTOs. Export is a separate decision.
+- Status: API responses only. No active UI or export exists.
+- Stub to real: build a UI later against the existing DTOs. Export is a separate decision.
 - Owning phase: planned, not scheduled.
 
 ## Block 6: Data and knowledge

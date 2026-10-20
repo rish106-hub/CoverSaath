@@ -64,7 +64,7 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build
+      - name: Validate backend entry point
         run: npm run build
 
       - name: Run safety evaluations

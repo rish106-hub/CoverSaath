@@ -40,7 +40,7 @@ Rules a PostgreSQL adapter must keep:
 
 - **Routes and tenant checks are not covered.** The SQLite port uses direct SQL (case subject derivation, source selection, consent checks, dependency outputs). The routes (`v1-backend-routes.js`) and `TenantAccessService` also read `workflow_runs` and `workflow_tasks` with direct SQL. Those read paths are not part of the runtime port. They need their own read port before routes can run on PostgreSQL.
 - **Signatures are documentation only.** The shape checks confirm that the methods exist, not their signatures or semantics. Semantics are checked by behaviour tests, which a PostgreSQL adapter must also pass.
-- **Exports are not wired yet.** `src/modules/coverage-analysis/index.js` still exports its own `assertCoverageAnalysisPort` (the fixture store check). The new contract exports are listed in the P1-A handoff for the central owner to add.
+- **Exports are not wired yet.** `src/features/coverage-analysis/index.js` still exports its own `assertCoverageAnalysisPort` (the fixture store check). The new contract exports are listed in the P1-A handoff for the central owner to add.
 
 ## Rollback
 
