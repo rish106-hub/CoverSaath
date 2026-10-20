@@ -220,7 +220,7 @@ const EXCLUSION_TEXT = Object.freeze({
 });
 
 /** Code assembles the answer from validated findings. There is no verdict: only cited evidence and unknowns. */
-export function assembleAnswer({ question, findings, overrides, context, checklist, rejected, sweepCompleted, documentIds, completeness }) {
+export function assembleAnswer({ question, findings, overrides, context, checklist, rejected, sweepCompleted, documentIds, completeness, storedText = null }) {
   const clauseById = new Map(context.clauses.map(clause => [clause.clauseId, clause]));
   const covered = [];
   const limited = [];
@@ -239,8 +239,12 @@ export function assembleAnswer({ question, findings, overrides, context, checkli
     else conditions.push({ subject: override.subject, text: override.quote, clauseIds: override.clauseIds, effect: override.effect });
   }
   const unknowns = [];
-  for (const kind of checklist) {
-    if (!context.clauses.some(clause => clause.kind === kind)) unknowns.push(`No ${kind} clause was found in the policy text that was read.`);
+  // Kinds are keyword ranking hints, never evidence of absence. When the whole policy was read nothing is unread;
+  // on the retrieved path a missing kind only means no clause carrying that label was retrieved.
+  if (context.path !== 'whole_policy') {
+    for (const kind of checklist) {
+      if (!context.clauses.some(clause => clause.kind === kind)) unknowns.push(`No clause labelled ${kind} by the keyword classifier was retrieved; such terms may be in policy text that was not read.`);
+    }
   }
   // Document-to-policy association is not established (ADR 0007 is blocked); callers read several documents together
   // only when the requester names them, and that grouping is never presented as verified.
@@ -266,7 +270,11 @@ export function assembleAnswer({ question, findings, overrides, context, checkli
       const key = `${id}|${quote}`;
       if (!sourceSeen.has(key) && clause.text.includes(quote)) {
         sourceSeen.add(key);
-        sources.push({ documentId: clause.documentId, page: clause.page, quote, clauseId: id });
+        // The model reads gated text, so a quote may carry privacy placeholders: it cites the right clause and page but
+        // is not verbatim source text. `verbatim` says which, checked against the stored (ungated) clause.
+        const source = { documentId: clause.documentId, page: clause.page, quote, clauseId: id };
+        if (storedText) source.verbatim = storedText.get(id)?.includes(quote) ?? false;
+        sources.push(source);
       }
     }
   };
@@ -402,6 +410,7 @@ export async function investigate({ question, clauses, search = () => [], call, 
   const answer = assembleAnswer({
     question: question.trim(), findings: parsed.findings, overrides, context: { ...context, clauses: read }, checklist,
     rejected: parsed.rejected + sweepRejected, sweepCompleted, documentIds, completeness,
+    storedText: new Map(clauses.map(clause => [clause.clauseId, clause.text])),
   });
   return { answer, usage, contextPath: context.path };
 }
