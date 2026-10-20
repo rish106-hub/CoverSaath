@@ -43,6 +43,9 @@ surface. Live-run failures on 2026-10-20 were pipeline bugs, fixed in Phase A (S
   Code assigns finding state; the model cannot set it. A failed sweep is reported as an unknown, never hidden.
 - `POST /api/v1/cases/:caseId/questions` (Idempotency-Key required) and `GET .../questions/:answerId`.
   Off unless `POLICY_EVIDENCE_ENABLED=true`. Needs a document-specific grant: `derive`, `insurance_question`, `google-gemini`.
+- Document boundaries (2026-10-20): only the latest active version per logical document (household-wide) is read.
+  More than one current document needs a requester-named `documentIds` set, recorded as an unverified association.
+  Stored answers are served only while the question grant is active and every read document is still current.
 - Unverified: no live Gemini call was made; recall (slice B5) is unmeasured.
 
 ## Consequences
