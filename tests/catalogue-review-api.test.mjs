@@ -410,3 +410,37 @@ test('review fix P2: bad asOf is a 400, an array source type is a 400, a househo
   assert.ok(events.every(e => ['system', 'adult_user'].includes(e.actor_type)));
   assert.equal(rows(app, 'catalogue_reviews'), 0);
 });
+
+test('Phase 7 journey: upload, OCR, question, typed candidate, independent review, handoff, then revocation withdraws everything', async t => {
+  const { app, s, reviewer } = await independent(t);
+  const { answerId, factId } = await answered(app, s);
+  const handoffOf = (token = s.token) => app.call(`/api/v1/cases/${s.caseId}/decision-catalogue?answerId=${encodeURIComponent(answerId)}&format=handoff`, { token });
+  const roomItem = res => res.data.policies[0].items.find(i => i.rule === 'room_rent_limit' && i.topic === 'room rent');
+
+  // Model-derived: a candidate only. The handoff keeps it unverified and carries no usable value.
+  const first = await handoffOf();
+  assert.equal(first.status, 200, JSON.stringify(first.data));
+  assert.equal(first.data.handoffVersion, 'decision-handoff/v1');
+  assert.equal(roomItem(first).state, 'missing');
+  assert.ok(first.data.openEndedFindings.length >= 1, 'the open-ended finding survives');
+  assert.equal(first.data.reviewRequired, true);
+  assert.equal(first.data.policies[0].association.documents[0].status, 'candidate');
+  assert.equal(first.data.policies[0].association.verified, false);
+
+  // Independent, attested review makes the value known with its citation.
+  assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 201);
+  const known = await handoffOf();
+  assert.equal(roomItem(known).state, 'known');
+  assert.deepEqual(roomItem(known).value, { kind: 'amount', amountMinor: 500000, currency: 'INR', basis: 'day' });
+  assert.equal(roomItem(known).citations[0].documentId, s.documentId);
+  assert.equal(roomItem(known).associationVerified, true);
+  assert.ok(!JSON.stringify(known.data).includes('000123') && !JSON.stringify(known.data).includes('Ishaan'));
+
+  // Revoking the question consent: every derived read stops, and a replay of the same request is refused.
+  const revoked = await app.call(`/api/v1/consents/${s.questionGrantId}/revoke`, { method: 'POST', token: s.token, body: { reason: 'journey test' } });
+  assert.ok([200, 201].includes(revoked.status), JSON.stringify(revoked.data));
+  assert.notEqual((await handoffOf()).status, 200);
+  assert.notEqual((await handoffOf(reviewer.token)).status, 200);
+  assert.equal(rows(app, 'catalogue_reviews'), 0, 'revocation erased the reviews that cited the document');
+  assert.equal(rows(app, 'policy_clauses'), 0);
+});

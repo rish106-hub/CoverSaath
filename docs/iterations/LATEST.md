@@ -1,5 +1,11 @@
 # Latest iteration
 
+## Phase 7: Block 4 handoff and journey tests (2026-10-20)
+
+- `handoff.js`: `toHandoff` / `assertHandoffContract`, contract `decision-handoff/v1`; returned by `GET .../decision-catalogue?answerId=&format=handoff`. States: known, unverified, conflicting, missing, not_permitted, not_selected, available_not_selected, dynamic_check. A value exists only when `known` (needs citations and a verified association); a model or unverified value is `candidateValue` only. Open-ended findings, dynamic checks, reviews, conflicts, completeness counts and processing version are included. No recommendation logic.
+- `tests/block3-journey.test.mjs`: the nine minimum scenarios at facts -> rules -> handoff level. `tests/catalogue-review-api.test.mjs`: one real-endpoint journey (upload, OCR, question, typed candidate, independent review, handoff, consent revocation erasing clauses and reviews).
+- Not covered: multi-document uploads through the API (scenarios 3, 6, 7 use synthetic reviewed batches, not uploaded files), real insurer documents, a Block 4 consumer beyond the contract assertions.
+
 ## Phase 3: candidate document-to-policy association (2026-10-20)
 
 `association.js`: a document is a candidate member of a logical policy (`pol-` + digest) only when its own clauses print exactly one policy number; several numbers is `ambiguous`, none is `unestablished`. The number is never returned and the uploader kind is never used. Facts now sit on their candidate policy (personal and corporate separate); the catalogue returns `documentAssociations`. Association is never verified by this path: a reviewer's `attestsPolicyAssociation` (independent grant) names the fact's own policy. Not built: endorsement/version relationships beyond a shared number, member enrolment evidence, a stored association review, ADR 0007. Tests: `tests/decision-catalogue-association.test.mjs`, API assertions in `decision-catalogue-api.test.mjs`.

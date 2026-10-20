@@ -1,6 +1,7 @@
 import { readBody } from '../http/request.js';
 import { isLoopbackRequest, readBinaryBody } from '../../shared/http/index.js';
 import { MAX_DOCUMENT_BYTES } from '../../features/input/index.js';
+import { toHandoff } from '../../features/decision-catalogue/index.js';
 import { documentDto } from '../../backend/services/index.js';
 import { validateSchema } from '../../backend/database/index.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
@@ -398,7 +399,8 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         caseRecord, answerId: url.searchParams.get('answerId'),
         asOf: url.searchParams.get('asOf'), memberId: url.searchParams.get('memberId'),
       });
-      return { status: 200, body: built };
+      // ?format=handoff returns the flat Block 4 view of the same catalogue (decision-handoff/v1).
+      return { status: 200, body: url.searchParams.get('format') === 'handoff' ? toHandoff(built) : built };
     }
     const sourcePackMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/source-pack$/);
     if (req.method === 'GET' && sourcePackMatch) {
