@@ -567,6 +567,8 @@ const INTERNAL_RECORD_ID_PATTERN = /(?<![A-Za-z0-9-])(?:[a-z]+-)*[0-9a-f]{8}-[0-
 // Email and UPI handles: a match starts only at the beginning of a local-part
 // run, and domain labels are dot-separated, so both are linear.
 const EMAIL_PATTERN = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g;
+// Spelled-out addresses ("name (at) example (dot) com", "name [at] example.com"): the bracketed at-word is the anchor.
+const OBFUSCATED_EMAIL_PATTERN = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+[ \t]*[(\[{][ \t]*at[ \t]*[)\]}][ \t]*[A-Za-z0-9-]+(?:(?:[ \t]*[(\[{][ \t]*dot[ \t]*[)\]}][ \t]*|\.)[A-Za-z0-9-]+)+/gi;
 const UPI_PATTERN = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{2,}@[A-Za-z]{2,16}(?![A-Za-z0-9]|\.[A-Za-z0-9])/g;
 
 // The honorific may be glued to the name by its full stop ("MRS.KAVYA").
@@ -1152,7 +1154,7 @@ function redactKnownIdentifiers(text, known, swap) {
   pass(known.emails, 'EMAIL');
   // Unknown email addresses too, so a known name inside a local part
   // ("kavya.placeholder@...") never splits an address.
-  value = outsideTokens(value, segment => segment.replace(EMAIL_PATTERN, match => swap('EMAIL', 'DIRECT_IDENTIFIER_EMAIL', match)));
+  value = outsideTokens(value, segment => segment.replace(OBFUSCATED_EMAIL_PATTERN, match => swap('EMAIL', 'DIRECT_IDENTIFIER_EMAIL', match)).replace(EMAIL_PATTERN, match => swap('EMAIL', 'DIRECT_IDENTIFIER_EMAIL', match)));
   pass(known.dates, 'DOB');
   pass(known.phones, 'PHONE');
   pass(known.names, 'NAME');
@@ -1196,6 +1198,7 @@ function redactSegment(segment, state, reasons) {
   replace(INTERNAL_RECORD_ID_PATTERN, 'ID', 'DIRECT_IDENTIFIER_STRUCTURED_ID');
   replaceStructured(STRUCTURED_HEALTH_PATTERN, 'HEALTH', 'SENSITIVE_HEALTH_CONDITION');
   replaceStructured(STRUCTURED_IDENTITY_PATTERN, 'IDENTIFIER', 'DIRECT_IDENTIFIER_LABELED_VALUE');
+  replace(OBFUSCATED_EMAIL_PATTERN, 'EMAIL', 'DIRECT_IDENTIFIER_EMAIL');
   replace(EMAIL_PATTERN, 'EMAIL', 'DIRECT_IDENTIFIER_EMAIL');
   replace(UPI_PATTERN, 'UPI', 'DIRECT_IDENTIFIER_BANK');
   // Honorific- or relation-prefixed names before labels, so "Proposer MRS. ASHA

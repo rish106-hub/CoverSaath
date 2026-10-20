@@ -17,7 +17,7 @@ const PAGES = [
   [
     { text: 'Policy Schedule', tag: 'headline' },
     { text: `Policyholder: ${OWNER_NAME}`, tag: 'paragraph' },
-    { text: 'Room rent limit: 5,000 per day', tag: 'paragraph' },
+    { text: 'Room rent limit: Rs 5,000 per day', tag: 'paragraph' },
     { text: 'Pre-existing disease waiting period: 3 years', tag: 'paragraph' },
   ],
   [
@@ -42,8 +42,8 @@ function stubDriver(requests) {
         requests.push({ agentId: settings.id, instructions: settings.instructions, prompt });
         const payload = JSON.parse(prompt);
         if (settings.id === 'knowvia-policy_evidence_investigate') {
-          const clause = payload.clauses.find(entry => entry.text.includes('Room rent limit: 5,000 per day'));
-          const findings = clause ? [{ clause_ids: [clause.clause_id], quote: 'Room rent limit: 5,000 per day', subject: 'room rent', conditions: [], exceptions: [] }] : [];
+          const clause = payload.clauses.find(entry => entry.text.includes('Room rent limit: Rs 5,000 per day'));
+          const findings = clause ? [{ clause_ids: [clause.clause_id], quote: 'Room rent limit: Rs 5,000 per day', subject: 'room rent', conditions: [], exceptions: [] }] : [];
           return { output: { findings }, totalUsage: { inputTokens: 300, outputTokens: 40 } };
         }
         if (settings.id === 'knowvia-policy_evidence_override_sweep') return { output: { overrides: [] }, totalUsage: { inputTokens: 300, outputTokens: 10 } };
@@ -221,6 +221,17 @@ test('B3: catalogue is derived from a stored answer, stays unverified and makes 
   assert.ok(c.policies[0].rules.every(rule => ['unknown', 'unverified'].includes(rule.result.status)));
   assert.ok(!JSON.stringify(res.data).includes('consentGrantId'), 'access metadata is never returned');
   assert.ok(!JSON.stringify(res.data).includes('Ishaan'), 'no owner name');
+  // Phase 2: the room-rent line is a strict value, so a typed twin sits beside the open-ended finding, still unverified.
+  const typed = c.facts.find(fact => fact.factType === 'room_rent_limit');
+  assert.ok(typed, 'typed room_rent_limit candidate surfaced');
+  assert.deepEqual(typed.value, { kind: 'amount', amountMinor: 500000, currency: 'INR', basis: 'day' });
+  assert.ok(typed.clauseIds.length === 1 && typed.sourceDigests.length === 1);
+  const rr = c.policies[0].rules.find(rule => rule.rule === 'room_rent_limit' && rule.topic === 'room rent');
+  assert.equal(rr.result.status, 'unknown');
+  assert.equal(rr.result.reason, 'only_non_contractual_sources');
+  assert.ok(rr.result.discrepancies.length >= 1, 'the candidate is visible as a discrepancy, not as a value');
+  assert.equal(rr.result.value, null);
+  assert.ok(c.facts.some(fact => fact.factType.startsWith('finding.')), 'open-ended finding kept');
   assert.ok(c.facts.every(fact => fact.page === 1 && fact.documentId === s.documentId));
 });
 
