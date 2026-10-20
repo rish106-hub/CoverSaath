@@ -355,12 +355,41 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         return { status: 200, body: { answerId: stored.answerId, current: stored.current, answer: stored.answer } };
       }
     }
+    // Authenticated review of one catalogue fact (ADR 0009 part 2). Reviewer strength comes from a stored grant, never from
+    // the request body. The caller names a fact; the server rebuilds it from live clauses. Idempotent, audited, no model call.
+    const reviewMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/decision-catalogue\/reviews$/);
+    if (req.method === 'POST' && reviewMatch) {
+      const body = await readBody(req);
+      const result = getCatalogueService().record({
+        principal, caseId: reviewMatch[1],
+        answerId: requiredString(body.answerId, 'answerId'), factId: requiredString(body.factId, 'factId', { max: 128 }),
+        decision: requiredString(body.decision, 'decision', { max: 20 }), reasonCode: requiredString(body.reasonCode, 'reasonCode', { max: 40 }),
+        attestedSourceType: body.attestedSourceType ?? null, attestsPolicyAssociation: body.attestsPolicyAssociation ?? false,
+        idempotencyKey: idempotencyKey(req), asOf: body.asOf ?? null, memberId: body.memberId ?? null,
+      });
+      return { status: result.replayed ? 200 : 201, body: result };
+    }
+    // The household owner designates a household adult as a confirmer (self confirmation, never `proven`). Independent
+    // reviewers are granted by operator tooling only: there is deliberately no route for them.
+    const confirmerMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/catalogue-reviewers$/);
+    if (req.method === 'POST' && confirmerMatch) {
+      services.access.requireHousehold(principal, confirmerMatch[1], { write: true });
+      const body = await readBody(req);
+      const grant = services.catalogueReviews.grantHouseholdConfirmer({
+        householdId: confirmerMatch[1], adultUserId: requiredString(body.adultUserId, 'adultUserId', { max: 128 }), grantedByAdultId: principal.adultId,
+      });
+      return { status: 201, body: { grantId: grant.id, kind: grant.kind, status: grant.status } };
+    }
     // Decision catalogue (Block 3): facts derived on read from one stored answer. No model call and no write.
     // Gated by the source-pack field, same as /questions. Whether that consent purpose is right for coverage facts is pending legal review.
     const catalogueMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/decision-catalogue$/);
     if (req.method === 'GET' && catalogueMatch) {
-      const caseRecord = requireDocumentCase(services, principal, catalogueMatch[1], { write: false });
-      responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      // An independent reviewer holds a grant, not a household role: they read the catalogue of the cases they review.
+      let caseRecord = getCatalogueService().independentReviewerCase(principal, catalogueMatch[1]);
+      if (!caseRecord) {
+        caseRecord = requireDocumentCase(services, principal, catalogueMatch[1], { write: false });
+        responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      }
       const built = getCatalogueService().build({
         caseRecord, answerId: url.searchParams.get('answerId'),
         asOf: url.searchParams.get('asOf'), memberId: url.searchParams.get('memberId'),

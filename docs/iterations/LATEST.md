@@ -1,5 +1,14 @@
 # Latest iteration
 
+## Phase 4: reviewer authority and review API (2026-10-20)
+
+On branch `closeout/block2-block3-codeql`, not pushed. Design and limits: [ADR 0009 part 2](../adr/0009-reviewed-facts-and-decision-catalogue.md).
+
+- Migrations SQLite 017 / PostgreSQL 013: `catalogue_reviewer_grants`, `catalogue_reviews` (immutable, scope trigger, erasure trigger). PostgreSQL side not run locally.
+- `CatalogueReviewRepository`, review logic in `decision-catalogue-service.js`, routes `POST .../decision-catalogue/reviews` and `POST /households/{id}/catalogue-reviewers`. Independent reviewers have no route (operator tooling only).
+- `tests/catalogue-review-api.test.mjs` (8 tests): forged authority ignored, household confirmer capped at `reported`, independent reviewer reaches `known` only with source and association attestation, rejection/dispute/supersession, idempotency, audit has no fact content, erasure.
+- Still open: independent read-only review of this slice, a staff access model (no production holder of the independent grant), PostgreSQL run, legal review, verified document-to-policy association beyond the reviewer attestation.
+
 ## Closeout slice: obfuscated email, typed twins, CodeQL hardening (2026-10-20)
 
 Base `main` `be3b102`. No provider call, no migration.

@@ -70,7 +70,7 @@ export const expectedTables = Object.freeze([
   'coverage_parameter_registry_pins', 'coverage_parameter_records',
   'coverage_parameter_acquisitions', 'coverage_parameter_observations',
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
-  'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs', 'policy_clauses', 'policy_answers',
+  'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs', 'policy_clauses', 'policy_answers', 'catalogue_reviewer_grants', 'catalogue_reviews',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);

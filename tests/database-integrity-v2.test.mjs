@@ -91,6 +91,7 @@ test('v1 data migrates to v2 without losing evidence or foreign-key integrity', 
     '014_source_page_blocks_upgrade.sql',
     '015_policy_evidence.sql',
     '016_policy_clauses_fts.sql',
+    '017_catalogue_reviews.sql',
   ]);
   assert.equal(validateSchema(database).valid, true);
   const migrated = database.prepare("SELECT provenance_kind FROM evidence_facts WHERE id = 'fact-v1'").get();

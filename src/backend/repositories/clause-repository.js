@@ -204,16 +204,20 @@ export class ClauseRepository {
     return this.#atomic(() => {
       let answers = 0;
       let clauses = 0;
+      let reviews = 0;
       const deleteAnswers = this.database.prepare(`DELETE FROM policy_answers
         WHERE (? IS NULL OR household_id = ?)
           AND EXISTS (SELECT 1 FROM json_each(policy_answers.document_ids_json) WHERE value = ?)`);
       const deleteClauses = this.database.prepare('DELETE FROM policy_clauses WHERE document_id = ? AND (? IS NULL OR household_id = ?)');
+      // Reviewed facts cite clauses of the document, so they are derived data too (ADR 0009).
+      const deleteReviews = this.database.prepare('DELETE FROM catalogue_reviews WHERE document_id = ? AND (? IS NULL OR household_id = ?)');
       for (const documentId of new Set(documentIds)) {
+        reviews += Number(deleteReviews.run(documentId, householdId, householdId).changes);
         answers += Number(deleteAnswers.run(householdId, householdId, documentId).changes);
         clauses += Number(deleteClauses.run(documentId, householdId, householdId).changes);
       }
-      const counts = Object.freeze({ clauses, answers });
-      if (clauses > 0 || answers > 0) {
+      const counts = Object.freeze({ clauses, answers, reviews });
+      if (clauses > 0 || answers > 0 || reviews > 0) {
         this.audit.append({
           householdId, caseId, actorType, actorId, action: 'policy_evidence.erased', resourceType,
           resourceId: resourceId ?? documentIds[0] ?? 'policy_evidence',
