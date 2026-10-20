@@ -68,7 +68,7 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
       if (inFlight >= MAX_IN_FLIGHT) throw coded('EVIDENCE_BUSY', 'Too many questions are in progress.', 503);
 
       // Only documents the grant names for question-time use are read.
-      const candidates = services.documents.listForCase(caseId, householdId).filter(document => document.lifecycleState === 'active').slice(0, MAX_DOCUMENTS);
+      const candidates = services.documents.listForCase(caseId, householdId).filter(document => document.lifecycleState === 'active');
       const checks = new Map();
       for (const document of candidates) {
         const check = questionGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId });
@@ -77,6 +77,8 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
         }
       }
       if (!checks.size) throw coded('CONSENT_SCOPE_REQUIRED', 'A document-specific question grant is required.', 403);
+      // The processing limit applies only after consent filtering, so an authorised document is never crowded out.
+      for (const documentId of [...checks.keys()].slice(MAX_DOCUMENTS)) checks.delete(documentId);
 
       const documentIds = [];
       const names = [];

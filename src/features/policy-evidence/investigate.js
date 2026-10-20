@@ -45,7 +45,7 @@ export function gateClauses(clauses, knownIdentifiers) {
   return { sent, withheld };
 }
 
-const toWire = clause => ({ clause_id: clause.clauseId, page: clause.page, kind: clause.kind, title: clause.title, text: clause.text });
+const toWire = clause => ({ clause_id: clause.clauseId, document_id: clause.documentId, page: clause.page, kind: clause.kind, title: clause.title, text: clause.text });
 
 /**
  * Context for the model. Whole gated policy when it fits the byte budget; otherwise endorsements and schedule
@@ -79,6 +79,11 @@ export function selectContext({ gated, checklist, question, search, budgetBytes 
 
 const strings = list => (Array.isArray(list) ? list.filter(item => typeof item === 'string' && item.trim()).map(item => item.trim().slice(0, 500)) : null);
 
+/** A consequential claim (condition, exception, value, appliesTo) is kept only if it is printed in a cited clause. */
+function grounded(claim, clauseIds, clauseText) {
+  return typeof claim === 'string' && claim.length > 0 && clauseIds.some(id => (clauseText.get(id) ?? '').includes(claim));
+}
+
 function parseFindings(json, clauseText, limits) {
   const findings = [];
   let rejected = 0;
@@ -98,6 +103,15 @@ function parseFindings(json, clauseText, limits) {
     };
     const key = JSON.stringify([candidate.clauseIds, candidate.quote]);
     if (validateFinding(candidate, clauseText).length || seen.has(key)) { rejected += 1; continue; }
+    // The main quote is valid; every other assertion must carry its own source text or it is dropped.
+    for (const field of ['conditions', 'exceptions']) {
+      const kept = (candidate[field] ?? []).filter(claim => grounded(claim, candidate.clauseIds, clauseText));
+      rejected += (candidate[field] ?? []).length - kept.length;
+      candidate[field] = kept;
+    }
+    for (const field of ['value', 'appliesTo']) {
+      if (candidate[field] !== null && candidate[field] !== '' && !grounded(candidate[field], candidate.clauseIds, clauseText)) { candidate[field] = null; rejected += 1; }
+    }
     seen.add(key);
     findings.push(candidate);
   }
@@ -120,6 +134,35 @@ function parseOverrides(json, clauseText, findingIds, limits) {
   }
   rejected += Math.max(0, raw.length - limits.maxOverrides);
   return { overrides, rejected };
+}
+
+const SWEEP_KINDS = Object.freeze(['exclusion', 'limit', 'waiting_period', 'endorsement', 'condition', 'schedule_fact', 'definition']);
+const SWEEP_TERMS = 'exclusion excluded waiver waived override notwithstanding limit sub-limit capped waiting period not payable';
+
+/**
+ * Fresh retrieval for the sweep, driven by the first-pass findings rather than the question alone. Returns the
+ * context clauses plus gated clauses that the first pass never saw (the cross-page exclusion a first retrieval missed).
+ * A whole-policy context already holds everything, so nothing new is added there.
+ */
+export function selectSweepContext({ context, gated, findings, search, budgetBytes }) {
+  if (context.path === 'whole_policy') return { clauses: context.clauses, added: 0 };
+  const have = new Set(context.clauses.map(clause => clause.clauseId));
+  const gatedById = new Map(gated.map(clause => [clause.clauseId, clause]));
+  const queries = [...new Set([SWEEP_TERMS, ...findings.flatMap(finding => [finding.subject, `${finding.subject} ${SWEEP_TERMS}`, finding.quote])])].slice(0, 12);
+  const extra = [];
+  let used = context.clauses.reduce((sum, clause) => sum + bytes(toWire(clause)), 0);
+  for (const query of queries) {
+    for (const hit of search({ query, kinds: SWEEP_KINDS, limit: INVESTIGATION_LIMITS.ftsPerKind })) {
+      const clause = gatedById.get(hit.clauseId);
+      if (!clause || have.has(clause.clauseId)) continue;
+      const size = bytes(toWire(clause));
+      if (used + size > budgetBytes * 1.5) continue;
+      used += size; have.add(clause.clauseId); extra.push(clause);
+    }
+  }
+  const index = new Map(gated.map((clause, position) => [clause.clauseId, position]));
+  const clauses = [...context.clauses, ...extra].sort((a, b) => index.get(a.clauseId) - index.get(b.clauseId));
+  return { clauses, added: extra.length };
 }
 
 const LIMITING_KINDS = new Set(['limit', 'exclusion', 'waiting_period']);
@@ -152,6 +195,9 @@ export function assembleAnswer({ question, findings, overrides, context, checkli
   for (const kind of checklist) {
     if (!context.clauses.some(clause => clause.kind === kind)) unknowns.push(`No ${kind} clause was found in the policy text that was read.`);
   }
+  // Document-to-policy association is not established (ADR 0007 is blocked), so several documents are never merged silently.
+  const documents = new Set(context.clauses.map(clause => clause.documentId));
+  if (documents.size > 1) unknowns.push(`${documents.size} documents were read together. Which policy each belongs to is not established, so facts from different documents may describe different policies.`);
   if (withheld > 0) unknowns.push(`${withheld} clause(s) were withheld by the privacy check and were not read.`);
   if (context.truncated) unknowns.push('The policy text exceeded the reading budget, so some clauses were not read.');
   if (rejected > 0) unknowns.push(`${rejected} model finding(s) failed validation and were dropped.`);
@@ -170,7 +216,10 @@ export function assembleAnswer({ question, findings, overrides, context, checkli
       }
     }
   };
-  findings.forEach(finding => cite(finding.clauseIds, finding.quote));
+  findings.forEach(finding => {
+    cite(finding.clauseIds, finding.quote);
+    for (const claim of [...finding.conditions, ...finding.exceptions]) cite(finding.clauseIds, claim);
+  });
   overrides.forEach(override => cite(override.clauseIds, override.quote));
 
   const hasQualifiers = limited.length > 0 || conditions.length > 0 || findings.some(finding => finding.exceptions.length > 0);
@@ -223,16 +272,19 @@ export async function investigate({ question, clauses, search = () => [], call, 
   let overrides = [];
   let sweepRejected = 0;
   let sweepCompleted = false;
+  let sweepContext = { clauses: context.clauses, added: 0 };
   if (parsed.findings.length) {
     try {
+      sweepContext = selectSweepContext({ context, gated: sent, findings: parsed.findings, search, budgetBytes: caps.contextBudgetBytes });
+      const sweepText = new Map(sweepContext.clauses.map(clause => [clause.clauseId, clause.text]));
       const sweepPayload = {
         questions: [{ text: gatedQuestion }],
         findings: parsed.findings.map(finding => ({ finding_id: finding.findingId, subject: finding.subject, quote: finding.quote, clause_ids: finding.clauseIds })),
-        clauses: wire,
+        clauses: sweepContext.clauses.map(toWire),
       };
       const second = await run(EVIDENCE_SWEEP_TASK, sweepPayload, SWEEP_SCHEMA);
       if (second && Array.isArray(second.overrides)) {
-        const result = parseOverrides(second, clauseText, new Set(parsed.findings.map(finding => finding.findingId)), caps);
+        const result = parseOverrides(second, sweepText, new Set(parsed.findings.map(finding => finding.findingId)), caps);
         overrides = result.overrides;
         sweepRejected = result.rejected;
         sweepCompleted = true;
@@ -249,7 +301,7 @@ export async function investigate({ question, clauses, search = () => [], call, 
   }
   const documentIds = [...new Set(context.clauses.map(clause => clause.documentId))];
   const answer = assembleAnswer({
-    question: question.trim(), findings: parsed.findings, overrides, context, checklist, withheld: withheld.length,
+    question: question.trim(), findings: parsed.findings, overrides, context: { ...context, clauses: sweepContext.clauses }, checklist, withheld: withheld.length,
     rejected: parsed.rejected + sweepRejected, sweepCompleted, documentIds,
   });
   return { answer, usage, contextPath: context.path };
