@@ -1,5 +1,39 @@
 # Latest iteration
 
+## Policy structuring hardening S1 to S5 (2026-10-20)
+
+Active plan: [policy-structuring-hardening.xml](../exec-plans/active/policy-structuring-hardening.xml). Decisions:
+ADR 0006 addendum (2026-10-20). Uncommitted on `codex/backend-first-layout`; no commit, push, PR or deployment.
+
+### Done
+
+- S1 typed accuracy evaluator: no substring matching; typed comparison through the validator normalisers.
+- S2 run-scoped proposals with provenance (`structuringRunId`, `pipelineVersion`, `registryVersion`, `sourceVersion`).
+- S3 processing status separated from evidence outcome (`complete`, `partial_review_required`, `failed`); failed
+  outcomes are never committed; provisional thresholds 1 and 0.5, unmeasured. The result no longer says `completed`.
+- S4 durable job state: SQLite 013 / PostgreSQL 010 `policy_structuring_jobs`; restart marks running attempts
+  `interrupted`; a new paid attempt needs `restart: true`.
+- S5 explicit blocks upgrade for knowvia.ocr.v1 documents: SQLite 014 / PostgreSQL 011, narrowed blocks
+  immutability trigger, `mode: blocks_upgrade` with `acknowledgeProviderCharge: true`, per-page text hash check
+  (`OCR_UPGRADE_TEXT_CHANGED` fails closed). OCR jobs now record the output contract they stored (v2 with blocks).
+
+### Blocked
+
+- S6 document-to-policy association (ADR 0007) is blocked by U2: the SQLite runner cannot rebuild
+  `coverage_parameter_records` inside its per-file transaction with foreign keys on (probe: plain rebuild
+  `FOREIGN KEY constraint failed`; deferred rebuild fails on trigger references). Re-plan before Block 3.
+
+### Evidence
+
+- `npm run check` with a local PostgreSQL 17 (`TEST_DATABASE_URL`): pass. 697 tests, 687 pass, 10 skips (live
+  services), 0 fail. Catalog parity, PostgreSQL trigger behaviour and runner tests included.
+- `npm run eval:safety`: pass, `failures: []`. `npm run check:architecture`: pass, 132 files. `git diff --check`: clean.
+- Forward migration 012 to 014 on a populated synthetic SQLite database: page ids kept, schema valid, 0 FK errors.
+- Not verified: live Sarvam or Gemini calls (none made), real golden-file accuracy under the typed evaluator,
+  whether Sarvam reproduces page text on a re-run.
+
+Production readiness remains **FAIL**.
+
 ## Backend-first repository layout (2026-10-20)
 
 Completed plan: [backend-first-layout.md](../exec-plans/completed/backend-first-layout.md).

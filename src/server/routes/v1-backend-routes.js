@@ -390,6 +390,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const job = await getOcrService().start({
         documentId: record.id,
         retryFailed: body.retryFailed === true,
+        // Explicit, paid blocks upgrade for a knowvia.ocr.v1 document; refused unless acknowledged.
+        mode: body.mode ?? 'standard',
+        acknowledgeProviderCharge: body.acknowledgeProviderCharge === true,
         authorization: {
           authorized: true,
           consentGrantId: requiredString(body.consentGrantId, 'consentGrantId'),
@@ -430,8 +433,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         workflowRunId: requiredString(body.workflowRunId, 'workflowRunId'),
         consentGrantId: requiredString(body.consentGrantId, 'consentGrantId'),
         subjectAdultId: principal.adultId,
+        restart: body.restart ?? false,
       });
-      return { status: started.status === 'completed' ? 200 : 202, body: { structuring: started } };
+      return { status: started.status === 'finished' ? 200 : 202, body: { structuring: started } };
     }
     if (req.method === 'GET' && structuringMatch) {
       const record = requireOwnedDocument({ services, documentUploads, principal, documentId: structuringMatch[1] });

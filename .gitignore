@@ -13,6 +13,7 @@ dist/
 coverage/
 .local/
 .claude/prompts/block-1-input-slice.xml
+/docs
 docs/exec-plans/active/handoff-codex.md
 docs/exec-plans/active/production-hardening.xml
 

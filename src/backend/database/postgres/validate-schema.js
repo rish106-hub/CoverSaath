@@ -12,6 +12,7 @@ const POSTGRES_ONLY_CRITICAL_TRIGGERS = Object.freeze([
   'coverage_parameter_registry_pins_no_truncate',
   'coverage_parameter_registry_versions_no_truncate',
   'evidence_facts_no_truncate',
+  'policy_structuring_jobs_no_truncate',
   'policy_structuring_runs_no_truncate',
   'proposed_parameters_no_truncate',
 ]);

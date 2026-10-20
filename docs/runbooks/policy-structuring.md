@@ -24,9 +24,34 @@ Scope: whole-document policy structuring (ADR 0006) through the local API. Real 
    recipient `google-gemini`, held by the adult who starts the run.
 5. `POST /api/v1/documents/:id/structuring-runs` with `workflowRunId` and `consentGrantId` (202 running,
    200 when already stored). Poll `GET /api/v1/documents/:id/structuring-runs?workflowRunId=...`.
-6. Review: nothing in the result is proven. Contradictions and model selections need household confirmation.
+6. Read `processingStatus` and `evidenceOutcome` separately:
+   - `running`: wait. `finished` with `complete`: every chunk was read and every model-allowed critical key has a
+     reading. `finished` with `partial_review_required` (`requiresReview: true`): some chunks were skipped or a
+     critical key is missing (`outcomeReasons`, `missingCriticalKeys`); review before relying on it.
+   - `finished` with `failed` (`STRUCTURING_EVIDENCE_INSUFFICIENT`): too little evidence; nothing was stored.
+   - `failed_processing`: the run stopped with `errorCode`; nothing was stored.
+   - `interrupted`: the server restarted mid-run; nothing was stored and nothing was re-sent.
+   Thresholds are provisional and unmeasured; an outcome is not an accuracy claim.
+7. Review: nothing in the result is proven. Contradictions and model selections need household confirmation.
    Check `skippedChunks`: `privacy_gate_refused` chunks (member and health tables) are never sent and their facts
    are not captured.
+
+## Restart a failed or interrupted run
+
+A new attempt is a new paid run. After `failed_processing`, `interrupted` or an evidence `failed` outcome,
+`POST .../structuring-runs` returns `409 STRUCTURING_RESTART_REQUIRED` until the body adds `"restart": true`.
+A run already stored for the current pipeline version is replayed and never paid again, with or without the flag.
+
+## Documents OCR'd without blocks (knowvia.ocr.v1)
+
+Structuring answers `409 STRUCTURING_BLOCKS_UNAVAILABLE`. Running OCR again does not help: the stored v1 success
+is reused. Request the explicit, paid upgrade:
+`POST /api/v1/documents/:id/ocr-jobs` with `{ "mode": "blocks_upgrade", "acknowledgeProviderCharge": true,
+"consentGrantId": "<sarvam grant>" }`, then refresh the job until `succeeded`.
+- Without the acknowledgement: `409 OCR_UPGRADE_CHARGE_UNACKNOWLEDGED`, no provider call.
+- Pages already have blocks: `409 OCR_UPGRADE_NOT_NEEDED`, no provider call. A repeat request returns the same job.
+- `OCR_UPGRADE_TEXT_CHANGED`: Sarvam read the document differently this time. The v1 pages are kept and no blocks
+  are attached. Re-upload the document as a new version and OCR it normally; that re-upload is a new paid call.
 
 ## Revoke
 
@@ -38,8 +63,12 @@ observations they wrote. Revoking the Sarvam or upload grant erases pages and bl
 1. Set `POLICY_STRUCTURING_ENABLED=false` and restart. Upload, OCR and analysis are unaffected.
 2. Migrations SQLite 011/012 and PostgreSQL 007/008/009 are additive; older code ignores the new tables,
    column and triggers. Do not drop them while stored data must stay erasable.
-3. To remove structuring output for a document without revoking consent, call
-   `PolicyStructuringRepository.eraseDerived({ documentIds, reasonCode: 'data_subject_request' })`.
+3. SQLite 013 / PostgreSQL 010 (`policy_structuring_jobs`) are additive; older code ignores the table. SQLite 014 /
+   PostgreSQL 011 (blocks upgrade column and narrowed trigger) are forward-only: roll back by reverting code and
+   re-initialising the local database (no production data exists).
+4. To remove structuring output for a document without revoking consent, call
+   `PolicyStructuringRepository.eraseDerived({ documentIds, reasonCode: 'data_subject_request' })`. It also
+   stamps the document's structuring jobs erased.
 
 ## Logs
 

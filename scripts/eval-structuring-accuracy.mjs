@@ -24,7 +24,8 @@ const forbidden = getPolicyParameterRegistry(POLICY_PARAMETER_REGISTRY_VERSION).
 const runs = [];
 for (const file of files) {
   const { result } = JSON.parse(await readFile(resolve(file), 'utf8'));
-  if (result?.status !== 'completed') throw new Error(`${file}: run is not completed.`);
+  // 'completed' is the status of result files saved before processing and evidence outcomes were separated.
+  if (!['finished', 'completed'].includes(result?.status) || !result.structuringRun) throw new Error(`${file}: run is not finished.`);
   runs.push(result);
 }
 

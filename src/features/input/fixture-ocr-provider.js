@@ -10,6 +10,7 @@ export function createFixtureOcrProvider({ pages = [{ pageNumber: 1, text: 'Synt
   return Object.freeze({
     name: 'fixture',
     mode: 'fixture',
+    outputContractVersion: OCR_BLOCKS_VERSION,
     health: () => ({ provider: 'fixture', status: 'fixture_only', networkAttempted: false, calls: 0, accuracyMeasured: false }),
     async createJob({ document }) {
       const jobRef = `fixture-${randomUUID()}`;

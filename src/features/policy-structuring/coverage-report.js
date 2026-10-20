@@ -2,6 +2,7 @@
 // (chunk text, values, quotes, labels) is copied in. Chunk ids and page numbers are positional, not content.
 // Accounting is not accuracy: a stored chunk can still miss facts, which only a golden comparison measures.
 import { isConflict } from './reconciler.js';
+import { inferValueType, normalizeValue } from './validator.js';
 
 const tally = (list, pick) => list.reduce((counts, entry) => {
   const key = pick(entry);
@@ -115,40 +116,60 @@ export const CRITICAL_FIELD_KEYS = Object.freeze({
   exclusions_present: 'f.standard_exclusions_with_codes',
 });
 
-const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
-const compact = text => String(text ?? '').normalize('NFKC').toLowerCase().replace(/(rs\.?|inr|₹)/g, '').replace(/[^a-z0-9]+/g, '');
-// Dates in common printed forms become yyyymmdd so 01/02/2026, 1-Feb-2026 and 2026-02-01 compare equal.
-function dates(text) {
-  const out = new Set();
-  const value = String(text ?? '').toLowerCase();
-  for (const [, d, m, y] of value.matchAll(/\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})\b/g)) out.add(`${y}${m.padStart(2, '0')}${d.padStart(2, '0')}`);
-  for (const [, y, m, d] of value.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) out.add(`${y}${m}${d}`);
-  for (const [, d, mon, y] of value.matchAll(/\b(\d{1,2})[\s-]*([a-z]{3})[a-z]*[\s,-]*(\d{4})\b/g)) {
-    if (MONTHS[mon]) out.add(`${y}${String(MONTHS[mon]).padStart(2, '0')}${d.padStart(2, '0')}`);
-  }
-  return out;
-}
-// Durations become days so 36 months, 3 years and 1095 days compare equal (30-day months, 365-day years).
-function durations(text) {
-  const out = new Set();
-  for (const [, n, unit] of String(text ?? '').toLowerCase().matchAll(/(\d+)\s*(day|month|year)s?/g)) {
-    out.add(Number(n) * { day: 1, month: 30, year: 365 }[unit]);
-  }
-  return out;
+const PLAIN_NUMBER = /^\s*\d[\d,]*(?:\.\d+)?\s*$/;
+const DATE_FRAGMENT = /\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b|\b\d{1,2}[\s-][a-z]{3}[a-z]*\.?[\s-]\d{4}\b/gi;
+const tokens = text => String(text ?? '').normalize('NFKC').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+
+// Golden type from printed markers (validator inferValueType); a bare number is `number`, anything else text.
+function goldenType(value) {
+  return inferValueType(value) ?? (PLAIN_NUMBER.test(value) ? 'number' : 'text');
 }
 
-// A reading matches a golden value when the golden value's compact form appears in the reading, or
-// they share a date or a duration. Deliberately lenient on wording, strict on numbers.
+// Typed readings: the stored normalised value when its kind matches, else the reading text normalised by
+// the same validator rules. A period prints two dates, so each printed date is also a candidate.
+function typedReadings(type, reading) {
+  const out = [];
+  if (reading?.normalized?.kind === type) out.push(reading.normalized);
+  const text = String(reading?.value ?? '');
+  const whole = normalizeValue(type, text);
+  if (whole) out.push(whole);
+  if (type === 'date') for (const [fragment] of text.matchAll(DATE_FRAGMENT)) out.push(normalizeValue('date', fragment));
+  return out.filter(Boolean);
+}
+
+// Exact equality per type. Durations need the same unit: 36 months is not 3 years (no 30/365-day conversion).
+function sameTyped(golden, read) {
+  switch (golden.kind) {
+    case 'money': return read.amountMinor === golden.amountMinor && (golden.per == null || read.per === golden.per);
+    case 'percentage': return read.percent === golden.percent;
+    case 'date': return read.iso === golden.iso;
+    case 'duration': return read.amount === golden.amount && read.unit === golden.unit;
+    case 'boolean':
+    case 'number': return read.value === golden.value;
+    default: return false;
+  }
+}
+
+// Text: the golden tokens appear as a contiguous run of whole reading tokens, never a raw substring.
+function textMatches(golden, reading) {
+  const want = tokens(golden);
+  const have = tokens(reading?.value);
+  if (!want.length) return false;
+  for (let i = 0; i + want.length <= have.length; i += 1) if (want.every((token, j) => have[i + j] === token)) return true;
+  return false;
+}
+
+// A reading matches a golden value by type: money, percentage, date, duration, boolean and number compare
+// normalised values exactly; a typed golden with an unparseable reading never matches. Arrays need every element.
 export function readingMatches(expected, reading) {
   const values = Array.isArray(expected) ? expected : [expected];
-  const text = `${reading?.value ?? ''} ${reading?.normalized ? JSON.stringify(reading.normalized) : ''}`;
   return values.every(value => {
-    const golden = compact(value);
-    if (golden && compact(text).includes(golden)) return true;
-    const goldenDates = dates(value);
-    if (goldenDates.size && [...dates(text)].some(date => goldenDates.has(date))) return true;
-    const goldenDurations = durations(value);
-    return goldenDurations.size > 0 && [...durations(text)].some(days => goldenDurations.has(days));
+    if (typeof value !== 'string' && typeof value !== 'number') return false;
+    const printed = String(value);
+    const type = goldenType(printed);
+    if (type === 'text') return textMatches(printed, reading);
+    const golden = normalizeValue(type, printed);
+    return golden != null && typedReadings(type, reading).some(read => sameTyped(golden, read));
   });
 }
 

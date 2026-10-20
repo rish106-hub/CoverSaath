@@ -152,3 +152,51 @@ Status: accepted.
 Limits: one real policy measured. Gemini retention on the paid tier is "a limited period" for abuse monitoring
 (period unstated); the free tier may use content for training and human review, so live use requires a billed
 project. Consent wording for the Gemini step is not final and needs legal review.
+
+## Addendum (2026-10-20): structuring hardening S1 to S5
+
+Status: accepted. Plan: `docs/exec-plans/active/policy-structuring-hardening.xml`. S6 (document-to-policy
+association, ADR 0007) is blocked; see below.
+
+- **Typed accuracy evaluator (S1).** `readingMatches` compares by type through the validator normalisers:
+  money by `amountMinor` (and `per` when the golden has one), percentage, date (`iso`), duration (amount and unit;
+  no 30/365-day conversion), number and boolean by value, text by whole consecutive words. A typed golden with an
+  unparseable reading never matches. Accuracy reports made before this change are not comparable.
+- **Run-scoped proposals (S2).** Proposals are listed per structuring run; another run on the same document never
+  contributes. Each proposal in the result carries `structuringRunId`, `pipelineVersion`, `registryVersion` and
+  `sourceVersion`.
+- **Processing status and evidence outcome (S3).** `processingStatus` is `running`, `finished`,
+  `failed_processing` or `interrupted`; `evidenceOutcome` is decided by deterministic counts only
+  (`src/features/policy-structuring/outcome.js`): `complete` needs zero skipped or unaccounted chunks and a reading
+  for every model-allowed critical key; `partial_review_required` otherwise, when accepted items reach
+  `MIN_ACCEPTED_ITEMS` and the skipped share stays at most `MAX_SKIPPED_SHARE`; `failed` when no item is accepted,
+  a budget stop left more than half the chunks unread, or the skipped share is above the maximum. A failed outcome
+  is never committed. The thresholds (1 and 0.5) are provisional and unmeasured. The outcome, reason codes and
+  missing critical keys are stored in `counts_json`. Runs stored before this change read as
+  `partial_review_required` with reason `outcome_not_recorded`. The result never reports `completed`.
+- **Durable job state (S4, SQLite 013, PostgreSQL 010).** Each attempt is a `policy_structuring_jobs` row:
+  identifiers, statuses, an evidence outcome code, an error code and an attempt number, never text or values. One
+  queued or running attempt per run and document (partial unique index). On service start, running rows become
+  `interrupted` (one counts-only audit event); nothing is re-dispatched. After a failed or interrupted attempt a
+  new paid attempt needs `restart: true` (`409 STRUCTURING_RESTART_REQUIRED` otherwise). Erasure and document
+  deletion stamp the document's jobs erased (status kept); an erased attempt needs no restart.
+- **Explicit blocks upgrade (S5, SQLite 014, PostgreSQL 011).** A job now records the output contract it stored
+  (`knowvia.ocr.v2` when its pages carry blocks); page text keeps the `knowvia.ocr.v1` text contract. A normal OCR
+  request reuses any live or succeeded job of the document, whatever contract it recorded, so the change never
+  starts a silent paid rerun. `POST /api/v1/documents/:id/ocr-jobs` with `mode: "blocks_upgrade"`,
+  `acknowledgeProviderCharge: true` and the Sarvam grant re-reads a v1 document: refused before any provider call
+  with `409 OCR_UPGRADE_NOT_NEEDED` when every page has blocks (or a page was upgraded or erased) and with
+  `409 OCR_UPGRADE_CHARGE_UNACKNOWLEDGED` without the acknowledgement. The upgrade job is keyed by the v2 contract,
+  so a repeat request returns the same job. Blocks are attached to the stored pages only when every page's new
+  text hashes to its stored `text_sha256`; otherwise the job fails closed with `OCR_UPGRADE_TEXT_CHANGED` and the
+  v1 pages stay. The blocks immutability trigger is narrowed, not dropped: it allows exactly one NULL to blocks
+  fill by a succeeded v2 job of the same document version with unchanged text, recorded in
+  `source_pages.blocks_upgrade_job_id` (set once). Page ids and text never change, so existing observations keep
+  their source page. Audit: `ocr.blocks_upgrade_requested` and `ocr.blocks_upgrade_completed`, counts only.
+- **U1.** The Sarvam normaliser is deterministic: the same provider output yields the same page text in any block
+  order (synthetic replay test). Whether Sarvam returns the same output on a re-run is unknown without a paid
+  call, so the hash check decides per run.
+- **S6 blocked (U2).** Changing `coverage_parameter_records` uniqueness to (run, policy, key) needs a SQLite table
+  rebuild. The migration runner runs each file inside `BEGIN IMMEDIATE` with `foreign_keys` on, where
+  `PRAGMA foreign_keys = OFF` is a no-op; on a populated synthetic database a plain rebuild fails with
+  `FOREIGN KEY constraint failed` and a deferred rebuild fails on trigger references. Re-plan before Block 3.
