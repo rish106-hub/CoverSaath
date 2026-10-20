@@ -1,0 +1,35 @@
+tests/decision-catalogue-typed-candidates.test.mjs
+  s_c52538788cad78::t_ea349fe63d3c91 1-25,27-54
+  s_c52538788cad78::t_412b50641c3f65 26
+src/backend/services/decision-catalogue-service.js
+  s_c52538788cad78::t_621be444a946b5 2,29
+src/features/decision-catalogue/index.js
+  s_c52538788cad78::t_621be444a946b5 10
+tests/decision-catalogue-api.test.mjs
+  s_c52538788cad78::t_bbb7338bade708 20,45-46
+  s_c52538788cad78::t_048d124985dc55 224-229,233-234
+  s_c52538788cad78::t_aaa4b1943cdd62 230-232
+tests/privacy-gate-obfuscated-email.test.mjs
+  s_c52538788cad78::t_e35687af341b15 1-21
+src/features/ai-analysis/privacy-evidence-gate.js
+  s_c52538788cad78::t_95fd0ce0daa88d 570-571,1157,1201
+src/features/decision-catalogue/typed-candidates.js
+  s_c52538788cad78::t_ea349fe63d3c91 11,25-26,28
+  s_c52538788cad78::t_621be444a946b5 1-10,12-24,27,29-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "793bb54fe3369a6c650a6f177a5c654cc0a56e6d",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
