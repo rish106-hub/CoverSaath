@@ -5,6 +5,18 @@
 Base: HEAD `5b31739`, equal to `origin/main` `fee77db`.
 Audit: [block-2-closeout-audit.md](../exec-plans/active/block-2-closeout-audit.md). Block 2 decision: **NO-GO**.
 
+Live findings fixed (first live question run, 2026-10-20):
+- Every source carries `verbatim`. The model reads gated text, so a quote can hold privacy placeholders (and the
+  gate can normalise the adjacent label). Such a quote cites the right clause and page but is not verbatim source text.
+- Clause-kind "absence" unknowns are no longer emitted when the whole policy was read. On the retrieved path they say
+  only that no clause with that keyword label was retrieved. Kinds are ranking hints, never evidence of absence.
+- Ops: the local DB was backed up (`.local/backups/`), moved from `.local/.local/` to `.local/knowvia.sqlite` and
+  migrated to 16 migrations (valid). The live question run on the one local policy is in progress; results are
+  pending in the close-out audit.
+- Open from live review: F-B, a finding bucketed by its cited clause's keyword label (the benefits table is labelled
+  `exclusion`, so "At Actuals" lands in `limited_or_excluded`). P1, the privacy gate leaves locality and PIN after
+  a masked address.
+
 Owner decisions applied (all "recommended" options):
 - D1/D1a: a question reads only the latest active version of each logical document. The version is household-wide
   (`DocumentRepository.latestActiveVersions`), so a newer version in another case still supersedes. Authorised
