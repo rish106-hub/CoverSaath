@@ -1,0 +1,55 @@
+src/features/policy-evidence/index.js
+  s_5385b19946e320::t_03e0049554ea47 2
+  s_5385b19946e320::t_d3ea16460f918e 3
+package.json
+  s_5385b19946e320::t_03e0049554ea47 13
+src/features/policy-evidence/recall-eval.js
+  s_5385b19946e320::t_d3ea16460f918e 1-35
+src/backend/services/policy-evidence-service.js
+  s_5385b19946e320::t_d2e0fb26014c32 71,80-81
+src/features/policy-evidence/investigate.js
+  s_5385b19946e320::t_9f568846672fce 82-83,85-86,106-114,219-220,222
+  s_5385b19946e320::t_d2e0fb26014c32 84,139-167,221,275,278-279,283,287,304
+  s_5385b19946e320::t_03e0049554ea47 48,198-200
+scripts/eval-retrieval-recall.mjs
+  s_5385b19946e320::t_d3ea16460f918e 1-33
+tests/policy-evidence-document-limit.test.mjs
+  s_5385b19946e320::t_fd7072b50d58fb 1-24
+tests/policy-evidence-investigate.test.mjs
+  s_5385b19946e320::t_380e19ccfad0b0 149-174
+tests/policy-evidence-recall.test.mjs
+  s_5385b19946e320::t_d3ea16460f918e 1-37
+src/features/ai-analysis/structuring-contract.js
+  s_5385b19946e320::t_d2e0fb26014c32 31,35
+  s_5385b19946e320::t_03e0049554ea47 30
+docs/adr/0008-evidence-first-reasoning.md
+  s_a882ea2c2ad47b::t_9d80eb2584416b 1-57
+docs/iterations/LATEST.md
+  s_5385b19946e320::t_bd84411b760285 3-14
+docs/exec-plans/active/direction-change.md
+  s_5385b19946e320::t_4cc517feb73948 1-360
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "523ccd107cff88e9d57d137892c4b51aeb53fc1a",
+  "prompts": {},
+  "sessions": {
+    "s_5385b19946e320": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2ac45ea0-48cb-44ce-9e7c-ccd9897569df",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_a882ea2c2ad47b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebc0f405-cf3e-4d1d-97dd-d923318e2d09",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
