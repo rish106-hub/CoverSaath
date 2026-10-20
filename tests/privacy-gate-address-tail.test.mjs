@@ -83,7 +83,8 @@ test('P1: long mask runs after an address do not backtrack', () => {
   for (const mask of ['X', '*', '•', 'X-', 'X ']) {
     const text = `${`Address: A. Xx ${mask.repeat(200)}\n`.repeat(70)}`.slice(0, 15_000);
     const started = performance.now();
-    sanitizeEvidenceTextForStorage(text, { maxBytes: 16_000 });
+    // Since gate v7 a mask run the gate cannot judge is refused; the timing bound still applies to either outcome.
+    try { sanitizeEvidenceTextForStorage(text, { maxBytes: 16_000 }); } catch (error) { assert.equal(error.code, 'PRIVACY_ADDRESS_UNCERTAIN'); }
     assert.ok(performance.now() - started < 1000, `mask ${JSON.stringify(mask)} too slow`);
   }
 });

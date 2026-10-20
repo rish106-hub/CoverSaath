@@ -25,7 +25,7 @@ function recordedSeed(list) {
  * firstPassFindings: optional { [questionId]: [{ subject, quote, clauseIds }] }, recorded from real first-pass model
  * output for the same policy, so the sweep is measured against what the model actually returned.
  */
-export function evaluateRecall({ clauses, search, golden, maxInputBytes = INVESTIGATION_LIMITS.maxInputBytes, knownIdentifiers = [], firstPassFindings = null }) {
+export function evaluateRecall({ clauses, search, golden, maxInputBytes = INVESTIGATION_LIMITS.maxInputBytes, knownIdentifiers = [], firstPassFindings = null, tuning = undefined }) {
   if (!Array.isArray(golden) || !golden.length) throw invalid('Golden questions are required.');
   if (!Number.isInteger(maxInputBytes) || maxInputBytes <= 0) throw invalid('maxInputBytes must be a positive integer.');
   const { sent } = gateClauses(clauses, knownIdentifiers);
@@ -40,13 +40,13 @@ export function evaluateRecall({ clauses, search, golden, maxInputBytes = INVEST
     });
     const questions = [{ text: item.question }];
     const checklist = checklistFor(item.question);
-    const context = selectContext({ gated: sent, checklist, question: item.question, search, budgetBytes: clauseBudget({ questions, checklist, clauses: [] }, caps) });
+    const context = selectContext({ gated: sent, checklist, question: item.question, search, budgetBytes: clauseBudget({ questions, checklist, clauses: [] }, caps), tuning });
     const recorded = firstPassFindings && Object.hasOwn(firstPassFindings, item.id);
     const findings = recorded ? recordedSeed(firstPassFindings[item.id]) : [{ subject: item.question, quote: '', clauseIds: [] }];
     const wireFindings = findings.map((finding, index) => ({ finding_id: `f${index + 1}`, subject: finding.subject, quote: finding.quote, clause_ids: finding.clauseIds }));
     const sweepBudget = clauseBudget({ questions, findings: wireFindings, clauses: [] }, caps);
     const first = new Set(context.clauses.map(clause => clause.clauseId));
-    const sweep = new Set([...first, ...selectSweepContext({ context, gated: sent, findings, search, budgetBytes: sweepBudget }).clauses.map(clause => clause.clauseId)]);
+    const sweep = new Set([...first, ...selectSweepContext({ context, gated: sent, findings, search, budgetBytes: sweepBudget, tuning }).clauses.map(clause => clause.clauseId)]);
     const resolved = expected.filter(entry => entry.clauseId);
     const inFirst = resolved.filter(entry => first.has(entry.clauseId)).length;
     const inSweep = resolved.filter(entry => sweep.has(entry.clauseId)).length;

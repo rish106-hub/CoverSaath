@@ -1,5 +1,15 @@
 # Latest iteration
 
+## Block 2 delta close-out: privacy v7, answer guards, retrieval tuning (2026-10-20)
+
+Uncommitted on `codex/backend-first-layout`, base `d34c44d`. No provider call, no commit.
+
+- Privacy gate `knowvia-privacy-evidence-v7`: PIN with irregular spacing or a "PIN:" label; address-shaped tails with no anchor; up to eight continuation lines; unlabelled "Flat..., City - PIN" lines and table cells; house-number forms ("Plot No 5") are not policy wording. Address-shaped text past the scan limits throws `PRIVACY_ADDRESS_UNCERTAIN` (a clause is withheld; `sanitizeEvidenceForModel` callers fail closed as for other restricted text). Tests: `tests/privacy-gate-address-closure.test.mjs`. Residual (not fixed): an unlabelled address with one comma, no dash, no house number and no PIN-adjacent digits context ("Sample Nagar, Testville 560001" alone); an unlabelled address whose locality has no PIN; non-Latin tails after an unlabelled address.
+- Answer guards: a `covers` finding is demoted to conditions when its own row states a restriction or opt-out, or another row read says the named thing is "Not Opted"; the row is cited. v1 stored answers are served as stored (`pipelineVersion` v1, `pipelineCurrent: false`). Tests: `tests/policy-evidence-answer-regression.test.mjs`.
+- Retrieval: `RETRIEVAL_TUNING` (stop words dropped, insurance synonyms, best hit of each list ahead of endorsement/schedule fill) is the default; `{}` restores the old behaviour. `npm run eval:retrieval -- --tuning '<json>'` measures a variant. Numbers in `retrieval-terms.js`. Tuned on the same 34-question set it was measured on (no untouched holdout).
+- Master policy ingestion (local DB, read-only copy): 20 of 20 pages stored, 45 clauses, 45 FTS rows, one document and version. Only boilerplate header/footer/page-number and image descriptions are dropped. The live gateway limit (64,000) reads the whole policy; 48,000 would not.
+- Checks: `npm run check` 862 tests, 809 pass, 0 fail, 53 skipped. `eval:safety` pass. `check:architecture` pass. `git diff --check` clean.
+
 ## Evidence answers: effect bucketing F-B and unnamed-subject unknown F-C (2026-10-20)
 
 First-pass findings now carry a model-reported `effect` (covers, limits, excludes, conditions, informs), validated in code (unknown or missing becomes `conditions`; a `covers` quote that itself states a restriction is routed to `conditions`). Answers bucket by effect, not by the cited clause's keyword kind, so "Room Rent At Actuals" from a table labelled `exclusion` is covered. A deterministic unknown now says when a subject word from the (gated) question is named in no clause read. `INVESTIGATION_VERSION` is `v2`. Tests: `tests/policy-evidence-effect.test.mjs`; the B3 fixture in `policy-evidence-investigate.test.mjs` now supplies `effect` (strictly more accurate than kind-based bucketing). Independent read-only review done; findings resolved. Unverified: no live provider call, so real model effect labelling is unmeasured. Stored answers from `v1` have no `effect`. Subject check is noisy on the retrieved path and ignores words under 5 letters.

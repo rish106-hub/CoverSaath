@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { QUESTION_CONSENT_SCOPE } from '../../contracts/policy-evidence.js';
-import { buildClauses, investigate } from '../../features/policy-evidence/index.js';
+import { INVESTIGATION_VERSION, buildClauses, investigate } from '../../features/policy-evidence/index.js';
 import { extractFields, FIELD_NAMES } from '../../features/ai-analysis/eval-extractor.js';
 
 // Answers one question about a case's policy documents (ADR 0008): stored OCR blocks become clauses, the
@@ -105,7 +105,8 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     return documents.every(isCurrent);
   }
 
-  const publicAnswer = ({ access: _access, ...stored }) => stored;
+  // `pipelineCurrent` is false for an answer stored by an earlier pipeline: it is served as stored, never re-bucketed.
+  const publicAnswer = ({ access: _access, ...stored }) => ({ ...stored, pipelineCurrent: stored.answer?.pipelineVersion === INVESTIGATION_VERSION });
 
   return Object.freeze({
     async ask({ caseRecord, subjectAdultId, question, consentGrantId, idempotencyKey, documentIds: requestedDocumentIds }) {
