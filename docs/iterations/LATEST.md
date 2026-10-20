@@ -1,5 +1,9 @@
 # Latest iteration
 
+## Evidence answers: effect bucketing F-B and unnamed-subject unknown F-C (2026-10-20)
+
+First-pass findings now carry a model-reported `effect` (covers, limits, excludes, conditions, informs), validated in code (unknown or missing becomes `conditions`; a `covers` quote that itself states a restriction is routed to `conditions`). Answers bucket by effect, not by the cited clause's keyword kind, so "Room Rent At Actuals" from a table labelled `exclusion` is covered. A deterministic unknown now says when a subject word from the (gated) question is named in no clause read. `INVESTIGATION_VERSION` is `v2`. Tests: `tests/policy-evidence-effect.test.mjs`; the B3 fixture in `policy-evidence-investigate.test.mjs` now supplies `effect` (strictly more accurate than kind-based bucketing). Independent read-only review done; findings resolved. Unverified: no live provider call, so real model effect labelling is unmeasured. Stored answers from `v1` have no `effect`. Subject check is noisy on the retrieved path and ignores words under 5 letters.
+
 ## Block 2 close-out: baseline audit and document boundaries D1, D1a, D1b, D2, D3 (2026-10-20)
 
 Base: HEAD `5b31739`, equal to `origin/main` `fee77db`.

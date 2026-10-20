@@ -29,6 +29,8 @@ export const STRUCTURING_INSTRUCTIONS = Object.freeze({
     'conditions, exclusions, definitions, schedule entries and endorsements, including clauses that qualify or contradict each other.',
     'Clauses carry a document_id; never combine facts from different documents into one finding. Return one finding per fact. cite clause_ids from the provided clauses and copy quote verbatim from one of those clauses.',
     'subject is the member, plan, rider or benefit the fact applies to, as printed. List each condition and exception, and give value and applies_to, ONLY as text copied verbatim from the cited clauses; anything not printed there is discarded.',
+    'effect says what the cited clause does to what the question asks about, judged from the clause text, not from its heading: covers (it provides or allows the benefit, including "at actuals" or no stated limit),',
+    'limits (a cap, sub-limit, co-pay, deductible or waiting period), excludes (it is not payable), conditions (it applies only if something holds) or informs (a definition or schedule fact that neither grants nor restricts). Use conditions when unsure.',
     'Never guess or infer a value that is not printed. Unknown is not false. Do not decide or promise coverage.',
   ].join(' '),
   [EVIDENCE_SWEEP_TASK]: [
@@ -69,16 +71,21 @@ export const RECONCILE_SCHEMA = Object.freeze({
   required: ['conflicts'],
 });
 
+// What a cited clause does to the asked subject. Model-reported and validated in code (investigate.js); it only chooses
+// a display bucket and never a coverage decision. Anything else falls back to 'conditions'.
+export const FINDING_EFFECTS = Object.freeze(['covers', 'limits', 'excludes', 'conditions', 'informs']);
+
 const findingProperties = {
   clause_ids: { type: 'array', items: { type: 'string' } }, quote: { type: 'string' }, subject: { type: 'string' },
   applies_to: { type: 'string' }, conditions: { type: 'array', items: { type: 'string' } },
   exceptions: { type: 'array', items: { type: 'string' } }, value: { type: 'string' }, open_kind: { type: 'string' },
+  effect: { type: 'string', enum: FINDING_EFFECTS },
 };
 
 export const INVESTIGATE_SCHEMA = Object.freeze({
   type: 'object',
   properties: { findings: { type: 'array', items: { type: 'object', properties: findingProperties,
-    required: ['clause_ids', 'quote', 'subject', 'conditions', 'exceptions'] } } },
+    required: ['clause_ids', 'quote', 'subject', 'conditions', 'exceptions', 'effect'] } } },
   required: ['findings'],
 });
 

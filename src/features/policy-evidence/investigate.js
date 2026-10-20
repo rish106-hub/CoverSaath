@@ -3,11 +3,11 @@
 // Every clause sent to a model passes the privacy gate first, consent is re-checked before each call, and the
 // provider call is injected (no SDK or fetch is imported here).
 import { sanitizeEvidenceTextForStorage } from '../ai-analysis/privacy-evidence-gate.js';
-import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, INVESTIGATE_SCHEMA, STRUCTURING_INSTRUCTIONS, SWEEP_SCHEMA } from '../ai-analysis/structuring-contract.js';
+import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, FINDING_EFFECTS, INVESTIGATE_SCHEMA, STRUCTURING_INSTRUCTIONS, SWEEP_SCHEMA } from '../ai-analysis/structuring-contract.js';
 import { validateAnswer, validateFinding } from '../../contracts/policy-evidence.js';
 import { classifyClause } from './clauses.js';
 
-export const INVESTIGATION_VERSION = 'policy-evidence-investigation/v1';
+export const INVESTIGATION_VERSION = 'policy-evidence-investigation/v2';
 // maxInputBytes is only the fallback when the caller's gateway does not state its limit; it matches
 // STRUCTURING_GATEWAY_LIMITS.maxInputBytes. Clause budgets are always derived from it, never set separately.
 // maxClausesPerCall matches the gateway's structuring payload array bound (schemas.js validateStructuringInput).
@@ -116,10 +116,12 @@ function parseFindings(json, clauseText, limits) {
       appliesTo: typeof item?.applies_to === 'string' ? item.applies_to.trim().slice(0, 200) : null,
       conditions: strings(item?.conditions), exceptions: strings(item?.exceptions),
       overrides: [], value: typeof item?.value === 'string' ? item.value.trim().slice(0, 500) : null,
+      // Unknown or missing effect is 'conditions': a bad label may under-claim, never over-claim coverage.
+      effect: FINDING_EFFECTS.includes(item?.effect) ? item.effect : 'conditions',
       openKind: typeof item?.open_kind === 'string' ? item.open_kind.trim().slice(0, 120) : null,
       state: 'extracted_unverified',
     };
-    const key = JSON.stringify([candidate.clauseIds, candidate.quote]);
+    const key = JSON.stringify([candidate.clauseIds, candidate.quote, candidate.effect]);
     if (validateFinding(candidate, clauseText).length || seen.has(key)) { rejected += 1; continue; }
     // The main quote is valid; every other assertion must carry its own source text or it is dropped.
     for (const field of ['conditions', 'exceptions']) {
@@ -201,12 +203,29 @@ export function selectSweepContext({ context, gated, findings, search, budgetByt
   };
 }
 
-const LIMITING_KINDS = new Set(['limit', 'exclusion', 'waiting_period']);
 const entryOf = (finding, clauseById) => ({
   findingId: finding.findingId, subject: finding.subject, quote: finding.quote, clauseIds: finding.clauseIds,
   pages: [...new Set(finding.clauseIds.map(id => clauseById.get(id).page))].sort((a, b) => a - b),
-  conditions: finding.conditions, exceptions: finding.exceptions, overrides: finding.overrides,
+  effect: finding.effect, conditions: finding.conditions, exceptions: finding.exceptions, overrides: finding.overrides,
 });
+
+// A quote that itself states a restriction can never be filed as covered, whatever effect the model reported
+// (untrusted policy text can steer the label). It is routed to conditions instead.
+const LIMITING_QUOTE = /\b(?:not\s+(?:covered|payable|admissible|eligible)|excluded?|exclusions?|capped|sub-?limits?|waiting\s+period|limited\s+to|shall\s+not|no\s+cover)\b/i;
+
+// Words that name no policy subject. Conservative: a word missing from this list can only add an unknown, never remove one.
+const GENERIC_TERMS = new Set(`about above after also analysis answer any are authorised be been before benefit benefits both can cannot claim claims clause
+cost costs could cover covered covers coverage cashless does done each eligible for from get give have how include included insurance insured insurer into
+is it its limit limits made make many may member members much need not only other our out over paid pay payable plan policies policy possible really
+should some such than that the their them then there these they this those under upto what when where whether which while who will with within would
+you your treatment treatments procedure procedures hospital hospitalisation expense expenses mother father wife husband spouse son daughter parent parents family child children myself`.split(/\s+/));
+
+/** Candidate subject terms from the question: plain lowercase words of 5+ letters that are not generic. Deterministic, no model. */
+export function subjectTerms(question) {
+  const words = String(question).toLowerCase().match(/[a-z]{5,}/g) ?? [];
+  return [...new Set(words.filter(word => !GENERIC_TERMS.has(word)))].slice(0, 5);
+}
+const stemOf = term => term.slice(0, Math.max(5, term.length - 3));
 
 const EXCLUSION_TEXT = Object.freeze({
   over_document_limit: 'the case has more authorised documents than one question can read',
@@ -220,17 +239,17 @@ const EXCLUSION_TEXT = Object.freeze({
 });
 
 /** Code assembles the answer from validated findings. There is no verdict: only cited evidence and unknowns. */
-export function assembleAnswer({ question, findings, overrides, context, checklist, rejected, sweepCompleted, documentIds, completeness, storedText = null }) {
+export function assembleAnswer({ question, gatedQuestion = question, findings, overrides, context, checklist, rejected, sweepCompleted, documentIds, completeness, storedText = null }) {
   const clauseById = new Map(context.clauses.map(clause => [clause.clauseId, clause]));
   const covered = [];
   const limited = [];
   const conditions = [];
   for (const finding of findings) {
-    const kinds = finding.clauseIds.map(id => clauseById.get(id).kind);
-    const entry = entryOf(finding, clauseById);
-    if (kinds.some(kind => LIMITING_KINDS.has(kind))) limited.push(entry);
-    else if (kinds.some(kind => kind === 'condition' || kind === 'procedure' || kind === 'endorsement')) conditions.push({ subject: finding.subject, text: finding.quote, clauseIds: finding.clauseIds });
-    else covered.push(entry);
+    // The validated effect picks the bucket. The clause's keyword kind is a ranking hint and says nothing about a
+    // finding quoted from a large mixed clause (a benefits table labelled 'exclusion' for one "Not Covered" row).
+    if (finding.effect === 'covers' && !LIMITING_QUOTE.test(finding.quote)) covered.push(entryOf(finding, clauseById));
+    else if (finding.effect === 'limits' || finding.effect === 'excludes') limited.push(entryOf(finding, clauseById));
+    else conditions.push({ subject: finding.subject, text: finding.quote, clauseIds: finding.clauseIds, effect: finding.effect === 'covers' ? 'conditions' : finding.effect });
     for (const condition of finding.conditions) conditions.push({ subject: finding.subject, text: condition, clauseIds: finding.clauseIds });
   }
   for (const override of overrides) {
@@ -239,6 +258,15 @@ export function assembleAnswer({ question, findings, overrides, context, checkli
     else conditions.push({ subject: override.subject, text: override.quote, clauseIds: override.clauseIds, effect: override.effect });
   }
   const unknowns = [];
+  // A subject the question names but no clause that was read mentions may sit in a document that was not uploaded.
+  const readText = context.clauses.map(clause => clause.text.toLowerCase()).join('\n');
+  // Terms come from the gated question, so nothing the privacy gate redacted is echoed into the answer.
+  const unnamed = subjectTerms(gatedQuestion).filter(term => !readText.includes(stemOf(term)));
+  if (unnamed.length) {
+    const plural = unnamed.length > 1;
+    const where = context.path === 'whole_policy' ? 'it may be in documents not uploaded, such as the full policy wording' : 'it may be in policy text that was not retrieved or in documents not uploaded';
+    unknowns.push(`${unnamed.join(', ')} ${plural ? 'are' : 'is'} not named in the documents read, so ${plural ? where.replace('it may', 'they may') : where}.`);
+  }
   // Kinds are keyword ranking hints, never evidence of absence. When the whole policy was read nothing is unread;
   // on the retrieved path a missing kind only means no clause carrying that label was retrieved.
   if (context.path !== 'whole_policy') {
@@ -408,7 +436,7 @@ export async function investigate({ question, clauses, search = () => [], call, 
     sweepOverBudget,
   };
   const answer = assembleAnswer({
-    question: question.trim(), findings: parsed.findings, overrides, context: { ...context, clauses: read }, checklist,
+    question: question.trim(), gatedQuestion, findings: parsed.findings, overrides, context: { ...context, clauses: read }, checklist,
     rejected: parsed.rejected + sweepRejected, sweepCompleted, documentIds, completeness,
     storedText: new Map(clauses.map(clause => [clause.clauseId, clause.text])),
   });
