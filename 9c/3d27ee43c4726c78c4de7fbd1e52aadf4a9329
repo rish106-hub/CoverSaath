@@ -1,0 +1,14 @@
+.env.example
+  h_569153b6154eb9 30,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9c3d27ee43c4726c78c4de7fbd1e52aadf4a9329",
+  "prompts": {},
+  "humans": {
+    "h_569153b6154eb9": {
+      "author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
