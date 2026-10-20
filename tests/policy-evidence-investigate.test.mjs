@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildClauses, investigate } from '../src/features/policy-evidence/index.js';
+import { INVESTIGATION_LIMITS, buildClauses, checklistFor, investigate } from '../src/features/policy-evidence/index.js';
 import { validateAnswer } from '../src/contracts/index.js';
 
 // Synthetic policy only: fictional insurer, numbers and member.
@@ -50,7 +50,11 @@ function fixture({ first = firstPass, second = sweep, payloads = [] } = {}) {
     throw new Error(`unexpected task ${task}`);
   };
 }
-const run = (options = {}) => investigate({ question: 'Will my policy cover cataract surgery for my mother?', clauses, consentCheck: async () => {}, ...options });
+const QUESTION = 'Will my policy cover cataract surgery for my mother?';
+const run = (options = {}) => investigate({ question: QUESTION, clauses, consentCheck: async () => {}, ...options });
+// The payload ceiling that leaves exactly `clauseBytes` for first-pass clauses.
+const capFor = clauseBytes => clauseBytes + INVESTIGATION_LIMITS.payloadMarginBytes
+  + Buffer.byteLength(JSON.stringify({ questions: [{ text: QUESTION }], checklist: checklistFor(QUESTION), clauses: [] }));
 
 test('B3: whole policy is read, findings are cited, the cap lands in limited and the waiver in conditions', async () => {
   const payloads = [];
@@ -132,8 +136,8 @@ test('B3: payload carries gated text only; restricted clauses are withheld and t
 
 test('B3: above the byte budget the context is retrieved, bounded and reported', async () => {
   const searched = [];
-  const search = ({ kinds }) => { searched.push(kinds[0]); return clauses.filter(clause => clause.kind === kinds[0]); };
-  const { answer, contextPath } = await run({ call: fixture({ second: { overrides: [] } }), search, limits: { contextBudgetBytes: 700 } });
+  const search = ({ kinds }) => { searched.push(kinds?.[0] ?? 'any'); return kinds ? clauses.filter(clause => clause.kind === kinds[0]) : []; };
+  const { answer, contextPath } = await run({ call: fixture({ second: { overrides: [] } }), search, limits: { maxInputBytes: capFor(700) } });
   assert.equal(contextPath, 'retrieved');
   assert.ok(searched.length > 0);
   assert.ok(answer.unknowns.some(text => /reading budget/.test(text)));
@@ -166,7 +170,7 @@ test('B3: the sweep runs its own retrieval and sees a clause the first pass cont
   const search = ({ query, kinds }) => (/waiting|exclusion/.test(query) ? clauses.filter(clause => clause.clauseId === exclusion.clauseId) : []);
   const first = { findings: [finding(12, 'cataract surgery as a hospitalisation benefit')] };
   const second = { overrides: [{ clause_ids: [exclusion.clauseId], quote: 'waiting period of 24 months', effect: 'limits', target_finding_ids: ['f1'] }] };
-  const { answer } = await run({ call: fixture({ first, second, payloads }), search: input => (input.kinds.length === 1 ? [byPage(12)] : search(input)), limits: { contextBudgetBytes: budget } });
+  const { answer } = await run({ call: fixture({ first, second, payloads }), search: input => (input.kinds?.length === 1 ? [byPage(12)] : search(input)), limits: { maxInputBytes: capFor(budget) } });
   const sweepIds = payloads.find(entry => entry.task === 'policy_evidence_override_sweep').payload.clauses.map(clause => clause.clause_id);
   const firstIds = payloads.find(entry => entry.task === 'policy_evidence_investigate').payload.clauses.map(clause => clause.clause_id);
   assert.ok(!firstIds.includes(exclusion.clauseId) && sweepIds.includes(exclusion.clauseId));
