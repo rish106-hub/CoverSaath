@@ -1,0 +1,28 @@
+tests/support/postgres-fixtures.mjs
+  s_c52538788cad78::t_be935db62d2bf9 85-92
+tests/postgres-catalog-parity.test.mjs
+  s_c52538788cad78::t_be935db62d2bf9 215
+tests/postgres-runner.test.mjs
+  s_c52538788cad78::t_71693d10f86250 43
+  s_c52538788cad78::t_be935db62d2bf9 15
+tests/postgres-triggers.test.mjs
+  s_c52538788cad78::t_be935db62d2bf9 988-1016
+src/backend/database/database.js
+  s_c52538788cad78::t_555b42ab190474 79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e4813474f98d42127bbebd1de4786cc13521078d",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
