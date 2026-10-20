@@ -1,5 +1,16 @@
 # Latest iteration
 
+## Block 3 first slice: decision catalogue (2026-10-20)
+
+Uncommitted on `block3/decision-catalogue` (from `b94c958`). No provider call, no migration. Design: [decision-catalogue.md](../architecture/decision-catalogue.md).
+
+- `src/features/decision-catalogue/`: facts bridge, applicability, 12 typed rules, cross-policy separation, official-source validator, `decision-catalogue/v1` handoff. Derived on read from live clauses, so erasure needs no derived-store path.
+- Authority is a batch attestation (`origin`, `reviewStatus`, `verifiedPolicyIds` set by the calling channel). A candidate cannot claim its own authority. Deterministic facts are never ingested.
+- Two independent read-only reviews: 15 then 10 findings, all fixed with tests. The final fixes (round two) had no third review.
+- Checks: `npm run check` 905 tests, 852 pass, 0 fail, 53 skipped; `eval:safety` 0 failures; `git diff --check` clean.
+- Wiring (same day): `GET /api/v1/cases/{caseId}/decision-catalogue?answerId=&asOf=&memberId=` (`decision-catalogue-service.js`, `readForCatalogue` in the evidence service). Read only, no model call, no write. Same consent re-check, currency check and 404 rules as `/questions`; gated by the source-pack field (same as `/questions`, consent purpose pending legal review; owner chose to keep it). Adapter `from-answer.js`: facts are `model` origin, `user_statement` source type (the upload label is requester-set and kept only as `declaredSourceType`), policy `unresolved`, association unverified. Tests: `tests/decision-catalogue-api.test.mjs`. Wiring review: 2 high, 2 medium fixed. Typed rules stay unknown on this path (findings are open-ended `finding.*` facts); mapping findings to typed values is not built.
+- Not done: tenant checks beyond the answer path, v9 privacy fresh review, CodeQL baseline record, official-source curated data. Waiting-period rule assumes `policy_period/continuous_cover.start` is the verified start of uninterrupted cover.
+
 ## Address residuals R1-R3 and review gaps: privacy gate v9 (2026-10-20)
 
 Uncommitted on `codex/backend-first-layout`. No provider call.
@@ -199,3 +210,4 @@ Open work includes:
 - Live provider validation, OCR accuracy evidence and cost checks.
 - Retention policy and legal review of consent wording.
 - A future UI, only after backend contracts and production boundaries are accepted.
+- Block 3 close-out: handoff/adversarial tests added (`tests/decision-catalogue-handoff.test.mjs`), CodeQL baseline recorded in `docs/architecture/decision-catalogue.md` (11 pre-existing alerts, none in Block 3). Reviewer role/storage and Block 4 consumption remain unbuilt, pending an ADR.

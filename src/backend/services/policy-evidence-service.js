@@ -222,6 +222,21 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
       }));
     },
 
+    /**
+     * A stored answer for the decision catalogue: same consent re-check as `get`, and only while every document it read
+     * is still active and current. No model call, no write.
+     */
+    readForCatalogue({ caseRecord, answerId }) {
+      if (!evidenceEnabled(env)) throw coded('EVIDENCE_DISABLED', 'Policy questions are disabled.', 503);
+      const householdId = caseRecord.household_id;
+      const stored = services.clauses.getAnswer({ householdId, caseId: caseRecord.id, answerId });
+      const access = requireAnswerAccess({ householdId, stored });
+      if (!answerIsCurrent({ householdId, caseId: caseRecord.id, access })) {
+        throw coded('POLICY_EVIDENCE_ANSWER_STALE', 'The documents behind this answer have changed. Ask again.', 409);
+      }
+      return { answerId: stored.answerId, answer: stored.answer, documentIds: access.documentIds, pipelineCurrent: stored.answer?.pipelineVersion === INVESTIGATION_VERSION };
+    },
+
     get({ caseRecord, answerId }) {
       const householdId = caseRecord.household_id;
       const stored = services.clauses.getAnswer({ householdId, caseId: caseRecord.id, answerId });
