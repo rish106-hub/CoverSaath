@@ -1,0 +1,36 @@
+src/features/decision-catalogue/curated-products.js
+  s_c52538788cad78::t_5e47a6d4db77d7 12-14,51
+  s_c52538788cad78::t_3a9bb05a9c7c56 1-11,15-50,52-114
+src/backend/services/decision-catalogue-service.js
+  s_c52538788cad78::t_8f2da4af4bcf30 56-58,61-63
+  s_c52538788cad78::t_5e47a6d4db77d7 3
+  s_c52538788cad78::t_63eeda5c04b3cd 163-169
+src/features/decision-catalogue/curated-sources.js
+  s_c52538788cad78::t_5e47a6d4db77d7 7-11
+tests/catalogue-review-api.test.mjs
+  s_c52538788cad78::t_109577580e63ce 447-460
+src/features/decision-catalogue/index.js
+  s_c52538788cad78::t_5e47a6d4db77d7 9,13
+tests/curated-products.test.mjs
+  s_c52538788cad78::t_8f2da4af4bcf30 1-89
+src/features/decision-catalogue/catalogue.js
+  s_c52538788cad78::t_5e47a6d4db77d7 9,29,61
+docs/iterations/LATEST.md
+  s_c52538788cad78::t_4f3a4c8ff1c191 258-266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "782daa3d99669a50002168932044456436d31cf8",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
