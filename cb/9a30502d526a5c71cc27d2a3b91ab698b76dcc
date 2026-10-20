@@ -1,0 +1,126 @@
+tests/support/postgres-fixtures.mjs
+  s_a882ea2c2ad47b::t_e8eb90befc70e6 81-89
+src/contracts/index.js
+  s_a882ea2c2ad47b::t_4254f76325362c 9
+src/contracts/ai-authority.js
+  s_a882ea2c2ad47b::t_9583729d6d740c 54-57
+tests/policy-evidence-investigate.test.mjs
+  s_a882ea2c2ad47b::t_737211cac01e43 1-110,112,114,116-148
+  s_a882ea2c2ad47b::t_f295a0dc084b22 111,113,115
+tests/policy-evidence-clauses.test.mjs
+  s_a882ea2c2ad47b::t_22d54b2cb15fb3 1-62
+src/features/input/document-intake-service.js
+  s_a882ea2c2ad47b::t_c0b6e8ea0ca0df 99-100
+src/features/policy-structuring/validator.js
+  s_a882ea2c2ad47b::t_6d3ba6c4f0e0e6 129-141,151-163
+  s_a882ea2c2ad47b::t_19c789202b66be 200
+  s_a882ea2c2ad47b::t_3814741ca534c4 164
+src/backend/database/migrations/016_policy_clauses_fts.sql
+  s_a882ea2c2ad47b::t_b4ecaac746a728 1-22
+src/server/create-server.js
+  s_a882ea2c2ad47b::t_98bd489e08a8e8 7,91-100
+  s_a882ea2c2ad47b::t_b87776fef6c975 168
+  s_a882ea2c2ad47b::t_64f0b04e1aefe9 101
+src/backend/repositories/index.js
+  s_a882ea2c2ad47b::t_22d7f9c9b44dc9 12
+src/features/ai-analysis/privacy-evidence-gate.js
+  s_a882ea2c2ad47b::t_1cd64c3b84c436 14,291-294,302-311,335,337-338,340-341,345,356,365-366,1154,1158-1159
+  s_a882ea2c2ad47b::t_669431ed10167d 295-301,342-344
+src/backend/repositories/clause-repository.js
+  s_a882ea2c2ad47b::t_300cf922ff1be2 132,144-151,163-179
+  s_a882ea2c2ad47b::t_22d7f9c9b44dc9 1-131,133-143,152-162,180-218
+tests/policy-structuring-critical-fields.test.mjs
+  s_a882ea2c2ad47b::t_af870021e002b2 75-87
+src/features/policy-evidence/clauses.js
+  s_a882ea2c2ad47b::t_22d54b2cb15fb3 1-52
+src/contracts/policy-evidence-consent.js
+  s_a882ea2c2ad47b::t_4254f76325362c 1
+tests/privacy-gate-policy-numbers.test.mjs
+  s_a882ea2c2ad47b::t_669431ed10167d 1-38
+tests/database-integrity-v2.test.mjs
+  s_a882ea2c2ad47b::t_c4238bd7f8c62e 92-93
+tests/evidence-completion-persistence.test.mjs
+  s_a882ea2c2ad47b::t_c4238bd7f8c62e 81-82
+src/backend/repositories/consent-repository.js
+  s_a882ea2c2ad47b::t_bbe91cc67fd084 3,17,26-27,424-432,487
+  s_a882ea2c2ad47b::t_35037ec7d4a13b 246-253
+src/backend/services/index.js
+  s_a882ea2c2ad47b::t_300cf922ff1be2 6
+tests/postgres-triggers.test.mjs
+  s_a882ea2c2ad47b::t_e8eb90befc70e6 960-987
+tests/database-path.test.mjs
+  s_a882ea2c2ad47b::t_c0b6e8ea0ca0df 1-34
+tests/postgres-runner.test.mjs
+  s_a882ea2c2ad47b::t_73da23e44f6471 15
+  s_a882ea2c2ad47b::t_c4238bd7f8c62e 43
+src/backend/database/database.js
+  s_a882ea2c2ad47b::t_0f11b10354777a 73
+  s_a882ea2c2ad47b::t_ca5b43119fed32 195-197,203-206
+  s_a882ea2c2ad47b::t_c9b3fd4f97bb14 2
+  s_a882ea2c2ad47b::t_9f8be815cbb24f 207
+src/backend/database/postgres/migrations/012_policy_evidence.sql
+  s_a882ea2c2ad47b::t_b4ecaac746a728 1-117
+tests/privacy-gate-r4.test.mjs
+  s_a882ea2c2ad47b::t_669431ed10167d 44-46
+tests/database-schema.test.mjs
+  s_a882ea2c2ad47b::t_c4238bd7f8c62e 35
+src/features/policy-structuring/extractor.js
+  s_a882ea2c2ad47b::t_6d3ba6c4f0e0e6 12
+src/features/policy-evidence/index.js
+  s_a882ea2c2ad47b::t_32fdf251180f2a 2
+  s_a882ea2c2ad47b::t_22d54b2cb15fb3 1
+src/features/policy-evidence/investigate.js
+  s_a882ea2c2ad47b::t_32fdf251180f2a 1-256
+src/backend/services/policy-evidence-service.js
+  s_a882ea2c2ad47b::t_300cf922ff1be2 1-117
+src/features/policy-structuring/coverage-report.js
+  s_a882ea2c2ad47b::t_af870021e002b2 121,138-143,198-200
+  s_a882ea2c2ad47b::t_ba300862554863 185
+src/contracts/policy-evidence.js
+  s_a882ea2c2ad47b::t_4254f76325362c 1-71
+src/backend/services/backend-services.js
+  s_a882ea2c2ad47b::t_af4fd739922318 1,14-16,25
+tests/postgres-catalog-parity.test.mjs
+  s_a882ea2c2ad47b::t_0f11b10354777a 21-23,25-26
+  s_a882ea2c2ad47b::t_73da23e44f6471 215
+tests/policy-evidence-api.test.mjs
+  s_a882ea2c2ad47b::t_57f23f48a75d88 1-277
+src/features/ai-analysis/structuring-contract.js
+  s_a882ea2c2ad47b::t_bf3a61195ee4de 21
+  s_a882ea2c2ad47b::t_3de05b11caaa21 7-9,25-41,72-94,96-97
+tests/policy-structuring-validator.test.mjs
+  s_a882ea2c2ad47b::t_19c789202b66be 47,167-187
+  s_a882ea2c2ad47b::t_fc281e0a0694e6 188
+tests/policy-evidence-persistence.test.mjs
+  s_a882ea2c2ad47b::t_d8aa3bc9699bb6 63-64,66-68,91-92,95
+  s_a882ea2c2ad47b::t_af4fd739922318 1-62,65,69-90,93-94,96-124
+src/backend/database/migrations/015_policy_evidence.sql
+  s_a882ea2c2ad47b::t_b4ecaac746a728 1-92
+src/server/routes/v1-backend-routes.js
+  s_a882ea2c2ad47b::t_98bd489e08a8e8 196,335-355
+  s_a882ea2c2ad47b::t_97a06ff6544ec7 356
+docs/iterations/LATEST.md
+  s_a882ea2c2ad47b::t_6ec3da10d27c23 3-29
+docs/runbooks/policy-structuring.md
+  s_a882ea2c2ad47b::t_0572d17bac3477 77-83
+src/features/ai-analysis/responsibility-matrix.js
+  s_a882ea2c2ad47b::t_f38a039fd1610d 9-10,75-76
+src/features/ai-analysis/schemas.js
+  s_a882ea2c2ad47b::t_b885b9e691fe18 2,215-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb9a30502d526a5c71cc27d2a3b91ab698b76dcc",
+  "prompts": {},
+  "sessions": {
+    "s_a882ea2c2ad47b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ebc0f405-cf3e-4d1d-97dd-d923318e2d09",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
