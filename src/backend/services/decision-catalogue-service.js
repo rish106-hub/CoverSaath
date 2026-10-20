@@ -22,11 +22,14 @@ const candidateFromFact = (fact, extra = {}) => ({
   ...extra,
 });
 
-export function createDecisionCatalogueService({ services, evidence } = {}) {
+export function createDecisionCatalogueService({ services, evidence, env = {} } = {}) {
   if (!services?.clauses || !services?.documents || typeof evidence?.readForCatalogue !== 'function') {
     throw new TypeError('services and an evidence service are required.');
   }
   const reviews = services.catalogueReviews ?? null;
+  // The independent-reviewer path reads a household's facts without a household role or the subject's source-pack
+  // consent (ADR 0009 item 7, review P1). Off until a consent purpose and a staff access model exist.
+  const independentEnabled = env.CATALOGUE_INDEPENDENT_REVIEW_ENABLED === 'true';
 
   function load({ caseRecord, answerId }) {
     if (typeof answerId !== 'string' || !answerId || answerId.length > 256) throw coded('VALIDATION_ERROR', 'answerId is required.', 400);
@@ -82,7 +85,7 @@ export function createDecisionCatalogueService({ services, evidence } = {}) {
     const reviewedBatches = [];
     for (const review of all) {
       const current = reviewIsCurrent(review, ctx, new Set(factByKey.keys()));
-      const state = review.superseded ? 'superseded' : !current ? 'stale' : review.decision;
+      const state = !review.reviewerActive ? 'reviewer_revoked' : review.superseded ? 'superseded' : !current ? 'stale' : review.decision;
       reviewSummary.push({ reviewId: review.reviewId, factId: factByKey.get(review.factKey)?.factId ?? null, decision: review.decision, state, authority: review.authority, reasonCode: review.reasonCode, reviewedAt: review.createdAt });
       if (state === 'rejected') rejectedKeys.add(review.factKey);
       if (state !== 'accepted') continue;
@@ -114,22 +117,27 @@ export function createDecisionCatalogueService({ services, evidence } = {}) {
     return { sourceAnswerId: ctx.stored.answerId, pipelineCurrent: ctx.stored.pipelineCurrent, catalogue: out, skipped: ctx.skipped };
   }
 
-  /** Who may review: a household confirmer who still holds a household role, or an independent reviewer with an active grant. */
+  const activeHousehold = householdId => services.households?.getHousehold(householdId)?.status === 'active';
+
+  /** Who may review: a household confirmer who still holds a household role, or (when enabled) an independent reviewer. */
   function reviewerCase(principal, caseId) {
-    const caseRecord = services.access.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId);
+    const caseRecord = typeof caseId === 'string' ? services.access.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId) : null;
     const grant = caseRecord && reviews?.activeGrant(caseRecord.household_id, principal.adultId);
-    if (!grant) throw notFound();
-    if (grant.kind === 'household_confirmer') {
+    if (!grant || !activeHousehold(caseRecord.household_id)) throw notFound();
+    if (grant.kind === 'independent_reviewer') {
+      if (!independentEnabled) throw notFound();
+    } else {
       try { services.access.requireHousehold(principal, caseRecord.household_id, { write: false }); } catch { throw notFound(); }
     }
-    return caseRecord;
+    return { caseRecord, kind: grant.kind };
   }
 
   function record({ principal, caseId, answerId, factId, decision, reasonCode, attestedSourceType = null, attestsPolicyAssociation = false, idempotencyKey, asOf = null, memberId = null }) {
     if (!reviews) throw coded('REVIEWS_UNAVAILABLE', 'Reviews are unavailable.', 503);
-    const caseRecord = reviewerCase(principal, caseId);
+    checkQuery({ asOf, memberId });
+    const { caseRecord } = reviewerCase(principal, caseId);
     if (typeof factId !== 'string' || !factId || factId.length > 128) throw coded('VALIDATION_ERROR', 'factId is required.', 400);
-    if (attestedSourceType !== null && !Object.hasOwn(CONTRACTUAL_SOURCES, attestedSourceType)) throw coded('VALIDATION_ERROR', 'attestedSourceType is not a contractual source type.', 400);
+    if (attestedSourceType !== null && (typeof attestedSourceType !== 'string' || !Object.hasOwn(CONTRACTUAL_SOURCES, attestedSourceType))) throw coded('VALIDATION_ERROR', 'attestedSourceType is not a contractual source type.', 400);
     if (typeof attestsPolicyAssociation !== 'boolean') throw coded('VALIDATION_ERROR', 'attestsPolicyAssociation must be a boolean.', 400);
     // The reviewed fact is rebuilt on the server from live clauses after the consent and currency re-check. The caller
     // names a factId and never supplies a value, a clause or a digest.
@@ -144,13 +152,16 @@ export function createDecisionCatalogueService({ services, evidence } = {}) {
     return { reviewId: stored.reviewId, replayed: stored.replayed, decision: stored.decision, authority: stored.authority, factId };
   }
 
-  // Only an active independent grant opens a case without a household role. Everyone else gets the normal household rules.
+  // Only an enabled, active independent grant on an active household opens a case without a household role.
   function independentReviewerCase(principal, caseId) {
-    if (!reviews || typeof caseId !== 'string') return null;
+    if (!independentEnabled || !reviews || typeof caseId !== 'string') return null;
     const caseRecord = services.access.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId);
-    const grant = caseRecord && reviews.activeGrant(caseRecord.household_id, principal.adultId);
+    const grant = caseRecord && activeHousehold(caseRecord.household_id) && reviews.activeGrant(caseRecord.household_id, principal.adultId);
     return grant?.kind === 'independent_reviewer' ? caseRecord : null;
   }
 
-  return Object.freeze({ build, record, independentReviewerCase });
+  /** The household source-pack field gate for a household confirmer's write, matching the read route. Returns the case. */
+  function confirmerCase(principal, caseId) { return reviewerCase(principal, caseId); }
+
+  return Object.freeze({ build, record, independentReviewerCase, confirmerCase });
 }

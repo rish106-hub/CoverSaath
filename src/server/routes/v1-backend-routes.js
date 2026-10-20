@@ -359,6 +359,10 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     // the request body. The caller names a fact; the server rebuilds it from live clauses. Idempotent, audited, no model call.
     const reviewMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/decision-catalogue\/reviews$/);
     if (req.method === 'POST' && reviewMatch) {
+      // A household confirmer needs the same source-pack field access as the read route; an independent reviewer is
+      // gated by the (default off) CATALOGUE_INDEPENDENT_REVIEW_ENABLED switch inside the service.
+      const reviewCase = getCatalogueService().confirmerCase(principal, reviewMatch[1]);
+      if (reviewCase.kind === 'household_confirmer') responses.requireCaseField({ principal, caseRecord: reviewCase.caseRecord, field: READ_FIELDS.sourcePack });
       const body = await readBody(req);
       const result = getCatalogueService().record({
         principal, caseId: reviewMatch[1],

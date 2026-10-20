@@ -101,7 +101,7 @@ export function createApiServer({
   };
   let catalogueService = null;
   const getCatalogueService = () => {
-    catalogueService ||= createDecisionCatalogueService({ services: getBackend().services, evidence: getEvidenceService() });
+    catalogueService ||= createDecisionCatalogueService({ services: getBackend().services, evidence: getEvidenceService(), env });
     return catalogueService;
   };
   const ownsDatabase = !injectedDatabase;

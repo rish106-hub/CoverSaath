@@ -252,7 +252,7 @@ test('Phase 4: a household confirmer reaches reported at most; a claimed authori
 });
 
 test('Phase 4: an independent reviewer can make a fact known; model proposal and original stay visible', async t => {
-  const app = await startApp(t);
+  const app = await startApp(t, { env: { CATALOGUE_INDEPENDENT_REVIEW_ENABLED: 'true' } });
   const s = await scenario(app, 'Mine');
   const reviewer = await scenario(app, 'Reviewer');
   new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator' });
@@ -275,7 +275,7 @@ test('Phase 4: an independent reviewer can make a fact known; model proposal and
 });
 
 test('Phase 4: rejection removes the proposal from rules; disputes keep review required; later review wins', async t => {
-  const app = await startApp(t);
+  const app = await startApp(t, { env: { CATALOGUE_INDEPENDENT_REVIEW_ENABLED: 'true' } });
   const s = await scenario(app, 'Mine');
   const reviewer = await scenario(app, 'Reviewer');
   new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator' });
@@ -347,4 +347,66 @@ test('Phase 4: reviews are immutable', async t => {
   await makeConfirmer(app, s);
   await review(app, s, { answerId, factId, decision: 'accepted', reasonCode: 'matches_clause' });
   assert.throws(() => app.database.prepare("UPDATE catalogue_reviews SET decision = 'rejected'").run(), /immutable/);
+});
+
+const independent = async (t, extra = {}) => {
+  const app = await startApp(t, { env: { CATALOGUE_INDEPENDENT_REVIEW_ENABLED: 'true', ...extra } });
+  const s = await scenario(app, 'Mine');
+  const reviewer = await scenario(app, 'Reviewer');
+  const repo = new CatalogueReviewRepository(app.database);
+  const grant = repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator' });
+  return { app, s, reviewer, repo, grant };
+};
+const attest = { decision: 'accepted', reasonCode: 'matches_clause', attestedSourceType: 'issued_schedule', attestsPolicyAssociation: true };
+
+test('review fix P1-5: the independent path is off unless explicitly enabled', async t => {
+  const app = await startApp(t);
+  const s = await scenario(app, 'Mine');
+  const reviewer = await scenario(app, 'Reviewer');
+  new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator' });
+  const { answerId, factId } = await answered(app, s);
+  assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 404);
+  assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 404);
+});
+
+test('review fix P1-1: revoking an independent reviewer withdraws what their reviews supported', async t => {
+  const { app, s, reviewer, repo, grant } = await independent(t);
+  const { answerId, factId } = await answered(app, s);
+  assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 201);
+  assert.equal(roomRule(await catalogue(app, s, answerId)).result.status, 'known');
+  assert.equal(repo.revokeGrant({ householdId: s.householdId, grantId: grant.id }), true);
+  const c = await catalogue(app, s, answerId);
+  assert.notEqual(roomRule(c).result.status, 'known');
+  assert.equal(c.data.catalogue.reviews[0].state, 'reviewer_revoked');
+  assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 404, 'a revoked reviewer cannot write');
+});
+
+test('review fix P1-2: a household confirmation never overrides an independent review', async t => {
+  const { app, s, reviewer } = await independent(t);
+  const { answerId, factId } = await answered(app, s);
+  await makeConfirmer(app, s);
+  assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 201);
+  assert.equal((await review(app, s, { answerId, factId, decision: 'rejected', reasonCode: 'does_not_match_clause' })).status, 201);
+  const c = await catalogue(app, s, answerId);
+  assert.equal(roomRule(c).result.status, 'known', 'household rejection did not remove the independently proven fact');
+  assert.deepEqual(c.data.catalogue.reviews.map(r => [r.authority, r.state]).sort(), [['household', 'superseded'], ['independent', 'accepted']]);
+});
+
+test('review fix P1-3: a closed household blocks the independent reviewer', async t => {
+  const { app, s, reviewer } = await independent(t);
+  const { answerId, factId } = await answered(app, s);
+  app.database.prepare("UPDATE households SET status = 'closed' WHERE id = ?").run(s.householdId);
+  assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 404);
+  assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 404);
+});
+
+test('review fix P2: bad asOf is a 400, an array source type is a 400, a household member cannot be independent', async t => {
+  const { app, s, reviewer, repo } = await independent(t);
+  const { answerId, factId } = await answered(app, s);
+  assert.equal((await review(app, s, { answerId, factId, ...attest, asOf: 'nope' }, { token: reviewer.token })).status, 400);
+  assert.equal((await review(app, s, { answerId, factId, ...attest, attestedSourceType: ['issued_schedule'] }, { token: reviewer.token })).status, 400);
+  assert.throws(() => repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: s.adultId, operatorId: 'test-operator' }), /independent reviewer/);
+  const events = app.database.prepare("SELECT actor_type, action FROM audit_events WHERE action LIKE 'catalogue_reviewer.%'").all();
+  assert.ok(events.every(e => ['system', 'adult_user'].includes(e.actor_type)));
+  assert.equal(rows(app, 'catalogue_reviews'), 0);
 });
