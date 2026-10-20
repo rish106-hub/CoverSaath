@@ -1,5 +1,5 @@
 import { isIsoDate } from '../../features/decision-catalogue/contracts.js';
-import { CURATED_OFFICIAL_SOURCES, answerToCandidates, buildDecisionCatalogue } from '../../features/decision-catalogue/index.js';
+import { CURATED_OFFICIAL_SOURCES, answerToCandidates, buildDecisionCatalogue, typedTwins } from '../../features/decision-catalogue/index.js';
 
 // Builds the Block 3 decision catalogue from one stored policy answer (ADR 0008). Read only and derived on every call:
 // nothing is stored, so revoking consent or erasing a document removes the facts from the next response. The answer
@@ -26,7 +26,7 @@ export function createDecisionCatalogueService({ services, evidence } = {}) {
       const { candidates, skipped } = answerToCandidates(stored.answer, { clauseRows, documentKinds, policyId });
       const catalogue = buildDecisionCatalogue({
         householdId, clauseRows: clauseRows.map(row => ({ id: row.clauseId, documentId: row.documentId, sourceVersion: row.sourceVersion, page: row.page, digest: row.digest })),
-        batches: [{ origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates }],
+        batches: [{ origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates: [...candidates, ...typedTwins(candidates, clauseRows)] }],
         policies: [{ policyId, kind: 'unresolved', coverBasis: 'unknown' }], asOf, memberId,
         officialSources: CURATED_OFFICIAL_SOURCES, today: new Date().toISOString().slice(0, 10),
       });
