@@ -11,6 +11,7 @@ import { extractFields, FIELD_NAMES } from '../../features/ai-analysis/eval-extr
 const MAX_KNOWN_IDENTIFIERS = 200;
 const MAX_IN_FLIGHT = 4;
 const MAX_DOCUMENTS = 10;
+const SKIP_REASONS = Object.freeze({ OCR_PAGES_UNAVAILABLE: 'ocr_unavailable', OCR_PAGES_INCOMPLETE: 'ocr_incomplete', DOCUMENT_NOT_FOUND: 'not_found' });
 
 export const evidenceEnabled = (env = process.env) => env.POLICY_EVIDENCE_ENABLED === 'true';
 
@@ -78,17 +79,23 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
       }
       if (!checks.size) throw coded('CONSENT_SCOPE_REQUIRED', 'A document-specific question grant is required.', 403);
       // The processing limit applies only after consent filtering, so an authorised document is never crowded out.
-      for (const documentId of [...checks.keys()].slice(MAX_DOCUMENTS)) checks.delete(documentId);
+      // Every authorised document that is not read is counted and reported in the answer, never silently omitted.
+      const authorised = checks.size;
+      const excluded = new Map();
+      const exclude = (reason, count = 1) => excluded.set(reason, (excluded.get(reason) ?? 0) + count);
+      const overLimit = [...checks.keys()].slice(MAX_DOCUMENTS);
+      for (const documentId of overLimit) checks.delete(documentId);
+      if (overLimit.length) exclude('over_document_limit', overLimit.length);
 
       const documentIds = [];
       const names = [];
       for (const documentId of checks.keys()) {
         let stored;
         try { stored = ensureClauses({ householdId, caseId, documentId }); } catch (error) {
-          if (['OCR_PAGES_UNAVAILABLE', 'OCR_PAGES_INCOMPLETE', 'DOCUMENT_NOT_FOUND'].includes(error?.code)) continue;
+          if (Object.hasOwn(SKIP_REASONS, String(error?.code))) { exclude(SKIP_REASONS[error.code]); continue; }
           throw error;
         }
-        if (!stored) continue;
+        if (!stored) { exclude('ocr_incomplete'); continue; }
         documentIds.push(documentId);
         names.push(...documentNames(stored.pages.map(({ page, blocks }) => ({ page, blocks }))));
       }
@@ -96,6 +103,9 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
 
       const consentCheck = () => { for (const documentId of documentIds) checks.get(documentId)(); };
       const clauses = services.clauses.listClauses({ householdId, caseId, documentIds });
+      const withClauses = new Set(clauses.map(clause => clause.documentId));
+      const empty = documentIds.filter(documentId => !withClauses.has(documentId)).length;
+      if (empty) exclude('no_clauses', empty);
       const knownIdentifiers = [...(await loadKnownIdentifiers(caseId)), ...names].slice(0, MAX_KNOWN_IDENTIFIERS);
       const call = createModelCall({ consentCheck, onCall: () => {} });
       inFlight += 1;
@@ -103,6 +113,7 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
       try {
         result = await investigate({
           question, clauses, knownIdentifiers, call, consentCheck,
+          documentScope: { authorised, excluded: [...excluded].map(([reason, count]) => ({ reason, count })) },
           search: ({ query, kinds, limit }) => services.clauses.searchClauses({ householdId, caseId, documentIds, query, kinds, limit }),
         });
       } finally { inFlight -= 1; }

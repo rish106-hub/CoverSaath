@@ -27,7 +27,8 @@ function readStructuringConfig(env) {
 }
 
 /**
- * Returns createCall({ consentCheck, onCall }) => call({ task, payload }) => { json, usage, costUsd }.
+ * Returns createCall({ consentCheck, onCall }) => call({ task, payload }) => { json, usage, costUsd }, with
+ * call.maxInputBytes set to the gateway input limit.
  * One run budget per createCall (one document run); the project budget is shared with live analysis when
  * `projectBudget` (createSharedProjectBudget) is passed, else one per factory. onCall receives
  * counts only (task, tokens, cost, outcome), never prompts or output.
@@ -60,7 +61,8 @@ export function createStructuringModelCallFactory({ env = process.env, loadModel
         maxRetries: 0, maxReservationUsd: config.reservationUsd, maxConcurrentCalls: STRUCTURING_GATEWAY_LIMITS.maxConcurrentCalls,
       },
     });
-    return async ({ task, payload }) => {
+    // maxInputBytes is stated on the call so callers derive their payload budgets from the real gateway limit.
+    return Object.assign(async ({ task, payload }) => {
       if (!isStructuringTask(task)) throw Object.assign(new Error('Not a structuring task.'), { code: 'unsupported_ai_task' });
       let result;
       try {
@@ -72,6 +74,6 @@ export function createStructuringModelCallFactory({ env = process.env, loadModel
       const { inputTokens, outputTokens, costUsd } = result.metadata;
       onCall({ task, outcome: 'ok', inputTokens, outputTokens, costUsd });
       return { json: result.output, usage: { inputTokens, outputTokens }, costUsd };
-    };
+    }, { maxInputBytes: config.maxInputBytes });
   };
 }
