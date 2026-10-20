@@ -119,3 +119,72 @@ stripped, `clause-repository.js:24`), household scoping of clause and answer rea
 7. Close-out report (A7) with GO/NO-GO.
 
 Today's decision: **NO-GO.** Live question journey never run, recall unmeasured, D1 open.
+
+## Live backend acceptance (A5), 2026-10-20
+
+Approved by the owner ("do all"), capped at $2. Providers: Gemini `gemini-3.8-flash` **live**. Sarvam not called (the
+policy's 20 OCR pages were already stored from the earlier live run). Database: the owner's local SQLite, backed up and
+moved from `.local/.local/` (migrations 015 and 016 applied, valid). Scripts and raw outputs are local only
+(`.local/live-question-run*.mjs`, `.local/live-question-run-*/`, mode 700/600). No policy text is in this report.
+
+Corpus: **1 real policy set** (schedule plus customer information sheet; no full policy wording). **34 candidate
+questions, 62 expected quotes, AI-drafted, not owner-verified** (`.local/eval/golden-questions.draft.json`). This is
+a pilot measurement, not a labelled-corpus result.
+
+| Measure | Result |
+|---|---|
+| Questions answered | 34 of 34. The first attempt stopped at question 7 because the Google project hit its monthly spend cap. The owner raised it and the rest ran. |
+| Context path | `whole_policy` for all (45 clauses, about 42 KB, under the 64 KB gateway limit) |
+| Answer states | 33 `conditional`, 1 `insufficient_evidence` (co-payment: no clause, correct abstention), 0 verdicts |
+| Expected quotes cited (exact match) | 56 of 62 (90.3%) |
+| Expected clauses cited (manual re-score, same clause or same row elsewhere) | 60 of 62 (96.8%). Misses: q09 Parenthood add-on "Not Opted" status (the maternity exclusion itself was cited) and q20 cashless 1-hour authorisation time |
+| Critical exclusions or overrides missed | 0 exclusions. 1 critical-labelled status line (q09 add-on), which does not change that maternity is excluded |
+| Citation integrity, 191 sources | 183 verbatim. 7 privacy-redacted at the correct clause and page. 1 gate-normalised (table pipes) at the correct clause. 0 wrong page, 0 fabricated. Non-verbatim sources carry `verbatim: false` (added after the first run). |
+| Override sweep | Completed on 32 of 34. 2 not completed (provider error, spend cap), both reported in `unknowns` |
+| Prompt injection (q33) | Resisted: conditional answer, exclusion cited, injected text only in the echoed question |
+| Replay / key reuse / GET | 200 replay with 0 provider calls / 409 `IDEMPOTENCY_KEY_REUSED` / 200 `current: true`, no access metadata returned |
+| Consent expiry (D3) | After expiry: replay 403 `CONSENT_REQUIRED`, GET 403 `CONSENT_REQUIRED`, 0 provider calls |
+| Privacy | 0 of 4 locally detected names in any prompt; 0 secrets in traces. **P1:** the locality and PIN after a masked address reach Gemini. The other digit runs are public insurer numbers (UIN, helplines, stamp references) |
+| Cost | About $1.56 total (about $0.045 per question average, $0.02 to $0.07 range). 2 Gemini calls per question, about 30k input and 3 to 9k output tokens each |
+| Latency | p50 38 s, max 114 s per question (two sequential model calls) |
+
+Manually spot-checked values (q01 to q06): sum insured and floater basis, policy period, room rent and ICU "At
+Actuals", PED 3 years with fresh waiting on enhanced sum insured, 30-day initial wait except accidents. All correct and cited.
+
+### Findings from the live run
+
+- **Fixed (pushed):** sources marked `verbatim`; false "No limit clause was found" unknowns removed on the whole-policy path.
+- **F-B (open, medium):** findings are bucketed by the cited clause's keyword label. The page-6 benefits table is
+  labelled `exclusion`, so "Room Rent | At Actuals" (no limit) appears under `limited_or_excluded`. The fix needs a
+  model-reported effect per finding (schema change, AI-authority review).
+- **F-C (open, medium):** q08 (cataract) gives no unknown saying cataract is not named in the documents read. The
+  answer stays `conditional` and cites the waiting periods and member exclusions, but does not say the wording was not uploaded.
+- **P1 (open, medium):** the privacy gate leaves locality and PIN after `<ADDRESS_n>`.
+- **R1 (open, risk):** forced retrieval recall on this policy is 52% at a 16 KB budget and 18% at 8 KB (clauses up to
+  4,000 characters). It does not affect this policy, which is read whole, but long policy wordings will take the retrieved path.
+
+### Hard gates
+
+| Gate | Status |
+|---|---|
+| All supported pages accounted for | PASS (20 of 20, one document) |
+| No undetected page-order or mapping failure | PASS (one document) |
+| No unauthorised cross-household retrieval | PASS in tests; NOT TESTED live |
+| No fabricated quotations | PASS (191 of 191 at the correct clause) |
+| No wrong document or policy attribution | PASS (single document) |
+| No missed critical exclusion or override | PASS on the draft set; NOT owner-verified |
+| No wrong critical value accepted as verified | PASS (findings capped at `extracted_unverified`; q01 to q06 spot-checked) |
+| No silently excluded documents | PASS |
+| No incomplete evidence presented as complete | PASS (sweep failures reported) |
+| No unapproved paid call | PASS ($1.56 of the $2 approval) |
+
+### Decision: NO-GO for freeze, single-policy pipeline PASS
+
+The live single-policy journey works end to end with traceable citations. Block 2 cannot be frozen because:
+1. The question set is AI-drafted (owner verification required) and covers 1 policy, not 3 to 5.
+2. F-B can present "no limit" under `limited_or_excluded`. This can mislead.
+3. P1 privacy residue.
+
+Smallest path to GO: owner verifies the 34 questions and answers; fix F-B and P1 (each with independent review);
+add F-C (an unknown when the asked subject is not named in the read text); run 2 to 4 more policies including one
+long wording (measures R1).
