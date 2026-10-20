@@ -6,6 +6,7 @@ import { RULES } from './rules.js';
 import { separatePolicies } from './cross-policy.js';
 import { resolveApplicable } from './applicability.js';
 import { validateOfficialSource } from './official-sources.js';
+import { compareToCurated } from './curated-products.js';
 
 /** Clause rows come from ClauseRepository.listClauses (active documents of this household and case only). */
 export function buildEvidenceIndex(clauseRows, householdId) {
@@ -25,7 +26,7 @@ export function buildEvidenceIndex(clauseRows, householdId) {
   return index;
 }
 
-export function buildDecisionCatalogue({ householdId, batches, clauseRows, policies, asOf = null, memberId = null, officialSources = [], today = null }) {
+export function buildDecisionCatalogue({ householdId, batches, clauseRows, policies, asOf = null, memberId = null, officialSources = [], curatedProducts = [], today = null }) {
   if (asOf !== null && !isIsoDate(asOf)) throw new TypeError('asOf must be an ISO date.');
   const evidenceIndex = buildEvidenceIndex(clauseRows, householdId);
   const facts = [];
@@ -57,6 +58,7 @@ export function buildDecisionCatalogue({ householdId, batches, clauseRows, polic
     unassociatedFacts: facts.filter(fact => !fact.policyId || !policyIds.has(fact.policyId)).map(fact => fact.factId),
     rejected,
     officialSources: today ? officialSources.map(record => validateOfficialSource(record, { today })) : [],
+    curatedComparison: compareToCurated({ clauseRows, facts, products: curatedProducts }),
     reviewRequired: facts.some(fact => !fact.verified) || unresolvedConflicts.length > 0 || riders.some(rider => rider.status === 'conflict'),
     limitations: ['Derived from the evidence supplied; retrieval completeness is not established.', 'Not legal review. No claim approval or payout is predicted.'],
   });
