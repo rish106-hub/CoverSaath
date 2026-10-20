@@ -17,6 +17,7 @@ const PAGES = [
   [
     { text: 'Policy Schedule', tag: 'headline' },
     { text: `Policyholder: ${OWNER_NAME}`, tag: 'paragraph' },
+    { text: 'Policy Number: SYN-PH-000123', tag: 'paragraph' },
     { text: 'Room rent limit: Rs 5,000 per day', tag: 'paragraph' },
     { text: 'Pre-existing disease waiting period: 3 years', tag: 'paragraph' },
   ],

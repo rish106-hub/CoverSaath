@@ -17,6 +17,7 @@ const PAGES = [
   [
     { text: 'Policy Schedule', tag: 'headline' },
     { text: `Policyholder: ${OWNER_NAME}`, tag: 'paragraph' },
+    { text: 'Policy Number: SYN-PH-000123', tag: 'paragraph' },
     { text: 'Room rent limit: Rs 5,000 per day', tag: 'paragraph' },
     { text: 'Pre-existing disease waiting period: 3 years', tag: 'paragraph' },
   ],
@@ -232,6 +233,11 @@ test('B3: catalogue is derived from a stored answer, stays unverified and makes 
   assert.ok(rr.result.discrepancies.length >= 1, 'the candidate is visible as a discrepancy, not as a value');
   assert.equal(rr.result.value, null);
   assert.ok(c.facts.some(fact => fact.factType.startsWith('finding.')), 'open-ended finding kept');
+  // Phase 3: the printed number groups the document into a candidate logical policy; it is not verified and not echoed.
+  assert.deepEqual(c.documentAssociations.map(d => [d.status, d.verified, d.basis]), [['candidate', false, 'printed_policy_number']]);
+  assert.ok(c.facts.every(fact => fact.policyId.startsWith('pol-') && fact.association.verified === false));
+  assert.equal(c.policies.length, 1);
+  assert.ok(!JSON.stringify(res.data).includes('000123'), 'the policy number is never returned');
   assert.ok(c.facts.every(fact => fact.page === 1 && fact.documentId === s.documentId));
 });
 
