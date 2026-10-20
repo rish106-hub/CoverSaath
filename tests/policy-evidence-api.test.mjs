@@ -223,6 +223,8 @@ test('B4: a question is answered with cited, conditional evidence and replays wi
   const read = await app.call(`/api/v1/cases/${s.caseId}/questions/${first.data.answerId}`, { token: s.token });
   assert.equal(read.status, 200);
   assert.deepEqual(read.data.answer, answer);
+  assert.equal(read.data.current, true);
+  assert.ok(!JSON.stringify(read.data).includes('consentGrantId') && !JSON.stringify(replay.data).includes('consentGrantId'), 'access metadata is never returned');
 });
 
 test('B4: no question grant, a structuring-only grant or a disabled flag never reaches the model', async t => {
