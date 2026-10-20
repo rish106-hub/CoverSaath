@@ -1,0 +1,40 @@
+src/features/ai-analysis/privacy-evidence-gate.js
+  s_15600a15938a21::t_e94c47c224e09d 14
+  s_15600a15938a21::t_d3f0ad5bb9ec73 1353,1365,1377-1380,1398,1404-1407,1409-1410,1412-1421,1425-1441,1472-1473,1495
+  s_15600a15938a21::t_095fd923cca31a 1384
+  s_15600a15938a21::t_4b14fd5124f9de 1387
+  s_15600a15938a21::t_10fa925f3c0b4e 1350-1351
+  s_15600a15938a21::t_00125615489abd 1448-1451,1464,1468,1496-1498
+  s_15600a15938a21::t_a6ff251657d4db 1381-1383,1396-1397,1408,1411,1422,1442-1443,1461-1463,1465-1467,1469-1471
+  s_15600a15938a21::t_d29429a5409e67 1444-1447
+  s_15600a15938a21::t_28c49ed8c1f385 1320-1321,1352,1391,1393
+  s_15600a15938a21::t_43dcc3cfabf283 1399-1403
+  s_15600a15938a21::t_1d1e6fadca42b2 1385-1386,1388-1390,1392,1394-1395,1423-1424,1452-1460
+tests/privacy-gate-address-closure.test.mjs
+  s_15600a15938a21::t_8f448aa744bab9 155-160,184
+  s_15600a15938a21::t_ca43f902aff869 148
+  s_15600a15938a21::t_e94c47c224e09d 10,161-183
+  s_15600a15938a21::t_072468575ac9d0 154,185-216
+  s_15600a15938a21::t_172147eb0bf2f2 106-147,149-153
+tests/privacy-gate-r4.test.mjs
+  s_15600a15938a21::t_e94c47c224e09d 45-46
+  s_15600a15938a21::t_172147eb0bf2f2 44
+docs/iterations/LATEST.md
+  s_15600a15938a21::t_2d8eb8d1ee5a43 3-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b94c958ca86acb9a690cce2125b76f69b59671cf",
+  "prompts": {},
+  "sessions": {
+    "s_15600a15938a21": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7bdd1ace-5773-4b93-a381-1a219a829e30",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
