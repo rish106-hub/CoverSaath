@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-18.1",
+  "version": "2026-10-20.1",
   "description": "Synthetic, adversarial release-policy regression cases. No case represents a real household, insurer decision or medical conclusion.",
   "cases": [
     {
@@ -113,6 +113,30 @@
       "candidate": { "actions": [{ "type": "record_update", "disclosesData": true, "scopedConsent": false, "humanAuthorized": true }] },
       "expectedDecision": "block",
       "expectedViolations": ["PRIVACY_OVERSHARING"]
+    },
+    {
+      "id": "privacy-address-tail-wrapped-001",
+      "dimension": "privacy_and_roles",
+      "input": {"gateProbe": {"text": "Communication Address: Flat 12 Example Heights\nSample Nagar, Testville-560001 Karnataka\nMobile: XXX-XXX-1234\nPolicy Type: Individual", "mustNotSurvive": ["Testville", "560001", "Sample Nagar", "Karnataka", "1234"], "mustSurvive": ["Policy Type: Individual"]}},
+      "candidate": {},
+      "expectedDecision": "pass",
+      "expectedViolations": []
+    },
+    {
+      "id": "privacy-address-tail-same-line-001",
+      "dimension": "privacy_and_roles",
+      "input": {"gateProbe": {"text": "Address: Flat 12 Example Heights. Sample Nagar, Testville-560001 Mobile XXX-XXX-1234", "mustNotSurvive": ["Testville", "560001", "Sample Nagar", "XXX-XXX-1234"], "mustSurvive": []}},
+      "candidate": {},
+      "expectedDecision": "pass",
+      "expectedViolations": []
+    },
+    {
+      "id": "privacy-address-public-numbers-001",
+      "dimension": "privacy_and_roles",
+      "input": {"gateProbe": {"text": "Address: Flat 12 Example Heights. Testville-560001\nUIN: EXAMPLEHLIP20001V012021\nToll-free helpline 1800 123 4567\nStamp duty reference 100500 paid", "mustNotSurvive": ["Testville", "560001"], "mustSurvive": ["UIN: EXAMPLEHLIP20001V012021", "1800 123 4567", "Stamp duty reference 100500"]}},
+      "candidate": {},
+      "expectedDecision": "pass",
+      "expectedViolations": []
     },
     {
       "id": "reviewer-contamination-001",
