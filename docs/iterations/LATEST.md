@@ -1,5 +1,17 @@
 # Latest iteration
 
+## Evidence-first review fixes (2026-10-20)
+
+Uncommitted on `codex/backend-first-layout`.
+
+- Claim grounding: finding conditions, exceptions, value and appliesTo must be verbatim in a cited clause or are dropped and counted.
+- Independent sweep: `selectSweepContext` runs fresh FTS searches from the findings and adds unseen clauses to the sweep call (retrieved path only).
+- Document limit (10) now applies after consent filtering.
+- Several documents in one answer add an unknown: document-to-policy association is still unestablished (ADR 0007 blocked by U2). Wire clauses carry `document_id`.
+- `npm run eval:retrieval` and `evaluateRecall` measure retrieval recall from `.local/eval/retrieval-golden.json` (owner-written, not yet created). No numbers exist.
+- `/docs` is gitignored: ADR 0008 and direction-change.md need `git add -f` to be committed.
+- Unverified: live Sarvam -> Gemini -> question journey; recall on real policies; semantic/hybrid comparison.
+
 ## Direction change: Phase A S0/S1/S2/S7 and Phase B B0/B1 start (2026-10-20)
 
 Plan: [direction-change.md](../exec-plans/active/direction-change.md). ADR: [0008](../adr/0008-evidence-first-reasoning.md) (Proposed).
