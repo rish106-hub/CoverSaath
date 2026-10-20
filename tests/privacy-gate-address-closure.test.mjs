@@ -7,7 +7,7 @@ import { buildClauses, investigate } from '../src/features/policy-evidence/index
 
 const storage = text => sanitizeEvidenceTextForStorage(text).text;
 
-test('gate version is v7', () => assert.equal(PRIVACY_EVIDENCE_GATE_VERSION, 'knowvia-privacy-evidence-v7'));
+test('gate version is v8', () => assert.equal(PRIVACY_EVIDENCE_GATE_VERSION, 'knowvia-privacy-evidence-v9'));
 
 const LEAKS = ['Testville', 'Sample Nagar', 'Example Heights', '560001', '560 001', 'Karnataka', 'टेस्टविले', '560-001', '5 6 0 0 0 1', '56 0001'];
 const CASES = [
@@ -102,4 +102,115 @@ test('closure: no address text reaches either outgoing model payload', async () 
   assert.ok(wire.includes('Example Insurance Ltd'), 'public insurer detail kept');
   assert.ok(wire.includes('capped at Rs. 40,000 per eye'), 'policy wording kept');
   assert.ok(!wire.includes('Extension Sample Nagar'), 'refused clause was withheld');
+});
+
+// Block 2 delta, residuals R1-R3 (gate v8). Synthetic values only.
+const R_LEAKS = ['Testville', 'Sample Nagar', 'Example Heights', 'Example Temple', 'Old Example Road', '560001', 'Karnataka'];
+const R_CASES = [
+  ['R1 locality and PIN, one comma, no dash', 'Sample Nagar, Testville 560001'],
+  ['R1 city and PIN only', 'Testville 560001'],
+  ['R1 inside a sentence', 'Insured lives at Sample Nagar Testville 560001 per proposal'],
+  ['R1 in a table cell', '| Proposer | Sample Nagar, Testville 560001 |'],
+  ['R2 house number, no PIN', 'Flat 12, Example Heights, Sample Nagar, Testville'],
+  ['R2 bare number start, no PIN', '12, Example Heights, Sample Nagar'],
+  ['R2 plot number, no PIN', 'Plot No 5, Example Heights'],
+  ['R2 no PIN, state after the run', 'Flat 12, Example Heights, Sample Nagar, Testville, Karnataka'],
+  ['R3 landmark and road fragment', 'Near Example Temple, Old Example Road'],
+  ['R3 locality fragment alone', 'Example Heights, Sample Nagar'],
+  ['R3 state line after a fragment', 'Example Heights, Sample Nagar\nKarnataka'],
+];
+for (const [label, text] of R_CASES) {
+  test(`residual: ${label}`, () => {
+    const out = storage(text);
+    for (const leak of R_LEAKS) assert.ok(!out.includes(leak), `"${leak}" survived in ${JSON.stringify(out)}`);
+  });
+}
+
+// Deliberate decision: a state or city name on its own is not an address and territorial wording needs it.
+test('residual: standalone state and city names and policy wording stay', () => {
+  const out = storage([
+    'Territorial limit: India. Zone 1: Karnataka, Delhi NCR',
+    'Testville, Karnataka',
+    'Road traffic accident, Hernia, Piles',
+    'Behind the ear hearing aids are excluded.',
+    'Plan 1, Plan 2, Plan 3 500000',
+    'Registered Office: Example Insurance Ltd, Sample Nagar, Testville - 400001',
+  ].join('\n'));
+  assert.match(out, /Zone 1: Karnataka, Delhi NCR/);
+  assert.match(out, /^Testville, Karnataka$/m);
+  assert.match(out, /Road traffic accident, Hernia, Piles/);
+  assert.match(out, /Behind the ear hearing aids are excluded\./);
+  assert.match(out, /Plan 1, Plan 2, Plan 3 500000/);
+  assert.match(out, /Example Insurance Ltd, Sample Nagar, Testville - 400001/);
+});
+
+test('residual: new rules stay linear on adversarial input', () => {
+  const inputs = ['A'.repeat(15000), 'Aa '.repeat(5000), '1 Aa '.repeat(3000), 'Aa Bb, '.repeat(2000), 'Near Aa '.repeat(1800), 'Aa Nagar, '.repeat(1500), 'Aa Bb Cc Dd Ee '.repeat(900), ('Flat 1, ' + 'Aa Bb, '.repeat(200) + '\n').repeat(60)];
+  for (const text of inputs) {
+    const started = performance.now();
+    try { sanitizeEvidenceTextForStorage(text.slice(0, 15_000), { maxBytes: 16_000 }); } catch (error) { assert.equal(error.code, 'PRIVACY_ADDRESS_UNCERTAIN'); }
+    assert.ok(performance.now() - started < 1000, `slow: ${text.slice(0, 20)}`);
+  }
+});
+
+// Review-driven: benefit wording that only looks like a fragment stays.
+test('residual: landmark and plot wording false positives stay', () => {
+  const out = storage('Day Care Procedures, Opposite Eye Surgery, Behind Ear Procedures\nSub-limits: Cataract, Plot 3, Lane Surgery');
+  assert.match(out, /Opposite Eye Surgery, Behind Ear Procedures/);
+  assert.match(out, /Plot 3, Lane Surgery/);
+});
+
+// Review residuals closed in v9.
+test('residual: prose, hospital-line, semicolon, sector and split-line addresses go', () => {
+  const cases = [
+    ['Insured resides at Sample Nagar, Testville and wants a claim.', /Sample Nagar|Testville/],
+    ['Admitted at Sample Hospital, Sample Nagar, Testville', /Sample Nagar|Testville/],
+    ['Flat 3; Example Heights; Sample Nagar', /Example Heights|Sample Nagar/],
+    ['Sector 5, Testville', /Sector 5/],
+    ['Sample Gali, Testville', /Sample Gali/],
+    ['12\nSample Nagar, Testville 560001', /^12$/m],
+  ];
+  for (const [text, leak] of cases) {
+    const out = storage(text);
+    assert.doesNotMatch(out, leak, text);
+    assert.match(out, /<ADDRESS_\d+>/u, text);
+  }
+});
+
+test('residual: hospital name and benefit wording stay beside redacted locality', () => {
+  const out = storage('Admitted at Sample Hospital, Sample Nagar, Testville\nWaiting Extension applies');
+  assert.match(out, /Admitted at Sample Hospital, <ADDRESS_\d+>/);
+  assert.match(out, /Waiting Extension applies/);
+});
+
+// v9 second pass: lowercase, Devanagari, spaced PIN, comma-less house lines, glued locality suffix.
+test('residual: lowercase, Devanagari, spaced-PIN and comma-less addresses go', () => {
+  const cases = [
+    ['Testville 560 001', /560/],
+    ['flat 12, example heights, sample nagar, testville', /example heights|sample nagar/],
+    ['insured lives at sample nagar, testville and agrees', /sample nagar/],
+    ['मकान 12, सैंपल नगर, टेस्टविल', /सैंपल|मकान/],
+    ['बीमित सैंपल नगर में रहता है', /सैंपल/],
+    ['Flat 12 Example Apartments Testville', /Example Apartments/],
+    ['Sample Pur, Block 5, Samplepur, 12', /Samplepur/],
+  ];
+  for (const [text, leak] of cases) {
+    const out = storage(text);
+    assert.doesNotMatch(out, leak, text);
+    assert.match(out, /<ADDRESS_\d+>/u, text);
+  }
+});
+
+test('residual: amounts, zone lists and benefit wording stay after the second pass', () => {
+  const text = ['Copay 100 110', 'Zone 1: Mumbai, Hyderabad, Ahmedabad', 'the waiting period colony of disease', 'Door 5 Benefit Rider Applies', 'sum insured 100 200 waiting 300 400'].join('\n');
+  assert.equal(storage(text), text);
+});
+
+test('residual: second-pass rules stay linear', () => {
+  const inputs = ['a'.repeat(15000), 'a '.repeat(7000), 'नगर '.repeat(3000), 'स'.repeat(15000), 'Flat 1 '.repeat(2000), 'flat 1, a'.repeat(1500)];
+  for (const text of inputs) {
+    const started = performance.now();
+    try { sanitizeEvidenceTextForStorage(text.slice(0, 15_000), { maxBytes: 16_000 }); } catch (error) { assert.equal(error.code, 'PRIVACY_ADDRESS_UNCERTAIN'); }
+    assert.ok(performance.now() - started < 1000, `slow: ${text.slice(0, 20)}`);
+  }
 });

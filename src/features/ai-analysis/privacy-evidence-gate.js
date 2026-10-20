@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 // closed on ID-shaped cells and whole-cell dates. Headers split over two rows are
 // read as one header; tab-separated tables (two or more tab rows) are refused as
 // restricted, because collapsing tabs loses the cell boundaries a header needs.
-export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v7';
+export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v9';
 export const EVIDENCE_DATA_CLASSES = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
 // The consent-scope recipient that names the live model provider. A document's
 // derive scope must name this exact recipient before its evidence may be sent
@@ -1317,6 +1317,8 @@ function absorbAddressTails(text) {
 // Insurer, hospital and branch lines are public details and stay.
 const PUBLIC_ADDRESS_LINE = /\b(?:hospital|clinic|insurer|insurance|assurance|ltd|limited|corporate|registered|head\s+office|tpa|grievance|ombudsman)\b/iu;
 const ADDRESS_COMPONENT_LABEL = /\b(?:ward|sector|block|phase|plot|flat|door|house|po|ps|dist|district|tehsil|taluk|village|vill|near)\s*$/iu;
+// A spaced pair of 3-digit groups after a place word is a PIN unless benefit or amount wording sits in the run.
+const AMOUNT_CONTEXT = /\b(?:co-?pay|limit|sum|insured|premium|deductible|rent|age|cap|amount|cover|sublimit|rs|inr|waiting|days?|years?|months?|bonus|charges?|fees?|rate|plan|tier|room|claim)\b/iu;
 const UNLABELLED_PIN = /(?<![\d₹.])[1-9](?:[ -]?\d){5}(?![\d]|[,.]\d)/gu;
 
 function redactUnlabelledAddresses(value, swap) {
@@ -1345,7 +1347,10 @@ function redactUnlabelledAddresses(value, swap) {
       const candidate = pieces.slice(runStart).join('').slice(-220);
       const candidateStart = pin.index - candidate.length;
       const trimmed = candidate.trim();
-      if (trimmed.length < 6 || trimmed.length > 220 || !/,/u.test(trimmed) || hasPolicyWording(trimmed)
+      // A capitalised place word right before a contiguous PIN ("Testville 560001") is enough without a comma. A spaced PIN
+      // needs a comma, because runs of small numbers ("Copay 100 110") look like one.
+      const placeBeforePin = (/^\d{6}$/u.test(pin[0]) || (/^\d{3} \d{3}$/u.test(pin[0]) && !AMOUNT_CONTEXT.test(trimmed))) && /\p{Lu}[\p{L}\p{M}]{2,}[,.]?\s*[,–—-]*\s*$/u.test(trimmed);
+      if (trimmed.length < 3 || trimmed.length > 220 || !(/,/u.test(trimmed) || placeBeforePin) || hasPolicyWording(trimmed)
         || !isAddressLike(trimmed.replace(/[,–—-]+(?=\s|$)/gu, ' '))) continue;
       // Lines directly above that carry a house or plot number belong to the same address.
       let top = index;
@@ -1357,7 +1362,7 @@ function redactUnlabelledAddresses(value, swap) {
       // internal separator ("560 001"), or a house number in the text or just above, and a round amount ("500000")
       // is never a PIN.
       const glued = /[–—-]\s*$/u.test(candidate) || /[ -]/u.test(pin[0]);
-      if ((!glued && !/\d/u.test(trimmed) && first < 0) || (!/[ -]/u.test(pin[0]) && /000$/u.test(pin[0]))) continue;
+      if ((!glued && !placeBeforePin && !/\d/u.test(trimmed) && first < 0) || (!/[ -]/u.test(pin[0]) && /000$/u.test(pin[0]))) continue;
       const end = pin.index + pin[0].length + stateWordsAfter(line.slice(pin.index + pin[0].length));
       const leading = candidate.length - candidate.trimStart().length;
       rebuilt += line.slice(from, candidateStart + leading) + swap('ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS', line.slice(candidateStart + leading, end));
@@ -1365,6 +1370,103 @@ function redactUnlabelledAddresses(value, swap) {
       if (first >= 0) for (let above = first; above < index; above += 1) lines[above] = swap('ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS', lines[above]);
     }
     lines[index] = rebuilt ? rebuilt + line.slice(from) : line;
+  }
+  return lines.join('\n');
+}
+
+// Address fragments with no PIN and no label: a house-number start ("Flat 12, ..."), a landmark ("Near Example
+// Temple") or a locality/street name ("Sample Nagar", "Old Example Road"). A comma-chained run of address-shaped
+// pieces that holds one of these goes whole. A state or city name on its own is not a fragment: territorial and zone
+// wording needs it, and it does not identify anyone. It goes only when it sits in such a run or directly after one.
+const LOCALITY_SUFFIX = '(?:Nagar|Colony|Layout|Enclave|Heights|Apartments?|Residency|Vihar|Marg|Chowk|Extension|Road|Street|Lane|Puram|Ganj|Gali|Mohalla|Bazaar|Bazar)';
+// Inside prose only the suffixes that are never ordinary benefit wording count.
+const INLINE_SUFFIX = '(?:Nagar|Colony|Layout|Enclave|Heights|Apartments?|Residency|Vihar|Marg|Puram|Ganj|Gali|Mohalla)';
+const INLINE_LOCALITY = new RegExp(`(?<![\\p{L}\\p{M}\\d.'])(?:#?\\d{1,4}[A-Za-z]?(?:[/-]\\d{1,4})?,?\\s+)?(?:\\p{Lu}[\\p{L}\\p{M}.']*\\s+){1,4}${INLINE_SUFFIX}(?![\\p{L}])(?:\\s?[,;]\\s?\\p{Lu}[\\p{L}\\p{M}]{2,}(?:\\s\\p{Lu}[\\p{L}\\p{M}]{2,})?){0,2}`, 'gu');
+// Lowercase or OCR-lowercase lines (no capital letter at all) never carry the capitalisation the main rules need, so they
+// get a stricter form: a strong locality suffix, or a house keyword with a number, and a following comma piece.
+const LOWER_LOCALITY = /(?<![\p{L}\p{M}\d.'])(?:(?:#?\d{1,4}[a-z]?(?:[/-]\d{1,4})?,?\s+)?(?:[a-z.']+\s+){1,2}(?:nagar|enclave|vihar|puram|gali|mohalla)(?![\p{L}])|(?:flat|house|door|plot|h\.?\s?no\.?)\s*#?\d{1,4}[a-z]?(?:[/-]\d{1,4})?\s*,\s*[a-z.']+(?:\s[a-z.']+){0,3})(?:\s?[,;]\s?[a-z]{3,}(?:\s[a-z]{3,})?){0,2}/gu;
+// Devanagari: word run ending in a locality word (नगर, कॉलोनी, विहार...), optional house keyword or number before it.
+const DEVA = '[\\p{Script=Devanagari}\\p{M}]';
+const DEVA_SUFFIX = '(?:नगर|कॉलोनी|कालोनी|विहार|मार्ग|पुरम|गंज|गली|मोहल्ला|एन्क्लेव|हाइट्स|अपार्टमेंट|रेजिडेंसी)';
+const DEVA_LOCALITY = new RegExp(`(?<![\\p{L}\\p{M}\\d])(?:(?:(?:फ्लैट|मकान|प्लॉट|घर)\\s*)?[०-९0-9]{1,4}[,\\s]+)?(?:(?:${DEVA}+\\s+){1,3}${DEVA_SUFFIX}|${DEVA}{2,}${DEVA_SUFFIX})(?![\\p{L}\\p{M}])(?:\\s?[,;،]\\s?${DEVA}{2,}(?:\\s${DEVA}{2,})?){0,2}`, 'gu');
+// Comma-less house address ("Flat 12 Example Apartments Testville"): house keyword + number, then 2-5 capitalised words.
+const HOUSE_INLINE = /(?<![\p{L}\p{M}\d])(?:Flat|House|H\.?\s?No\.?)\s*#?\d{1,4}[A-Za-z]?(?:[/-]\d{1,4})?\s*,?\s+(?:\p{Lu}[\p{L}\p{M}.']{2,}\s*,?\s*){2,5}/gu;
+// A single place word with a glued suffix ("Samplepur") counts only beside a number, because city names alone are kept.
+const GLUED_LOCALITY = /\p{Lu}[\p{L}\p{M}]{2,}(?:nagar|pur|halli|palli|puram|ganj|wadi|bagh)(?![\p{L}])/u;
+const SECTOR_START = /^\s*Sector\s+\d{1,3}\b/u;
+const HOUSE_LINE_ONLY = /^\s*(?:(?:flat|house|door|plot|h\.?\s?no\.?)\s*)?(?:no\.?\s*)?#?\d{1,4}[A-Za-z]?(?:[/-]\d{1,4})?,?\s*$/iu;
+const LOCALITY_NAME = new RegExp(`(?:\\p{Lu}[\\p{L}\\p{M}.']*\\s+){1,4}${LOCALITY_SUFFIX}(?![\\p{L}])`, 'u');
+// A landmark needs a place noun ("Near Example Temple"), so benefit wording such as "Near Miss Events" or "Behind Ear
+// Procedures" stays. Plot and shop numbers need a second address signal ("Plot 3, Lane Surgery" is not an address).
+const LANDMARK = /(?:^|[\s,(])(?:Near|Opp\.?|Opposite|Behind|Beside|Nr\.?)\s+(?:The\s+)?(?:\p{Lu}[\p{L}\p{M}.']*\s+){0,3}(?:Temple|Mall|Park|School|Church|Mosque|Masjid|Station|Stop|Circle|Signal|Market|Bank|Chowk|College|Gate|Hospital|Stadium)(?![\p{L}])/u;
+const HOUSE_KEYWORD_START = /^\s*(?:flat|house|door|h\.?\s?no)\b[^,]*\d/iu;
+const WEAK_HOUSE_START = /^\s*(?:plot|shop)\b[^,]*\d/iu;
+const HOUSE_NUMBER_ONLY = /^\s*#?\d{1,4}[A-Za-z]?(?:[/-]\d{1,4})?\s*$/u;
+const FRAGMENT_PIECE_MAX = 80;
+
+function redactFragmentRun(text, swap) {
+  const parts = text.split(/([,;])/u);
+  const pieces = [];
+  for (let index = 0; index < parts.length; index += 2) pieces.push({ index, text: parts[index] });
+  const likeAt = piece => piece.text.trim() !== '' && piece.text.length <= FRAGMENT_PIECE_MAX && !hasPolicyWording(piece.text) && !PUBLIC_ADDRESS_LINE.test(piece.text)
+    && isAddressLike(piece.text.replace(/[–—-]+(?=\s|$)/gu, ' '));
+  const triggerAt = piece => LOCALITY_NAME.test(piece.text) || LANDMARK.test(piece.text) || HOUSE_KEYWORD_START.test(piece.text);
+  let output = '';
+  let cursor = 0;
+  let runStart = 0;
+  while (runStart < pieces.length) {
+    if (!likeAt(pieces[runStart])) { runStart += 1; continue; }
+    let runEnd = runStart;
+    while (runEnd + 1 < pieces.length && likeAt(pieces[runEnd + 1])) runEnd += 1;
+    const run = pieces.slice(runStart, runEnd + 1);
+    const qualifies = run.some(triggerAt) || (run.length >= 3 && WEAK_HOUSE_START.test(run[0].text)) || (run.length >= 3 && HOUSE_NUMBER_ONLY.test(run[0].text) && run.slice(1).some(piece => /\p{L}/u.test(piece.text)))
+      || (run.length >= 2 && SECTOR_START.test(run[0].text))
+      || (run.length >= 3 && run.some(piece => GLUED_LOCALITY.test(piece.text)) && run.some(piece => /\d/u.test(piece.text)));
+    if (qualifies) {
+      const startPiece = run[0];
+      const endPiece = run[run.length - 1];
+      const leading = startPiece.text.length - startPiece.text.trimStart().length;
+      const offset = parts.slice(0, startPiece.index).join('').length;
+      const span = parts.slice(startPiece.index, endPiece.index + 1).join('');
+      const trailing = endPiece.text.length - endPiece.text.trimEnd().length;
+      output += text.slice(cursor, offset + leading) + swap('ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS', span.slice(leading, span.length - trailing));
+      cursor = offset + span.length - trailing;
+    }
+    runStart = runEnd + 1;
+  }
+  return output + text.slice(cursor);
+}
+
+function redactAddressFragments(value, swap) {
+  if (!/\p{Lu}/u.test(value)) return value;
+  // Public wording (hospital, insurer) is judged piece by piece inside the run, so "Admitted at Sample Hospital,
+  // Sample Nagar, Testville" keeps the hospital and loses the locality. Table cells are judged one by one.
+  // A cell that opens with public wording ("Hospital Address", "Registered Office: Example Insurance Ltd") is a public
+  // address and stays whole.
+  const opensPublic = cell => PUBLIC_ADDRESS_LINE.test(cell.trim().split(/\s+/u).slice(0, 2).join(' '));
+  return value.split('\n').map(line => (opensPublic(line) ? line : line.split('|').map(cell => (opensPublic(cell) ? cell : redactFragmentRun(cell, swap))).join('|'))).join('\n');
+}
+
+// A locality name inside a sentence ("resides at Sample Nagar, Testville and ...") or on a long comma-less line.
+function redactInlineLocalities(value, swap) {
+  const sw = match => swap('ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS', match);
+  return value.split('\n').map(line => {
+    if (PUBLIC_ADDRESS_LINE.test(line.trim().split(/\s+/u).slice(0, 2).join(' '))) return line;
+    let out = line.replace(INLINE_LOCALITY, sw);
+    out = out.replace(HOUSE_INLINE, match => sw(match.trimEnd()) + match.slice(match.trimEnd().length));
+    out = outsideTokens(out, segment => segment.replace(DEVA_LOCALITY, sw));
+    if (!/\p{Lu}/u.test(out.replace(/<[A-Z]+_\d+>/gu, ''))) out = outsideTokens(out, segment => segment.replace(LOWER_LOCALITY, sw));
+    return out;
+  }).join('\n');
+}
+
+// A bare house number on its own line directly above a redacted address belongs to it.
+function absorbHouseNumberLines(text, swap) {
+  const lines = text.split('\n');
+  for (let index = 0; index + 1 < lines.length; index += 1) {
+    if (lines[index].length < 40 && HOUSE_LINE_ONLY.test(lines[index]) && /^\s*<ADDRESS_\d+>/u.test(lines[index + 1])) {
+      lines[index] = swap('ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS', lines[index].trim());
+    }
   }
   return lines.join('\n');
 }
@@ -1390,7 +1492,10 @@ function redactText(value, state) {
   const labelled = absorbAddressTails(outsideTokens(lined, segment => redactSegment(segment, state, reasons)));
   // Unlabelled addresses run after labelled ones, so a labelled address keeps its own tail rule; a second pass lets a
   // masked phone line after an unlabelled address go too.
-  const text = absorbAddressTails(outsideTokens(labelled, segment => redactUnlabelledAddresses(segment, swap)));
+  const unlabelled = outsideTokens(labelled, segment => redactUnlabelledAddresses(segment, swap));
+  const fragments = outsideTokens(unlabelled, segment => redactAddressFragments(segment, swap));
+  const inline = outsideTokens(fragments, segment => redactInlineLocalities(segment, swap));
+  const text = absorbHouseNumberLines(absorbAddressTails(inline), swap);
   return { text, reasons: [...reasons].sort() };
 }
 
