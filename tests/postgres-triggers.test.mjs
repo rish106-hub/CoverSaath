@@ -957,6 +957,34 @@ test('stored OCR blocks need page text and a live document, are immutable and er
   proves('source_pages_blocks_erase_on_document_erasure');
 });
 
+test('policy clauses and answers stay scoped, immutable and erase with their document', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const scope = 'policy clause must match an active document of its case and household';
+  await rejects(insert(pool, 'policy_clauses', { id: 'pc-foreign', household_id: b.household, case_id: b.case, document_id: a.document }), scope);
+  await rejects(insert(pool, 'policy_clauses', { id: 'pc-wrong-case', household_id: a.household, case_id: b.case, document_id: a.document }), scope);
+  await insert(pool, 'policy_clauses', { id: 'pc-1', household_id: a.household, case_id: a.case, document_id: a.document });
+  await insert(pool, 'policy_clauses', { id: 'pc-2', household_id: a.household, case_id: a.case, document_id: a.document, page: 2 });
+  proves('policy_clauses_scope_insert');
+  await rejects(pool.query("UPDATE policy_clauses SET text = 'changed' WHERE id = 'pc-1'"), 'policy clauses are immutable; erasure deletes them');
+  assert.equal((await pool.query("UPDATE policy_clauses SET text = 'x' WHERE false")).rowCount, 0, 'row-level: no row, no fire');
+  proves('policy_clauses_immutable');
+
+  const answerScope = 'policy answer must match its case and household';
+  await rejects(insert(pool, 'policy_answers', { id: 'pa-wrong', household_id: b.household, case_id: a.case, requested_by_adult_id: b.adult }), answerScope);
+  await insert(pool, 'policy_answers', { id: 'pa-1', household_id: a.household, case_id: a.case, requested_by_adult_id: a.adult, document_ids_json: JSON.stringify([a.document]) });
+  await insert(pool, 'policy_answers', { id: 'pa-other', household_id: a.household, case_id: a.case, requested_by_adult_id: a.adult, document_ids_json: '["some-other-document"]' });
+  proves('policy_answers_scope_insert');
+  await rejects(pool.query("UPDATE policy_answers SET question = 'changed' WHERE id = 'pa-1'"), 'policy answers are immutable; erasure deletes them');
+  proves('policy_answers_immutable');
+
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['quarantined', a.document]);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM policy_clauses')).n, 2, 'quarantine is not erasure');
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['deletion_requested', a.document]);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM policy_clauses')).n, 0);
+  assert.deepEqual((await pool.query('SELECT id FROM policy_answers ORDER BY id')).rows.map(row => row.id), ['pa-other'], 'only answers citing the document go');
+  proves('policy_evidence_erase_on_document_erasure');
+});
+
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const catalog = (await pool.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname")).rows.map(row => row.tgname);

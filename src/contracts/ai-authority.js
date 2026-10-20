@@ -51,6 +51,10 @@ export const AI_AUTHORITY_MATRIX = freezeAll({
     // PolicyStructuringRepository.commitStructuring, never above extracted_unverified or conflicting.
     policy_structuring_extract: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-structuring', recordsParameterObservations: true },
     policy_structuring_reconcile: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-structuring', recordsParameterObservations: false },
+    // Evidence-first question tasks (ADR 0008): findings with clause ids and quotes, capped at extracted_unverified.
+    // They never record parameter observations; answers are cited conditional evidence, not decisions.
+    policy_evidence_investigate: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-evidence', recordsParameterObservations: false },
+    policy_evidence_override_sweep: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-evidence', recordsParameterObservations: false },
   },
 
   // Owner of every coverage-analysis workflow task (responsibility-matrix.js RUNTIME_RESPONSIBILITIES).

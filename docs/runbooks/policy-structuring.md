@@ -74,3 +74,10 @@ observations they wrote. Revoking the Sarvam or upload grant erases pages and bl
 
 Server logs carry event names and codes only (`policy_structuring_failed` with `code`). Audit rows carry counts.
 Never log prompts, provider responses, quotes or page text.
+
+## Database location move (DATABASE_LEGACY_PATH)
+
+Older builds resolved `DATABASE_PATH=.local/knowvia.sqlite` to `.local/.local/knowvia.sqlite`. The path now resolves
+to `<cwd>/.local/knowvia.sqlite`. If both the legacy file exists and the target does not, startup fails with
+`DATABASE_LEGACY_PATH`. Nothing is moved automatically. With the server stopped, move the database and its
+`-wal` and `-shm` files by hand from `.local/.local/` to `.local/`, then start again.

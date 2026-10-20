@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -70,7 +70,7 @@ export const expectedTables = Object.freeze([
   'coverage_parameter_registry_pins', 'coverage_parameter_records',
   'coverage_parameter_acquisitions', 'coverage_parameter_observations',
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
-  'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs',
+  'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs', 'policy_clauses', 'policy_answers',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -192,11 +192,18 @@ export function purgeExpiredIdempotencyKeys(database, { at = new Date().toISOStr
 export function openDatabase({ path = '.local/knowvia.sqlite', migrate = true } = {}) {
   const inMemory = path === ':memory:';
   const databaseRoot = resolve('.local');
-  const resolvedPath = inMemory ? ':memory:' : resolve(databaseRoot, path);
+  // A relative path resolves against the working directory (so '.local/x.sqlite' is <cwd>/.local/x.sqlite) and must
+  // still lie inside .local. It was once resolved against .local itself, which produced .local/.local/.
+  const resolvedPath = inMemory ? ':memory:' : resolve(path);
   if (!inMemory) {
     const relativeToRoot = relative(databaseRoot, resolvedPath);
     if (relativeToRoot.startsWith('..') || relativeToRoot === '' || relativeToRoot.startsWith('../')) {
       throw new Error('Invalid database path: path must be within .local');
+    }
+    // Data from the old resolution is never moved automatically: refuse to start a second, empty database beside it.
+    const legacyPath = resolve(databaseRoot, '.local', relativeToRoot);
+    if (!existsSync(resolvedPath) && existsSync(legacyPath)) {
+      throw Object.assign(new Error('A database exists at the legacy location .local/.local/. Move it (with its -wal and -shm files) to the configured path while the server is stopped; see docs/runbooks/policy-structuring.md.'), { code: 'DATABASE_LEGACY_PATH' });
     }
     mkdirSync(dirname(resolvedPath), { recursive: true, mode: 0o700 });
   }

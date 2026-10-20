@@ -72,3 +72,16 @@ test('scoreCriticalFields classifies every critical outcome and never counts a c
   assert.equal(totals.wrong, 1);
   assert.equal(totals.correct, 2);
 });
+
+test('S0: a single duration inside a clause matches; several durations never do', () => {
+  assert.equal(readingMatches('30 days', reading('Initial waiting Period (Code-Excl03): 30 days from the first policy start date')), true);
+  assert.equal(readingMatches('3 Years', reading('Waiting period 36 / 24 / 12 months')), false);
+  assert.equal(readingMatches('36 months', reading('36 / 24 months')), false);
+});
+
+test('S0: golden unknown scores correct_unknown without readings and wrong with one', () => {
+  const g = { co_payment: { value: 'unknown', page: null, confirmed: true } };
+  assert.equal(scoreCriticalFields(g, { parameters: [] }).fields.co_payment.outcome, 'correct_unknown');
+  const withReading = { parameters: [{ key: 'd.co_pay_general', state: 'extracted_unverified', readings: [reading('10%', { selected: true })] }] };
+  assert.equal(scoreCriticalFields(g, withReading).fields.co_payment.outcome, 'wrong');
+});

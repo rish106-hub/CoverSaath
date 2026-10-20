@@ -44,7 +44,7 @@ test('every rejection reason, with no text in the rejection', () => {
     page_mismatch: { ...sum, page: 3 },
     block_not_in_chunk: { ...sum, block_index: 7 },
     authority_state: { ...sum, state: 'proven' },
-    ambiguous_target: { ...sum, proposed: proposal.proposed },
+    ambiguous_target: { ...base, value: 'x', evidence_quote: 'Schedule', proposed: { proposed_key: '', category: '', label: '' } },
     invalid_proposed_key: { ...proposal, proposed: { ...proposal.proposed, proposed_key: 'Bad-Key' } },
     invalid_category: { ...proposal, proposed: { ...proposal.proposed, category: 'z' } },
     value_missing: { ...sum, value: '' },
@@ -163,4 +163,26 @@ test('model confidence and rationale are kept as bounded review notes only', () 
   assert.equal(item.note.rationale.length, 300);
   assert.equal(item.state, 'extracted_unverified');
   assert.equal(run([{ ...sum, confidence: 'certain' }]).accepted[0].note.confidence, null);
+});
+
+test('S2: exactly one target per item', () => {
+  // Valid registry key plus a filled proposal: the registry reading wins, the proposal is dropped and counted.
+  const both = run([{ ...sum, proposed: proposal.proposed }]);
+  assert.equal(both.accepted[0].parameterKey, 'd.sum_insured');
+  assert.equal(both.proposals.length, 0);
+  assert.equal(both.accepted[0].note.proposalDroppedRegistryMatch, true);
+  // Registry key plus an all-empty proposed object counts as registry only.
+  const emptyProposed = run([{ ...sum, proposed: { proposed_key: '', category: '', label: '' } }]);
+  assert.equal(emptyProposed.accepted.length, 1);
+  assert.equal(emptyProposed.accepted[0].note.proposalDroppedRegistryMatch, undefined);
+  // A forbidden key with a valid proposal yields a proposal and never a reading of the forbidden key.
+  const forbidden = run([{ ...proposal, registry_key: 'a.contract_and_member_identifiers' }]);
+  assert.equal(forbidden.accepted.length, 0);
+  assert.equal(forbidden.proposals.length, 1);
+  // An unknown key with a valid proposal also stands as a proposal.
+  assert.equal(run([{ ...proposal, registry_key: 'd.not_a_key' }]).proposals.length, 1);
+  // A forbidden key with an invalid proposal keeps the registry rejection reason.
+  assert.equal(reasonOf({ ...sum, registry_key: 'a.contract_and_member_identifiers', proposed: { proposed_key: 'Bad-Key', category: 'e', label: 'x' } }), 'model_extraction_not_permitted');
+  // Neither target stays ambiguous.
+  assert.equal(reasonOf({ ...base, value: 'x', evidence_quote: 'Schedule' }), 'ambiguous_target');
 });

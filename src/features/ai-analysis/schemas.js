@@ -1,5 +1,5 @@
 import { assertModelTask } from './responsibility-matrix.js';
-import { STRUCTURING_EXTRACT_TASK, STRUCTURING_OUTPUT_SCHEMAS, isStructuringTask } from './structuring-contract.js';
+import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, STRUCTURING_EXTRACT_TASK, STRUCTURING_OUTPUT_SCHEMAS, isStructuringTask } from './structuring-contract.js';
 
 const SOURCE_STATES = Object.freeze(['known', 'unknown', 'conflict']);
 const FACT_STATES = Object.freeze(['known', 'unknown', 'conflict']);
@@ -212,8 +212,14 @@ function rejectUnsupportedClaims(task, output, input) {
 const STRUCTURING_PAYLOAD_KEYS = Object.freeze({
   [STRUCTURING_EXTRACT_TASK]: ['chunks', 'registry'],
   policy_structuring_reconcile: ['groups'],
+  // Evidence-first questions (ADR 0008): `questions` holds the single question object, `checklist` the clause kinds.
+  [EVIDENCE_INVESTIGATE_TASK]: ['questions', 'checklist', 'clauses'],
+  [EVIDENCE_SWEEP_TASK]: ['questions', 'findings', 'clauses'],
 });
-const STRUCTURING_OUTPUT_LISTS = Object.freeze({ [STRUCTURING_EXTRACT_TASK]: 'items', policy_structuring_reconcile: 'conflicts' });
+const STRUCTURING_OUTPUT_LISTS = Object.freeze({
+  [STRUCTURING_EXTRACT_TASK]: 'items', policy_structuring_reconcile: 'conflicts',
+  [EVIDENCE_INVESTIGATE_TASK]: 'findings', [EVIDENCE_SWEEP_TASK]: 'overrides',
+});
 const MAX_STRUCTURING_OUTPUT_ENTRIES = 2_000;
 
 function validateStructuringInput(task, input) {

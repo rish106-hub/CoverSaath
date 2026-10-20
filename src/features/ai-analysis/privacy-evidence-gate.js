@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 // closed on ID-shaped cells and whole-cell dates. Headers split over two rows are
 // read as one header; tab-separated tables (two or more tab rows) are refused as
 // restricted, because collapsing tabs loses the cell boundaries a header needs.
-export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v4';
+export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v5';
 export const EVIDENCE_DATA_CLASSES = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
 // The consent-scope recipient that names the live model provider. A document's
 // derive scope must name this exact recipient before its evidence may be sent
@@ -288,6 +288,27 @@ const CARD_SHAPES = Object.freeze([[4, 4, 4, 4], [4, 4, 4, 4, 1], [4, 4, 4, 4, 2
 const CARD_LABEL = /(?:card|credit|debit|visa|master\s?card|rupay|amex|american\s+express|maestro|diners|discover|cvv|cvc|expiry|valid\s+thru|exp\.?\s*date)/i;
 // Major networks (Mastercard 2/5, Amex/Diners/JCB 3, Visa 4, Discover/RuPay/Maestro 6, RuPay 8).
 const CARD_NETWORK_PREFIX = /^[2-68]/;
+// Identifier labels (policy, certificate, member, proposal, receipt, claim, customer, UIN, e-card + no/number/id).
+// A Luhn-valid run behind one of these is a policy-style identifier: minimised, never mistaken for a payment card.
+const ID_LABEL = /\b(?:(?:policy|certificate|member(?:ship)?|proposal|receipt|claim|customer|e-?card|uin)\s*(?:no\.?|number|num|id|#)|uin)\b\s*[:.\-#]*\s*$/i;
+const LABEL_WINDOW = 48;
+// Prefix and length of real card networks. A lone unlabelled Luhn-valid run is rejected only when it has one of
+// these shapes; any other 13-19 digit run (a 19-digit policy number, say) is minimised instead.
+const NETWORK_SHAPES = Object.freeze([
+  [/^4/, [13, 16, 19]], [/^(?:5[1-5]|2(?:2[2-9]|[3-6]\d|7[01]|720))/, [16]], [/^3[47]/, [15]], [/^3(?:0[0-5]|[68])/, [14]],
+  [/^35/, [16, 17, 18, 19]], [/^6(?:011|5|4[4-9])/, [16, 17, 18, 19]], [/^(?:60|81|82|508)/, [16]],
+]);
+const hasNetworkShape = digits => NETWORK_SHAPES.some(([prefix, lengths]) => prefix.test(digits) && lengths.includes(digits.length));
+
+// Label context of a digit run: `card` is an explicit payment-card label, `identifier` an ID label.
+// "e-card" and "health card" name insurer cards, so they are removed before the card-label test.
+function runLabels(value, index) {
+  const prefix = value.slice(Math.max(0, index - LABEL_WINDOW), index);
+  return {
+    card: CARD_LABEL.test(prefix.replace(/\b(?:e-?card|health\s+card)\b/gi, ' ')),
+    identifier: ID_LABEL.test(prefix),
+  };
+}
 
 function isAscendingYears(groups) {
   if (groups.length < 2 || groups.some(group => !/^(?:19|20)\d\d$/.test(group))) return false;
@@ -311,10 +332,17 @@ function isTableLike(groups) {
 // 'card'      : Luhn-valid card-shaped number -> the value is rejected.
 // 'ambiguous' : Luhn-valid card-shaped window in a table-like run -> the run is
 //               minimised to a placeholder instead of rejected.
-function cardClassification(groups, labelled) {
+function cardClassification(groups, labelled, identifierLabelled = false) {
   const digits = groups.join('');
+  // An identifier label downgrades an unlabelled card shape to minimisation; a card label always wins.
+  const unlabelledVerdict = identifierLabelled ? 'ambiguous' : 'card';
   if (groups.length === 1) {
-    return digits.length >= 13 && digits.length <= 19 && (labelled || CARD_NETWORK_PREFIX.test(digits)) && luhnValid(digits) ? 'card' : null;
+    if (digits.length < 13 || digits.length > 19 || !luhnValid(digits)) return null;
+    if (labelled) return 'card';
+    // Unlabelled lone run: a real network shape is rejected unless an identifier label explains it; anything
+    // else with a card-like prefix could be a policy number and is minimised.
+    if (hasNetworkShape(digits)) return unlabelledVerdict;
+    return CARD_NETWORK_PREFIX.test(digits) ? 'ambiguous' : null;
   }
   if (labelled && digits.length >= 13 && digits.length <= 19 && luhnValid(digits)) return 'card';
   const lengths = groups.map(group => group.length);
@@ -325,7 +353,7 @@ function cardClassification(groups, labelled) {
       const window = groups.slice(start, end);
       const candidate = window.join('');
       if (isAscendingYears(window) || !(labelled || CARD_NETWORK_PREFIX.test(candidate)) || !luhnValid(candidate)) continue;
-      return isTableLike(groups) && !labelled ? 'ambiguous' : 'card';
+      return isTableLike(groups) && !labelled ? 'ambiguous' : labelled ? 'card' : unlabelledVerdict;
     }
   }
   return null;
@@ -334,8 +362,8 @@ function cardClassification(groups, labelled) {
 function containsPaymentCard(value) {
   for (const match of value.matchAll(DIGIT_RUN)) {
     const groups = match[2].split(GROUP_SEPARATOR);
-    const labelled = CARD_LABEL.test(value.slice(Math.max(0, match.index - 48), match.index));
-    if (cardClassification(groups, labelled) === 'card') return true;
+    const labels = runLabels(value, match.index);
+    if (cardClassification(groups, labels.card, labels.identifier) === 'card') return true;
   }
   return false;
 }
@@ -1123,11 +1151,12 @@ function redactSegment(segment, state, reasons) {
   value = value.replace(BRACKETED_PHONE, (match, plus, run) => (
     isIndianPhone(plus, run.split(/\D+/).filter(Boolean)) ? swap('PHONE', 'DIRECT_IDENTIFIER_PHONE', match) : match
   ));
-  value = value.replace(DIGIT_RUN, (match, plus, run) => {
+  value = value.replace(DIGIT_RUN, (match, plus, run, offset, whole) => {
     const groups = run.split(GROUP_SEPARATOR);
     if (isIndianPhone(plus, groups)) return swap('PHONE', 'DIRECT_IDENTIFIER_PHONE', match);
     if (isGovernmentId(groups)) return `${plus}${swap('GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID', run)}`;
-    if (cardClassification(groups, false)) return `${plus}${swap('NUMBER', 'DIRECT_IDENTIFIER_CARD_LIKE_NUMBER', run)}`;
+    const labels = runLabels(whole, offset);
+    if (cardClassification(groups, labels.card, labels.identifier)) return `${plus}${swap('NUMBER', 'DIRECT_IDENTIFIER_CARD_LIKE_NUMBER', run)}`;
     return match;
   });
   return value;

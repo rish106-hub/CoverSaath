@@ -118,6 +118,7 @@ export const CRITICAL_FIELD_KEYS = Object.freeze({
 
 const PLAIN_NUMBER = /^\s*\d[\d,]*(?:\.\d+)?\s*$/;
 const DATE_FRAGMENT = /\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b|\b\d{1,2}[\s-][a-z]{3}[a-z]*\.?[\s-]\d{4}\b/gi;
+const DURATION_FRAGMENT = /\d+(?:\.\d+)?\s*\)?\s*(?:days?|months?|years?|yrs?)\b/gi;
 const tokens = text => String(text ?? '').normalize('NFKC').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 
 // Golden type from printed markers (validator inferValueType); a bare number is `number`, anything else text.
@@ -134,6 +135,12 @@ function typedReadings(type, reading) {
   const whole = normalizeValue(type, text);
   if (whole) out.push(whole);
   if (type === 'date') for (const [fragment] of text.matchAll(DATE_FRAGMENT)) out.push(normalizeValue('date', fragment));
+  // A clause value ("... Code-Excl03: 30 days ...") holds the figure inside prose. A fragment counts only when
+  // it is the single duration printed; several durations are ambiguous and never match.
+  if (type === 'duration') {
+    const fragments = [...text.matchAll(DURATION_FRAGMENT)];
+    if (fragments.length === 1) out.push(normalizeValue('duration', fragments[0][0]));
+  }
   return out.filter(Boolean);
 }
 
@@ -175,7 +182,7 @@ export function readingMatches(expected, reading) {
 
 /**
  * Critical-field outcome per owner-verified golden field, for one review result (the structuring GET body):
- * correct | conflicting_with_correct | conflicting_without_correct | wrong | missed | unknown_by_design.
+ * correct | correct_unknown | conflicting_with_correct | conflicting_without_correct | wrong | missed | unknown_by_design.
  * `wrong` is a value presented as extracted that does not match; it is the outcome that blocks acceptance.
  */
 export function scoreCriticalFields(goldenFields, review, { modelForbiddenKeys = [] } = {}) {
@@ -188,7 +195,9 @@ export function scoreCriticalFields(goldenFields, review, { modelForbiddenKeys =
     const parameter = byKey.get(key);
     const readings = parameter?.readings ?? [];
     let outcome;
-    if (!readings.length) outcome = forbidden.has(key) ? 'unknown_by_design' : 'missed';
+    const expectsUnknown = String(expected?.value ?? '').trim().toLowerCase() === 'unknown';
+    if (!readings.length) outcome = expectsUnknown ? 'correct_unknown' : forbidden.has(key) ? 'unknown_by_design' : 'missed';
+    else if (expectsUnknown) outcome = 'wrong';
     else if (parameter.state === 'conflicting') outcome = readings.some(reading => readingMatches(expected.value, reading)) ? 'conflicting_with_correct' : 'conflicting_without_correct';
     else {
       const asserted = readings.find(reading => reading.selected) ?? readings.at(-1);
