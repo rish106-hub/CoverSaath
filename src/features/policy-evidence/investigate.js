@@ -210,6 +210,8 @@ const entryOf = (finding, clauseById) => ({
 
 const EXCLUSION_TEXT = Object.freeze({
   over_document_limit: 'the case has more authorised documents than one question can read',
+  superseded_version: 'a newer version of the same document exists',
+  not_named: 'the request did not name them',
   ocr_incomplete: 'their stored text is incomplete',
   ocr_unavailable: 'their stored text is unavailable',
   not_found: 'they could not be found',
@@ -240,9 +242,10 @@ export function assembleAnswer({ question, findings, overrides, context, checkli
   for (const kind of checklist) {
     if (!context.clauses.some(clause => clause.kind === kind)) unknowns.push(`No ${kind} clause was found in the policy text that was read.`);
   }
-  // Document-to-policy association is not established (ADR 0007 is blocked), so several documents are never merged silently.
+  // Document-to-policy association is not established (ADR 0007 is blocked); callers read several documents together
+  // only when the requester names them, and that grouping is never presented as verified.
   const documents = new Set(context.clauses.map(clause => clause.documentId));
-  if (documents.size > 1) unknowns.push(`${documents.size} documents were read together. Which policy each belongs to is not established, so facts from different documents may describe different policies.`);
+  if (documents.size > 1) unknowns.push(`${documents.size} documents were read together as named in the request. That they belong to one policy is not verified, so facts from different documents may describe different policies.`);
   // Nothing authorised is left out silently: every excluded document and unread clause is counted here.
   for (const { reason, count } of completeness.documentsExcluded) {
     unknowns.push(`${count} authorised document(s) were not read because ${EXCLUSION_TEXT[reason]}. Evidence in them is not reflected in this answer.`);

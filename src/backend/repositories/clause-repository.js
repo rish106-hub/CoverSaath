@@ -129,11 +129,17 @@ export class ClauseRepository {
   }
 
   /** Stores an immutable answer. A replayed idempotency key with the same request digest returns the stored one. */
-  saveAnswer({ id = `answer-${randomUUID()}`, householdId, caseId, requestedByAdultId, idempotencyKey, requestDigest, question, answer, consentCheck = null }) {
+  saveAnswer({ id = `answer-${randomUUID()}`, householdId, caseId, requestedByAdultId, idempotencyKey, requestDigest, question, answer, consentCheck = null, access }) {
     text(householdId, 'householdId'); text(caseId, 'caseId'); text(requestedByAdultId, 'requestedByAdultId');
     text(idempotencyKey, 'idempotencyKey', 128); text(requestDigest, 'requestDigest', 64); text(question, 'question', 2000);
     if (!ANSWER_STATES.includes(answer?.state)) throw invalid('Answer state is invalid.');
-    const documentIds = [...new Set(answer.sources.map(source => source.documentId).concat(answer.documentIds ?? []))];
+    if (Object.hasOwn(answer, 'access')) throw invalid('Answer must not carry access metadata.');
+    // Access metadata lets reads re-check the question grant later (consent expiry). It is stored with the answer and
+    // never returned inside it.
+    text(access?.consentGrantId, 'access.consentGrantId'); text(access?.subjectAdultId, 'access.subjectAdultId');
+    if (!Array.isArray(access.documentIds) || !access.documentIds.length || access.documentIds.length > 20) throw invalid('access.documentIds is invalid.');
+    access.documentIds.forEach(documentId => text(documentId, 'access.documentIds'));
+    const documentIds = [...new Set(answer.sources.map(source => source.documentId).concat(answer.documentIds ?? [], access.documentIds))];
     return this.#atomic(() => {
       const existing = this.database.prepare(`SELECT * FROM policy_answers WHERE household_id = ? AND case_id = ? AND idempotency_key = ?`)
         .get(householdId, caseId, idempotencyKey);
@@ -153,13 +159,15 @@ export class ClauseRepository {
         (id, household_id, case_id, requested_by_adult_id, idempotency_key, request_digest, question, state, document_ids_json, answer_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id, householdId, caseId, requestedByAdultId, idempotencyKey, requestDigest, question, answer.state,
-          JSON.stringify(documentIds), JSON.stringify(answer), this.clock().toISOString());
+          JSON.stringify(documentIds), JSON.stringify({ ...answer, access: { consentGrantId: access.consentGrantId, subjectAdultId: access.subjectAdultId, documentIds: [...access.documentIds] } }),
+          this.clock().toISOString());
       return { replayed: false, ...this.#answer(this.database.prepare('SELECT * FROM policy_answers WHERE id = ?').get(id)) };
     });
   }
 
   #answer(row) {
-    return { answerId: row.id, caseId: row.case_id, createdAt: row.created_at, answer: JSON.parse(row.answer_json) };
+    const { access = null, ...answer } = JSON.parse(row.answer_json);
+    return { answerId: row.id, caseId: row.case_id, createdAt: row.created_at, answer, access };
   }
 
   /** Stored answer for an idempotency key, so a replay is served before any paid work. Null when none. */
