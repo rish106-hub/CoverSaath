@@ -11,7 +11,9 @@ import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
 import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW, createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
-import { createCoverageAnalysisSourceInput } from '../src/features/coverage-analysis/source-input.js';
+import { createCoverageAnalysisSourceInput as buildSourceInput } from '../src/features/coverage-analysis/source-input.js';
+// The gate needs an explicit identifier list; these tests have no household identifiers.
+const createCoverageAnalysisSourceInput = (caseRecord, pages, options = {}) => buildSourceInput(caseRecord, pages, { knownIdentifiers: [], ...options });
 import { auditActions, liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 import { seedParameterWorld } from './support/parameter-fixtures.mjs';
 
@@ -115,8 +117,11 @@ test('K2: a following table row with a relationship word or a name next to a dat
 });
 
 test('K2: the line after a matched line is never included when it carries an identifier placeholder', () => {
-  const sent = sentText(createCoverageAnalysisSourceInput(caseRecord, [page('Room rent limit\nlimit 5000 for <NAME_1>')]));
+  const known = [{ kind: 'NAME', value: 'Kavya Placeholder' }];
+  const sent = sentText(createCoverageAnalysisSourceInput(caseRecord, [page('Room rent limit\nlimit 5000 for Kavya Placeholder')], { knownIdentifiers: known }));
   assert.equal(sent, 'Room rent limit');
+  // Raw page text that already carries placeholder syntax is refused, so it cannot pose as a gate-minted token.
+  assert.throws(() => createCoverageAnalysisSourceInput(caseRecord, [page('Room rent limit\nlimit 5000 for <NAME_1>')]), { code: 'SOURCE_PACK_REQUIRED' });
 });
 
 // ---------------------------------------------------------------------------

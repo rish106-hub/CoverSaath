@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
@@ -276,4 +276,33 @@ test('B4: revoking the question grant erases clauses, FTS rows and answers', asy
   const after = await ask(app, s, { key: randomUUID() });
   assert.ok([403, 409].includes(after.status));
   assert.equal(app.requests.length, 2, 'no new provider call after revocation');
+});
+
+test('v9 review: the stored question and answer carry the gated question, never the raw one; revocation erases the row', async t => {
+  const app = await startApp(t);
+  const s = await scenario(app);
+  const question = `What is the room rent limit for ${OWNER_NAME}, mobile 98765 43210?`;
+  const answered = await ask(app, s, { question });
+  assert.equal(answered.status, 201, JSON.stringify(answered.data));
+  const stored = app.database.prepare('SELECT question, answer_json FROM policy_answers').get();
+  for (const text of [stored.question, stored.answer_json, JSON.stringify(answered.data)]) {
+    assert.ok(!text.includes('98765') && !text.includes('43210') && !text.includes('Ishaan'), text);
+  }
+  assert.match(stored.question, /<PHONE_\d+>/);
+  assert.ok(app.requests.every(request => !request.prompt.includes('98765')));
+  const revoked = await app.call(`/api/v1/consents/${s.questionGrantId}/revoke`, { method: 'POST', token: s.token, body: {} });
+  assert.ok([200, 201, 204].includes(revoked.status));
+  assert.equal(rows(app, 'policy_answers'), 0, 'the question column is erased with its row');
+});
+
+test('v9 re-review: the stored request digest is keyed, not a plain hash of the raw question', async t => {
+  const app = await startApp(t);
+  const s = await scenario(app);
+  const question = 'What is the room rent limit?';
+  const key = randomUUID();
+  assert.equal((await ask(app, s, { question, key })).status, 201);
+  const stored = app.database.prepare('SELECT request_digest FROM policy_answers').get().request_digest;
+  const plain = named => createHash('sha256').update(JSON.stringify([s.caseId, question, s.questionGrantId, named])).digest('hex');
+  for (const named of [null, undefined, []]) assert.notEqual(stored, plain(named), 'an unsalted hash of the question can be confirmed by guessing');
+  assert.equal((await ask(app, s, { question, key })).status, 200, 'a replay in the same process still matches');
 });

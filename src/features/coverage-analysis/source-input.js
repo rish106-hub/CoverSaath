@@ -201,7 +201,10 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryV
   // Unknown registry versions throw here: the run never pins a registry it cannot resolve.
   const registry = getPolicyParameterRegistry(registryVersion);
   const matchers = parameterMatchers(registry);
-  const gateOptions = knownIdentifiers === undefined ? {} : { knownIdentifiers };
+  // The household's identifier list is required (an empty list means none): without it every page would fail the gate and
+  // be reported as unusable text, hiding the real cause.
+  if (!Array.isArray(knownIdentifiers)) throw Object.assign(new Error('Known identifiers are required to build a source pack.'), { code: 'PRIVACY_GATE_MALFORMED', statusCode: 422 });
+  const gateOptions = { knownIdentifiers };
 
   const excluded = [];
   const unmatched = [];
@@ -213,7 +216,7 @@ export function createCoverageAnalysisSourceInput(caseRecord, pages, { registryV
       const pageKeys = matchedKeys(stored.text, matchers).slice(0, MAX_KEYS_PER_PAGE);
       const selected = selectExcerpt(stored.text, matchers);
       // The excerpt is re-sanitised: dropping lines must not make the remainder restricted.
-      const excerpt = selected === null ? null : sanitizeEvidenceTextForStorage(selected, { maxBytes: SOURCE_REQUEST_LIMITS.maxSourceBytes, ...gateOptions });
+      const excerpt = selected === null ? null : sanitizeEvidenceTextForStorage(selected, { maxBytes: SOURCE_REQUEST_LIMITS.maxSourceBytes, ...gateOptions, regate: true });
       const excerptKeys = excerpt === null ? [] : matchedKeys(excerpt.text, matchers).slice(0, MAX_KEYS_PER_PAGE);
       if (excerptKeys.length === 0) {
         // Nothing on this page is allowlisted for the model. It is not sent and is

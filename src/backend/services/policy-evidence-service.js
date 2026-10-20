@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { QUESTION_CONSENT_SCOPE } from '../../contracts/policy-evidence.js';
 import { INVESTIGATION_VERSION, buildClauses, investigate } from '../../features/policy-evidence/index.js';
 import { extractFields, FIELD_NAMES } from '../../features/ai-analysis/eval-extractor.js';
@@ -42,6 +42,12 @@ const documentNames = pages => {
 };
 
 export function createPolicyEvidenceService({ services, loadKnownIdentifiers, createModelCall, env = process.env } = {}) {
+  // The request digest covers the raw question, so it is keyed: an unsalted hash would let anyone holding the database
+  // confirm a guessed question. The key is derived from the server's document key; without one (development) it is
+  // random per process, so a replay after a restart is a new request rather than a match.
+  const configuredKey = env.DOCUMENT_ENCRYPTION_KEY_BASE64 ? Buffer.from(env.DOCUMENT_ENCRYPTION_KEY_BASE64, 'base64') : null;
+  if (configuredKey && configuredKey.length < 32) throw coded('POLICY_EVIDENCE_CONFIG_INVALID', 'The document encryption key must decode to at least 32 bytes.', 500);
+  const digestKey = createHmac('sha256', configuredKey ?? randomBytes(32)).update('policy-answer-request-digest-v1').digest();
   if (!services?.clauses || typeof loadKnownIdentifiers !== 'function' || typeof createModelCall !== 'function') {
     throw new TypeError('services, loadKnownIdentifiers and createModelCall are required.');
   }
@@ -115,7 +121,7 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
       if (typeof question !== 'string' || !question.trim() || question.length > 2000) throw coded('VALIDATION_ERROR', 'question is required.', 400);
       if (typeof consentGrantId !== 'string' || !consentGrantId) throw coded('VALIDATION_ERROR', 'consentGrantId is required.', 400);
       const named = namedDocuments(requestedDocumentIds);
-      const requestDigest = createHash('sha256').update(JSON.stringify([caseId, question.trim(), consentGrantId, named])).digest('hex');
+      const requestDigest = createHmac('sha256', digestKey).update(JSON.stringify([caseId, question.trim(), consentGrantId, named])).digest('hex');
       // A replay does no paid work, but it is served only while consent is active and the evidence is still current.
       const replay = services.clauses.findAnswerByKey({ householdId, caseId, idempotencyKey, requestDigest });
       if (replay) {
@@ -209,7 +215,7 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
       const access = { consentGrantId, subjectAdultId, documentIds };
       const answer = named && named.length > 1 ? { ...result.answer, documentAssociation: { basis: 'requester_named', verified: false } } : result.answer;
       return publicAnswer(services.clauses.saveAnswer({
-        householdId, caseId, requestedByAdultId: subjectAdultId, idempotencyKey, requestDigest, question: question.trim(),
+        householdId, caseId, requestedByAdultId: subjectAdultId, idempotencyKey, requestDigest, question: result.answer.question,
         answer, access,
         // Consent and currency are both re-checked immediately before the answer is written: a newer version that
         // arrived during the model call means this answer is not stored or returned as current.
