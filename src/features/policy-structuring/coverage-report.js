@@ -188,7 +188,7 @@ export function readingMatches(expected, reading) {
 export function scoreCriticalFields(goldenFields, review, { modelForbiddenKeys = [] } = {}) {
   const byKey = new Map((review?.parameters ?? []).map(parameter => [parameter.key, parameter]));
   const forbidden = new Set(modelForbiddenKeys);
-  const fields = {};
+  const fields = Object.create(null); // keys come from golden files and model output: no prototype to pollute
   for (const [field, expected] of Object.entries(goldenFields ?? {})) {
     const key = CRITICAL_FIELD_KEYS[field];
     if (!key) continue;
