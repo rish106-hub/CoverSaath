@@ -24,6 +24,7 @@ const item = (rule, policyId) => {
     conflicting: state === 'conflicting' ? result.conflicting ?? [] : [],
     discrepancies: result.discrepancies ?? [],
     associationVerified: result.associationVerified ?? false,
+    conditional: rule.conditional === true,
     ...(rule.completion ? { completion: rule.completion } : {}),
   };
 };

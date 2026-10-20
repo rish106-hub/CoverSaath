@@ -22,7 +22,11 @@ export function separatePolicies(policies, facts, { asOf = null, memberId = null
   return deepFreeze({
     layers,
     // Coordination is never inferred. Combined confirmed cover stays null so a benefit cannot be counted twice.
-    coordination: { state: layers.length > 1 ? 'unresolved' : 'single_policy', claimOrder: null },
+    coordination: {
+      state: layers.length > 1 ? 'unresolved' : 'single_policy', claimOrder: null,
+      // A top-up only responds above an underlying threshold that is a separate, unverified fact; it is never a larger sum insured.
+      notes: layers.filter(layer => layer.kind === 'top_up' || layer.kind === 'super_top_up').map(layer => ({ policyId: layer.policyId, note: 'Responds above a deductible threshold; its limit is not added to another policy.' })),
+    },
     combinedConfirmedCover: null,
     boundary: 'Policy limits are separate contract layers: not added, ranked or treated as payable together.',
   });
