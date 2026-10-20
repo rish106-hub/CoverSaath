@@ -1,6 +1,7 @@
 // Deterministic clause builder (ADR 0008). Stored OCR blocks -> page-bounded clauses. No model, no provider call:
 // the same blocks always give the same clause ids and digests. `kind` is a keyword classification used to build the
-// question checklist; it is a retrieval aid and never a coverage decision.
+// question checklist; it is a retrieval aid and never a coverage decision. Retrieval uses it to rank, never to filter:
+// an unusual clause classified 'other' (or misclassified) must still be reachable by search.
 import { createHash } from 'node:crypto';
 import { sectionStoredDocument } from '../policy-structuring/sectioner.js';
 import { CLAUSE_KINDS, validateClause } from '../../contracts/policy-evidence.js';
@@ -12,6 +13,8 @@ const KIND_RULES = Object.freeze([
   ['schedule_fact', /\b(?:policy schedule|schedule of benefits|policy period|sum insured|premium|insured member|policy number|date of (?:commencement|issue))\b/i],
   ['limit', /\b(?:sub-?limit|capped|maximum|up to|per (?:day|claim|eye|year)|co-?pay|deductible|room rent|% of (?:the )?sum insured)\b/i],
   ['definition', /\b(?:means|shall mean|is defined as|definitions?)\b/i],
+  // Boilerplate such as "subject to the terms of this policy" is not a condition.
+  ['condition', /\b(?:subject to(?! (?:the |all )?(?:other )?(?:terms|provisions|conditions)\b)|provided (?:that|always)|on condition|conditions? (?:precedent|apply|applies)|only (?:if|when|after)|eligible only|shall be eligible|is conditional)\b/i],
   ['procedure', /\b(?:claim (?:procedure|process)|cashless|intimat|notify|grievance|reimbursement|documents? required)\b/i],
   ['benefit', /\b(?:we will (?:pay|cover|reimburse)|covered|coverage|benefit|hospitali[sz]ation|treatment)\b/i],
 ]);

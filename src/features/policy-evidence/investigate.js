@@ -5,10 +5,14 @@
 import { sanitizeEvidenceTextForStorage } from '../ai-analysis/privacy-evidence-gate.js';
 import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, INVESTIGATE_SCHEMA, STRUCTURING_INSTRUCTIONS, SWEEP_SCHEMA } from '../ai-analysis/structuring-contract.js';
 import { validateAnswer, validateFinding } from '../../contracts/policy-evidence.js';
+import { classifyClause } from './clauses.js';
 
 export const INVESTIGATION_VERSION = 'policy-evidence-investigation/v1';
+// maxInputBytes is only the fallback when the caller's gateway does not state its limit; it matches
+// STRUCTURING_GATEWAY_LIMITS.maxInputBytes. Clause budgets are always derived from it, never set separately.
+// maxClausesPerCall matches the gateway's structuring payload array bound (schemas.js validateStructuringInput).
 export const INVESTIGATION_LIMITS = Object.freeze({
-  contextBudgetBytes: 80_000, ftsPerKind: 8, maxFindings: 60, maxOverrides: 60, maxQuestionChars: 2000,
+  maxInputBytes: 64_000, payloadMarginBytes: 1_024, maxClausesPerCall: 500, ftsPerKind: 8, maxFindings: 60, maxOverrides: 60, maxQuestionChars: 2000,
 });
 const GATE_MAX_BYTES = 16_000;
 const OVERRIDE_EFFECTS = new Set(['limits', 'excludes', 'waives', 'overrides', 'conditions']);
@@ -46,14 +50,25 @@ export function gateClauses(clauses, knownIdentifiers) {
 }
 
 const toWire = clause => ({ clause_id: clause.clauseId, document_id: clause.documentId, page: clause.page, kind: clause.kind, title: clause.title, text: clause.text });
+// One clause's share of the serialised payload, including the comma that separates it in the clauses array.
+const clauseBytes = clause => bytes(toWire(clause)) + 1;
 
 /**
- * Context for the model. Whole gated policy when it fits the byte budget; otherwise endorsements and schedule
- * clauses plus FTS hits per checklist kind (`search` is household-scoped), trimmed to the budget.
+ * Bytes left for clauses in a payload, measured the way the gateway measures it (JSON.stringify of the payload,
+ * model-gateway.js), after the rest of the payload and a safety margin. `skeleton` is the payload with `clauses: []`.
  */
-export function selectContext({ gated, checklist, question, search, budgetBytes }) {
-  const total = gated.reduce((sum, clause) => sum + bytes(toWire(clause)), 0);
-  if (total <= budgetBytes) return { clauses: gated, path: 'whole_policy', truncated: false };
+export function clauseBudget(skeleton, { maxInputBytes, payloadMarginBytes = INVESTIGATION_LIMITS.payloadMarginBytes }) {
+  return maxInputBytes - payloadMarginBytes - bytes(skeleton);
+}
+
+/**
+ * Context for the model. Whole gated policy when it fits the clause budget (see clauseBudget); otherwise endorsements
+ * and schedule clauses, then FTS hits interleaved by rank (`search` is household-scoped): a search over every clause
+ * first, then one per checklist kind as a boost, then 'other'. Kind ranks; it never decides what can be found.
+ */
+export function selectContext({ gated, checklist, question, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall }) {
+  const total = gated.reduce((sum, clause) => sum + clauseBytes(clause), 0);
+  if (total <= budgetBytes && gated.length <= maxClauses) return { clauses: gated, path: 'whole_policy', truncated: false };
   const byId = new Map(gated.map((clause, index) => [clause.clauseId, { clause, index }]));
   const ordered = [];
   const seen = new Set();
@@ -62,14 +77,17 @@ export function selectContext({ gated, checklist, question, search, budgetBytes 
     if (entry && !seen.has(clause.clauseId)) { seen.add(clause.clauseId); ordered.push(entry); }
   };
   gated.filter(clause => clause.kind === 'endorsement' || clause.kind === 'schedule_fact').forEach(take);
-  const perKind = checklist.map(kind => search({ query: question, kinds: [kind], limit: INVESTIGATION_LIMITS.ftsPerKind }));
-  for (let rank = 0; rank < INVESTIGATION_LIMITS.ftsPerKind; rank += 1) for (const hits of perKind) if (hits[rank]) take(hits[rank]);
+  const lists = [
+    search({ query: question, kinds: null, limit: INVESTIGATION_LIMITS.ftsPerKind }),
+    ...[...new Set([...checklist, 'other'])].map(kind => search({ query: question, kinds: [kind], limit: INVESTIGATION_LIMITS.ftsPerKind })),
+  ];
+  for (let rank = 0; rank < INVESTIGATION_LIMITS.ftsPerKind; rank += 1) for (const hits of lists) if (hits[rank]) take(hits[rank]);
   const kept = [];
   let used = 0;
   let truncated = false;
   for (const entry of ordered) {
-    const size = bytes(toWire(entry.clause));
-    if (used + size > budgetBytes) { truncated = true; continue; }
+    const size = clauseBytes(entry.clause);
+    if (used + size > budgetBytes || kept.length >= maxClauses) { truncated = true; continue; }
     used += size;
     kept.push(entry);
   }
@@ -136,33 +154,51 @@ function parseOverrides(json, clauseText, findingIds, limits) {
   return { overrides, rejected };
 }
 
-const SWEEP_KINDS = Object.freeze(['exclusion', 'limit', 'waiting_period', 'endorsement', 'condition', 'schedule_fact', 'definition']);
+const SWEEP_KINDS = Object.freeze(['exclusion', 'limit', 'waiting_period', 'endorsement', 'condition', 'schedule_fact', 'definition', 'other']);
 const SWEEP_TERMS = 'exclusion excluded waiver waived override notwithstanding limit sub-limit capped waiting period not payable';
 
 /**
- * Fresh retrieval for the sweep, driven by the first-pass findings rather than the question alone. Returns the
- * context clauses plus gated clauses that the first pass never saw (the cross-page exclusion a first retrieval missed).
- * A whole-policy context already holds everything, so nothing new is added there.
+ * Context for the sweep, bounded by its own clause budget (the sweep payload also carries the findings). Clauses cited
+ * by a finding come first and are never dropped. On the retrieved path, fresh retrieval driven by the findings comes
+ * next (the cross-page exclusion a first retrieval missed), then sweep-relevant kinds, then the rest of the first-pass
+ * context. `dropped` counts first-pass clauses left out; `truncated` is true when any candidate did not fit.
  */
-export function selectSweepContext({ context, gated, findings, search, budgetBytes }) {
-  if (context.path === 'whole_policy') return { clauses: context.clauses, added: 0 };
-  const have = new Set(context.clauses.map(clause => clause.clauseId));
+export function selectSweepContext({ context, gated, findings, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall }) {
   const gatedById = new Map(gated.map(clause => [clause.clauseId, clause]));
-  const queries = [...new Set([SWEEP_TERMS, ...findings.flatMap(finding => [finding.subject, `${finding.subject} ${SWEEP_TERMS}`, finding.quote])])].slice(0, 12);
-  const extra = [];
-  let used = context.clauses.reduce((sum, clause) => sum + bytes(toWire(clause)), 0);
-  for (const query of queries) {
-    for (const hit of search({ query, kinds: SWEEP_KINDS, limit: INVESTIGATION_LIMITS.ftsPerKind })) {
-      const clause = gatedById.get(hit.clauseId);
-      if (!clause || have.has(clause.clauseId)) continue;
-      const size = bytes(toWire(clause));
-      if (used + size > budgetBytes * 1.5) continue;
-      used += size; have.add(clause.clauseId); extra.push(clause);
+  const inContext = new Set(context.clauses.map(clause => clause.clauseId));
+  const cited = new Set(findings.flatMap(finding => finding.clauseIds ?? []));
+  const ordered = [];
+  const seen = new Set();
+  const take = clause => { if (clause && !seen.has(clause.clauseId)) { seen.add(clause.clauseId); ordered.push(clause); } };
+  context.clauses.filter(clause => cited.has(clause.clauseId)).forEach(take);
+  if (context.path !== 'whole_policy') {
+    const queries = [...new Set([SWEEP_TERMS, ...findings.flatMap(finding => [finding.subject, `${finding.subject} ${SWEEP_TERMS}`, finding.quote])])].slice(0, 12);
+    for (const query of queries) {
+      // Sweep kinds are a boost; the unfiltered search then reaches a clause of any kind.
+      for (const kinds of [SWEEP_KINDS, null]) {
+        for (const hit of search({ query, kinds, limit: INVESTIGATION_LIMITS.ftsPerKind })) take(gatedById.get(hit.clauseId));
+      }
     }
   }
+  context.clauses.filter(clause => SWEEP_KINDS.includes(clause.kind)).forEach(take);
+  context.clauses.forEach(take);
+  const kept = [];
+  let used = 0;
+  let truncated = false;
+  for (const clause of ordered) {
+    const size = clauseBytes(clause);
+    if (!cited.has(clause.clauseId) && (used + size > budgetBytes || kept.length >= maxClauses)) { truncated = true; continue; }
+    used += size;
+    kept.push(clause);
+  }
+  const keptIds = new Set(kept.map(clause => clause.clauseId));
   const index = new Map(gated.map((clause, position) => [clause.clauseId, position]));
-  const clauses = [...context.clauses, ...extra].sort((a, b) => index.get(a.clauseId) - index.get(b.clauseId));
-  return { clauses, added: extra.length };
+  return {
+    clauses: kept.sort((a, b) => index.get(a.clauseId) - index.get(b.clauseId)),
+    added: kept.filter(clause => !inContext.has(clause.clauseId)).length,
+    dropped: context.clauses.filter(clause => !keptIds.has(clause.clauseId)).length,
+    truncated,
+  };
 }
 
 const LIMITING_KINDS = new Set(['limit', 'exclusion', 'waiting_period']);
@@ -172,8 +208,17 @@ const entryOf = (finding, clauseById) => ({
   conditions: finding.conditions, exceptions: finding.exceptions, overrides: finding.overrides,
 });
 
+const EXCLUSION_TEXT = Object.freeze({
+  over_document_limit: 'the case has more authorised documents than one question can read',
+  ocr_incomplete: 'their stored text is incomplete',
+  ocr_unavailable: 'their stored text is unavailable',
+  not_found: 'they could not be found',
+  no_clauses: 'no clause could be built from their stored text',
+  not_in_context: 'none of their clauses passed the privacy check or fitted the reading budget',
+});
+
 /** Code assembles the answer from validated findings. There is no verdict: only cited evidence and unknowns. */
-export function assembleAnswer({ question, findings, overrides, context, checklist, withheld, rejected, sweepCompleted, documentIds }) {
+export function assembleAnswer({ question, findings, overrides, context, checklist, rejected, sweepCompleted, documentIds, completeness }) {
   const clauseById = new Map(context.clauses.map(clause => [clause.clauseId, clause]));
   const covered = [];
   const limited = [];
@@ -198,8 +243,14 @@ export function assembleAnswer({ question, findings, overrides, context, checkli
   // Document-to-policy association is not established (ADR 0007 is blocked), so several documents are never merged silently.
   const documents = new Set(context.clauses.map(clause => clause.documentId));
   if (documents.size > 1) unknowns.push(`${documents.size} documents were read together. Which policy each belongs to is not established, so facts from different documents may describe different policies.`);
-  if (withheld > 0) unknowns.push(`${withheld} clause(s) were withheld by the privacy check and were not read.`);
-  if (context.truncated) unknowns.push('The policy text exceeded the reading budget, so some clauses were not read.');
+  // Nothing authorised is left out silently: every excluded document and unread clause is counted here.
+  for (const { reason, count } of completeness.documentsExcluded) {
+    unknowns.push(`${count} authorised document(s) were not read because ${EXCLUSION_TEXT[reason]}. Evidence in them is not reflected in this answer.`);
+  }
+  if (completeness.clausesWithheld > 0) unknowns.push(`${completeness.clausesWithheld} clause(s) were withheld by the privacy check and were not read.`);
+  if (completeness.clausesNotRead > 0) unknowns.push(`The policy text exceeded the reading budget, so ${completeness.clausesNotRead} clause(s) were not read.`);
+  if (completeness.sweepOverBudget) unknowns.push('The findings cite more policy text than one override check can read, so that check was not run.');
+  if (completeness.sweepTruncated) unknowns.push('The check for overriding or conflicting clauses could not read every candidate clause within the reading budget.');
   if (rejected > 0) unknowns.push(`${rejected} model finding(s) failed validation and were dropped.`);
   if (!sweepCompleted) unknowns.push('The check for overriding or conflicting clauses did not complete.');
   if (!findings.length && !overrides.length) unknowns.push('No clause in the policy text answers the question.');
@@ -228,29 +279,46 @@ export function assembleAnswer({ question, findings, overrides, context, checkli
   overridesChecked.push({ kind: 'override_sweep', status: sweepCompleted ? 'completed' : 'not_completed' });
   const answer = {
     question, state, covered, limited_or_excluded: limited, conditions, overrides_checked: overridesChecked, unknowns,
-    calculations: [], sources, documentIds, contextPath: context.path, pipelineVersion: INVESTIGATION_VERSION, legalReview: 'required',
+    calculations: [], sources, documentIds, contextPath: context.path, completeness, pipelineVersion: INVESTIGATION_VERSION, legalReview: 'required',
   };
   const errors = validateAnswer(answer);
   if (errors.length) fail('INVESTIGATION_ANSWER_INVALID', `Assembled answer is invalid: ${errors.join('; ')}`);
   return answer;
 }
 
-export async function investigate({ question, clauses, search = () => [], call, consentCheck, knownIdentifiers = [], limits = {} } = {}) {
-  const caps = { ...INVESTIGATION_LIMITS, ...limits };
+const EXCLUSION_REASONS = new Set(Object.keys(EXCLUSION_TEXT));
+
+/**
+ * `documentScope` ({ authorised, excluded: [{ reason, count }] }) is the caller's account of authorised documents it
+ * did not pass in, so they are reported instead of silently omitted. The payload ceiling is the smaller of
+ * `limits.maxInputBytes` and the gateway limit the call states (`call.maxInputBytes`).
+ */
+export async function investigate({ question, clauses, search = () => [], call, consentCheck, knownIdentifiers = [], limits = {}, documentScope = null } = {}) {
+  const stated = [limits.maxInputBytes, call?.maxInputBytes].filter(value => Number.isInteger(value) && value > 0);
+  const caps = { ...INVESTIGATION_LIMITS, ...limits, maxInputBytes: stated.length ? Math.min(...stated) : INVESTIGATION_LIMITS.maxInputBytes };
+  const excluded = Array.isArray(documentScope?.excluded) ? documentScope.excluded : [];
+  if (!excluded.every(entry => EXCLUSION_REASONS.has(entry?.reason) && Number.isInteger(entry.count) && entry.count > 0)) fail('INVESTIGATION_INPUT_INVALID', 'Excluded documents need a known reason and a count.');
   if (typeof question !== 'string' || !question.trim() || question.length > caps.maxQuestionChars) fail('INVESTIGATION_INPUT_INVALID', 'A question of reasonable length is required.');
   if (!Array.isArray(clauses) || clauses.length === 0) fail('INVESTIGATION_NO_EVIDENCE', 'The case has no stored policy clauses.');
   if (typeof call !== 'function' || typeof consentCheck !== 'function') fail('INVESTIGATION_INPUT_INVALID', 'A provider call and a consent check are required.');
   const gatedQuestion = gate(question.trim(), knownIdentifiers);
   if (gatedQuestion === null) fail('INVESTIGATION_QUESTION_REFUSED', 'The question contains restricted data and cannot be sent.');
   const checklist = checklistFor(question);
-  const { sent, withheld } = gateClauses(clauses, knownIdentifiers);
+  // Kinds are recomputed from the stored text so clauses stored under an older classifier route like new ones.
+  const current = clauses.map(clause => ({ ...clause, kind: classifyClause(clause.sectionPath?.[0] ?? null, clause.text) }));
+  const { sent, withheld } = gateClauses(current, knownIdentifiers);
   if (!sent.length) fail('INVESTIGATION_NO_EVIDENCE', 'No clause could be released to the model.');
   // The fallback FTS search returns stored (ungated) clauses; only clauses that passed the gate are used.
-  const context = selectContext({ gated: sent, checklist, question: gatedQuestion, search, budgetBytes: caps.contextBudgetBytes });
+  const questions = [{ text: gatedQuestion }];
+  const firstBudget = clauseBudget({ questions, checklist, clauses: [] }, caps);
+  if (firstBudget <= 0) fail('INVESTIGATION_BUDGET_EXCEEDED', 'The question leaves no room for policy text within the model input limit.');
+  const context = selectContext({ gated: sent, checklist, question: gatedQuestion, search, budgetBytes: firstBudget, maxClauses: caps.maxClausesPerCall });
   const clauseText = new Map(context.clauses.map(clause => [clause.clauseId, clause.text]));
   const wire = context.clauses.map(toWire);
   const usage = { inputTokens: 0, outputTokens: 0, calls: 0 };
   const run = async (task, payload, schema) => {
+    // Budgets are derived so this never fires; if it does, it is a defect, reported as such rather than as a provider error.
+    if (bytes(payload) > caps.maxInputBytes) fail('INVESTIGATION_BUDGET_EXCEEDED', 'The model payload exceeds the input limit.');
     await consentCheck();
     usage.calls += 1;
     const response = await call({ task, system: STRUCTURING_INSTRUCTIONS[task], payload, schema });
@@ -259,11 +327,17 @@ export async function investigate({ question, clauses, search = () => [], call, 
     return response?.json;
   };
 
-  let first;
-  try {
-    first = await run(EVIDENCE_INVESTIGATE_TASK, { questions: [{ text: gatedQuestion }], checklist, clauses: wire }, INVESTIGATE_SCHEMA);
-  } catch (error) {
-    throw Object.assign(new Error('The investigation could not be completed.'), { code: 'INVESTIGATION_PROVIDER_ERROR', statusCode: 502, cause: error?.code });
+  // Coded budget defects and consent refusals keep their codes; everything else is a provider failure.
+  const passThrough = error => error?.code === 'INVESTIGATION_BUDGET_EXCEEDED' || /^CONSENT_/.test(String(error?.code));
+  // Nothing retrieved means nothing to ask: no model call, and the answer says the evidence is insufficient.
+  let first = { findings: [] };
+  if (wire.length) {
+    try {
+      first = await run(EVIDENCE_INVESTIGATE_TASK, { questions, checklist, clauses: wire }, INVESTIGATE_SCHEMA);
+    } catch (error) {
+      if (passThrough(error)) throw error;
+      throw Object.assign(new Error('The investigation could not be completed.'), { code: 'INVESTIGATION_PROVIDER_ERROR', statusCode: 502, cause: error?.code });
+    }
   }
   if (!first || typeof first !== 'object' || !Array.isArray(first.findings)) fail('INVESTIGATION_MALFORMED', 'The investigation returned an unusable response.');
   const parsed = parseFindings(first, clauseText, caps);
@@ -272,17 +346,19 @@ export async function investigate({ question, clauses, search = () => [], call, 
   let overrides = [];
   let sweepRejected = 0;
   let sweepCompleted = false;
-  let sweepContext = { clauses: context.clauses, added: 0 };
+  let sweepContext = { clauses: [], added: 0, dropped: 0, truncated: false };
+  let sweepOverBudget = false;
   if (parsed.findings.length) {
     try {
-      sweepContext = selectSweepContext({ context, gated: sent, findings: parsed.findings, search, budgetBytes: caps.contextBudgetBytes });
+      const sweepFindings = parsed.findings.map(finding => ({ finding_id: finding.findingId, subject: finding.subject, quote: finding.quote, clause_ids: finding.clauseIds }));
+      const sweepBudget = clauseBudget({ questions, findings: sweepFindings, clauses: [] }, caps);
+      sweepContext = selectSweepContext({ context, gated: sent, findings: parsed.findings, search, budgetBytes: sweepBudget, maxClauses: caps.maxClausesPerCall });
       const sweepText = new Map(sweepContext.clauses.map(clause => [clause.clauseId, clause.text]));
-      const sweepPayload = {
-        questions: [{ text: gatedQuestion }],
-        findings: parsed.findings.map(finding => ({ finding_id: finding.findingId, subject: finding.subject, quote: finding.quote, clause_ids: finding.clauseIds })),
-        clauses: sweepContext.clauses.map(toWire),
-      };
-      const second = await run(EVIDENCE_SWEEP_TASK, sweepPayload, SWEEP_SCHEMA);
+      const sweepPayload = { questions, findings: sweepFindings, clauses: sweepContext.clauses.map(toWire) };
+      // Cited clauses are never dropped, so findings that cite more than fits make the sweep impossible: it is skipped
+      // and reported as not completed rather than failing the whole question.
+      sweepOverBudget = bytes(sweepPayload) > caps.maxInputBytes || sweepPayload.clauses.length > caps.maxClausesPerCall;
+      const second = sweepOverBudget ? null : await run(EVIDENCE_SWEEP_TASK, sweepPayload, SWEEP_SCHEMA);
       if (second && Array.isArray(second.overrides)) {
         const result = parseOverrides(second, sweepText, new Set(parsed.findings.map(finding => finding.findingId)), caps);
         overrides = result.overrides;
@@ -293,16 +369,36 @@ export async function investigate({ question, clauses, search = () => [], call, 
         }
       }
     } catch (error) {
-      if (error?.code === 'CONSENT_SCOPE_REQUIRED' || /^CONSENT_/.test(String(error?.code))) throw error;
+      if (passThrough(error)) throw error;
     }
   } else {
-    // Nothing to sweep: no first-pass finding exists, so the sweep is trivially complete.
-    sweepCompleted = true;
+    // Nothing to sweep: no first-pass finding exists, so the sweep is trivially complete, unless nothing was read at all.
+    sweepCompleted = wire.length > 0;
   }
-  const documentIds = [...new Set(context.clauses.map(clause => clause.documentId))];
+  // The answer reflects every clause that reached the model: the first pass plus the sweep, if it completed.
+  const position = new Map(sent.map((clause, index) => [clause.clauseId, index]));
+  const readById = new Map([...context.clauses, ...(sweepCompleted ? sweepContext.clauses : [])].map(clause => [clause.clauseId, clause]));
+  const read = [...readById.values()].sort((a, b) => position.get(a.clauseId) - position.get(b.clauseId));
+  const documentIds = [...new Set(read.map(clause => clause.documentId))];
+  const documentsInput = new Set(clauses.map(clause => clause.documentId));
+  // A document passed in whose clauses were all withheld or left out of every context is reported, not lost.
+  const unread = [...documentsInput].filter(documentId => !documentIds.includes(documentId)).length;
+  const documentsExcluded = excluded.map(({ reason, count }) => ({ reason, count }));
+  if (unread) documentsExcluded.push({ reason: 'not_in_context', count: unread });
+  const completeness = {
+    documentsAuthorised: Number.isInteger(documentScope?.authorised) ? documentScope.authorised : documentsInput.size + excluded.reduce((sum, entry) => sum + entry.count, 0),
+    documentsRead: documentIds.length,
+    documentsExcluded,
+    clausesStored: clauses.length,
+    clausesWithheld: withheld.length,
+    clausesNotRead: sent.length - read.length,
+    sweepClausesDropped: sweepCompleted ? sweepContext.dropped : 0,
+    sweepTruncated: sweepCompleted && sweepContext.truncated,
+    sweepOverBudget,
+  };
   const answer = assembleAnswer({
-    question: question.trim(), findings: parsed.findings, overrides, context: { ...context, clauses: sweepContext.clauses }, checklist, withheld: withheld.length,
-    rejected: parsed.rejected + sweepRejected, sweepCompleted, documentIds,
+    question: question.trim(), findings: parsed.findings, overrides, context: { ...context, clauses: read }, checklist,
+    rejected: parsed.rejected + sweepRejected, sweepCompleted, documentIds, completeness,
   });
   return { answer, usage, contextPath: context.path };
 }
