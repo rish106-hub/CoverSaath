@@ -1,5 +1,13 @@
 # Latest iteration
 
+## Phase 5: deterministic rule completion (2026-10-20)
+
+- Waiting-period completion needs a verified `continuous_cover` fact (`since`, `uninterrupted`, optional `creditedPriorCover`), a known waiting period and an as-of date. A policy start date, model-reported continuity, an interrupted record or a missing piece gives `unknown` with a reason (`continuity_not_evidenced`, `cover_interrupted`, `as_of_date_missing`, `waiting_period_not_established`). The contract month-counting rule is still unverified.
+- Stricter typed values: zero or negative caps, zero percent limits, zero deductibles, bps above 10000, bad restoration and bonus shapes, impossible dates and non-boolean flags never become `known` (they fall back to `unverified` with `value_malformed`).
+- Results carry `conditional` when conditions, exceptions or overrides apply (also in the handoff). Top-up layers get a coordination note; limits are still never added.
+- Tests: `tests/decision-catalogue-rules-phase5.test.mjs`. One existing test now supplies a `continuous_cover` fact instead of `policy_period/continuous_cover`.
+- Not done: network, cashless and claim-document rules were only re-run, not extended; no real-policy evidence; conflicting override evidence is surfaced through `conflict`/`conditional`, not adjudicated.
+
 ## Phase 7: Block 4 handoff and journey tests (2026-10-20)
 
 - `handoff.js`: `toHandoff` / `assertHandoffContract`, contract `decision-handoff/v1`; returned by `GET .../decision-catalogue?answerId=&format=handoff`. States: known, unverified, conflicting, missing, not_permitted, not_selected, available_not_selected, dynamic_check. A value exists only when `known` (needs citations and a verified association); a model or unverified value is `candidateValue` only. Open-ended findings, dynamic checks, reviews, conflicts, completeness counts and processing version are included. No recommendation logic.
@@ -37,7 +45,7 @@ Merged to `main` (PR #37, `be3b102`) with the privacy gate fixes from `optimisti
 - Two independent read-only reviews: 15 then 10 findings, all fixed with tests. The final fixes (round two) had no third review.
 - Checks: `npm run check` 905 tests, 852 pass, 0 fail, 53 skipped; `eval:safety` 0 failures; `git diff --check` clean.
 - Wiring (same day): `GET /api/v1/cases/{caseId}/decision-catalogue?answerId=&asOf=&memberId=` (`decision-catalogue-service.js`, `readForCatalogue` in the evidence service). Read only, no model call, no write. Same consent re-check, currency check and 404 rules as `/questions`; gated by the source-pack field (same as `/questions`, consent purpose pending legal review; owner chose to keep it). Adapter `from-answer.js`: facts are `model` origin, `user_statement` source type (the upload label is requester-set and kept only as `declaredSourceType`), policy `unresolved`, association unverified. Tests: `tests/decision-catalogue-api.test.mjs`. Wiring review: 2 high, 2 medium fixed. Typed rules stay unknown on this path (findings are open-ended `finding.*` facts); mapping findings to typed values is not built.
-- Not done: official-source curated data, reviewer role and fact storage (proposed in [ADR 0009](../adr/0009-reviewed-facts-and-decision-catalogue.md)), Block 4 consumption, findings-to-typed-values mapping. Facts now carry `sourceDigests` taken from the evidence index. Waiting-period rule assumes `policy_period/continuous_cover.start` is the verified start of uninterrupted cover.
+- Not done: official-source curated data, reviewer role and fact storage (proposed in [ADR 0009](../adr/0009-reviewed-facts-and-decision-catalogue.md)), Block 4 consumption, findings-to-typed-values mapping. Facts now carry `sourceDigests` taken from the evidence index. (Superseded by Phase 5: the waiting-period rule no longer assumes a policy start date is continuity; see below.)
 
 ## Address residuals R1-R3 and review gaps: privacy gate v9 (2026-10-20)
 
