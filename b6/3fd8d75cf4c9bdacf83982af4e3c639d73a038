@@ -1,0 +1,29 @@
+src/features/decision-catalogue/cross-policy.js
+  s_c52538788cad78::t_bad4ca1882089d 25-29
+tests/decision-catalogue.test.mjs
+  s_c52538788cad78::t_bad4ca1882089d 139
+tests/decision-catalogue-rules-phase5.test.mjs
+  s_c52538788cad78::t_1fe4f71cc96538 1-100
+src/features/decision-catalogue/handoff.js
+  s_c52538788cad78::t_bad4ca1882089d 27
+src/features/decision-catalogue/rules.js
+  s_c52538788cad78::t_bad4ca1882089d 8-9,11,13,16,20,25-29,35-36,58-60,62-66,68-78
+docs/iterations/LATEST.md
+  s_c52538788cad78::t_aab4bde47ad53a 3-10,48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b63fd8d75cf4c9bdacf83982af4e3c639d73a038",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
