@@ -1,0 +1,21 @@
+docs/exec-plans/active/block-2-closeout-audit.md
+  s_a2ce4c6a4ba23f::t_b3568a5f84a95d 122-190
+docs/iterations/LATEST.md
+  s_a2ce4c6a4ba23f::t_00a6f1827fdcc2 6,14-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3c958bab09a330aea3d2e581bb8a43ddd29acaa1",
+  "prompts": {},
+  "sessions": {
+    "s_a2ce4c6a4ba23f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "adf7af64-23ea-45b8-b5ea-6114b780b0a7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
