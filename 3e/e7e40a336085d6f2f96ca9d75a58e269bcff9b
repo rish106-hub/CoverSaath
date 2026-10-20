@@ -1,0 +1,33 @@
+tests/policy-evidence-effect.test.mjs
+  s_d6de892e85fc81::t_62e833c9a303cc 121
+  s_d6de892e85fc81::t_e1cd5395cfadf0 1-92,96,98,109,112,116,118,126
+  s_d6de892e85fc81::t_1fff6685054c2e 93-95,97,99-108,110-111,113-115,117,119-120,122-125
+src/features/policy-evidence/investigate.js
+  s_d6de892e85fc81::t_e23b22a29c77a5 221,228
+  s_d6de892e85fc81::t_c8a4e8504eb077 6,10,119-120,124,209,212-220,222-227,229,242,248-249,251,261-262
+  s_d6de892e85fc81::t_e0a9ad41e0ac47 250,252,263-269,439
+src/features/ai-analysis/structuring-contract.js
+  s_d6de892e85fc81::t_c8a4e8504eb077 32-33,74-77,82,88
+tests/policy-evidence-investigate.test.mjs
+  s_d6de892e85fc81::t_e23b22a29c77a5 37-39
+docs/adr/0008-evidence-first-reasoning.md
+  s_d6de892e85fc81::t_741fb60442d9ab 49-53
+docs/iterations/LATEST.md
+  s_d6de892e85fc81::t_a1f9ac34e3f509 3-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3ee7e40a336085d6f2f96ca9d75a58e269bcff9b",
+  "prompts": {},
+  "sessions": {
+    "s_d6de892e85fc81": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2d1cc91b-ff2e-4696-9fbd-57f7d9657789",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
