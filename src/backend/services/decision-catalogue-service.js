@@ -25,7 +25,7 @@ export function createDecisionCatalogueService({ services, evidence } = {}) {
       const policyId = `unresolved-${stored.answerId}`;
       const { candidates, skipped } = answerToCandidates(stored.answer, { clauseRows, documentKinds, policyId });
       const catalogue = buildDecisionCatalogue({
-        householdId, clauseRows: clauseRows.map(row => ({ id: row.clauseId, documentId: row.documentId, sourceVersion: row.sourceVersion, page: row.page })),
+        householdId, clauseRows: clauseRows.map(row => ({ id: row.clauseId, documentId: row.documentId, sourceVersion: row.sourceVersion, page: row.page, digest: row.digest })),
         batches: [{ origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates }],
         policies: [{ policyId, kind: 'unresolved', coverBasis: 'unknown' }], asOf, memberId,
       });

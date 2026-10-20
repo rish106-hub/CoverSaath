@@ -5,8 +5,8 @@ import { buildDecisionCatalogue, CATALOGUE_VERSION } from '../src/features/decis
 // Synthetic data only. Block 4 contract (G8), reviewer-path and adversarial gaps (B3-7, B3-8).
 const H = 'household-1';
 const clauseRows = [
-  { id: 'c-1', documentId: 'doc-s', sourceVersion: '1', page: 1 },
-  { id: 'c-2', documentId: 'doc-w', sourceVersion: '1', page: 7 },
+  { id: 'c-1', documentId: 'doc-s', sourceVersion: '1', page: 1, digest: 'sha-c1' },
+  { id: 'c-2', documentId: 'doc-w', sourceVersion: '1', page: 7, digest: 'sha-c2' },
 ];
 const policies = [{ policyId: 'P1', kind: 'personal', coverBasis: 'individual' }];
 const cand = over => ({ policyId: 'P1', policyAssociation: { basis: 'schedule' }, documentId: 'doc-s', sourceVersion: '1', sourceType: 'issued_schedule', clauseIds: ['c-1'], ...over });
@@ -106,4 +106,9 @@ test('review: model and official-source batches cannot carry contractual source 
     assert.equal(cat.facts.length, 0);
     assert.equal(cat.rejected[0].code, 'FACT_AUTHORITY_EXCEEDED');
   }
+});
+
+test('fact provenance: each fact carries the digest of every cited clause, taken from the evidence index', () => {
+  const cat = run([reviewed([cand({ ...sumInsured, sourceDigests: ['forged'] })])]);
+  assert.deepEqual(cat.facts[0].sourceDigests, ['sha-c1']);
 });
