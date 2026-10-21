@@ -10,12 +10,17 @@ export const postgresTestMigrationRoot = fileURLToPath(new URL('../../../../.loc
 // One fixed advisory-lock key for the whole migration run (a session lock, held on one connection).
 const MIGRATION_LOCK_KEY = '7283541900012';
 
+function isWithinDirectory(base, target) {
+  const offset = relative(base, target);
+  return offset === '' || (!offset.startsWith('..') && !isAbsolute(offset));
+}
+
 export function loadPostgresMigrations(directory = postgresMigrationDirectory) {
   const root = realpathSync(resolve(directory));
-  const productionRoot = realpathSync(postgresMigrationDirectory);
-  const testRoot = resolve(postgresTestMigrationRoot);
-  const insideProductionRoot = root === productionRoot || root.startsWith(productionRoot + sep);
-  const insideTestRoot = root.startsWith(testRoot + sep);
+  const productionRoot = realpathSync(resolve(postgresMigrationDirectory));
+  const testRoot = realpathSync(resolve(postgresTestMigrationRoot));
+  const insideProductionRoot = isWithinDirectory(productionRoot, root);
+  const insideTestRoot = isWithinDirectory(testRoot, root);
   if (!insideProductionRoot && !insideTestRoot) {
     throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'The migration directory is not allowed.');
   }
