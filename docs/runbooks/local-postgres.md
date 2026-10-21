@@ -92,6 +92,8 @@ Without `TEST_DATABASE_URL` the PostgreSQL tests are skipped with a visible reas
 
 Tests create one template database per migration set (`coversaath_tpl_…`) and one throwaway database per test, and drop the throwaway ones.
 
+The migration loader reads only `src/backend/database/postgres/migrations/` and directories inside it. Runner tests write scratch migration sets under its gitignored `test-scratch/` subdirectory and remove them; the loader reads only top-level regular files, so a scratch set never joins the real one. Nothing outside the repository's migration directory can be loaded, and no optional directory has to exist.
+
 ## Reset
 
 Stops the server and deletes every local PostgreSQL database. Synthetic data only.

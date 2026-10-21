@@ -8,7 +8,9 @@ const clauseRows = [{ id: 'c1', documentId: 'd1', sourceVersion: '1', page: 1, d
 const fact = over => ({ policyId: 'P1', policyAssociation: { basis: 'printed_policy_number' }, documentId: 'd1', sourceVersion: '1', sourceType: 'issued_schedule', clauseIds: ['c1'], topic: '', ...over });
 const reviewed = candidates => ({ origin: 'human_review', reviewStatus: 'accepted', verifiedPolicyIds: ['P1', 'P2'], candidates });
 const build = (batches, pol = [{ policyId: 'P1', kind: 'personal' }]) => buildDecisionCatalogue({ householdId: 'h1', clauseRows, batches, policies: pol, asOf: '2026-06-30' });
-const wp = (cat, asOf, topic = 'pre_existing') => evaluateRules(cat.facts, { policyId: 'P1', topic, asOf }, ['waiting_period'])[0];
+// Continuity is always one member's, so completion is asked for a named member.
+const MEMBER = { memberId: 'member-a', scope: 'member' };
+const wp = (cat, asOf, topic = 'pre_existing', memberId = 'member-a') => evaluateRules(cat.facts, { policyId: 'P1', topic, asOf, memberId }, ['waiting_period'])[0];
 const WP = fact({ factType: 'waiting_period', topic: 'pre_existing', value: { months: 24 } });
 
 test('a policy start date alone is not continuity', () => {
@@ -17,12 +19,12 @@ test('a policy start date alone is not continuity', () => {
 });
 
 test('model-reported continuity cannot complete a waiting period', () => {
-  const model = { origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates: [fact({ sourceType: 'user_statement', factType: 'continuous_cover', value: { since: '2020-01-01', uninterrupted: true } })] };
+  const model = { origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates: [fact({ sourceType: 'user_statement', factType: 'continuous_cover', subject: MEMBER, value: { since: '2020-01-01', uninterrupted: true } })] };
   assert.equal(wp(build([reviewed([WP]), model]), '2026-08-01').completion.reason, 'continuity_not_evidenced');
 });
 
 test('verified continuity completes only on the right day; credited prior cover is shown', () => {
-  const cat = build([reviewed([WP, fact({ factType: 'continuous_cover', value: { since: '2024-07-01', uninterrupted: true, creditedPriorCover: true } })])]);
+  const cat = build([reviewed([WP, fact({ factType: 'continuous_cover', subject: MEMBER, value: { since: '2024-07-01', uninterrupted: true, creditedPriorCover: true } })])]);
   assert.equal(wp(cat, '2026-06-30').completion.state, 'not_completed');
   const done = wp(cat, '2026-07-01').completion;
   assert.equal(done.state, 'completed');
@@ -32,12 +34,12 @@ test('verified continuity completes only on the right day; credited prior cover 
 });
 
 test('an interrupted cover record never completes a waiting period', () => {
-  const cat = build([reviewed([WP, fact({ factType: 'continuous_cover', value: { since: '2020-01-01', uninterrupted: false } })])]);
+  const cat = build([reviewed([WP, fact({ factType: 'continuous_cover', subject: MEMBER, value: { since: '2020-01-01', uninterrupted: false } })])]);
   assert.deepEqual(wp(cat, '2026-08-01').completion, { state: 'unknown', reason: 'cover_interrupted' });
 });
 
 test('an unknown or unverified waiting period has no completion', () => {
-  const cat = build([reviewed([fact({ factType: 'continuous_cover', value: { since: '2020-01-01', uninterrupted: true } })])]);
+  const cat = build([reviewed([fact({ factType: 'continuous_cover', subject: MEMBER, value: { since: '2020-01-01', uninterrupted: true } })])]);
   assert.equal(wp(cat, '2026-08-01').completion.reason, 'waiting_period_not_established');
 });
 
@@ -97,4 +99,38 @@ test('layered policies stay independent: a top-up is not added, and waiting peri
   assert.equal(layer('P1').rules.find(r => r.rule === 'sum_insured').result.value.amountMinor, 50000000);
   assert.equal(layer('P2').rules.find(r => r.rule === 'sum_insured').result.value.amountMinor, 100000000);
   assert.equal(layer('P2').rules.find(r => r.rule === 'waiting_period' && r.topic === 'pre_existing'), undefined, 'P1 waiting period is not evaluated on P2');
+});
+
+test('a policy-wide continuity record never completes a waiting period, named member or not; enrolment is always per member', () => {
+  const memberB = { memberId: 'member-b', scope: 'member' };
+  const policyWide = fact({ factType: 'continuous_cover', value: { since: '2020-01-01', uninterrupted: true } });
+  const cat = build([reviewed([WP, policyWide, fact({ factType: 'member_enrolment', value: { status: 'enrolled' } })])]);
+  const forMember = evaluateRules(cat.facts, { policyId: 'P1', topic: 'pre_existing', asOf: '2026-08-01', memberId: 'member-b' }, ['waiting_period'])[0];
+  assert.deepEqual(forMember.completion, { state: 'unknown', reason: 'continuity_not_evidenced' });
+  assert.deepEqual(wp(cat, '2026-08-01', 'pre_existing', null).completion, { state: 'unknown', reason: 'continuity_not_evidenced' }, 'a floater record would otherwise cover a member who joined later');
+  const enrolment = memberId => evaluateRules(cat.facts, { policyId: 'P1', memberId }, ['member_enrolment'])[0].result;
+  for (const memberId of [null, 'member-b']) {
+    assert.equal(enrolment(memberId).status, 'unknown');
+    assert.ok(enrolment(memberId).excluded.some(item => item.reason === 'member_scope_missing'));
+  }
+  const own = build([reviewed([WP, fact({ factType: 'continuous_cover', subject: memberB, value: { since: '2024-01-01', uninterrupted: true } })])]);
+  assert.equal(evaluateRules(own.facts, { policyId: 'P1', topic: 'pre_existing', asOf: '2026-08-01', memberId: 'member-b' }, ['waiting_period'])[0].completion.state, 'completed');
+});
+
+test('a newer family version that is not in effect yet does not displace the one that is, so a real conflict stays a conflict', () => {
+  const rows = [
+    { id: 'a1', documentId: 'da', sourceVersion: '1', page: 1, digest: 'ga1' }, { id: 'a2', documentId: 'da', sourceVersion: '2', page: 1, digest: 'ga2' },
+    { id: 'b1', documentId: 'db', sourceVersion: '1', page: 1, digest: 'gb1' },
+  ];
+  const cap = amount => ({ kind: 'amount', amountMinor: amount, currency: 'INR', basis: 'per_day' });
+  const cat = buildDecisionCatalogue({ householdId: 'h1', clauseRows: rows, policies: [{ policyId: 'P1', kind: 'personal' }], batches: [reviewed([
+    fact({ documentId: 'da', sourceVersion: '1', familyId: 'fam-a', clauseIds: ['a1'], factType: 'room_rent_limit', value: cap(10000), effective: { from: '2026-01-01', to: '2026-12-31' } }),
+    fact({ documentId: 'da', sourceVersion: '2', familyId: 'fam-a', clauseIds: ['a2'], factType: 'room_rent_limit', value: cap(30000), effective: { from: '2027-01-01' } }),
+    fact({ documentId: 'db', sourceVersion: '1', familyId: 'fam-b', clauseIds: ['b1'], factType: 'room_rent_limit', value: cap(20000) }),
+  ])] });
+  const at = asOf => evaluateRules(cat.facts, { policyId: 'P1', asOf }, ['room_rent_limit'])[0].result;
+  assert.equal(at('2026-06-01').status, 'conflict');
+  assert.ok(!at('2026-06-01').excluded.some(item => item.reason === 'older_version'));
+  assert.equal(at('2027-06-01').status, 'conflict', 'v2 and family B disagree once v2 is in effect');
+  assert.ok(at('2027-06-01').excluded.some(item => item.reason === 'not_in_effect'));
 });

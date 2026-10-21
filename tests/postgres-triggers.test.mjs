@@ -1045,6 +1045,40 @@ test('curated source archives and submissions are immutable, never deleted, and 
   proves('curated_product_submissions_content_immutable', 'curated_product_submissions_no_delete');
 });
 
+test('an active checker grant needs a public key, and signed-action nonces are immutable and never deleted', postgresTestOptions(), async t => {
+  const { pool, a } = await worlds(t);
+  const key = 'MCowBQYDK2VwAyEA' + 'A'.repeat(44);
+  const legacy = await addAdult(pool, a.household, 'legacy-checker');
+  const checker = await addAdult(pool, a.household, 'keyed-checker');
+  await insert(pool, 'source_curator_grants', { id: 'scg-curator' });
+  await rejects(insert(pool, 'source_curator_grants', { id: 'scg-nokey', adult_user_id: legacy, role: 'checker' }), 'an active checker grant needs a public key');
+  await insert(pool, 'source_curator_grants', { id: 'scg-revoked', adult_user_id: legacy, role: 'checker', status: 'revoked', revoked_at: at });
+  await insert(pool, 'source_curator_grants', { id: 'scg-1', adult_user_id: checker, role: 'checker', public_key: key });
+  await rejects(pool.query("UPDATE source_curator_grants SET public_key = NULL WHERE id = 'scg-1'"), 'an active checker grant needs a public key');
+  await rejects(pool.query("UPDATE source_curator_grants SET status = 'active', revoked_at = NULL WHERE id = 'scg-revoked'"), 'an active checker grant needs a public key');
+  assert.equal((await pool.query("UPDATE source_curator_grants SET status = 'revoked', revoked_at = $1, public_key = NULL WHERE id = 'scg-1'", [at])).rowCount, 1, 'revoking never needs a key');
+  await assert.rejects(insert(pool, 'source_curator_grants', { id: 'scg-short', adult_user_id: checker, role: 'curator', public_key: 'short' }), /violates check constraint/);
+  proves('source_curator_grants_checker_key_insert', 'source_curator_grants_checker_key_update');
+
+  await insert(pool, 'curated_source_archives', { sha256: 'a'.repeat(64) });
+  await insert(pool, 'curated_product_submissions', { id: 'cps-1' });
+  await insert(pool, 'curated_action_nonces', { nonce: 'a'.repeat(32) });
+  await assert.rejects(insert(pool, 'curated_action_nonces', { nonce: 'a'.repeat(32) }), /duplicate key/);
+  await assert.rejects(insert(pool, 'curated_action_nonces', { nonce: 'short' }), /violates check constraint/);
+  await rejects(pool.query("UPDATE curated_action_nonces SET action = 'publish'"), 'curated action nonces are immutable');
+  await rejects(pool.query('DELETE FROM curated_action_nonces'), 'curated action nonces are never deleted');
+  assert.equal((await pool.query("UPDATE curated_action_nonces SET action = 'publish' WHERE false")).rowCount, 0, 'row-level: no row, no fire');
+  proves('curated_action_nonces_immutable', 'curated_action_nonces_no_delete');
+
+  await insert(pool, 'curated_product_submissions', { id: 'cps-derived', wording_version: 'v2', page_text_origin: 'derived_from_bytes', text_extractor_version: 'pdf-content-text/v1' });
+  await assert.rejects(insert(pool, 'curated_product_submissions', { id: 'cps-bad-origin', wording_version: 'v3', page_text_origin: 'ocr' }), /violates check constraint/);
+  await rejects(pool.query("UPDATE curated_product_submissions SET page_text_origin = 'curator_supplied' WHERE id = 'cps-derived'"), 'curated page text origin is immutable once written');
+  await rejects(pool.query("UPDATE curated_product_submissions SET text_extractor_version = 'other' WHERE id = 'cps-derived'"), 'curated page text origin is immutable once written');
+  await rejects(pool.query("UPDATE curated_product_submissions SET page_text_origin = 'derived_from_bytes' WHERE id = 'cps-1'"), 'curated page text origin is immutable once written');
+  assert.equal((await pool.query("UPDATE curated_product_submissions SET facts_json = '[{}]', state = 'candidate' WHERE id = 'cps-derived'")).rowCount, 1, 'other updates still pass');
+  proves('curated_product_submissions_text_origin_immutable');
+});
+
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const catalog = (await pool.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname")).rows.map(row => row.tgname);

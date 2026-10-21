@@ -531,3 +531,19 @@ test('reviewer scope: no body can mint an independent grant, and the audit histo
   assert.throws(() => app.database.prepare("UPDATE audit_events SET action = 'tampered'").run());
   assert.throws(() => app.database.prepare('DELETE FROM audit_events').run());
 });
+
+test('an independent grant covers only documents the case held when it was issued; a regrant is needed for later uploads', async t => {
+  const app = await startApp(t, { env: { CATALOGUE_INDEPENDENT_REVIEW_ENABLED: 'true' } });
+  const s = await scenario(app, 'Mine');
+  const reviewer = await scenario(app, 'Reviewer');
+  // Issued an hour before the document was uploaded: the upload is newer than the grant.
+  const earlier = new CatalogueReviewRepository(app.database, { clock: () => new Date(Date.now() - 3_600_000) });
+  earlier.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  const { answerId, factId } = await answered(app, s);
+  assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 404, 'a later document is not covered');
+  assert.equal((await review(app, s, { answerId, factId, decision: 'accepted', reasonCode: 'matches_clause' }, { token: reviewer.token })).status, 404);
+  assert.equal(app.database.prepare("SELECT count(*) AS n FROM catalogue_reviews").get().n, 0);
+  new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 200, 'an operator regrant covers it');
+  assert.equal((await review(app, s, { answerId, factId, decision: 'accepted', reasonCode: 'matches_clause' }, { token: reviewer.token })).status, 201);
+});

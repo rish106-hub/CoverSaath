@@ -71,13 +71,16 @@ export function toHandoff(built) {
 export function assertHandoffContract(handoff) {
   const fail = message => { throw new Error(`Handoff contract: ${message}`); };
   if (handoff?.handoffVersion !== HANDOFF_VERSION) fail('version');
+  if (handoff.catalogueVersion !== CATALOGUE_VERSION) fail('catalogue version');
   if (handoff.combinedConfirmedCover !== null) fail('combined cover must be null');
+  if (!Array.isArray(handoff.policies)) fail('policies');
   for (const policy of handoff.policies) {
-    if (policy.spendableCash !== false) fail('limits are never spendable cash');
+    if (policy?.spendableCash !== false) fail('limits are never spendable cash');
+    if (!Array.isArray(policy.items)) fail('items');
     for (const entry of policy.items) {
       if (!HANDOFF_STATES.includes(entry.state)) fail(`state ${entry.state}`);
       if ((entry.state === 'known') !== (entry.value !== null)) fail(`value only when known (${entry.rule})`);
-      if (entry.state === 'known' && (!entry.citations.length || !entry.associationVerified)) fail(`known needs citations and a verified association (${entry.rule})`);
+      if (entry.state === 'known' && (!Array.isArray(entry.citations) || !entry.citations.length || entry.associationVerified !== true)) fail(`known needs citations and a verified association (${entry.rule})`);
       if (entry.state !== 'unverified' && entry.state !== 'dynamic_check' && entry.candidateValue !== null) fail(`candidate value leaked (${entry.rule})`);
     }
   }

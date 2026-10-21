@@ -1,26 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  createPostgresPool, postgresMigrationDirectory, postgresMigrationFiles, postgresTestMigrationRoot,
-  runPostgresMigrations, validatePostgresSchema,
+  createPostgresPool, postgresMigrationDirectory, postgresMigrationFiles, runPostgresMigrations, validatePostgresSchema,
 } from '../src/backend/database/postgres/index.js';
 import {
-  adminQuery, createTestDatabase, ensureTemplate, migrationSetDigest, postgresTestOptions, useBlankDatabase, useTestDatabase,
+  adminQuery, createTestDatabase, ensureTemplate, migrationSetDigest, postgresTestOptions, scratchMigrationDirectory,
+  useBlankDatabase, useTestDatabase,
 } from './support/postgres.mjs';
 import { insert, one } from './support/postgres-fixtures.mjs';
 
-const baseline = ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql', '013_catalogue_reviews.sql', '014_curated_product_workflow.sql'];
+const baseline = ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql', '013_catalogue_reviews.sql', '014_curated_product_workflow.sql', '015_curated_signed_actions.sql'];
 
-function scratchDirectory(t, files = {}) {
-  mkdirSync(postgresTestMigrationRoot, { recursive: true });
-  const directory = mkdtempSync(join(postgresTestMigrationRoot, 'runner-'));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const [name, sql] of Object.entries(files)) writeFileSync(join(directory, name), sql);
-  return directory;
-}
 
 test('a fresh database migrates, records checksums, validates, and a repeat run is a no-op', postgresTestOptions(), async t => {
   const { pool } = await useBlankDatabase(t);
@@ -41,7 +34,7 @@ test('a fresh database migrates, records checksums, validates, and a repeat run 
     {
       valid: true, missingTables: [], missingViews: [], missingTriggers: [], missingIndexes: [], missingColumns: [],
       disabledTriggers: [], foreignKeyErrors: 0, collation: 'C', localeProvider: 'c', orderingValid: true,
-      collationValid: true, unsafeFunctionSearchPaths: [], migrationCount: 14,
+      collationValid: true, unsafeFunctionSearchPaths: [], migrationCount: 15,
     },
   );
   const publicTemporary = await one(pool, `SELECT count(*)::int AS n
@@ -52,7 +45,7 @@ test('a fresh database migrates, records checksums, validates, and a repeat run 
 
 test('a changed applied migration is refused and nothing later is applied', postgresTestOptions(), async t => {
   const { pool } = await useBlankDatabase(t);
-  const directory = scratchDirectory(t, {
+  const directory = scratchMigrationDirectory(t, {
     '001_first.sql': 'CREATE TABLE first_table (id bigint);\n',
     '002_second.sql': 'CREATE TABLE second_table (id bigint);\n',
   });
@@ -70,7 +63,7 @@ test('a changed applied migration is refused and nothing later is applied', post
 
 test('a failing migration file rolls back completely and can be fixed and re-run', postgresTestOptions(), async t => {
   const { pool } = await useBlankDatabase(t);
-  const directory = scratchDirectory(t, {
+  const directory = scratchMigrationDirectory(t, {
     '001_good.sql': 'CREATE TABLE good_table (id bigint);\n',
     '002_broken.sql': 'CREATE TABLE partial_table (id bigint);\nINSERT INTO partial_table VALUES (1);\nCREATE FUNCTION partial_fn() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$;\nSELECT 1 / 0;\n',
   });
@@ -94,7 +87,7 @@ test('a failing migration file rolls back completely and can be fixed and re-run
 
 test('concurrent runners wait beyond pool lock_timeout and apply each file exactly once', postgresTestOptions(), async t => {
   const { pool, url } = await useBlankDatabase(t);
-  const directory = scratchDirectory(t, {
+  const directory = scratchMigrationDirectory(t, {
     '001_log.sql': 'CREATE TABLE apply_log (version text);\n',
     '002_entry.sql': "INSERT INTO apply_log VALUES ('002');\nSELECT pg_sleep(0.3);\n",
     '003_entry.sql': "INSERT INTO apply_log VALUES ('003');\n",
@@ -120,7 +113,7 @@ test('the migration runner restores lock_timeout and redacts setup failures', po
   const { url } = await useBlankDatabase(t);
   const pool = createPostgresPool({ connectionString: url, max: 1, lockTimeoutMs: 77, applicationName: 'runner-restore' });
   t.after(() => pool.end());
-  const directory = scratchDirectory(t, {
+  const directory = scratchMigrationDirectory(t, {
     '001_one.sql': "CREATE TABLE one_table (lock_timeout text);\nINSERT INTO one_table VALUES (current_setting('lock_timeout'));\n",
   });
   await runPostgresMigrations(pool, { directory });

@@ -136,11 +136,11 @@ test('unknown waiting-period date never becomes zero months', () => {
   assert.equal(wp('2026-06-01').completion.state, 'unknown');
   const withStart = build([
     fact({ factType: 'waiting_period', topic: 'pre_existing', value: { months: 24 } }),
-    fact({ factType: 'continuous_cover', value: { since: '2024-07-01', uninterrupted: true } }),
+    fact({ factType: 'continuous_cover', subject: { memberId: 'm1', scope: 'member' }, value: { since: '2024-07-01', uninterrupted: true } }),
   ]);
-  const done = evaluateRules(withStart, { policyId: 'P1', topic: 'pre_existing', asOf: '2026-06-30' }, ['waiting_period'])[0];
+  const done = evaluateRules(withStart, { policyId: 'P1', topic: 'pre_existing', asOf: '2026-06-30', memberId: 'm1' }, ['waiting_period'])[0];
   assert.equal(done.completion.state, 'not_completed');
-  assert.equal(evaluateRules(withStart, { policyId: 'P1', topic: 'pre_existing', asOf: '2026-07-01' }, ['waiting_period'])[0].completion.state, 'completed');
+  assert.equal(evaluateRules(withStart, { policyId: 'P1', topic: 'pre_existing', asOf: '2026-07-01', memberId: 'm1' }, ['waiting_period'])[0].completion.state, 'completed');
 });
 
 test('malformed or float money is refused safely', () => {
