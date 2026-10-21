@@ -21,6 +21,7 @@ export const CHECK_REASON_CODES = Object.freeze(['quote_matches_source', 'quote_
 export const MAX_SOURCE_GRANT_DAYS = 90;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
 function coded(code, message, statusCode, details) { return Object.assign(new Error(message), { code, statusCode, ...(details ? { details } : {}) }); }
 const invalid = (message, details) => coded('CURATED_PRODUCT_INVALID', message, 400, details);
@@ -38,9 +39,15 @@ export class CuratedProductRepository {
     this.database = database;
     this.clock = clock;
     this.audit = audit ?? new AuditRepository(database, { clock });
-    // Optional insurer host allowlist (CURATED_SOURCE_HOSTS, comma separated, exact hosts). Unset means any https host.
+    // Insurer/regulator host allowlist (CURATED_SOURCE_HOSTS, comma separated, exact DNS names). Fails closed: unset or empty
+    // refuses every source. An allowlist is a control on where a source may be named, not proof it is official or reusable.
     const hosts = String(env.CURATED_SOURCE_HOSTS ?? '').split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
-    this.allowedHosts = hosts.length ? new Set(hosts) : null;
+    for (const host of hosts) {
+      if (!HOSTNAME.test(host) || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal') || host.endsWith('.local') || /^[\d.]+$/.test(host)) {
+        throw new TypeError(`CURATED_SOURCE_HOSTS entry "${host}" must be a public DNS name, not an address or local name.`);
+      }
+    }
+    this.allowedHosts = new Set(hosts);
   }
 
   #atomic(work) {
@@ -177,7 +184,8 @@ export class CuratedProductRepository {
     const identity = { uin, insurer, productName, wordingVersion, sourceUrl, sourceVersionId: str(sourceVersionId, 'sourceVersionId', 200), retrievedOn, effectiveFrom };
     const problems = validateSourceIdentity(identity, { today: this.#today() });
     if (problems.length) throw invalid('The source identity is invalid.', problems);
-    if (this.allowedHosts && !this.allowedHosts.has(new URL(sourceUrl).hostname.toLowerCase())) throw invalid('sourceUrl is not on the insurer host allowlist.');
+    if (!this.allowedHosts.size) throw coded('SOURCE_HOSTS_NOT_CONFIGURED', 'No source hosts are allowed: set CURATED_SOURCE_HOSTS.', 409);
+    if (new URL(sourceUrl).port || !this.allowedHosts.has(new URL(sourceUrl).hostname.toLowerCase())) throw invalid('sourceUrl is not on the insurer host allowlist.');
     if (curatedFreshness(identity, this.#today()) !== 'current') throw coded('SOURCE_NOT_CURRENT', 'The source is stale or not yet effective.', 409);
     if (!(bytes instanceof Uint8Array) || bytes.length < 1 || bytes.length > MAX_SOURCE_BYTES) throw invalid('bytes are invalid.');
     if (normalisePageTexts(pageTexts) === undefined) throw invalid('pageTexts are invalid.');
@@ -325,6 +333,24 @@ export class CuratedProductRepository {
       const id = this.#insert({ curatorId: actorId, identity, bytes, pageTexts, previousId: row.id, sha, evidence });
       this.#event(actorId, 'curated_source.changed', row.id, { previousSha256: row.content_sha256, sha256: sha, next: id });
       return { changed: true, submission: this.#dto(this.#row(row.id)), next: this.#dto(this.#row(id)) };
+    });
+  }
+
+  /**
+   * Operator-only invalidation of a published review (identity compromise, fraud, a wrong attestation). Grant expiry or
+   * routine revocation never calls this: an honest review stays historically valid. The review columns are not edited; the
+   * state moves to `needs_revalidation`, which stops the product informing anyone until it is collected and checked again.
+   */
+  invalidate({ submissionId, operatorId, reasonCode }) {
+    str(operatorId, 'operatorId', 128);
+    if (!['checker_compromised', 'review_found_wrong', 'source_superseded'].includes(reasonCode)) throw invalid('reasonCode is not supported.');
+    return this.#atomic(() => {
+      const row = this.#row(submissionId);
+      if (!row) throw notFound();
+      const done = this.database.prepare("UPDATE curated_product_submissions SET state = 'needs_revalidation' WHERE id = ? AND state IN ('published', 'checked')").run(row.id);
+      if (Number(done.changes) !== 1) throw coded('SUBMISSION_STATE_CONFLICT', `A ${row.state} submission cannot be invalidated.`, 409);
+      this.audit.append({ actorType: 'system', actorId: `operator:${operatorId}`.slice(0, 128), action: 'curated_source.invalidated', resourceType: 'curated_product_submission', resourceId: row.id, payload: { reasonCode, checkedBy: row.checked_by } });
+      return this.#dto(this.#row(row.id));
     });
   }
 
