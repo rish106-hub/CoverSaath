@@ -162,3 +162,13 @@ test('user-reported text is echoed as data and never trips the claim-wording che
   assert.equal(assertHouseholdPreviewContract(preview), true);
   assert.equal(preview.scenario.provenance, 'user_reported');
 });
+
+test('a detail answer may repeat but not contradict the direct topic or a specific procedure', () => {
+  rejects(requestOf({ topic: 'dental', answers: { topic_detail: 'maternity' } }), 'HOUSEHOLD_SCENARIO_CONTRADICTORY');
+  rejects(requestOf({ procedureText: 'cataract surgery', answers: { procedure_detail: 'knee replacement' } }), 'HOUSEHOLD_SCENARIO_CONTRADICTORY');
+  const same = validateScenarioInput(requestOf({ topic: 'Dental', procedureText: 'cataract surgery', answers: { topic_detail: 'dental', procedure_detail: 'Cataract Surgery' } }));
+  assert.equal(same.scenario.effective.topicDetail, 'Dental');
+  // A nonspecific direct procedure is what the question refines, so the answer replaces it.
+  const refined = validateScenarioInput(requestOf({ procedureText: 'surgery', answers: { procedure_detail: 'cataract surgery' } }));
+  assert.equal(refined.scenario.effective.procedureDetail, 'cataract surgery');
+});
