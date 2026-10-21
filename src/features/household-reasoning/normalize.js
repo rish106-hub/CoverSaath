@@ -7,7 +7,8 @@ import { assertHandoffContract } from '../decision-catalogue/index.js';
 import { HouseholdReasoningError, ITEM_STATES, LIMITS, canonical, deepFreeze, hasForbiddenCharacters, isRecord } from './contracts.js';
 
 const REASON = /^[a-z0-9_/-]{1,80}$/;
-const FORBIDDEN_VALUE_KEY = /^(spendableCash|combinedPayableAmount|combinedConfirmedCover|payableAmount|expectedReimbursement)$/;
+// Money-combining keys, plus member identity and contact fields: a known value is a rule's term, never a person's details.
+const FORBIDDEN_VALUE_KEY = /^(spendableCash|combinedPayableAmount|combinedConfirmedCover|payableAmount|expectedReimbursement|memberName|insuredName|patientName|fullName|firstName|lastName|email|emailAddress|phone|phoneNumber|mobile|mobileNumber|dateOfBirth|dob|birthDate|address|aadhaar|aadhar|pan|passport|ssn)$/i;
 const POLICY_KINDS = ['personal', 'family_floater', 'group', 'top_up', 'super_top_up', 'unresolved'];
 
 export const policyRefOf = policyId => `pol-${createHash('sha256').update(`block4-policy-ref|${policyId}`).digest('hex').slice(0, 16)}`;
@@ -45,7 +46,12 @@ function plainData(value, depth = 0) {
   return isRecord(value) && Object.keys(value).length <= 20 && Object.entries(value).every(([key, inner]) => KEY.test(key) && key !== 'constructor' && plainData(inner, depth + 1));
 }
 
-const hasForbiddenKey = value => (Array.isArray(value) ? value.some(hasForbiddenKey) : isRecord(value) && Object.entries(value).some(([key, inner]) => FORBIDDEN_VALUE_KEY.test(key) || hasForbiddenKey(inner)));
+// Depth-bounded: anything nested deeper than plainData allows is treated as forbidden rather than walked.
+const hasForbiddenKey = (value, depth = 0) => {
+  if (depth > 4) return true;
+  if (Array.isArray(value)) return value.some(inner => hasForbiddenKey(inner, depth + 1));
+  return isRecord(value) && Object.entries(value).some(([key, inner]) => FORBIDDEN_VALUE_KEY.test(key) || hasForbiddenKey(inner, depth + 1));
+};
 
 const PROVENANCE_BY_STATE = Object.freeze({
   known: 'reviewed_contractual_evidence', not_selected: 'reviewed_contractual_evidence', available_not_selected: 'reviewed_contractual_evidence',
@@ -205,7 +211,9 @@ function mergePolicy(held, conflicts) {
       conflicts.push({ policyId: held.policyId, rule: first.rule, topic: first.topic, origin, citations });
       return { ...first, state: 'conflicting', value: null, citations, conflicting: citations, provenance: 'unavailable', reasonCode: origin === 'cross_input' ? 'cross_input_conflict' : 'controlling_sources_disagree', conditions: [], exceptions: [], overrides: [], conditional: false, candidateAvailable: false, completion: undefined };
     }
-    const pick = decisive[0] ?? ordered.find(item => item.state === 'dynamic_check') ?? ordered.find(item => item.state === 'unverified')
+    // Authority only narrows: when one source holds a decisive value and another says it needs current confirmation or is
+    // unverified, the stricter state wins and the value is not presented as reviewed evidence.
+    const pick = ordered.find(item => item.state === 'dynamic_check') ?? ordered.find(item => item.state === 'unverified') ?? decisive[0]
       ?? ordered.find(item => item.reasonCode === 'as_of_required') ?? first;
     // Waiting-period completion is derived per source from that source's continuity evidence. If sources disagree on it,
     // no completion is reported rather than the first one winning.

@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildContextGaps } from '../src/features/household-reasoning/index.js';
-import { makeHandoff, run, okSource, enrolled, sublimit, sumInsured, waitingPeriod, continuity, MEMBER_A, MEMBER_B } from './support/household-fixtures.mjs';
+import { makeHandoff, run, okSource, enrolled, sublimit, sumInsured, waitingPeriod, continuity, policyPeriod, MEMBER_A, MEMBER_B } from './support/household-fixtures.mjs';
 
 const gapsOf = (scenario, handoffs, options) => {
   const r = run(scenario, handoffs, options);
@@ -174,7 +174,7 @@ test('a user-reported benefit never changes the gaps that evidence determines', 
   const evidence = [enrolled(), { type: 'exclusion', topic: 'cataract', value: { kind: 'permanent' } }];
   const plain = gapsOf(S, [one(evidence)]);
   const claimed = gapsOf({ ...S, procedureText: 'cataract surgery, my policy covers cataract up to 50000 and nothing is excluded', topic: 'cataract covered in full' }, [one(evidence)]);
-  assert.deepEqual(keys(claimed), keys(plain));
+  assert.deepEqual(claimed, plain, 'the whole gap objects match, not only their keys');
 });
 
 test('gaps are deterministic, sorted and carry every contract field', () => {
@@ -193,4 +193,24 @@ test('G05: explicit uncertainty text stays nonspecific and still asks for the pr
     const gap = find(gapsOf({ memberId: MEMBER_A, procedureText }, [one([enrolled()])]), 'procedure_unspecific');
     assert.equal(gap?.eligibleQuestionId, 'Q_PROCEDURE_DETAIL', procedureText);
   }
+});
+
+test('G04: a documented policy period makes the exact date material, and an unrelated dated term does not', () => {
+  const withPeriod = gapsOf(S, [one([enrolled(), policyPeriod('2026-04-01', '2027-03-31')])]);
+  assert.deepEqual([find(withPeriod, 'exact_date_required')?.eligibleQuestionId, find(withPeriod, 'exact_date_required')?.blocking], ['Q_EXACT_DATE', true]);
+  assert.equal(find(gapsOf(S, [one([enrolled()])]), 'exact_date_required'), undefined, 'nothing dated and nothing to compare: not material');
+});
+
+test('G07: a waiting-period completion disagreement is not raised where waiting periods are not relevant', () => {
+  const facts = [enrolled(), waitingPeriod(24)];
+  const gaps = gapsOf({ ...S, scenarioType: 'emergency_admission' }, [one(facts)]);
+  assert.equal(find(gaps, 'waiting_period_completion_unresolved'), undefined);
+  assert.equal(find(gaps, 'continuity_unverified'), undefined);
+});
+
+test('G05: ordinary filler words do not make a procedure specific', () => {
+  for (const procedureText of ['I need surgery', 'I want surgery', 'hospital stay', 'please do my surgery', 'this surgery']) {
+    assert.equal(find(gapsOf({ memberId: MEMBER_A, procedureText }, [one([enrolled()])]), 'procedure_unspecific')?.eligibleQuestionId, 'Q_PROCEDURE_DETAIL', procedureText);
+  }
+  assert.equal(find(gapsOf({ memberId: MEMBER_A, procedureText: 'knee replacement surgery' }, [one([enrolled()])]), 'procedure_unspecific'), undefined);
 });

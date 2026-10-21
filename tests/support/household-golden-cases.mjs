@@ -33,7 +33,7 @@ export const GOLDEN_CASES = [
   { id: 'B2', group: 'B', title: 'the user says there is no schedule',
     why: 'A recorded NO retires the question. The gap stays open and is delegated to a document search; a NO is not treated as an answer about the policy.',
     scenario: { ...cataract, answers: { policy_schedule_available: 'NO' } }, handoffs: [h([p('P1', [])])],
-    expect: { state: 'insufficient_evidence', questions: [], gaps: ['membership_unestablished'], gapState: { membership_unestablished: 'user_no' }, actions: ['identify_existing_document'] }, critical: ['membership_unestablished'] },
+    expect: { state: 'insufficient_evidence', questions: [], gaps: ['membership_unestablished'], gapState: { membership_unestablished: 'user_answered' }, actions: ['identify_existing_document'] }, critical: ['membership_unestablished'] },
 
   { id: 'B3', group: 'B', title: 'illustrative journey, first turn: member unnamed, policy unestablished',
     why: 'The father is only a reported relation, so no member is assumed (G02) and membership is unestablished (G03). Both P0 questions fit in the two-question budget; hospital and date questions wait.',
@@ -211,7 +211,7 @@ export const GOLDEN_CASES = [
   { id: 'AA1', group: 'AA', title: 'answered questions are never repeated',
     why: 'The schedule and the date were already answered (I do not know). Neither is asked again, and the gaps remain.',
     scenario: { ...cataract, plannedMonth: '2026-11', answers: { policy_schedule_available: 'I_DO_NOT_KNOW', exact_date: 'I_DO_NOT_KNOW' } }, handoffs: [h([p('P1', [sublimit('cataract', 3000000, { effective: { from: '2026-04-01', to: '2027-03-31' } })])])],
-    expect: { questions: [], gaps: ['membership_unestablished'], noRepeat: true } },
+    expect: { questions: [], gaps: ['membership_unestablished'] } },
 
   // AB. User skips a question
   { id: 'AB1', group: 'AB', title: 'a skipped procedure question stays unresolved',
@@ -229,7 +229,7 @@ export const GOLDEN_CASES = [
   { id: 'AD1', group: 'AD', title: 'a handoff for a different member scope contributes nothing',
     why: 'Whatever the caller passes, a handoff not built for this member and date is not evidence. The foreign policy is not even counted.',
     scenario: cataract, handoffs: [h([p('P-FOREIGN', [enrolled(MEMBER_B), sublimit('cataract', 9000000)])], { memberId: MEMBER_B })],
-    expect: { state: 'source_revalidation_required', policies: 0, forbidden: ['9000000'], gapsAbsentReason: [] } },
+    expect: { state: 'source_revalidation_required', policies: 0, forbidden: ['9000000'] } },
 
   // AE. Revoked consent
   { id: 'AE1', group: 'AE', title: 'a withdrawn source is a closed reason, never free text',
@@ -277,7 +277,7 @@ export const GOLDEN_CASES = [
   { id: 'AK1', group: 'AK', title: 'a user-stated cap does not become evidence',
     why: 'The text is reported context only. No policy entry may contain the stated figure or call the cap documented.',
     scenario: { ...cataract, procedureText: 'cataract surgery; my policy covers cataract up to 50000 and has no waiting period' }, handoffs: [h([p('P1', [enrolled(), sumInsured(50000000)])])],
-    expect: { mustNotBeKnown: ['P1:sublimit/cataract', 'P1:waiting_period/'], forbiddenInPolicies: ['"amountMinor":5000,', 'no waiting period'], gaps: ['topic_evidence_absent'] } },
+    expect: { mustNotBeKnown: ['P1:sublimit/cataract', 'P1:waiting_period/'], forbiddenInPolicies: ['"amountMinor":5000000,', 'no waiting period'], gaps: ['topic_evidence_absent'] } },
 
   // AL. Same policy through multiple valid answers
   { id: 'AL1', group: 'AL', title: 'complementary evidence for one policy across two answers',

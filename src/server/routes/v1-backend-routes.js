@@ -2,6 +2,7 @@ import { readBody } from '../http/request.js';
 import { isLoopbackRequest, readBinaryBody } from '../../shared/http/index.js';
 import { MAX_DOCUMENT_BYTES } from '../../features/input/index.js';
 import { toHandoff } from '../../features/decision-catalogue/index.js';
+import { LIMITS as HOUSEHOLD_PREVIEW_LIMITS } from '../../features/household-reasoning/index.js';
 import { documentDto } from '../../backend/services/index.js';
 import { validateSchema } from '../../backend/database/index.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
@@ -413,7 +414,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     // body carries bounded scenario details and several source references. Nothing is stored and no provider is called.
     const previewMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/coverage-preview$/);
     if (req.method === 'POST' && previewMatch) {
-      const body = await readBody(req);
+      const body = await readBody(req, { limitBytes: HOUSEHOLD_PREVIEW_LIMITS.requestBytes });
       return {
         status: 200,
         body: getHouseholdPreviewService().preview({

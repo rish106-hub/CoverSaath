@@ -206,7 +206,7 @@ test('a deleted document removes the evidence behind the answer', async t => {
   assert.ok(!JSON.stringify(res.data).includes('500000'));
 });
 
-test('a closed or other household member without a role cannot preview', async t => {
+test('a user with no role on the household cannot preview', async t => {
   const app = await startApp(t);
   const mine = await household(app, { name: 'Mine' });
   const outsider = await household(app, { name: 'Outsider' });

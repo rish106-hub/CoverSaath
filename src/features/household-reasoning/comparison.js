@@ -3,7 +3,8 @@
 // a household-wide fact while another policy's applicability is unresolved.
 import { OVERLAP_RULES, isRelevant } from './relevance.js';
 
-const holds = (position, rule, topic) => position.documentedTerms.concat(position.documentedRestrictions).find(t => t.rule === rule && t.topic === topic && t.state === 'known');
+// Any documented entry counts, including a cited not_selected or available_not_selected term: that is explicit evidence.
+const holds = (position, rule, topic) => position.documentedTerms.concat(position.documentedRestrictions).find(t => t.rule === rule && t.topic === topic);
 
 function periodExcludes(position, plannedDate) {
   const period = position.documentedTerms.find(t => t.rule === 'policy_period' && t.state === 'known');

@@ -27,7 +27,7 @@ export const SKIPPED = 'SKIPPED';
 export const SENTINELS = Object.freeze([NOT_KNOWN, SKIPPED]);
 
 export const LIMITS = Object.freeze({
-  sources: 5, answers: 50, procedureText: 2000, hospitalField: 160, identifier: 128, topic: 160, answerText: 160,
+  sources: 5, answers: 50, procedureText: 2000, hospitalField: 160, topic: 160, answerText: 160,
   questionsPerTurn: 2, questionsPerJourney: 5,
   policies: 20, itemsPerPolicy: 200, itemsTotal: 1000, citationsPerItem: 20, requestBytes: 16_384,
 });
@@ -91,6 +91,8 @@ export function hasForbiddenCharacters(value) {
     const previous = i > 0 ? chars[i - 1] : '';
     if (cp === 0x200c || cp === 0x200d) { if (!/^[\p{L}\p{M}]$/u.test(previous)) return true; continue; }
     if (cp === 0xfe0f) { if (!/^[\p{Extended_Pictographic}0-9#*]$/u.test(previous)) return true; continue; }
+    // Any other invisible format character (category Cf) is refused; the joiner and selector exemptions are handled above.
+    if (/^\p{Cf}$/u.test(chars[i])) return true;
     if (cp <= 0x1f || (cp >= 0x7f && cp <= 0x9f) || cp === 0x2028 || cp === 0x2029 || (cp >= 0x200b && cp <= 0x200f)
       || (cp >= 0x202a && cp <= 0x202e) || (cp >= 0x2060 && cp <= 0x206f) || cp === 0xad || cp === 0x61c || cp === 0x180e
       || (cp >= 0xfe00 && cp <= 0xfe0e) || cp === 0xfeff || (cp >= 0xe0000 && cp <= 0xe007f)

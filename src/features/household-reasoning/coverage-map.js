@@ -48,7 +48,7 @@ export function buildPolicyPosition(policy, scenario) {
       if (item.state === 'known' && RESTRICTIVE_RULES.includes(item.rule)) restrictions.push({ ...term, restrictionKind: item.rule === 'exclusion' ? 'exclusion' : 'limit_or_condition' });
       else if (!(item.rule === 'member_enrolment' && item.state === 'known' && item.value?.status === 'not_enrolled')) terms.push(term);
       if (item.rule === 'member_enrolment' && item.state === 'known' && item.value?.status === 'not_enrolled') restrictions.push({ ...term, restrictionKind: 'non_enrolment' });
-      if (item.rule === 'waiting_period' && item.completion && item.completion.state !== 'completed' && item.completion.state !== 'not_completed') {
+      if (relevant && item.rule === 'waiting_period' && item.completion && item.completion.state !== 'completed' && item.completion.state !== 'not_completed') {
         uncertainties.push({ gapType: 'evidence_gap', rule: 'waiting_period_completion', topic: item.topic, state: 'missing', reasonCode: item.completion.reason ?? 'completion_not_established', provenance: 'unavailable' });
       }
     } else if (item.state === 'not_permitted') {

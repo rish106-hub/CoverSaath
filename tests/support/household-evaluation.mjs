@@ -25,11 +25,20 @@ function build(c) {
   return { request, sources, preview: buildHouseholdCoveragePreview({ request, sources }) };
 }
 
+// Every expectation key the evaluator reads. A key outside this list would be skipped silently, so it fails the case.
+const KNOWN_EXPECT_KEYS = new Set([
+  'error', 'state', 'known', 'mustNotBeKnown', 'values', 'applicability', 'appliesToMember', 'policyKinds', 'gaps', 'noGaps', 'gapState', 'gapReason', 'gapResolver',
+  'questions', 'mustNotAsk', 'actions', 'overlaps', 'coordination', 'forbidden', 'forbiddenInPolicies', 'completion', 'restrictions', 'uncertain', 'dynamic', 'policies',
+  'sourceReason', 'sourceIndexes', 'noConflicts', 'citationCount', 'maxQuestions', 'noRequiredQuestions', 'limitationMatches', 'retrievalComplete', 'dateSemantics',
+  'plannedDate', 'hospitalIdentity', 'externalChecks',
+]);
+
 export function evaluateCase(c, { repeats = 3 } = {}) {
   const failures = [];
   const fail = message => failures.push(message);
-  const result = { id: c.id, group: c.group, title: c.title, failures, metrics: {} };
+  const result = { id: c.id, group: c.group, title: c.title, failures, metrics: {}, rejected: Boolean(c.expect.error) };
   const expect = c.expect;
+  for (const key of Object.keys(expect)) if (!KNOWN_EXPECT_KEYS.has(key)) fail(`unknown expectation key ${key}`);
 
   if (expect.error) {
     try { build(c); fail(`expected error ${expect.error}, got a preview`); } catch (error) { if (error.code !== expect.error) fail(`expected error ${expect.error}, got ${error.code ?? error.message}`); }
@@ -108,7 +117,7 @@ export function evaluateCase(c, { repeats = 3 } = {}) {
   for (const [id, kind] of Object.entries(expect.policyKinds ?? {})) if (policyOf(id)?.policyType.kind !== kind) fail(`${id} kind`);
   for (const g of expect.gaps ?? []) if (!gapKeys.includes(g)) fail(`gap ${g} missing`);
   for (const g of expect.noGaps ?? []) if (gapKeys.includes(g)) fail(`gap ${g} must be absent`);
-  for (const [g, state] of Object.entries(expect.gapState ?? {})) { const actual = gapOf(g)?.currentState; if (state === 'user_no' ? actual !== 'user_unknown' && actual !== 'user_answered' && !/^user_/.test(actual ?? '') : actual !== state) fail(`gap ${g} state ${actual}`); }
+  for (const [g, state] of Object.entries(expect.gapState ?? {})) { const actual = gapOf(g)?.currentState; if (actual !== state) fail(`gap ${g} state ${actual}`); }
   for (const [g, reason] of Object.entries(expect.gapReason ?? {})) if (gapOf(g)?.reason !== reason) fail(`gap ${g} reason ${gapOf(g)?.reason}`);
   for (const [g, resolver] of Object.entries(expect.gapResolver ?? {})) if (gapOf(g)?.expectedResolver !== resolver) fail(`gap ${g} resolver`);
   if (expect.questions && JSON.stringify(questionIds) !== JSON.stringify(expect.questions)) fail(`questions ${JSON.stringify(questionIds)}, expected ${JSON.stringify(expect.questions)}`);
@@ -143,6 +152,7 @@ export function evaluateCase(c, { repeats = 3 } = {}) {
 
   // Metrics against the labels.
   result.metrics.questions = questionIds.length;
+  result.metrics.labelledQuestions = expect.questions ? questionIds.length : 0;
   result.metrics.unnecessaryQuestions = expect.questions ? questionIds.filter(id => !expect.questions.includes(id)).length : 0;
   result.metrics.criticalExpected = (c.critical ?? []).length;
   result.metrics.criticalDetected = (c.critical ?? []).filter(g => gapKeys.includes(g)).length;
@@ -159,7 +169,7 @@ const percentile = (values, q) => { const sorted = [...values].sort((a, b) => a 
 
 export function evaluateAll(cases) {
   const results = cases.map(c => evaluateCase(c));
-  const accepted = results.filter(r => r.metrics.latencyMs || r.metrics.exception);
+  const accepted = results.filter(r => !r.rejected);
   const latencies = results.flatMap(r => r.metrics.latencyMs ?? []);
   const questions = sum(results, 'questions');
   const metrics = {
@@ -167,7 +177,9 @@ export function evaluateAll(cases) {
     criticalGapsExpected: sum(results, 'criticalExpected'), criticalGapsDetected: sum(results, 'criticalDetected'),
     criticalGapsMissed: sum(results, 'criticalExpected') - sum(results, 'criticalDetected'),
     questionsAsked: questions, questionsPerScenarioMax: Math.max(0, ...results.map(r => r.metrics.questions ?? 0)), unnecessaryQuestions: sum(results, 'unnecessaryQuestions'),
-    unnecessaryQuestionRate: questions ? sum(results, 'unnecessaryQuestions') / questions : 0, duplicateQuestions: sum(results, 'duplicateQuestions'),
+    // Only cases that list their expected questions can show an unnecessary one, so the rate is over those cases' questions.
+    questionsInLabelledCases: sum(results, 'labelledQuestions'),
+    unnecessaryQuestionRate: sum(results, 'labelledQuestions') ? sum(results, 'unnecessaryQuestions') / sum(results, 'labelledQuestions') : 0, duplicateQuestions: sum(results, 'duplicateQuestions'),
     materialGapsDelegated: sum(results, 'delegatedMaterialGaps'), materialGapsNeedingDelegation: sum(results, 'delegatedMaterialExpected'),
     unsupportedKnownConclusions: sum(results, 'unsupportedKnown'), crossContamination: sum(results, 'contamination'), illegalAuthorityUpgrades: sum(results, 'illegalUpgrades'),
     uncitedDocumentedConclusions: sum(results, 'uncited'), forbiddenTextDisclosures: sum(results, 'disclosures'), crossPolicySummations: sum(results, 'summations'),

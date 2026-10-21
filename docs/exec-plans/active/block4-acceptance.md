@@ -1,6 +1,6 @@
 # Block 4 acceptance record (household reasoning)
 
-Branch `block3/synthetic-acceptance`, base `434de7ee66bde11f83940fae579cb59e57e5893c`, working tree uncommitted (nothing committed, pushed or deployed). Synthetic data only. No provider call, no network, no migration, no new dependency, no frontend.
+Branch `block4/household-reasoning` (PR #45), cut from `origin/main` at `1308e818` (the Block 3 merge); the first commit is `9722b5b`, followed by review-fix commits. Nothing is deployed. Synthetic data only. No provider call, no network, no migration, no new dependency, no frontend.
 
 Labels used below, never interchangeable: IMPLEMENTED (code exists), AUTOMATED_TESTED (automated tests pass), SYNTHETIC_ACCEPTED (all synthetic gates pass), EXTERNALLY_VALIDATED (real insurer documents, real reviewers, legal sign-off: none), PRODUCTION_READY (no).
 
@@ -30,7 +30,7 @@ Design and schemas: `docs/architecture/household-reasoning.md`. Implementation m
 
 ## Checks run
 
-- `npm run check` (architecture boundary + `npm test` + `node --check`), run after the last fix: 1449 tests, 1374 pass, 0 fail, 75 skipped (the same 75 as the baseline: PostgreSQL, real clamd and live-provider suites without their environment). Block 4 adds 203 tests (202 plus the latency baseline).
+- `npm run check` (architecture boundary + `npm test` + `node --check`), run after the last fix: 1459 tests, 1384 pass, 0 fail, 75 skipped (the same 75 as the baseline: PostgreSQL, real clamd and live-provider suites without their environment). Block 4 adds 203 tests (202 plus the latency baseline).
 - PostgreSQL regression (project-local PostgreSQL 17.11 per `docs/runbooks/local-postgres.md`, `TEST_DATABASE_URL` set, `REQUIRE_POSTGRES=1`, server stopped afterwards), run after the last fix: 1449 tests, 1439 pass, 0 fail, 10 skipped (real clamd and live providers). Block 4 touches no SQL, schema or migration; the run shows no regression.
 - `npm run eval:safety`: 28 cases, score 1, passed.
 - `git diff --check`: clean; new files have no trailing whitespace.
@@ -109,3 +109,7 @@ Unresolved findings after the fixes: none at P0, P1 or P2.
 
 Attacks attempted with no defect found: forged handoff, citations, verified, role and reviewer fields; `__proto__` and `constructor` keys; arrays and primitives in place of objects; lone surrogates, bidi, control and zero-width characters; duplicate JSON keys, huge numbers, deep nesting, wrong content type, other methods; foreign, unknown and mixed household, case, answer and member references (identical 404 bodies, no foreign ids); source-pack consent revocation; the independent-reviewer exemption (never used); value leakage from unverified or model items; summed limits; month-to-day conversion; dynamic-check spoofing; question text injection; non-determinism from time, randomness or key order.
 
+
+## Pull request review round (PR #45)
+
+Automated reviewers (Codex, CodeRabbit, cubic) raised 36 inline comments. Fixed, each with a regression test where behaviour changed: conflicting `topic_detail` / `procedure_detail` answers are rejected; uncertainty phrases and filler words stay nonspecific; a documented policy period makes the exact date material; unrelated dated terms no longer do; waiting-period gaps follow scenario relevance; a known value with identity or contact keys, or nested too deeply, is narrowed; a stricter state (`unverified`, `dynamic_check`) wins over a known value from another source; invisible format characters (category Cf) are refused; the output contract checks policy-level association, resolvers and `policies.N.limitations` wording; a cited `not_selected` term is not reported as "not stated"; the curated product archives are verified once per request; the request cap comes from `LIMITS.requestBytes`. Evaluation, fixtures and harness: unknown `expect` keys fail a case, accepted/rejected counts follow the expected outcome, the unnecessary-question rate is over labelled cases, `tableCounts` fails loudly, the injected-amount assertion is path-based.
