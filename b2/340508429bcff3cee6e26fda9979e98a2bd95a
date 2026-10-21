@@ -1,0 +1,21 @@
+docs/exec-plans/active/block5-frontend-audit.md
+  s_abef256019c29f::t_7e4dd640b9460c 1-215
+docs/exec-plans/active/block5-decisions.md
+  s_abef256019c29f::t_b95c2736af68d8 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b2340508429bcff3cee6e26fda9979e98a2bd95a",
+  "prompts": {},
+  "sessions": {
+    "s_abef256019c29f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "02f0f47f-b9f9-4583-9334-b5662bf2c403",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
