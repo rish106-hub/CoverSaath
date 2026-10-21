@@ -1,0 +1,144 @@
+tests/context-gap-resolver.test.mjs
+  s_d74e1a9e70bc38::t_40cbdf143bda22 1-189
+scripts/eval-household-reasoning.mjs
+  s_d74e1a9e70bc38::t_f3fc33ec50ff97 1-42
+src/features/household-reasoning/coverage-map.js
+  s_d74e1a9e70bc38::t_72c9e87d69e7d9 73-74,76-78,80,84
+  s_d74e1a9e70bc38::t_04af32b38832a8 79
+  s_d74e1a9e70bc38::t_4665caaae43f9a 66
+  s_d74e1a9e70bc38::t_6d0adf84572ca8 1-51,53-63,65,67-72,75,81-83,85-100
+  s_d74e1a9e70bc38::t_f25da199f28f11 64
+  s_d74e1a9e70bc38::t_efe583c6b1bb69 52
+src/backend/services/household-preview-service.js
+  s_d74e1a9e70bc38::t_43308e74a145dd 1,3-62
+  s_d74e1a9e70bc38::t_3ff48493f9cf68 2
+src/features/household-reasoning/normalize.js
+  s_d74e1a9e70bc38::t_4e8632c53e7cdb 36-47,90
+  s_d74e1a9e70bc38::t_eaf13f5ffb751b 7,15
+  s_d74e1a9e70bc38::t_72c9e87d69e7d9 56-60,64-72,83,172,196-199,201-204,206,208-216,218-219,225
+  s_d74e1a9e70bc38::t_cb1a131e0d0b53 1-6,8-14,16-35,48-55,73-82,84-88,91-171,173-195,200,205,207,217,220,222-224,226-231
+  s_d74e1a9e70bc38::t_04af32b38832a8 61-63
+  s_d74e1a9e70bc38::t_7c4c50dff6daaa 221
+  s_d74e1a9e70bc38::t_099647b2a533c2 89
+src/server/routes/v1-backend-routes.js
+  s_d74e1a9e70bc38::t_3ff48493f9cf68 197,412-423
+  s_d74e1a9e70bc38::t_4362c192d78df3 424
+tests/household-reasoning-contracts.test.mjs
+  s_d74e1a9e70bc38::t_57d811a9844cf1 1-164
+tests/support/household-api-harness.mjs
+  s_d74e1a9e70bc38::t_6eda84f5057375 1-158
+src/features/household-reasoning/contracts.js
+  s_d74e1a9e70bc38::t_466a12bfc3156b 68-72
+  s_d74e1a9e70bc38::t_eaf13f5ffb751b 81,87,94,99-101
+  s_d74e1a9e70bc38::t_f25da199f28f11 40
+  s_d74e1a9e70bc38::t_04af32b38832a8 82-86,88-93
+  s_d74e1a9e70bc38::t_72c9e87d69e7d9 32,95
+  s_d74e1a9e70bc38::t_ca0965c6957411 1-31,33-39,41-67,73-80
+  s_d74e1a9e70bc38::t_ba78e1747868cd 96-98
+tests/context-question-planner.test.mjs
+  s_d74e1a9e70bc38::t_124922eaac362c 1-154
+tests/household-security-adversarial.test.mjs
+  s_d74e1a9e70bc38::t_4e8632c53e7cdb 1-93,100-103,106-110,112-113,120-154,236
+  s_d74e1a9e70bc38::t_1a9097bc1d99d9 227-228
+  s_d74e1a9e70bc38::t_04af32b38832a8 237-278
+  s_d74e1a9e70bc38::t_ba78e1747868cd 279-285
+  s_d74e1a9e70bc38::t_bdacbd1540f119 94-98
+  s_d74e1a9e70bc38::t_e22f24ea48b9df 104-105,111,114-119,155-226,229-235
+  s_d74e1a9e70bc38::t_239883f51e3d98 99
+src/server/create-server.js
+  s_d74e1a9e70bc38::t_e9c521f38cf3a9 7
+  s_d74e1a9e70bc38::t_3ff48493f9cf68 107-111,178
+src/features/household-reasoning/relevance.js
+  s_d74e1a9e70bc38::t_f25da199f28f11 41
+  s_d74e1a9e70bc38::t_56ed9c4530ef43 19-20
+  s_d74e1a9e70bc38::t_f6724b9c4d08c0 1-18,21-40,42-51
+src/features/household-reasoning/index.js
+  s_d74e1a9e70bc38::t_db86b9e198bbe0 1-10
+tests/household-reasoning-evidence.test.mjs
+  s_d74e1a9e70bc38::t_a3a6f3a6b4ed40 1-194,198-211,215-244
+  s_d74e1a9e70bc38::t_7c4c50dff6daaa 195-197,212-214
+src/backend/services/index.js
+  s_d74e1a9e70bc38::t_3ff48493f9cf68 7
+src/features/household-reasoning/context-gaps.js
+  s_d74e1a9e70bc38::t_bc352c7004a869 1-3,5-23,25-96,110-154,159-184
+  s_d74e1a9e70bc38::t_93e80e5d3f1e76 4,24
+  s_d74e1a9e70bc38::t_04af32b38832a8 97-101,104-105,155-158
+  s_d74e1a9e70bc38::t_3762d75489ab1d 102-103,106-109
+tests/household-preview-latency.test.mjs
+  s_d74e1a9e70bc38::t_054c84080cd9bc 1-34
+docs/architecture/household-reasoning.md
+  s_d74e1a9e70bc38::t_13d914ee897626 1-139
+  s_d74e1a9e70bc38::t_d7966888874f56 140-141
+tests/household-coverage-preview-api.test.mjs
+  s_d74e1a9e70bc38::t_6a17055d195265 9,270,280,285
+  s_d74e1a9e70bc38::t_8214c3c15d2acd 1-7,10-191,194-203,206-228,287
+  s_d74e1a9e70bc38::t_7b405cb0c45dcc 8,192-193,204-205,229-269,271-279,281-284,286
+tests/household-golden-matrix.test.mjs
+  s_d74e1a9e70bc38::t_efab646031b78e 7-8,10-11,47-49,51-53
+  s_d74e1a9e70bc38::t_8ee0e481f22410 1-6,9,12-46,50,54,56
+  s_d74e1a9e70bc38::t_545023308cbe05 55
+src/features/household-reasoning/output-contract.js
+  s_d74e1a9e70bc38::t_3762d75489ab1d 23
+  s_d74e1a9e70bc38::t_9d3d1a7300ae8c 1-17,21,24-69
+  s_d74e1a9e70bc38::t_72c9e87d69e7d9 18-20,22
+tests/household-coverage-map.test.mjs
+  s_d74e1a9e70bc38::t_ce2485ad1bebdd 1-16,18-159
+  s_d74e1a9e70bc38::t_9866e38610f3a1 17
+tests/support/household-golden-cases.mjs
+  s_d74e1a9e70bc38::t_4665caaae43f9a 86,88,142
+  s_d74e1a9e70bc38::t_f9d2f71333c77a 1-37,44-85,87,89-141,143-172,179-303
+  s_d74e1a9e70bc38::t_392b6d757a2981 38-43,173-178
+tests/household-scenario-analysis.test.mjs
+  s_d74e1a9e70bc38::t_26272357b3de7a 69-75,124
+  s_d74e1a9e70bc38::t_50041862625923 128
+  s_d74e1a9e70bc38::t_78c33eadba206f 1-68,76-123,125-127,129-162
+tests/support/household-evaluation.mjs
+  s_d74e1a9e70bc38::t_8ee0e481f22410 1-185
+src/features/household-reasoning/question-planner.js
+  s_d74e1a9e70bc38::t_c6223322244bda 1-51,53-74
+  s_d74e1a9e70bc38::t_66d33abd4438ab 52
+src/features/household-reasoning/preview.js
+  s_d74e1a9e70bc38::t_be0a57889da59a 1-82
+src/features/household-reasoning/scenario-input.js
+  s_d74e1a9e70bc38::t_eaf13f5ffb751b 6,13
+  s_d74e1a9e70bc38::t_cf68e7510efa79 27
+  s_d74e1a9e70bc38::t_f25da199f28f11 128
+  s_d74e1a9e70bc38::t_213c2a4866706f 1-5,7-12,14-26,28-127,129-134
+src/features/household-reasoning/comparison.js
+  s_d74e1a9e70bc38::t_85a272afa10785 1-90
+package.json
+  s_d74e1a9e70bc38::t_f3fc33ec50ff97 13
+src/features/household-reasoning/next-actions.js
+  s_d74e1a9e70bc38::t_8de765c5926f2e 1-6,11-14,16,19-42,44-72
+  s_d74e1a9e70bc38::t_efe583c6b1bb69 7-10,43
+  s_d74e1a9e70bc38::t_bbf45c4a26cb7f 15,17-18
+docs/exec-plans/active/block4-acceptance.md
+  s_d74e1a9e70bc38::t_20a33dd54b62ab 1-86
+  s_d74e1a9e70bc38::t_daa466e3fd5a99 87-111
+tests/household-policy-comparison.test.mjs
+  s_d74e1a9e70bc38::t_9866e38610f3a1 1-139
+tests/support/household-fixtures.mjs
+  s_d74e1a9e70bc38::t_82a1d9c48c2211 1-14,16-48,50,53-69
+  s_d74e1a9e70bc38::t_ce2485ad1bebdd 70-82
+  s_d74e1a9e70bc38::t_6a17055d195265 15,49,51-52
+docs/exec-plans/active/block4-household-reasoning.xml
+  s_d74e1a9e70bc38::t_3465877654726d 1-57
+docs/iterations/LATEST.md
+  s_d74e1a9e70bc38::t_ffec2b2048c8af 3-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9722b5b429bb954f32ef2211f37ce83b6185760c",
+  "prompts": {},
+  "sessions": {
+    "s_d74e1a9e70bc38": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e22ab5b4-8acf-4123-80e3-4e60a919eb4b",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
