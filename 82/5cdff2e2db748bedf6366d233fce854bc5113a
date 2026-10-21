@@ -1,0 +1,23 @@
+docs/exec-plans/active/codeql-alert-remediation.md
+  s_8db98385d48fd9::t_e04592753741dd 11,25
+docs/iterations/LATEST.md
+  s_8db98385d48fd9::t_e04592753741dd 3,9
+src/backend/database/postgres/migrate.js
+  s_8db98385d48fd9::t_e04592753741dd 23,59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "825cdff2e2db748bedf6366d233fce854bc5113a",
+  "prompts": {},
+  "sessions": {
+    "s_8db98385d48fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a15ca0-4c4d-75c2-b383-f23312bcb248",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
