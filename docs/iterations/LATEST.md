@@ -2,10 +2,10 @@
 
 ## CodeQL remediation candidate (2026-10-21, `codex/codeql-alerts-2026-10-21`)
 
-- Prepared fixes for all 10 CodeQL alerts open on `main`: provider smoke scripts no longer read secrets from `.env`; dynamic score maps use `Map`; migration paths reject links and malformed filenames; intentional repository-owned migration DDL has narrow CodeQL suppressions.
+- Prepared fixes for all 10 CodeQL alerts open on `main`: provider smoke scripts no longer read secrets from `.env`; dynamic score maps use `Map`; migration loading is restricted to fixed production and test roots and rejects links and malformed filenames.
 - Removed `.github/workflows/codeql.yml` because GitHub default setup is already configured with the extended query suite and the remote-and-local threat model. This avoids the failing default-versus-advanced setup conflict without changing repository settings.
 - Added synthetic regression coverage for hostile `__proto__` keys and migration-file links. Independent read-only security review found no blocker; its one low reliability finding was fixed and re-reviewed.
-- Checks: `npm run check` passed with 1,081 passed, 74 expected skips and 0 failures; `npm run eval:safety` passed 28/28 with zero network calls; `git diff --check` passed. PostgreSQL integration remained skipped without `TEST_DATABASE_URL`.
+- Checks: `npm run check` passed with 1,083 passed, 74 expected skips and 0 failures; `npm run eval:safety` passed 28/28 with zero network calls; `git diff --check` passed. PostgreSQL integration remained skipped without `TEST_DATABASE_URL`.
 - A fresh CodeQL result still requires the branch to be pushed and scanned. Do not claim the GitHub alerts closed until that scan completes.
 
 ## Closeout status (2026-10-20, `main`)
