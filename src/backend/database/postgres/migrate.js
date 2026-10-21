@@ -20,6 +20,7 @@ export function loadPostgresMigrations(directory = postgresMigrationDirectory) {
     throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'The migration directory is not allowed.');
   }
   // Restrict entries to regular files with fixed migration names, then resolve symlinks before reading.
+  // lgtm[js/path-injection] The canonical directory is restricted above to one of two fixed roots.
   return readdirSync(root, { withFileTypes: true })
     .filter(entry => entry.isFile() && /^\d{3}_[a-z0-9_]+\.sql$/.test(entry.name))
     .sort((left, right) => left.name.localeCompare(right.name))
@@ -55,6 +56,7 @@ async function applyMigration(client, version, sql) {
     }
     // Migration SQL is loaded only from a fixed, validated migration root. Parameter binding cannot
     // represent PostgreSQL DDL. The checksum makes later edits fail closed.
+    // lgtm[js/sql-injection] PostgreSQL DDL comes only from the validated migration loader above.
     await client.query(sql);
     await client.query(
       'INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ($1, $2, $3)',
