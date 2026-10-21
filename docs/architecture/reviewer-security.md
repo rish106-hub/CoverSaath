@@ -7,6 +7,7 @@ Two separate authority systems. Household reviewers judge facts derived from one
 - Every route identifies the caller by the bearer session (`principal.adultId`). No body field names a reviewer, checker or authority; such fields are ignored.
 - Sessions are self-issued bearer tokens after a bootstrap token. There is no identity provider, no MFA and no staff directory (`security.md`, Known gaps). So "authenticated" here means "holds a session for that adult id", not "is a verified person".
 - Operator tooling (`scripts/curated-source.mjs`, `CatalogueReviewRepository.grantIndependentReviewer`) runs with database access. Its `operatorId` argument is a label written to the audit trail, **not** authentication. Whoever can run it can grant roles. This is the main production identity gap.
+- Curated check and publish have no route. They need an Ed25519 signature by the key registered on the checker's live grant ([ADR 0010](../adr/0010-signed-curated-actions-and-derived-text.md)); a checker id typed by the operator is never sufficient. The operator can still register a key they hold, so signing narrows but does not close the gap above.
 
 ## Role and permission matrix
 
@@ -16,7 +17,7 @@ Two separate authority systems. Household reviewers judge facts derived from one
 | Household confirmer | owner, `POST /households/{id}/catalogue-reviewers` | own household | until revoked or household role ends | accept/reject/dispute a fact; result `reported` | reach `proven`; attest a contractual source |
 | Independent reviewer | operator tooling only | one case of one household; documents uploaded at or before `granted_at` | at most 30 days | read that case's catalogue (only when `CATALOGUE_INDEPENDENT_REVIEW_ENABLED=true`), review with `independent` authority | hold any role in that household; see documents uploaded after the grant; self-grant |
 | Source curator | operator CLI `grant-role` | all curated submissions | at most 90 days | register, propose facts, revalidate own submission | check or publish |
-| Source checker | operator CLI `grant-role` | all curated submissions | at most 90 days | read, check (accept/reject), publish, revalidate unchanged bytes | check or publish a submission they collected |
+| Source checker | operator CLI `grant-role` with the checker's public key | all curated submissions | at most 90 days | read, sign check (accept/reject) and publish actions applied by the CLI, revalidate unchanged bytes | check or publish a submission they collected; act without their private key |
 | Operator | database access | everything | n/a | grant/revoke roles, invalidate a published product | self-grant (refused by id comparison only) |
 
 ## Resource-scoped authorisation
@@ -31,7 +32,8 @@ Two separate authority systems. Household reviewers judge facts derived from one
 
 - Curated sources: the checker must differ from the collector (database CHECK plus service check, in the write transaction). One person holding both roles is still refused on their own submission. Publication needs a live checker grant and re-runs every machine check against the archive.
 - Household facts: a household confirmation can never supersede an independent review; only an independent review can reach `proven`.
-- No route can mint an independent reviewer or a source role.
+- No route can mint an independent reviewer or a source role, and no route can check or publish a curated product.
+- Curated machine checks compare against page text derived from the archived PDF bytes, never curator-supplied text.
 
 ## Review state transitions
 
@@ -42,7 +44,7 @@ Two separate authority systems. Household reviewers judge facts derived from one
 
 - Household reviews: an expired or revoked grant makes that reviewer's reviews count for nothing on the next read (by design: authority over a household's data ends with the grant).
 - Curated products: grant expiry or revocation stops new actions only. A product published by a checker whose grant later ended stays published, because publication is a recorded act. To withdraw it, an operator runs `invalidate` (checker compromised, review found wrong, source superseded), which moves it to `needs_revalidation`.
-- A role revoked between request and commit is seen inside the write transaction.
+- A role revoked between request and commit is seen inside the write transaction. A signed action is verified inside that transaction too, so revocation, expiry or a regrant with a new key between signing and applying refuses it.
 
 ## Consent dependency
 
@@ -62,7 +64,7 @@ Two separate authority systems. Household reviewers judge facts derived from one
 
 ## Known production identity gaps
 
-1. No trusted operator model: operator ids are labels.
+1. No trusted operator model: operator ids are labels. Curated approvals are signed by the checker's key, but the operator registers that key.
 2. No staff directory or MFA for independent reviewers, curators or checkers; nobody holds these roles.
 3. No consent purpose or legal review for independent review.
 4. Grant expiry for independent reviewers is repository-enforced; the database trigger checks only that an expiry and case exist.

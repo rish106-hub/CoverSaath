@@ -71,7 +71,7 @@ export const expectedTables = Object.freeze([
   'coverage_parameter_acquisitions', 'coverage_parameter_observations',
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
   'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs', 'policy_clauses', 'policy_answers', 'catalogue_reviewer_grants', 'catalogue_reviews',
-  'source_curator_grants', 'curated_source_archives', 'curated_product_submissions',
+  'source_curator_grants', 'curated_source_archives', 'curated_product_submissions', 'curated_action_nonces',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -79,6 +79,7 @@ export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved
 export const criticalTriggers = Object.freeze([
   'catalogue_reviewer_grants_scope_insert', 'catalogue_reviews_scope_insert', 'catalogue_reviews_immutable', 'catalogue_reviews_erase_on_document_erasure',
   'catalogue_reviewer_grants_independent_insert', 'catalogue_reviewer_grants_independent_update', 'curated_source_archives_immutable', 'curated_source_archives_no_delete', 'curated_product_submissions_content_immutable', 'curated_product_submissions_state_transition', 'curated_product_submissions_no_delete',
+  'source_curator_grants_checker_key_insert', 'source_curator_grants_checker_key_update', 'curated_action_nonces_immutable', 'curated_action_nonces_no_delete', 'curated_product_submissions_text_origin_immutable',
   'consent_revocations_mark_grant', 'integration_outbox_requires_active_consent',
   'audit_events_no_update', 'audit_events_no_delete',
   'workflow_task_dependencies_same_run_insert', 'workflow_task_dependencies_same_run_update',

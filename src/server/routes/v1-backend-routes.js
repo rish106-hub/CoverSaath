@@ -385,23 +385,12 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       });
       return { status: 201, body: { grantId: grant.id, kind: grant.kind, status: grant.status } };
     }
-    // Curated insurer wording (trusted-source workflow). The caller is identified by the session, and the role comes from a stored,
-    // expiring grant that is re-read on every request: there is no route to grant a role, and a body can name no checker.
-    // Collection and revalidation take document bytes and are operator tooling, not routes.
-    const curatedMatch = url.pathname.match(/^\/api\/v1\/curated-products\/([^/]+)(?:\/(check|publish))?$/);
-    if (curatedMatch) {
-      const submissionId = curatedMatch[1];
-      if (req.method === 'GET' && !curatedMatch[2]) return { status: 200, body: services.curatedProducts.get({ adultId: principal.adultId, submissionId }) };
-      if (req.method === 'POST' && curatedMatch[2] === 'check') {
-        const body = await readBody(req);
-        const result = services.curatedProducts.check({
-          checkerId: principal.adultId, submissionId, decision: requiredString(body.decision, 'decision', { max: 20 }), reasonCode: requiredString(body.reasonCode, 'reasonCode', { max: 60 }),
-          observedSha256: body.observedSha256 ?? null, factsSha256: body.factsSha256 ?? null, quotesReviewed: body.quotesReviewed === true, uinAndVersionReviewed: body.uinAndVersionReviewed === true,
-        });
-        return { status: 200, body: result };
-      }
-      if (req.method === 'POST' && curatedMatch[2] === 'publish') return { status: 200, body: services.curatedProducts.publish({ actorId: principal.adultId, submissionId }) };
-    }
+    // Curated insurer wording (trusted-source workflow). Read only: the caller is identified by the session and the role comes
+    // from a stored, expiring grant re-read on every request. Collection, check, publication and every role change are operator
+    // tooling (scripts/curated-source.mjs, ADR 0010): check and publish need an Ed25519 signature by the checker's registered
+    // key, which no session can supply, so there is deliberately no approval route.
+    const curatedMatch = url.pathname.match(/^\/api\/v1\/curated-products\/([^/]+)$/);
+    if (req.method === 'GET' && curatedMatch) return { status: 200, body: services.curatedProducts.get({ adultId: principal.adultId, submissionId: curatedMatch[1] }) };
     // Decision catalogue (Block 3): facts derived on read from one stored answer. No model call and no write.
     // Gated by the source-pack field, same as /questions. Whether that consent purpose is right for coverage facts is pending legal review.
     const catalogueMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/decision-catalogue$/);
