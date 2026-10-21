@@ -9,11 +9,10 @@
 // COVERSAATH_PG_MIGRATIONS_DIR points the harness at another migration directory. Mutation checks
 // use it to prove a test fails when a trigger is broken; its digest selects its own template.
 import { createHash, randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import pg from 'pg';
 import {
-  createPostgresPool, postgresMigrationDirectory, postgresMigrationFiles, runPostgresMigrations,
+  createPostgresPool, loadPostgresMigrations, postgresMigrationDirectory, runPostgresMigrations,
 } from '../../src/backend/database/postgres/index.js';
 
 export const SKIP_REASON = 'TEST_DATABASE_URL not set';
@@ -54,8 +53,8 @@ export function migrationDirectory() {
 
 export function migrationSetDigest(directory = migrationDirectory()) {
   const hash = createHash('sha256');
-  for (const name of postgresMigrationFiles(directory)) {
-    hash.update(name).update('\0').update(readFileSync(resolve(directory, name))).update('\0');
+  for (const { version, sql } of loadPostgresMigrations(directory)) {
+    hash.update(version).update('\0').update(sql).update('\0');
   }
   return hash.digest('hex').slice(0, 12);
 }
