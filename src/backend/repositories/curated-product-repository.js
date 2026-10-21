@@ -2,17 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { AuditRepository } from './audit-repository.js';
 import {
   curatedFreshness, validateCuratedFacts, validateCuratedProduct, validateSourceIdentity, verifySourceEvidence, normalisePageTexts, sha256Hex, MAX_SOURCE_BYTES,
+  curatedActionTimely, keyFingerprint, parsePublicKey, readCuratedAction, signatureDigest, verifyCuratedActionSignature,
+  buildVerifiedProductRecords, canonicalCuratedFacts,
 } from '../../features/decision-catalogue/index.js';
+import { PDF_TEXT_EXTRACTOR_VERSION, createSandboxedPdfTextExtractor } from '../../features/input/index.js';
 
 // Trusted insurer-source workflow (SQLite 018, PostgreSQL 014). Public insurer wording only: no household data.
 //
 //   collected  -> candidate -> checked -> published
 //   (register)   (propose)    (check)    (publish)       plus rejected, needs_revalidation, superseded
 //
-// A product reaches `verified` only by being PUBLISHED here: an authenticated adult holding an active, unexpired checker
-// grant, who is not the person who collected it, compared the digest of their own copy with the archived bytes, accepted
+// A product reaches `verified` only by being PUBLISHED here: an adult holding an active, unexpired checker grant, proven by
+// an Ed25519 signature made with the key registered on that grant (ADR 0010), who is not the person who collected it, compared the digest of their own copy with the archived bytes, accepted
 // the quotes, and had every machine check pass again against the archive. Verification never comes from a record's own
-// fields. Rows and archived bytes are never deleted; a changed source creates a new submission and withdraws the old one
+// fields. Page text is derived from the archived PDF bytes by the sandboxed extractor (never taken from the curator); a
+// curator's own page text is only a candidate that must agree with it, and a document whose text, page mapping, UIN or
+// wording version cannot be established is refused. Rows and archived bytes are never deleted; a changed source creates a new submission and withdraws the old one
 // from use until the new one is checked. There is deliberately no network code here: bytes are supplied by a person.
 // Audit payloads hold ids, digests and the public UIN, never page text.
 
@@ -21,6 +26,9 @@ export const CHECK_REASON_CODES = Object.freeze(['quote_matches_source', 'quote_
 export const MAX_SOURCE_GRANT_DAYS = 90;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const DERIVED = 'derived_from_bytes';
+// Whitespace and case are layout noise between a curator's candidate text and the derived text; everything else must match.
+const squash = value => String(value ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase();
 const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
 function coded(code, message, statusCode, details) { return Object.assign(new Error(message), { code, statusCode, ...(details ? { details } : {}) }); }
@@ -34,9 +42,14 @@ const str = (value, name, max = 256) => {
 };
 
 export class CuratedProductRepository {
-  constructor(database, { clock = () => new Date(), audit = null, env = {} } = {}) {
+  /**
+   * @param pdfText `{ version, extract(bytes) }`, defaulting to the sandboxed extractor. Only text from an extractor whose
+   *        version is PDF_TEXT_EXTRACTOR_VERSION is ever read as verified.
+   */
+  constructor(database, { clock = () => new Date(), audit = null, env = {}, pdfText = null } = {}) {
     if (!database?.prepare) throw new TypeError('A database is required.');
     this.database = database;
+    this.pdfText = pdfText;
     this.clock = clock;
     this.audit = audit ?? new AuditRepository(database, { clock });
     // Insurer/regulator host allowlist (CURATED_SOURCE_HOSTS, comma separated, exact DNS names). Fails closed: unset or empty
@@ -82,10 +95,15 @@ export class CuratedProductRepository {
 
   // ---- Roles: operator tooling only, no route, always temporary ----------------------------------------------------------
 
-  grantRole({ adultUserId, role, operatorId, expiresAt }) {
+  /**
+   * A checker grant must carry the checker's Ed25519 public key (base64 SPKI DER): check and publish are verified against it.
+   * A regrant replaces the key, so actions signed with an earlier key stop verifying.
+   */
+  grantRole({ adultUserId, role, operatorId, expiresAt, publicKey = null }) {
     str(adultUserId, 'adultUserId'); str(operatorId, 'operatorId', 128);
     if (!SOURCE_ROLES.includes(role)) throw invalid('role is not supported.');
     if (operatorId === adultUserId) throw invalid('An operator cannot grant themselves.');
+    if (role === 'checker' ? !parsePublicKey(publicKey) : publicKey !== null && !parsePublicKey(publicKey)) throw invalid('publicKey must be an Ed25519 public key (base64 SPKI DER).');
     const now = this.clock().getTime();
     if (typeof expiresAt !== 'string' || !ISO_INSTANT.test(expiresAt) || !(Date.parse(expiresAt) > now)
       || Date.parse(expiresAt) > now + MAX_SOURCE_GRANT_DAYS * 86_400_000) throw invalid(`expiresAt must be a future UTC instant within ${MAX_SOURCE_GRANT_DAYS} days.`);
@@ -94,13 +112,13 @@ export class CuratedProductRepository {
       const grantedBy = `operator:${operatorId}`.slice(0, 128);
       let id = existing?.id;
       if (existing) {
-        this.database.prepare("UPDATE source_curator_grants SET status = 'active', revoked_at = NULL, granted_by = ?, expires_at = ? WHERE id = ?").run(grantedBy, expiresAt, id);
+        this.database.prepare("UPDATE source_curator_grants SET status = 'active', revoked_at = NULL, granted_by = ?, expires_at = ?, public_key = ? WHERE id = ?").run(grantedBy, expiresAt, publicKey, id);
       } else {
         id = `scg-${randomUUID()}`;
-        this.database.prepare("INSERT INTO source_curator_grants (id, adult_user_id, role, status, granted_by, created_at, expires_at) VALUES (?, ?, ?, 'active', ?, ?, ?)")
-          .run(id, adultUserId, role, grantedBy, this.#now(), expiresAt);
+        this.database.prepare("INSERT INTO source_curator_grants (id, adult_user_id, role, status, granted_by, created_at, expires_at, public_key) VALUES (?, ?, ?, 'active', ?, ?, ?, ?)")
+          .run(id, adultUserId, role, grantedBy, this.#now(), expiresAt, publicKey);
       }
-      this.audit.append({ actorType: 'system', actorId: grantedBy, action: existing ? 'curated_source_role.regranted' : 'curated_source_role.granted', resourceType: 'source_curator_grant', resourceId: id, payload: { role, expiresAt } });
+      this.audit.append({ actorType: 'system', actorId: grantedBy, action: existing ? 'curated_source_role.regranted' : 'curated_source_role.granted', resourceType: 'source_curator_grant', resourceId: id, payload: { role, expiresAt, keyFingerprint: publicKey ? keyFingerprint(publicKey) : null } });
       return this.database.prepare('SELECT * FROM source_curator_grants WHERE id = ?').get(id);
     });
   }
@@ -120,6 +138,33 @@ export class CuratedProductRepository {
 
   #require(adultId, role) { const grant = this.activeRole(adultId, role); if (!grant) throw forbidden(); return grant; }
 
+  #extractor() {
+    this.pdfText ??= createSandboxedPdfTextExtractor();
+    if (typeof this.pdfText?.extract !== 'function' || typeof this.pdfText.version !== 'string') throw new TypeError('A PDF text extractor is required.');
+    return this.pdfText;
+  }
+
+  /**
+   * Page text from the bytes themselves. A curator's page text is a candidate: it must agree page for page with the derived
+   * text or the source is refused. Text that cannot be established on every page refuses the source (fail closed).
+   */
+  async #deriveText(bytes, candidatePageTexts) {
+    const extractor = this.#extractor();
+    let derived;
+    try { derived = await extractor.extract(bytes); } catch { throw rejectedEvidence(['page_text_unestablished']); }
+    if (derived?.status !== 'established') {
+      const pages = (derived?.pages ?? []).filter(page => page.status !== 'established').slice(0, 20).map(page => `page_text_unestablished:${page.page}:${page.reason}`);
+      throw rejectedEvidence(['page_text_unestablished', ...(derived?.reason ? [`document:${derived.reason}`] : []), ...pages]);
+    }
+    const pageTexts = derived.pages.map(page => page.text);
+    if (candidatePageTexts) {
+      if (candidatePageTexts.length !== pageTexts.length) throw rejectedEvidence(['supplied_page_count_differs']);
+      const differing = candidatePageTexts.map((text, i) => (squash(text) === squash(pageTexts[i]) ? null : `supplied_text_differs:${i + 1}`)).filter(Boolean);
+      if (differing.length) throw rejectedEvidence(differing);
+    }
+    return { pageTexts, version: extractor.version };
+  }
+
   // ---- Reads -------------------------------------------------------------------------------------------------------------
 
   #row(id) { return this.database.prepare('SELECT * FROM curated_product_submissions WHERE id = ?').get(str(id, 'submissionId')); }
@@ -130,7 +175,7 @@ export class CuratedProductRepository {
       effectiveFrom: row.effective_from, state: row.state, facts: JSON.parse(row.facts_json), machineChecks: JSON.parse(row.machine_checks_json),
       pageTexts: row.page_texts_json ? JSON.parse(row.page_texts_json) : null,
       collectedBy: row.collected_by, checkedBy: row.checked_by, checkedAt: row.checked_at, publishedAt: row.published_at,
-      factsSha256: sha256Hex(row.facts_json), previousId: row.previous_id, lastRevalidatedAt: row.last_revalidated_at, createdAt: row.created_at,
+      factsSha256: sha256Hex(row.facts_json), pageTextOrigin: row.page_text_origin, textExtractorVersion: row.text_extractor_version, previousId: row.previous_id, lastRevalidatedAt: row.last_revalidated_at, createdAt: row.created_at,
     };
   }
 
@@ -147,7 +192,14 @@ export class CuratedProductRepository {
   #archive(sha) { return this.database.prepare('SELECT content FROM curated_source_archives WHERE sha256 = ?').get(sha)?.content ?? null; }
 
   /** Evidence re-run against the ARCHIVED bytes, so a swapped or damaged archive cannot ride on an earlier pass. */
+  // Only text derived from the bytes by the current extractor supports a machine check. Older rows fail closed.
+  #textOriginBlocking(row) {
+    return row.page_text_origin === DERIVED && row.text_extractor_version === PDF_TEXT_EXTRACTOR_VERSION && row.page_texts_json ? [] : ['page_text_not_derived'];
+  }
+
   #verifyArchive(row) {
+    const origin = this.#textOriginBlocking(row);
+    if (origin.length) throw rejectedEvidence(origin);
     const bytes = this.#archive(row.content_sha256);
     const record = { uin: row.uin, wordingVersion: row.wording_version, contentSha256: row.content_sha256 };
     const facts = JSON.parse(row.facts_json);
@@ -160,16 +212,16 @@ export class CuratedProductRepository {
 
   // ---- Workflow ----------------------------------------------------------------------------------------------------------
 
-  #insert({ id = `cps-${randomUUID()}`, curatorId, identity, bytes, pageTexts, previousId = null, sha, evidence }) {
+  #insert({ id = `cps-${randomUUID()}`, curatorId, identity, bytes, pageTexts, extractorVersion, previousId = null, sha, evidence }) {
     const at = this.#now();
     this.database.prepare('INSERT OR IGNORE INTO curated_source_archives (sha256, byte_size, content, created_at) VALUES (?, ?, ?, ?)').run(sha, bytes.length, bytes, at);
     this.database.prepare(`INSERT INTO curated_product_submissions
       (id, uin, insurer, product_name, wording_version, source_url, source_version_id, content_sha256, retrieved_on, effective_from, page_texts_json,
-       facts_json, machine_checks_json, state, collected_by, previous_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, 'collected', ?, ?, ?)`)
+       facts_json, machine_checks_json, state, collected_by, previous_id, created_at, page_text_origin, text_extractor_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, 'collected', ?, ?, ?, ?, ?)`)
       .run(id, identity.uin, identity.insurer, identity.productName, identity.wordingVersion, identity.sourceUrl, identity.sourceVersionId, sha, identity.retrievedOn,
         identity.effectiveFrom ?? null, pageTexts ? JSON.stringify(pageTexts) : null,
-        JSON.stringify({ bytes: 'digest_computed', humanReview: evidence.humanReview }), curatorId, previousId, at);
+        JSON.stringify({ bytes: 'digest_computed', text: DERIVED, humanReview: evidence.humanReview }), curatorId, previousId, at, DERIVED, extractorVersion);
     this.#event(curatorId, 'curated_source.registered', id, { uin: identity.uin, sha256: sha, previousId });
     return id;
   }
@@ -177,9 +229,9 @@ export class CuratedProductRepository {
   /**
    * Collection. The digest is computed from the bytes the curator supplied; a digest the curator claims must match it.
    * Several printed UINs, a UIN or version that is not in the supplied text, and a different document for a wording that is
-   * already registered all fail closed.
+   * already registered all fail closed, and so does a document whose page text cannot be derived from its bytes.
    */
-  register({ curatorId, uin, insurer, productName, wordingVersion, sourceUrl, sourceVersionId, retrievedOn, effectiveFrom = null, claimedSha256 = null, bytes, pageTexts = null }) {
+  async register({ curatorId, uin, insurer, productName, wordingVersion, sourceUrl, sourceVersionId, retrievedOn, effectiveFrom = null, claimedSha256 = null, bytes, pageTexts = null }) {
     this.#require(curatorId, 'curator');
     const identity = { uin, insurer, productName, wordingVersion, sourceUrl, sourceVersionId: str(sourceVersionId, 'sourceVersionId', 200), retrievedOn, effectiveFrom };
     const problems = validateSourceIdentity(identity, { today: this.#today() });
@@ -191,15 +243,22 @@ export class CuratedProductRepository {
     if (normalisePageTexts(pageTexts) === undefined) throw invalid('pageTexts are invalid.');
     if (claimedSha256 != null && (typeof claimedSha256 !== 'string' || !SHA256.test(claimedSha256))) throw invalid('claimedSha256 is malformed.');
     const sha = sha256Hex(bytes);
-    const evidence = verifySourceEvidence({ record: { uin, wordingVersion, contentSha256: claimedSha256 ?? sha }, bytes, pageTexts });
+    const digestOnly = verifySourceEvidence({ record: { uin, wordingVersion, contentSha256: claimedSha256 ?? sha }, bytes });
+    if (digestOnly.blocking.length) throw rejectedEvidence(digestOnly.blocking);
+    const derived = await this.#deriveText(bytes, normalisePageTexts(pageTexts));
+    const evidence = verifySourceEvidence({ record: { uin, wordingVersion, contentSha256: claimedSha256 ?? sha }, bytes, pageTexts: derived.pageTexts });
     if (evidence.blocking.length) throw rejectedEvidence(evidence.blocking);
     return this.#atomic(() => {
       this.#require(curatorId, 'curator');
       const open = this.database.prepare("SELECT * FROM curated_product_submissions WHERE uin = ? AND wording_version = ? AND state IN ('collected', 'candidate', 'checked', 'published', 'needs_revalidation')").all(uin, wordingVersion);
       const same = open.find(row => row.content_sha256 === sha);
+      // A replay returns only a usable row. Text from an older extractor, or an invalidated row, is re-opened by revalidate.
+      if (same && (same.state === 'needs_revalidation' || this.#textOriginBlocking(same).length)) {
+        throw coded('SOURCE_REVALIDATION_REQUIRED', 'This document is registered but must be revalidated (stale text or invalidated review).', 409);
+      }
       if (same) return { ...this.#dto(same), replayed: true };
       if (open.length) throw coded('SOURCE_VERSION_CONFLICT', 'A different document is already registered for this UIN and wording version.', 409);
-      const id = this.#insert({ curatorId, identity, bytes, pageTexts, sha, evidence });
+      const id = this.#insert({ curatorId, identity, bytes, pageTexts: derived.pageTexts, extractorVersion: derived.version, sha, evidence });
       return { ...this.#dto(this.#row(id)), replayed: false };
     });
   }
@@ -214,8 +273,9 @@ export class CuratedProductRepository {
       if (!['collected', 'candidate'].includes(row.state)) throw coded('SUBMISSION_STATE_CONFLICT', `A ${row.state} submission cannot take new facts.`, 409);
       const problems = validateCuratedFacts(facts);
       if (problems.length) throw invalid('The facts are invalid.', problems);
-      const clean = facts.map(f => ({ factType: f.factType, topic: f.topic ?? 'general', value: f.value, page: f.page, quote: f.quote }));
-      const probe = { ...row, facts_json: JSON.stringify(clean) };
+      const factsJson = canonicalCuratedFacts(facts);
+      const clean = JSON.parse(factsJson);
+      const probe = { ...row, facts_json: factsJson };
       const evidence = this.#verifyArchive(probe);
       const machine = { bytes: 'verified', uin: evidence.humanReview.length ? 'human_review' : 'verified', quotes: evidence.humanReview.length ? 'human_review' : 'verified', humanReview: evidence.humanReview };
       const done = this.database.prepare("UPDATE curated_product_submissions SET facts_json = ?, machine_checks_json = ?, state = 'candidate' WHERE id = ? AND state IN ('collected', 'candidate')")
@@ -227,27 +287,65 @@ export class CuratedProductRepository {
   }
 
   /**
-   * Independent check. The checker authenticates as an adult with a live checker grant, is not the collector, supplies the
-   * SHA-256 of their own copy of the source and states they read every quotation in it. Accepting re-runs every machine check
-   * against the archived bytes. A page text the curator supplied is never trusted as the source itself.
+   * Verifies a signed checker action (ADR 0010) and returns its payload and grant. The caller id inside the payload is only a
+   * claim: it is accepted when the signature verifies against the public key of that adult's live checker grant. Runs inside
+   * the write transaction so a revocation or regrant between signing and applying is seen. The nonce row is written last,
+   * by the caller, in the same transaction, so a refused action never consumes it and an accepted one cannot be replayed.
    */
-  check({ checkerId, submissionId, decision, reasonCode, observedSha256 = null, factsSha256 = null, quotesReviewed = false, uinAndVersionReviewed = false }) {
-    this.#require(checkerId, 'checker');
-    if (!['accept', 'reject'].includes(decision)) throw invalid('decision is not supported.');
-    if (!CHECK_REASON_CODES.includes(reasonCode)) throw invalid('reasonCode is not supported.');
-    if ((decision === 'accept') !== (reasonCode === 'quote_matches_source')) throw invalid('reasonCode does not fit the decision.');
+  #authoriseSigned(envelope, action) {
+    const payload = readCuratedAction(envelope);
+    if (payload.action !== action) throw coded('SOURCE_ACTION_MALFORMED', `The signed action is not a ${action}.`, 400);
+    const grant = this.#require(payload.checkerId, 'checker');
+    if (!verifyCuratedActionSignature(grant.public_key, envelope)) throw coded('SOURCE_ACTION_SIGNATURE_INVALID', 'The signed action does not verify against the checker key.', 403);
+    if (!curatedActionTimely(payload, this.clock().getTime())) throw coded('SOURCE_ACTION_EXPIRED', 'The signed action is outside its validity window.', 403);
+    if (this.database.prepare('SELECT 1 FROM curated_action_nonces WHERE nonce = ?').get(payload.nonce)) throw coded('SOURCE_ACTION_REPLAYED', 'The signed action was already used.', 409);
+    return { payload, grant };
+  }
+
+  #spendNonce({ payload, grant }, envelope) {
+    this.database.prepare('INSERT INTO curated_action_nonces (nonce, grant_id, action, submission_id, signature_sha256, used_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(payload.nonce, grant.id, payload.action, payload.submissionId, signatureDigest(envelope), this.#now());
+  }
+
+  // Refused signed actions are recorded after the transaction rolled back. The actor is the CLAIMED checker id.
+  #refused(envelope, error, extra = []) {
+    if (!['SOURCE_ACTION_SIGNATURE_INVALID', 'SOURCE_ACTION_EXPIRED', 'SOURCE_ACTION_REPLAYED', 'SOURCE_ROLE_NOT_AUTHORISED', 'SELF_REVIEW_REFUSED', ...extra].includes(error?.code)) return;
+    let payload;
+    try { payload = JSON.parse(envelope.payload); } catch { return; }
+    if (typeof payload?.checkerId !== 'string' || typeof payload?.submissionId !== 'string') return;
+    this.audit.append({
+      actorType: 'system', actorId: `claimed:${payload.checkerId}`.slice(0, 128), action: 'curated_source.signed_action_refused',
+      resourceType: 'curated_product_submission', resourceId: payload.submissionId.slice(0, 128), payload: { reason: error.code, action: String(payload.action).slice(0, 20) },
+    });
+  }
+
+  /**
+   * Independent check, from a signed action only (operator CLI `check`; there is no route). The checker is not the collector,
+   * signs the SHA-256 of their own copy of the source and the digest of the facts they read, and states they read every
+   * quotation in it. Accepting re-runs every machine check against the archived bytes. A page text the curator supplied is
+   * never trusted as the source itself.
+   */
+  check({ signedAction }) {
     try {
-      return this.#check({ checkerId, submissionId, decision, reasonCode, observedSha256, factsSha256, quotesReviewed, uinAndVersionReviewed });
+      return this.#atomic(() => {
+        const authorised = this.#authoriseSigned(signedAction, 'check');
+        const { payload } = authorised;
+        if (!CHECK_REASON_CODES.includes(payload.reasonCode)) throw invalid('reasonCode is not supported.');
+        if ((payload.decision === 'accept') !== (payload.reasonCode === 'quote_matches_source')) throw invalid('reasonCode does not fit the decision.');
+        const result = this.#check({ checkerId: payload.checkerId, ...payload });
+        this.#spendNonce(authorised, signedAction);
+        return result;
+      });
     } catch (error) {
-      // The mismatch event is written after the failed transaction rolled back, so the attempt stays on record.
-      if (error?.code === 'SOURCE_DIGEST_MISMATCH' && error.audit) this.#event(checkerId, 'curated_source.check_digest_mismatch', submissionId, error.audit);
+      // Written after the failed transaction rolled back, so the attempt stays on record.
+      if (error?.code === 'SOURCE_DIGEST_MISMATCH' && error.audit) this.#event(error.audit.checkerId, 'curated_source.check_digest_mismatch', error.audit.submissionId, { observed: error.audit.observed });
+      this.#refused(signedAction, error);
       throw error;
     }
   }
 
-  #check({ checkerId, submissionId, decision, reasonCode, observedSha256, factsSha256, quotesReviewed, uinAndVersionReviewed }) {
+  #check({ checkerId, submissionId, decision, reasonCode, observedSha256, factsSha256, quotesReviewed }) {
     return this.#atomic(() => {
-      this.#require(checkerId, 'checker');
       const row = this.#row(submissionId);
       if (!row) throw notFound();
       if (row.collected_by === checkerId) throw coded('SELF_REVIEW_REFUSED', 'The person who collected a source cannot check it.', 403);
@@ -260,79 +358,104 @@ export class CuratedProductRepository {
       if (quotesReviewed !== true) throw invalid('quotesReviewed must be true: a checker states they read each quotation in the source.');
       if (typeof observedSha256 !== 'string' || !SHA256.test(observedSha256)) throw invalid('observedSha256 is malformed.');
       if (observedSha256 !== row.content_sha256) {
-        throw Object.assign(coded('SOURCE_DIGEST_MISMATCH', 'The checker\'s copy does not match the archived source.', 409), { audit: { observed: observedSha256 } });
+        throw Object.assign(coded('SOURCE_DIGEST_MISMATCH', 'The checker\'s copy does not match the archived source.', 409), { audit: { checkerId, submissionId: row.id, observed: observedSha256 } });
       }
       // The approval covers exactly the facts the checker read: a re-proposal after they looked invalidates it.
       if (factsSha256 !== sha256Hex(row.facts_json)) throw coded('FACTS_CHANGED', 'The candidate facts changed or were not the ones reviewed.', 409);
       const evidence = this.#verifyArchive(row);
-      // Without page text the UIN and wording version were compared to nothing; the checker must say they read them.
-      if (evidence.humanReview.length && uinAndVersionReviewed !== true) throw invalid('uinAndVersionReviewed must be true: no page text was supplied, so the UIN and wording version were not machine-checked.');
+      // Derived page text is required, so the UIN, wording version and every quote were machine-checked against the archive.
+      if (evidence.humanReview.length) throw rejectedEvidence(['page_text_unestablished']);
       const done = this.database.prepare("UPDATE curated_product_submissions SET state = 'checked', checked_by = ?, checked_at = ? WHERE id = ? AND state = 'candidate'").run(checkerId, this.#now(), row.id);
       if (Number(done.changes) !== 1) throw coded('SUBMISSION_STATE_CONFLICT', 'The submission changed.', 409);
-      this.#event(checkerId, 'curated_source.checked', row.id, { reasonCode, sha256: row.content_sha256 });
-      return this.#dto(this.#row(row.id));
-    });
-  }
-
-  /** Publication. Needs a live checker grant, a checked submission and every machine check passing again. Withdraws a superseded predecessor. */
-  publish({ actorId, submissionId }) {
-    this.#require(actorId, 'checker');
-    return this.#atomic(() => {
-      this.#require(actorId, 'checker');
-      const row = this.#row(submissionId);
-      if (!row) throw notFound();
-      if (row.collected_by === actorId) throw coded('SELF_REVIEW_REFUSED', 'The person who collected a source cannot publish it.', 403);
-      if (row.state !== 'checked') throw coded('SUBMISSION_STATE_CONFLICT', `A ${row.state} submission cannot be published.`, 409);
-      this.#verifyArchive(row);
-      if (row.previous_id) {
-        this.database.prepare("UPDATE curated_product_submissions SET state = 'superseded' WHERE id = ? AND state IN ('published', 'needs_revalidation')").run(row.previous_id);
-      }
-      const done = this.database.prepare("UPDATE curated_product_submissions SET state = 'published', published_at = ? WHERE id = ? AND state = 'checked'").run(this.#now(), row.id);
-      if (Number(done.changes) !== 1) throw coded('SUBMISSION_STATE_CONFLICT', 'The submission changed.', 409);
-      this.#event(actorId, 'curated_source.published', row.id, { uin: row.uin, sha256: row.content_sha256, supersedes: row.previous_id });
+      this.#event(checkerId, 'curated_source.checked', row.id, { reasonCode, sha256: row.content_sha256, factsSha256 });
       return this.#dto(this.#row(row.id));
     });
   }
 
   /**
-   * Explicit revalidation with bytes a person downloaded. Never fetches. An unchanged digest only records the check. A
-   * different digest withdraws the published wording from use (`needs_revalidation`, history kept) and opens a new collected
-   * submission that must go through proposal, a different checker and publication again.
+   * Publication, from a signed action only (operator CLI `publish`; there is no route). Needs a live checker grant whose key
+   * signed it, a checked submission, the same facts and source digests the signer attests, and every machine check passing
+   * again. Withdraws a superseded predecessor.
    */
-  revalidate({ actorId, submissionId, bytes, sourceVersionId = null, retrievedOn = null, pageTexts = null }) {
+  publish({ signedAction }) {
+    try {
+      return this.#atomic(() => {
+        const authorised = this.#authoriseSigned(signedAction, 'publish');
+        const { payload } = authorised;
+        const actorId = payload.checkerId;
+        const row = this.#row(payload.submissionId);
+        if (!row) throw notFound();
+        if (row.collected_by === actorId) throw coded('SELF_REVIEW_REFUSED', 'The person who collected a source cannot publish it.', 403);
+        if (row.state !== 'checked') throw coded('SUBMISSION_STATE_CONFLICT', `A ${row.state} submission cannot be published.`, 409);
+        if (payload.observedSha256 !== row.content_sha256) throw coded('SOURCE_DIGEST_MISMATCH', 'The publisher\'s copy does not match the archived source.', 409);
+        if (payload.factsSha256 !== sha256Hex(row.facts_json)) throw coded('FACTS_CHANGED', 'The facts are not the ones the publisher attested.', 409);
+        this.#verifyArchive(row);
+        if (row.previous_id) {
+          this.database.prepare("UPDATE curated_product_submissions SET state = 'superseded' WHERE id = ? AND state IN ('published', 'needs_revalidation')").run(row.previous_id);
+        }
+        const done = this.database.prepare("UPDATE curated_product_submissions SET state = 'published', published_at = ? WHERE id = ? AND state = 'checked'").run(this.#now(), row.id);
+        if (Number(done.changes) !== 1) throw coded('SUBMISSION_STATE_CONFLICT', 'The submission changed.', 409);
+        this.#spendNonce(authorised, signedAction);
+        this.#event(actorId, 'curated_source.published', row.id, { uin: row.uin, sha256: row.content_sha256, supersedes: row.previous_id, keyFingerprint: keyFingerprint(authorised.grant.public_key) });
+        return this.#dto(this.#row(row.id));
+      });
+    } catch (error) {
+      this.#refused(signedAction, error, ['SOURCE_DIGEST_MISMATCH', 'FACTS_CHANGED']);
+      throw error;
+    }
+  }
+
+  /**
+   * Explicit revalidation with bytes a person downloaded. Never fetches. Unchanged bytes on a usable row only record the
+   * check. Otherwise the collector opens a new `collected` submission (`previous_id` set) that must go through proposal, a
+   * different checker and publication again, and the old one is withdrawn from use (history kept):
+   *   - different bytes (the source changed; needs a new sourceVersionId);
+   *   - the same bytes whose stored text came from an older extractor or was never derived (re-derived from the bytes);
+   *   - the same bytes after an operator invalidated the review (`needs_revalidation`).
+   */
+  async revalidate({ actorId, submissionId, bytes, sourceVersionId = null, retrievedOn = null, pageTexts = null }) {
     if (!this.activeRole(actorId, 'curator') && !this.activeRole(actorId, 'checker')) throw forbidden();
     if (!(bytes instanceof Uint8Array) || bytes.length < 1 || bytes.length > MAX_SOURCE_BYTES) throw invalid('bytes are invalid.');
     if (normalisePageTexts(pageTexts) === undefined) throw invalid('pageTexts are invalid.');
     const sha = sha256Hex(bytes);
+    const REOPENABLE = ['published', 'checked', 'candidate', 'collected', 'needs_revalidation'];
+    const reopens = row => sha !== row.content_sha256 || row.state === 'needs_revalidation' || this.#textOriginBlocking(row).length > 0;
+    // Text is derived only for a re-opening the actor may make, and before the write transaction (it is async).
+    const before = this.#row(submissionId);
+    let derived = null;
+    if (before && REOPENABLE.includes(before.state) && reopens(before) && before.collected_by === actorId && this.activeRole(actorId, 'curator')) {
+      derived = await this.#deriveText(bytes, normalisePageTexts(pageTexts));
+    }
     return this.#atomic(() => {
       const isCurator = Boolean(this.activeRole(actorId, 'curator'));
       if (!isCurator && !this.activeRole(actorId, 'checker')) throw forbidden();
       const row = this.#row(submissionId);
       if (!row) throw notFound();
-      if (!['published', 'checked', 'candidate', 'collected'].includes(row.state)) throw coded('SUBMISSION_STATE_CONFLICT', `A ${row.state} submission cannot be revalidated.`, 409);
-      if (sha === row.content_sha256) {
+      if (!REOPENABLE.includes(row.state)) throw coded('SUBMISSION_STATE_CONFLICT', `A ${row.state} submission cannot be revalidated.`, 409);
+      if (!reopens(row)) {
         this.database.prepare('UPDATE curated_product_submissions SET last_revalidated_at = ? WHERE id = ?').run(this.#now(), row.id);
         this.#event(actorId, 'curated_source.revalidated_unchanged', row.id, { sha256: sha });
         return { changed: false, submission: this.#dto(this.#row(row.id)), next: null };
       }
       if (!isCurator || row.collected_by !== actorId) throw forbidden();
+      const changedBytes = sha !== row.content_sha256;
       const identity = {
         uin: row.uin, insurer: row.insurer, productName: row.product_name, wordingVersion: row.wording_version, sourceUrl: row.source_url,
-        sourceVersionId: str(sourceVersionId, 'sourceVersionId', 200), retrievedOn: retrievedOn ?? this.#today(), effectiveFrom: row.effective_from,
+        sourceVersionId: changedBytes ? str(sourceVersionId, 'sourceVersionId', 200) : row.source_version_id,
+        retrievedOn: retrievedOn ?? this.#today(), effectiveFrom: row.effective_from,
       };
-      if (identity.sourceVersionId === row.source_version_id) throw invalid('A changed source needs a new sourceVersionId.');
+      if (changedBytes && identity.sourceVersionId === row.source_version_id) throw invalid('A changed source needs a new sourceVersionId.');
       const problems = validateSourceIdentity(identity, { today: this.#today() });
       if (problems.length) throw invalid('The source identity is invalid.', problems);
-      const evidence = verifySourceEvidence({ record: { uin: row.uin, wordingVersion: row.wording_version, contentSha256: sha }, bytes, pageTexts });
+      if (!derived) throw coded('SUBMISSION_STATE_CONFLICT', 'The submission changed.', 409);
+      const evidence = verifySourceEvidence({ record: { uin: row.uin, wordingVersion: row.wording_version, contentSha256: sha }, bytes, pageTexts: derived.pageTexts });
       if (evidence.blocking.length) throw rejectedEvidence(evidence.blocking);
-      if (['published', 'checked'].includes(row.state)) {
-        this.database.prepare("UPDATE curated_product_submissions SET state = 'needs_revalidation' WHERE id = ? AND state IN ('published', 'checked')").run(row.id);
-      } else {
-        this.database.prepare("UPDATE curated_product_submissions SET state = 'superseded' WHERE id = ? AND state IN ('candidate', 'collected')").run(row.id);
-      }
-      const id = this.#insert({ curatorId: actorId, identity, bytes, pageTexts, previousId: row.id, sha, evidence });
-      this.#event(actorId, 'curated_source.changed', row.id, { previousSha256: row.content_sha256, sha256: sha, next: id });
-      return { changed: true, submission: this.#dto(this.#row(row.id)), next: this.#dto(this.#row(id)) };
+      const withdrawn = ['published', 'checked'].includes(row.state) ? 'needs_revalidation' : 'superseded';
+      this.database.prepare('UPDATE curated_product_submissions SET state = ? WHERE id = ? AND state = ?').run(withdrawn, row.id, row.state);
+      const id = this.#insert({ curatorId: actorId, identity, bytes, pageTexts: derived.pageTexts, extractorVersion: derived.version, previousId: row.id, sha, evidence });
+      const reason = changedBytes ? 'source_changed' : row.state === 'needs_revalidation' ? 'review_invalidated' : 'text_rederived';
+      this.#event(actorId, 'curated_source.changed', row.id, { previousSha256: row.content_sha256, sha256: sha, next: id, reason });
+      return { changed: true, reason, submission: this.#dto(this.#row(row.id)), next: this.#dto(this.#row(id)) };
     });
   }
 
@@ -362,6 +485,8 @@ export class CuratedProductRepository {
    * application bypasses them, so a trusted read never relies on an earlier pass.
    */
   #archiveBlocking(row) {
+    const origin = this.#textOriginBlocking(row);
+    if (origin.length) return origin;
     let pageTexts; let facts;
     try { pageTexts = row.page_texts_json ? JSON.parse(row.page_texts_json) : null; facts = JSON.parse(row.facts_json); } catch { return ['stored_json_invalid']; }
     if (!Array.isArray(facts)) return ['stored_json_invalid'];
@@ -375,14 +500,49 @@ export class CuratedProductRepository {
 
   #parsedFacts(row) { try { const facts = JSON.parse(row.facts_json); return Array.isArray(facts) ? facts : null; } catch { return null; } }
 
-  /** Operator check of every published submission's archive (CLI `verify-archives`). Reports, never repairs or changes state. */
-  verifyPublishedArchives() {
-    return this.database.prepare("SELECT * FROM curated_product_submissions WHERE state = 'published' ORDER BY uin, wording_version").all()
+  /**
+   * Operator check of every published submission's archive (CLI `verify-archives`). Re-runs the machine checks and derives the
+   * page text again from the archived bytes, so stored text edited outside the application is caught. Reports, never repairs.
+   */
+  async verifyPublishedArchives() {
+    const rows = this.database.prepare("SELECT * FROM curated_product_submissions WHERE state = 'published' ORDER BY uin, wording_version").all();
+    const out = [];
+    for (const row of rows) {
+      const blocking = [...this.#archiveBlocking(row)];
+      const bytes = this.#archive(row.content_sha256);
+      // Re-derivation only adds information when the stored checks still pass.
+      if (bytes && blocking.length === 0) {
+        try {
+          const derived = await this.#deriveText(new Uint8Array(bytes), null);
+          if (derived.version !== row.text_extractor_version) blocking.push('extractor_version_changed');
+          else if (JSON.stringify(derived.pageTexts) !== row.page_texts_json) blocking.push('derived_text_changed');
+        } catch (error) {
+          blocking.push(...(error?.details ?? ['page_text_unestablished']).slice(0, 1));
+        }
+      }
+      out.push({ submissionId: row.id, uin: row.uin, ok: blocking.length === 0, blocking, textOrigin: row.page_text_origin, extractor: row.text_extractor_version });
+    }
+    return out;
+  }
+
+  /**
+   * Read-only `verified-product-records/v1` view (WP4) of every submission. Values come only from listVerified; every other
+   * row is at most unverified. No household data exists in these tables. Not exposed by any route.
+   */
+  productRecords({ today = this.#today(), requested = [] } = {}) {
+    const verified = this.listVerified({ today });
+    const verifiedIds = new Set(verified.map(product => product.verification.submissionId));
+    const submissions = this.database.prepare('SELECT * FROM curated_product_submissions ORDER BY uin, wording_version, created_at').all()
+      .filter(row => !verifiedIds.has(row.id))
       .map(row => {
-        const blocking = this.#archiveBlocking(row);
-        // Without page text only the bytes are machine-checked; the UIN, version and quotes rest on the checker's attestation.
-        return { submissionId: row.id, uin: row.uin, ok: blocking.length === 0, blocking, quotesMachineChecked: Boolean(row.page_texts_json) };
+        const facts = this.#parsedFacts(row);
+        const dto = this.#dto({ ...row, facts_json: facts ? row.facts_json : '[]', machine_checks_json: '{}' });
+        const { pageTexts: _text, collectedBy: _collector, checkedBy: _checker, ...view } = dto;
+        // A published row that listVerified refused (stale text, failed archive check, malformed facts) is withdrawn from
+        // use: it reads as needing revalidation, never as an unverified candidate with values.
+        return row.state === 'published' ? { ...view, state: 'needs_revalidation', facts: [] } : view;
       });
+    return buildVerifiedProductRecords({ verified, submissions, requested, today });
   }
 
   /**
@@ -403,7 +563,7 @@ export class CuratedProductRepository {
         curatedBy: row.collected_by, checkedBy: row.checked_by, facts,
       }, { today });
       if (!checked.valid) continue;
-      out.push(Object.freeze({ ...checked, verified: true, verification: Object.freeze({ submissionId: row.id, sourceVersionId: row.source_version_id, checkedAt: row.checked_at }) }));
+      out.push(Object.freeze({ ...checked, verified: true, verification: Object.freeze({ submissionId: row.id, sourceVersionId: row.source_version_id, checkedAt: row.checked_at, pageTextOrigin: row.page_text_origin, textExtractorVersion: row.text_extractor_version }) }));
     }
     return Object.freeze(out);
   }

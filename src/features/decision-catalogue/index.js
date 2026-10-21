@@ -12,3 +12,8 @@ export { associateDocuments, extractPolicyNumbers, logicalPolicyId } from './ass
 export { toHandoff, assertHandoffContract, HANDOFF_VERSION, HANDOFF_STATES } from './handoff.js';
 export { validateCuratedProduct, validateCuratedFacts, validateSourceIdentity, curatedFreshness, loadCuratedProducts, compareToCurated, extractUins, sha256Hex } from './curated-products.js';
 export { verifySourceEvidence, normalisePageTexts, MAX_SOURCE_BYTES } from './source-verification.js';
+export {
+  CURATED_ACTION_VERSION, CuratedActionError, generateCheckerKeyPair, signCuratedAction, readCuratedAction, verifyCuratedActionSignature,
+  curatedActionTimely, parsePublicKey, keyFingerprint, signatureDigest, canonicalCuratedFacts,
+} from './curated-actions.js';
+export { buildVerifiedProductRecords, assertVerifiedProductRecordsContract, VERIFIED_RECORDS_VERSION, VERIFIED_RECORD_STATES } from './verified-product-records.js';

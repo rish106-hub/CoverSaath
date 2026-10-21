@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostgresDatabaseError } from './errors.js';
 
 export const postgresMigrationDirectory = fileURLToPath(new URL('./migrations', import.meta.url));
-export const postgresTestMigrationRoot = fileURLToPath(new URL('../../../../.local/postgres-test-migrations/', import.meta.url));
 
 // One fixed advisory-lock key for the whole migration run (a session lock, held on one connection).
 const MIGRATION_LOCK_KEY = '7283541900012';
@@ -15,17 +14,21 @@ function isWithinDirectory(base, target) {
   return offset === '' || (!offset.startsWith('..') && !isAbsolute(offset));
 }
 
+// Reads only directories inside the repository migration directory (CodeQL alert 40). Tests write scratch migration sets
+// in a gitignored subdirectory of it (tests/support/postgres.mjs); there is no second root, so nothing outside the
+// repository's own migrations is ever read and no optional directory has to exist at runtime.
 export function loadPostgresMigrations(directory = postgresMigrationDirectory) {
-  const root = realpathSync(resolve(directory));
+  let root;
+  try { root = realpathSync(resolve(directory)); } catch {
+    // Errors never carry filesystem paths.
+    throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'The migration directory is not allowed.');
+  }
   const productionRoot = realpathSync(resolve(postgresMigrationDirectory));
-  const testRoot = realpathSync(resolve(postgresTestMigrationRoot));
-  const insideProductionRoot = isWithinDirectory(productionRoot, root);
-  const insideTestRoot = isWithinDirectory(testRoot, root);
-  if (!insideProductionRoot && !insideTestRoot) {
+  if (!isWithinDirectory(productionRoot, root)) {
     throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'The migration directory is not allowed.');
   }
   // Restrict entries to regular files with fixed migration names, then resolve symlinks before reading.
-  // lgtm[js/path-injection] The canonical directory is restricted above to one of two fixed roots.
+  // lgtm[js/path-injection] The canonical directory is restricted above to the fixed repository migration root.
   return readdirSync(root, { withFileTypes: true })
     .filter(entry => entry.isFile() && /^\d{3}_[a-z0-9_]+\.sql$/.test(entry.name))
     .sort((left, right) => left.name.localeCompare(right.name))
