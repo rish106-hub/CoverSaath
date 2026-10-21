@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  createPostgresPool, postgresMigrationDirectory, postgresMigrationFiles, runPostgresMigrations, validatePostgresSchema,
+  createPostgresPool, postgresMigrationDirectory, postgresMigrationFiles, postgresTestMigrationRoot,
+  runPostgresMigrations, validatePostgresSchema,
 } from '../src/backend/database/postgres/index.js';
 import {
   adminQuery, createTestDatabase, ensureTemplate, migrationSetDigest, postgresTestOptions, useBlankDatabase, useTestDatabase,
@@ -15,7 +15,8 @@ import { insert, one } from './support/postgres-fixtures.mjs';
 const baseline = ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql', '013_catalogue_reviews.sql', '014_curated_product_workflow.sql'];
 
 function scratchDirectory(t, files = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'coversaath-pg-migrations-'));
+  mkdirSync(postgresTestMigrationRoot, { recursive: true });
+  const directory = mkdtempSync(join(postgresTestMigrationRoot, 'runner-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const [name, sql] of Object.entries(files)) writeFileSync(join(directory, name), sql);
   return directory;
