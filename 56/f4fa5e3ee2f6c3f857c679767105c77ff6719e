@@ -1,0 +1,79 @@
+src/backend/services/household-preview-service.js
+  s_d74e1a9e70bc38::t_98c0bed03dea4c 48-49,52
+src/features/household-reasoning/comparison.js
+  s_d74e1a9e70bc38::t_fd3f91dd752db2 6-7
+tests/support/household-fixtures.mjs
+  s_d74e1a9e70bc38::t_0e72d85fb60f44 48-53
+src/features/household-reasoning/normalize.js
+  s_d74e1a9e70bc38::t_2ca5ca2b598578 10-11,49-54,214-216
+tests/context-gap-resolver.test.mjs
+  s_d74e1a9e70bc38::t_aae7f7b1b70ac0 5
+  s_d74e1a9e70bc38::t_3a18f8e579702e 177
+  s_d74e1a9e70bc38::t_edc10a80091ea3 197-216
+scripts/eval-household-reasoning.mjs
+  s_d74e1a9e70bc38::t_6986148abc21d6 26
+src/features/household-reasoning/output-contract.js
+  s_d74e1a9e70bc38::t_2ca5ca2b598578 8,20,39,63
+tests/household-security-adversarial.test.mjs
+  s_d74e1a9e70bc38::t_f1bfc2421ea0a6 100-108
+tests/support/household-api-harness.mjs
+  s_d74e1a9e70bc38::t_0e72d85fb60f44 156-159
+src/features/household-reasoning/relevance.js
+  s_d74e1a9e70bc38::t_19deb11255124e 22,26-32,34
+tests/support/household-evaluation.mjs
+  s_d74e1a9e70bc38::t_fa1162ef189192 28-35,39,41,120,155,172,180-182
+src/server/routes/v1-backend-routes.js
+  s_d74e1a9e70bc38::t_d6732ca18308ce 5
+  s_d74e1a9e70bc38::t_d814bff390b667 417
+src/features/household-reasoning/next-actions.js
+  s_d74e1a9e70bc38::t_d814bff390b667 48-49
+src/features/household-reasoning/contracts.js
+  s_d74e1a9e70bc38::t_d814bff390b667 30,94-95
+src/backend/services/decision-catalogue-service.js
+  s_d74e1a9e70bc38::t_98c0bed03dea4c 94-96,99,101
+tests/household-reasoning-evidence.test.mjs
+  s_d74e1a9e70bc38::t_edc10a80091ea3 249-251,255-257,260,263-266,268-273
+  s_d74e1a9e70bc38::t_027fbb7cbc075b 252-254,258-259,261-262,267
+  s_d74e1a9e70bc38::t_a28b6b9a9a46dd 215-218
+tests/household-preview-latency.test.mjs
+  s_d74e1a9e70bc38::t_3a18f8e579702e 17-21
+src/features/household-reasoning/question-planner.js
+  s_d74e1a9e70bc38::t_4f4d7418fe0638 12-13
+tests/household-coverage-map.test.mjs
+  s_d74e1a9e70bc38::t_edc10a80091ea3 160-167
+src/features/household-reasoning/coverage-map.js
+  s_d74e1a9e70bc38::t_2952608c900560 51
+tests/household-coverage-preview-api.test.mjs
+  s_d74e1a9e70bc38::t_3a18f8e579702e 209
+tests/household-policy-comparison.test.mjs
+  s_d74e1a9e70bc38::t_edc10a80091ea3 140-147
+src/features/household-reasoning/context-gaps.js
+  s_d74e1a9e70bc38::t_1c3438c9b57d30 86-87,89-91
+  s_d74e1a9e70bc38::t_0e21aa5bc87fd0 4
+  s_d74e1a9e70bc38::t_ce4cac76d2e11d 158
+tests/support/household-golden-cases.mjs
+  s_d74e1a9e70bc38::t_6986148abc21d6 280
+  s_d74e1a9e70bc38::t_fa1162ef189192 36,214,232
+tests/household-reasoning-contracts.test.mjs
+  s_d74e1a9e70bc38::t_edc10a80091ea3 175-179
+docs/architecture/household-reasoning.md
+  s_d74e1a9e70bc38::t_b8fb66f5973957 84
+docs/exec-plans/active/block4-acceptance.md
+  s_d74e1a9e70bc38::t_6291bf4b0770a0 3,33,112-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "56f4fa5e3ee2f6c3f857c679767105c77ff6719e",
+  "prompts": {},
+  "sessions": {
+    "s_d74e1a9e70bc38": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e22ab5b4-8acf-4123-80e3-4e60a919eb4b",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
