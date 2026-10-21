@@ -5,7 +5,7 @@ import {
 } from './contracts.js';
 
 const TOP_LEVEL = ['contractVersion', 'scenario', 'sourceSummary', 'policies', 'comparisons', 'contextGaps', 'nextQuestions', 'externalChecks', 'nextActions', 'assessmentState', 'completeness', 'limitations'];
-const FORBIDDEN_KEY = /^(spendableCash|combinedPayableAmount|combinedConfirmedCover|aggregateCover|totalCover|totalSumInsured|expectedReimbursement|outOfPocket|candidateValue|policyNumber|rawText|quote|sessionToken|token|claimApproved|approvalLikelihood)$/i;
+const FORBIDDEN_KEY = /^(spendableCash|combinedPayableAmount|combinedConfirmedCover|aggregateCover|totalCover|totalSumInsured|expectedReimbursement|outOfPocket|candidateValue|policyNumber|rawText|quote|sessionToken|token|claimApproved|approvalLikelihood|memberName|insuredName|patientName|fullName|email|emailAddress|phone|phoneNumber|mobile|mobileNumber|dateOfBirth|dob|birthDate|address|aadhaar|aadhar|passport|ssn)$/i;
 const PROHIBITED_CLAIM = /\b(will be approved|claim (?:is|will be) (?:approved|paid)|cashless (?:is|will be) available|you will receive|guaranteed|is in the (?:insurer|tpa)'s network)\b/i;
 const DECISIVE_STATES = ['known', 'not_permitted', 'not_selected', 'available_not_selected'];
 
@@ -17,7 +17,7 @@ export function assertHouseholdPreviewContract(preview) {
 
   // Claim wording is checked on the engine's own sentences only. Echoed user input, quoted contract text and the topic labels
   // that document readings supply are data and are never scanned (they may legitimately contain such words).
-  const OWN_TEXT = /^preview\.(?:nextQuestions\.\d+\.text|nextActions\.\d+\.text|limitations\.\d+|externalChecks\.\d+\.(?:note|requires)|comparisons\.(?:unresolvedCoordination\.\d+\.text|possibleOverlap\.\d+\.note)|contextGaps\.\d+\.reason)$/;
+  const OWN_TEXT = /^preview\.(?:nextQuestions\.\d+\.text|nextActions\.\d+\.text|limitations\.\d+|policies\.\d+\.limitations\.\d+|externalChecks\.\d+\.(?:note|requires)|comparisons\.(?:unresolvedCoordination\.\d+\.text|possibleOverlap\.\d+\.note)|contextGaps\.\d+\.reason)$/;
   const walk = (value, path) => {
     if (typeof value === 'string' && OWN_TEXT.test(path) && PROHIBITED_CLAIM.test(value)) fail(`prohibited claim wording at ${path}`);
     if (Array.isArray(value)) value.forEach((inner, i) => walk(inner, `${path}.${i}`));
@@ -36,6 +36,7 @@ export function assertHouseholdPreviewContract(preview) {
     if (!ASSOCIATION_STATES.includes(policy.associationState)) fail('association state');
     if (!MEMBER_APPLICABILITY.includes(policy.memberApplicability?.state)) fail('member applicability');
     if (policy.memberApplicability.state === 'established' && (!policy.memberApplicability.citations.length || policy.associationState !== 'verified')) fail('established applicability needs citations and a verified association');
+    if (policy.associationState !== 'verified' && (policy.documentedTerms.length || policy.documentedRestrictions.length)) fail('documented entries need a verified policy association');
     for (const term of [...policy.documentedTerms, ...policy.documentedRestrictions]) {
       if (!ITEM_STATES.includes(term.state) || !DECISIVE_STATES.includes(term.state)) fail(`documented entry state ${term.state}`);
       if (!term.citations?.length) fail(`documented entry without citations (${term.rule})`);
@@ -59,7 +60,7 @@ export function assertHouseholdPreviewContract(preview) {
   }
   if (!Array.isArray(preview.nextQuestions) || preview.nextQuestions.length > LIMITS.questionsPerTurn) fail('too many questions');
   if (new Set(preview.nextQuestions.map(question => question.questionId)).size !== preview.nextQuestions.length) fail('duplicate question');
-  if (preview.nextQuestions.some(question => question.alreadyAnswered !== false || question.resolver === undefined)) fail('question shape');
+  if (preview.nextQuestions.some(question => question.alreadyAnswered !== false || !RESOLVERS.includes(question.resolver))) fail('question shape');
   for (const action of preview.nextActions) {
     if (!ACTION_TYPES.includes(action.actionType) || !action.reasonCode || action.status === 'completed') fail('next action');
   }

@@ -14,7 +14,11 @@ test('latency baseline: one source and the five-source cap', async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Latency', documents: 2 });
   const answers = [];
-  for (let i = 0; i < 5; i += 1) answers.push((await ask(app, s, { documentIds: [s.documentIds[i % 2]] })).data.answerId);
+  for (let i = 0; i < 5; i += 1) {
+    const asked = await ask(app, s, { documentIds: [s.documentIds[i % 2]] });
+    assert.equal(asked.status, 201, JSON.stringify(asked.data));
+    answers.push(asked.data.answerId);
+  }
   const body = sources => scenarioBody(sources.map(answerId => ({ caseId: s.caseId, answerId })), { scenarioType: 'planned_procedure', procedureText: 'cataract surgery', memberId: s.memberId, plannedMonth: '2026-11', hospital: { name: 'Healtworld Hospital', city: 'Durgapur' } });
   const measure = async sources => {
     await preview(app, s.householdId, body(sources), { token: s.token }); // warm-up

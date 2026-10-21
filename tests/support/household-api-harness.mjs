@@ -153,6 +153,8 @@ export const scenarioBody = (sources, scenario = {}) => ({ contractVersion: 'hou
 
 /** Row counts of every application table: a read-only route must leave all of them unchanged. */
 export function tableCounts(database) {
-  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%' ORDER BY name").all().map(row => row.name);
-  return Object.fromEntries(tables.map(name => { try { return [name, database.prepare(`SELECT count(*) AS n FROM "${name}"`).get().n]; } catch { return [name, null]; } }));
+  // Every application table is counted, full-text indexes included; a table that cannot be counted fails loudly instead of
+  // silently comparing equal. Only SQLite's own internal tables are skipped.
+  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row => row.name);
+  return Object.fromEntries(tables.map(name => [name, database.prepare(`SELECT count(*) AS n FROM "${name}"`).get().n]));
 }

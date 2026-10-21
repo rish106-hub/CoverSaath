@@ -1,7 +1,7 @@
 // WP5 deterministic context-gap resolver (rules G01 to G10). Pure: the same scenario and evidence always give the same
 // gaps. A gap names what is missing and who can resolve it. It never creates a coverage fact, and a user answer never
 // upgrades policy evidence. G10 (consent) is enforced before this code runs: an unauthorised source is never read.
-import { isSpecificProcedure } from './relevance.js';
+import { isRelevant, isSpecificProcedure } from './relevance.js';
 
 const SOURCE_CLASS = Object.freeze({
   USER: 'user_context', DOCUMENT: 'policy_document', VERIFIED_SOURCE: 'verified_source', DYNAMIC_EXTERNAL: 'external_confirmation', REVIEW: 'independent_review', NOT_PERMITTED: 'authorization',
@@ -83,9 +83,12 @@ export function buildContextGaps({ scenario, normalized, positions }) {
 
   // G04: an exact date, only when it could change applicability. A month is never converted to a day.
   if (['planned_procedure', 'general_benefit', 'policy_comparison'].includes(type) && !effective.plannedDate) {
-    const asOfItems = allItems.filter(item => item.reasonCode === 'as_of_required' || item.completion?.reason === 'as_of_date_missing');
+    // Only dated items the scenario cares about can make the date material; an unrelated dated term cannot.
+    const asOfItems = allItems.filter(item => (item.reasonCode === 'as_of_required' || item.completion?.reason === 'as_of_date_missing') && isRelevant(item, scenario));
     const comparisonNeedsDate = type === 'policy_comparison' && establishedIds.length >= 2;
-    const material = asOfItems.length > 0 || comparisonNeedsDate;
+    // A documented policy period is itself date-dependent: without a date it cannot be checked against the plan.
+    const periodDocumented = positions.some(p => p.documentedTerms.some(t => t.rule === 'policy_period' && t.state === 'known'));
+    const material = asOfItems.length > 0 || comparisonNeedsDate || periodDocumented;
     const state = answerState(scenario, 'exact_date');
     gaps.push(gap(material ? 'exact_date_required' : 'exact_date_materiality_undetermined', 'USER', {
       reason: material ? 'date_could_change_applicability' : 'no_dated_evidence_to_judge_yet', impact: material ? 'applicability' : 'clarification', priority: material ? 'P1' : 'P2',
@@ -152,7 +155,7 @@ export function buildContextGaps({ scenario, normalized, positions }) {
   // G07: waiting-period completion needs verified continuity. A reported "no break in cover" stays user_reported.
   const waiting = positions.flatMap(p => p.documentedRestrictions.filter(r => r.rule === 'waiting_period' && r.relevantToScenario !== false).map(r => ({ p, r })));
   const continuityMissing = waiting.filter(({ r }) => r.completion && r.completion.state === 'unknown' && r.completion.reason === 'continuity_not_evidenced');
-  const disagree = positions.filter(p => p.documentedRestrictions.some(r => r.rule === 'waiting_period' && r.completion?.reason === 'completion_differs_across_sources')).map(p => p.policyId);
+  const disagree = positions.filter(p => p.documentedRestrictions.some(r => r.rule === 'waiting_period' && r.relevantToScenario !== false && r.completion?.reason === 'completion_differs_across_sources')).map(p => p.policyId);
   if (disagree.length) {
     gaps.push(gap('waiting_period_completion_unresolved', 'REVIEW', { reason: 'sources_disagree_on_waiting_period_completion', impact: 'major_restriction', priority: 'P1', currentState: 'conflicting', blocking: true, relatedPolicyIds: disagree.sort(), relatedRuleKeys: ['waiting_period/'] }));
   }

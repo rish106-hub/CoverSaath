@@ -172,3 +172,8 @@ test('a detail answer may repeat but not contradict the direct topic or a specif
   const refined = validateScenarioInput(requestOf({ procedureText: 'surgery', answers: { procedure_detail: 'cataract surgery' } }));
   assert.equal(refined.scenario.effective.procedureDetail, 'cataract surgery');
 });
+
+test('other invisible format characters are refused in user text', () => {
+  for (const cp of [0xfffa, 0x1d173, 0x600, 0x200b, 0x2060]) rejects(requestOf({ procedureText: `cataract${String.fromCodePoint(cp)} surgery` }), 'HOUSEHOLD_SCENARIO_INVALID');
+  assert.doesNotThrow(() => validateScenarioInput(requestOf({ procedureText: 'cataract surgery' })));
+});

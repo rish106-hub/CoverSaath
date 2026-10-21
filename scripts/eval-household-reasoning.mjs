@@ -23,7 +23,7 @@ const summary = [
   'Scope: synthetic engine behaviour only. Not a measure of model accuracy, OCR or retrieval recall, insurer-data coverage or real-policy claim accuracy.',
   '',
   `- Critical gaps detected: ${metrics.criticalGapsDetected} of ${metrics.criticalGapsExpected} labelled (missed ${metrics.criticalGapsMissed}).`,
-  `- Questions asked: ${metrics.questionsAsked} over ${metrics.acceptedInputCases} accepted cases (max ${metrics.questionsPerScenarioMax} per response). Unnecessary: ${metrics.unnecessaryQuestions} (${percent(metrics.unnecessaryQuestionRate)}). Duplicates: ${metrics.duplicateQuestions}.`,
+  `- Questions asked: ${metrics.questionsAsked} over ${metrics.acceptedInputCases} accepted cases (max ${metrics.questionsPerScenarioMax} per response). Unnecessary: ${metrics.unnecessaryQuestions} of ${metrics.questionsInLabelledCases} questions in cases that list their expected questions (${percent(metrics.unnecessaryQuestionRate)}). Duplicates: ${metrics.duplicateQuestions}.`,
   `- Material gaps delegated to a document, review or external check: ${metrics.materialGapsDelegated} of ${metrics.materialGapsNeedingDelegation}.`,
   `- Unsupported documented conclusions: ${metrics.unsupportedKnownConclusions}. Cross-member or cross-policy contamination: ${metrics.crossContamination}. Illegal authority upgrades: ${metrics.illegalAuthorityUpgrades}. Uncited documented conclusions: ${metrics.uncitedDocumentedConclusions}. Cross-policy summations: ${metrics.crossPolicySummations}.`,
   `- Forbidden-text disclosures: ${metrics.forbiddenTextDisclosures}. Unhandled exceptions: ${metrics.unhandledExceptions}. Determinism mismatches: ${metrics.determinismMismatches}.`,

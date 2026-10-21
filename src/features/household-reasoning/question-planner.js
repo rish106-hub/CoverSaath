@@ -9,6 +9,8 @@ const q = (questionId, questionKey, text, answerType, options, resolver, effort,
   questionId, questionKey, text, answerType, allowedOptions: options, required: false, skippable: true, resolver, effortLevel: effort, expectedEffect, explanation,
 });
 
+// allowedOptions lists only the fixed, non-free-text choices (YES/NO and the I_DO_NOT_KNOW / SKIPPED sentinels). For text, date and
+// member questions the answer is any value of answerType as well; a client must not treat allowedOptions as the complete answer set.
 // trigger: the gap rule that makes the question eligible. target: the scenario field the answer fills.
 export const QUESTION_BANK = deepFreeze([
   q('Q_BENEFIT_TOPIC', 'topic_detail', 'Which benefit or situation do you want to check?', 'text', OPEN, 'USER', 1, 'names_the_topic_used_to_match_terms', 'G05: a topic is needed to match policy terms.'),

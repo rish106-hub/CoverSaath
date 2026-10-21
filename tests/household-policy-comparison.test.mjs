@@ -137,3 +137,11 @@ test('comparison output is deterministic and independent of source order', () =>
   ] });
   assert.equal(JSON.stringify(run(S, [reordered]).comparisons), first);
 });
+
+test('a cited not_selected term in another policy is explicit evidence, not a "not stated" gap', () => {
+  const handoff = two({ facts: [{ type: 'add_on', topic: 'parenthood', selection: 'available', value: { name: 'Parenthood' } }] }, { facts: [{ type: 'add_on', topic: 'parenthood', selection: 'not_opted', value: { name: 'Parenthood' } }] });
+  const result = run({ ...S, topic: 'parenthood' }, [handoff]);
+  const p2 = result.positions.find(p => p.documentedTerms.some(t => t.rule === 'add_on' && t.topic === 'parenthood'));
+  assert.ok(p2, 'the add-on is documented in at least one policy');
+  assert.ok(!result.comparisons.evidenceGaps.some(g => g.rule === 'add_on' && g.topic === 'parenthood' && g.reasonCode === 'not_stated_in_this_policys_evidence' && result.positions.find(p => p.policyId === g.policyId).documentedTerms.some(t => t.rule === 'add_on' && t.topic === 'parenthood')));
+});

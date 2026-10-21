@@ -45,9 +45,11 @@ export function createHouseholdPreviewService({ services, catalogue }) {
       return { caseRecord, answerId: source.answerId };
     });
 
+    // One request-scoped cache: the curated product archives are verified once, not once per source.
+    const curatedCache = {};
     const sources = cases.map(({ caseRecord, answerId }, sourceIndex) => {
       try {
-        const built = catalogue.build({ caseRecord, answerId, asOf: plannedDate, memberId });
+        const built = catalogue.build({ caseRecord, answerId, asOf: plannedDate, memberId, curatedCache });
         return { sourceIndex, status: 'ok', handoff: toHandoff(built) };
       } catch (error) {
         const reason = REVALIDATION_CODES.get(error?.code);

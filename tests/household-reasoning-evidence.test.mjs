@@ -212,6 +212,10 @@ test('bounds: too many policies or items is a coded error, never silent truncati
   const wide = thaw(handoffOf([]));
   wide.policies = Array.from({ length: 21 }, (_, i) => ({ ...wide.policies[0], policyId: `P${i}` }));
   assert.throws(() => norm([okSource(wide)]), error => error instanceof HouseholdReasoningError && error.code === 'HOUSEHOLD_PREVIEW_BOUND_EXCEEDED' && error.statusCode === 422);
+  const crowded = thaw(handoffOf([sublimit('cataract', 3000000)]));
+  const template = crowded.policies[0].items.find(item => item.rule === 'sublimit');
+  crowded.policies[0].items = Array.from({ length: 201 }, (_, i) => ({ ...template, topic: `topic ${i}` }));
+  assert.throws(() => norm([okSource(crowded)]), error => error instanceof HouseholdReasoningError && error.code === 'HOUSEHOLD_PREVIEW_BOUND_EXCEEDED' && error.statusCode === 422, 'more than itemsPerPolicy items');
   assert.throws(() => norm([]), HouseholdReasoningError);
   const six = Array.from({ length: 6 }, (_, i) => okSource(handoffOf([]), i));
   assert.throws(() => norm(six), HouseholdReasoningError);
@@ -241,4 +245,29 @@ test('property: normalisation never raises authority over any generated handoff'
     }
   }
   assert.ok(checked > 100);
+});
+
+test('a known value carrying member identity or contact fields, or nested too deeply, is narrowed and never copied', () => {
+  for (const extra of [{ memberName: 'Synthetic Person' }, { email: 'x@example.test' }, { dateOfBirth: '1970-01-01' }, { phone: '0000000000' }]) {
+    const handoff = thaw(handoffOf([waitingPeriod(24)]));
+    handoff.policies[0].items.find(i => i.rule === 'waiting_period').value = { months: 24, ...extra };
+    const item = itemOf(norm([okSource(handoff)]), 'waiting_period');
+    assert.equal(item.state, 'unverified', Object.keys(extra)[0]);
+    assert.equal(item.value ?? null, null);
+  }
+  const deep = thaw(handoffOf([waitingPeriod(24)]));
+  let nested = { months: 24 };
+  for (let i = 0; i < 5000; i += 1) nested = { inner: nested };
+  deep.policies[0].items.find(i => i.rule === 'waiting_period').value = { months: 24, nested };
+  assert.equal(itemOf(norm([okSource(deep)]), 'waiting_period').state, 'unverified');
+});
+
+test('when one source holds a known value and another needs confirmation or is unverified, the stricter state is kept in either order', () => {
+  const known = handoffOf([sublimit('cataract', 3000000)]);
+  const unreviewed = handoffOf([sublimit('cataract', 3000000, { review: 'self_confirmed' })]);
+  for (const order of [[known, unreviewed], [unreviewed, known]]) {
+    const n = norm(order.map((handoff, i) => okSource(handoff, i)));
+    assert.equal(itemOf(n, 'sublimit', 'cataract').state, 'unverified');
+    assert.equal(itemOf(n, 'sublimit', 'cataract').value ?? null, null);
+  }
 });

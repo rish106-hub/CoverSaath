@@ -45,7 +45,12 @@ export function makeBuilt({ memberId = null, asOf = null, answerId = 'answer-1',
     householdId: 'household-synthetic', clauseRows, batches, asOf, memberId,
     policies: policies.map(policy => ({ policyId: policy.id, kind: policy.kind ?? 'unresolved', coverBasis: policy.coverBasis ?? 'unknown' })),
   });
-  const documentAssociations = policies.map(policy => ({ policyId: policy.id, documentId: `doc-${policy.id}`, status: policy.verified === false ? 'candidate' : 'candidate', basis: 'printed_policy_number' }));
+  // One association per document a policy's facts actually cite, as the Block 3 builder would produce.
+  const documentAssociations = policies.flatMap(policy => {
+    const documentIds = new Set(policy.facts.map(fact => fact.documentId ?? `doc-${policy.id}`));
+    if (!documentIds.size) documentIds.add(`doc-${policy.id}`);
+    return [...documentIds].sort().map(documentId => ({ policyId: policy.id, documentId, status: 'candidate', basis: 'printed_policy_number' }));
+  });
   return { sourceAnswerId: answerId, pipelineCurrent, catalogue: { ...catalogue, documentAssociations }, skipped: [] };
 }
 

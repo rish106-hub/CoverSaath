@@ -91,10 +91,14 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
     }) && modelFactIds.has(review.factKey);
   };
 
-  function build({ caseRecord, answerId, asOf = null, memberId = null, documentsUntil = null }) {
+  // `curatedCache` is an optional caller-owned `{}` shared by several builds of one request, so the published archives are
+  // verified once per request rather than once per source. It changes no result: the cache is keyed by the same date.
+  function build({ caseRecord, answerId, asOf = null, memberId = null, documentsUntil = null, curatedCache = null }) {
     checkQuery({ asOf, memberId });
     const ctx = load({ caseRecord, answerId, documentsUntil });
+    if (curatedCache?.value) ctx.curated = curatedCache.value;
     const first = compose(ctx, [modelBatch(ctx.candidates)], { asOf, memberId });
+    if (curatedCache) curatedCache.value = ctx.curated;
     const factByKey = new Map(first.facts.map(fact => [factKeyOf(fact.factId), fact]));
     const all = reviews ? reviews.list({ householdId: ctx.householdId, caseId: caseRecord.id }) : [];
     const reviewSummary = [];

@@ -157,3 +157,11 @@ test('exclusions are documented restrictions only when known and cited', () => {
   const unreviewed = run(S, [one([enrolled(), exclusion('cataract', { review: 'model' })])]).positions[0];
   assert.equal(unreviewed.documentedRestrictions.filter(x => x.rule === 'exclusion').length, 0, 'a model-read exclusion is not a documented restriction');
 });
+
+test('a waiting-period completion gap is listed only where waiting periods are relevant', () => {
+  const facts = [enrolled(), waitingPeriod(24)];
+  const emergency = run({ ...S, scenarioType: 'emergency_admission' }, [one(facts)]).positions[0];
+  assert.ok(!emergency.uncertainties.some(u => u.rule === 'waiting_period_completion'));
+  const planned = run(S, [one(facts)]).positions[0];
+  assert.ok(planned.uncertainties.some(u => u.rule === 'waiting_period_completion'));
+});

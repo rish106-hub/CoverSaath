@@ -19,11 +19,19 @@ const GENERIC_PROCEDURE_TERMS = new Set([
   'a', 'an', 'the', 'my', 'his', 'her', 'for', 'of', 'to', 'at', 'in', 'on', 'and', 'needs', 'need', 'planned', 'medical', 'health', 'something', 'some', 'any', 'major', 'minor', 'big', 'small', 'is', 'be', 'has', 'have', 'will', 'father', 'mother', 'wife', 'husband',
   // Explicit uncertainty ("I don't know", "not sure", the answer sentinels) names no procedure.
   'i', 'we', 'you', 'do', 'doe', 'don', 't', 'know', 'not', 'sure', 'unsure', 'unknown', 'skipped', 'idea', 'no', 'yet', 'decided', 'unclear', 'maybe', 'tbd', 'dunno', 'cannot', 'nothing', 'say', 'tell',
+  'want', 'please', 'hospital', 'this', 'that', 'it', 'with', 'by', 'from', 'as', 'am', 'are', 'was', 'would', 'like', 'going', 'get', 'getting', 'undergo', 'doing', 'doctor', 'advised', 'suggested',
   'eye', 'ear', 'nose', 'throat', 'heart', 'knee', 'hip', 'back', 'spine', 'stomach', 'kidney', 'brain', 'leg', 'arm', 'tooth', 'teeth', 'bone', 'skin', 'chest',
 ]);
 
+// Plain plural trimming that leaves words whose singular ends in s (diagnosis, bypass, status, this) alone.
+const singular = token => {
+  if (token.length > 4 && token.endsWith('ies')) return `${token.slice(0, -3)}y`;
+  if (token.length > 3 && token.endsWith('s') && !/(?:ss|us|is)$/.test(token)) return token.slice(0, -1);
+  return token;
+};
+
 export const tokensOf = value => (typeof value === 'string'
-  ? value.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean).map(t => (t.length > 3 && t.endsWith('s') ? t.slice(0, -1) : t))
+  ? value.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(' ').filter(Boolean).map(singular)
   : []);
 
 /** True when the item topic's tokens appear, in order and adjacent, in any scenario text. */

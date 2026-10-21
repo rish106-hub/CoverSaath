@@ -97,7 +97,15 @@ test('prompt injection in clause text, hospital name and answers never changes d
   walk(hostile, 'preview');
   assert.ok(where.length > 0);
   assert.ok(where.every(path => /\.(conditions|exceptions|overrides)\.\d+$/.test(path) || path.startsWith('preview.scenario.') || /^preview\.externalChecks\.\d+\.facility\./.test(path)), where.join('\n'));
-  assert.ok(!JSON.stringify(hostile).includes('9999999') || JSON.stringify(hostile.scenario).includes('9999999'), 'the number appears only in the echoed user text');
+  // The injected amount may appear only as quoted text (echoed user input or a cited qualifier), never in a computed field or as a number.
+  const amountAt = [];
+  const find = (value, path) => {
+    if (typeof value === 'string') { if (value.includes('9999999')) amountAt.push(path); } else if (typeof value === 'number') { if (String(value).includes('9999999')) amountAt.push(path); }
+    else if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) find(v, `${path}.${k}`);
+  };
+  find(hostile, 'preview');
+  assert.ok(amountAt.length > 0);
+  assert.ok(amountAt.every(path => /\.(conditions|exceptions|overrides)\.\d+$/.test(path) || path.startsWith('preview.scenario.') || /^preview\.externalChecks\.\d+\.facility\./.test(path)), amountAt.join('\n'));
   assert.ok(!JSON.stringify(hostile.policies.map(p => p.uncertainties)).includes('SYSTEM'), 'a clause reason is a closed code');
 });
 
