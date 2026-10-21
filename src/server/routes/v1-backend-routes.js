@@ -407,14 +407,15 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     const catalogueMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/decision-catalogue$/);
     if (req.method === 'GET' && catalogueMatch) {
       // An independent reviewer holds a grant, not a household role: they read the catalogue of the cases they review.
-      let caseRecord = getCatalogueService().independentReviewerCase(principal, catalogueMatch[1]);
+      const independent = getCatalogueService().independentReviewerCase(principal, catalogueMatch[1]);
+      let caseRecord = independent?.caseRecord ?? null;
       if (!caseRecord) {
         caseRecord = requireDocumentCase(services, principal, catalogueMatch[1], { write: false });
         responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
       }
       const built = getCatalogueService().build({
         caseRecord, answerId: url.searchParams.get('answerId'),
-        asOf: url.searchParams.get('asOf'), memberId: url.searchParams.get('memberId'),
+        asOf: url.searchParams.get('asOf'), memberId: url.searchParams.get('memberId'), documentsUntil: independent?.documentsUntil ?? null,
       });
       // ?format=handoff returns the flat Block 4 view of the same catalogue (decision-handoff/v1).
       return { status: 200, body: url.searchParams.get('format') === 'handoff' ? toHandoff(built) : built };

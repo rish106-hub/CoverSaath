@@ -1,5 +1,19 @@
 # Latest iteration
 
+## Block 3 synthetic engineering acceptance (2026-10-21, branch `block3/synthetic-acceptance`, uncommitted)
+
+Base `main` `0922fa4`. No provider call, no network, no migration. Full report: [block-3-acceptance.md](../exec-plans/active/block-3-acceptance.md).
+
+- Fixed (each with a regression test that failed first): a published curated product whose archive bytes, archive row or page text was altered outside the application stayed verified (reads now re-check; CLI `verify-archives`); policy ids were an unkeyed hash of the policy number (now keyed HMAC); an independent grant covered documents uploaded after it (`documentsUntil`); applicability U01 (undated query answered from a lower layer), U02 (older wording answered a term the newer one dropped), U03 (policy-wide enrolment or continuity applied to any member).
+- Hardened: `assertHandoffContract` refuses a foreign catalogue version, missing arrays and a non-boolean association.
+- Added: deterministic synthetic PDF fixtures and a 30-case scenario matrix (`tests/support/synthetic-policies.mjs`, `tests/block3-synthetic-matrix.test.mjs`), real-PDF and CLI journeys (`tests/curated-source-integrity.test.mjs`), a two-document upload-to-handoff API journey (`tests/block3-multi-document-api.test.mjs`), an empty-catalogue guard (`tests/curated-sources-empty.test.mjs`).
+- Docs: `decision-catalogue.md` rewritten as the catalogue contract; new `reviewer-security.md` and `runbooks/curated-sources.md`; ADR 0009 addendum (b).
+- Checks: `npm run check` 1197 tests, 1123 pass, 0 fail, 74 skipped (64 PostgreSQL without `TEST_DATABASE_URL`, 10 live/clamd); `eval:safety` 0 failures; `git diff --check` clean. PostgreSQL 17 not run locally.
+- Independent read-only review: 1 P1, 4 P2, 7 P3. Fixed P1 (a not-yet-effective newer version collapsed a conflict to known), P2 continuity scope (waiting-period completion now needs a member-scoped continuity fact and a named member), P2 malformed stored facts, CLI exit status, docs. Open: outward clause digests unkeyed (Block 2 follow-up), per-request archive hashing cost, conservative `as_of_required`. Fixes not re-reviewed.
+- `/docs` is gitignored: ADR 0009, `decision-catalogue.md` and the research note were never committed; new docs need `git add -f`.
+- Upgrade note: policy ids change once (and with any change of `DOCUMENT_ENCRYPTION_KEY_BASE64`); existing reviews then read as `stale`.
+- Still open: all external dependencies in the acceptance file (real insurer evidence, real curator/checker, operator identity model, reuse rights, legal review, holdout evaluation, privacy assessment, deployment). CodeQL fixes are in the separate `codex/codeql-alerts-2026-10-21` worktree.
+
 ## CodeQL remediation candidate (2026-10-21, `codex/codeql-final-suppressions-2026-10-21`)
 
 - Prepared fixes for all 10 CodeQL alerts open on `main`: provider smoke scripts no longer read secrets from `.env`; dynamic score maps use `Map`; migration loading is restricted to fixed production and test roots and rejects links and malformed filenames.

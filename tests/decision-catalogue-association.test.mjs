@@ -1,7 +1,8 @@
 // Phase 3: document-to-policy association. Synthetic numbers only. No network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { associateDocuments, extractPolicyNumbers, buildDecisionCatalogue } from '../src/features/decision-catalogue/index.js';
+import { createHash } from 'node:crypto';
+import { associateDocuments, extractPolicyNumbers, buildDecisionCatalogue, logicalPolicyId } from '../src/features/decision-catalogue/index.js';
 
 const rows = (...pairs) => pairs.map(([documentId, text], i) => ({ clauseId: `c${i}`, documentId, text }));
 
@@ -51,4 +52,19 @@ test('facts of two candidate policies never cross: each rule layer sees only its
     assert.ok(rule.result.discrepancies.every(c => c.documentId === (layer.policyId === 'pol-a' ? 'd1' : 'd2')) || rule.result.citations.length === 0);
     assert.notEqual(rule.result.status, 'known');
   }
+});
+test('logical policy ids are keyed: the same number gives the same id under one key and an unrelated id under another', () => {
+  const keyA = Buffer.alloc(32, 1);
+  const keyB = Buffer.alloc(32, 2);
+  const text = 'Policy Number: SYN-PH-000123';
+  const a1 = associateDocuments(rows(['d1', text]), ['d1'], { key: keyA }).documents[0].policyId;
+  const a2 = associateDocuments(rows(['d2', text]), ['d2'], { key: keyA }).documents[0].policyId;
+  const b = associateDocuments(rows(['d1', text]), ['d1'], { key: keyB }).documents[0].policyId;
+  assert.equal(a1, a2);
+  assert.notEqual(a1, b);
+  // An unkeyed digest of the number (what a client could compute from a guess) never equals the id.
+  const guess = createHash('sha256').update('policy-association/v1:SYN-PH-000123').digest('hex');
+  assert.ok(!a1.includes(guess.slice(0, 24)));
+  assert.equal(logicalPolicyId('SYN-PH-000123', keyA), a1);
+  assert.throws(() => logicalPolicyId('SYN-PH-000123', Buffer.alloc(8)), /32 bytes/);
 });

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildDecisionCatalogue, CATALOGUE_VERSION } from '../src/features/decision-catalogue/index.js';
+import { assertHandoffContract, buildDecisionCatalogue, CATALOGUE_VERSION, toHandoff } from '../src/features/decision-catalogue/index.js';
 
 // Synthetic data only. Block 4 contract (G8), reviewer-path and adversarial gaps (B3-7, B3-8).
 const H = 'household-1';
@@ -111,4 +111,29 @@ test('review: model and official-source batches cannot carry contractual source 
 test('fact provenance: each fact carries the digest of every cited clause, taken from the evidence index', () => {
   const cat = run([reviewed([cand({ ...sumInsured, sourceDigests: ['forged'] })])]);
   assert.deepEqual(cat.facts[0].sourceDigests, ['sha-c1']);
+});
+
+test('handoff consumer: a future or malformed handoff fails closed instead of being read as v1', () => {
+  const good = toHandoff({ sourceAnswerId: 'a1', pipelineCurrent: true, catalogue: run([reviewed([cand(sumInsured)])]) });
+  assert.equal(assertHandoffContract(good), true);
+  const clone = () => JSON.parse(JSON.stringify(good));
+  const known = h => h.policies[0].items.find(i => i.state === 'known');
+  const breaches = [
+    ['future handoff version', h => { h.handoffVersion = 'decision-handoff/v2'; }, /version/],
+    ['future catalogue version', h => { h.catalogueVersion = 'decision-catalogue/v2'; }, /catalogue version/],
+    ['policies missing', h => { delete h.policies; }, /policies/],
+    ['items missing', h => { delete h.policies[0].items; }, /items/],
+    ['summed cover', h => { h.combinedConfirmedCover = { amountMinor: 1 }; }, /combined cover/],
+    ['spendable limit', h => { h.policies[0].spendableCash = true; }, /spendable/],
+    ['unknown state', h => { known(h).state = 'approved'; }, /state approved/],
+    ['known without value', h => { known(h).value = null; }, /value only when known/],
+    ['known without citations', h => { known(h).citations = []; }, /citations/],
+    ['known with a truthy non-boolean association', h => { known(h).associationVerified = 'yes'; }, /verified association/],
+    ['candidate on a missing item', h => { const m = h.policies[0].items.find(i => i.state === 'missing'); m.candidateValue = { amountMinor: 1 }; }, /candidate value leaked/],
+  ];
+  for (const [name, mutate, expected] of breaches) {
+    const h = clone(); mutate(h);
+    assert.throws(() => assertHandoffContract(h), expected, name);
+  }
+  assert.throws(() => toHandoff({ catalogue: { catalogueVersion: 'decision-catalogue/v2' } }), /Unsupported catalogue version/);
 });
