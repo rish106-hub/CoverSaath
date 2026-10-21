@@ -1,0 +1,92 @@
+tests/curated-source-integrity.test.mjs
+  s_d84ddf5b277c7b::t_17aa81da032650 1-20,22-86,88-100,116-153,155-168
+  s_d84ddf5b277c7b::t_83526b233e655d 21,154
+  s_d84ddf5b277c7b::t_78a082dd2ed26e 101-105,107-109,113
+  s_d84ddf5b277c7b::t_9577434a65c175 106,110-112,114-115
+  s_d84ddf5b277c7b::t_8a6b477b92a756 87
+docs/runbooks/curated-sources.md
+  s_d84ddf5b277c7b::t_34702fb8065227 1-101
+src/server/routes/v1-backend-routes.js
+  s_d84ddf5b277c7b::t_2947dcd056b483 410-411,418
+src/features/decision-catalogue/handoff.js
+  s_d84ddf5b277c7b::t_e4dbc5befd0271 74,76,78-79,83
+src/backend/services/decision-catalogue-service.js
+  s_d84ddf5b277c7b::t_2947dcd056b483 1,33-38,40-42,46,52,65-69,75,94,96,149-150,156,162,174,185
+docs/architecture/reviewer-security.md
+  s_d84ddf5b277c7b::t_fb45c7fe621e14 1-68
+  s_d84ddf5b277c7b::t_6160ac003c7622 69-70
+tests/decision-catalogue.test.mjs
+  s_d84ddf5b277c7b::t_8a6b477b92a756 139,141,143
+src/features/decision-catalogue/association.js
+  s_d84ddf5b277c7b::t_bee31afb41951d 5-9,25-31,36,40,50
+tests/block3-synthetic-matrix.test.mjs
+  s_d84ddf5b277c7b::t_52974a1662336e 1-220,222,224-232
+  s_d84ddf5b277c7b::t_6f33a131524bbf 221
+  s_d84ddf5b277c7b::t_850c8d1c8629af 223
+tests/decision-catalogue-handoff.test.mjs
+  s_d84ddf5b277c7b::t_e4dbc5befd0271 3,115-138
+  s_d84ddf5b277c7b::t_6ed7e2094b4a2d 139
+tests/decision-catalogue-rules-phase5.test.mjs
+  s_d84ddf5b277c7b::t_78a082dd2ed26e 119-136
+  s_d84ddf5b277c7b::t_24182fae3cdf6b 103,105-109,111-118
+  s_d84ddf5b277c7b::t_8a6b477b92a756 11-13,22,27,37,42,104,110
+tests/curated-sources-empty.test.mjs
+  s_d84ddf5b277c7b::t_2785a6ece0964a 1-27
+src/features/decision-catalogue/applicability.js
+  s_d84ddf5b277c7b::t_4fb9729a1fb268 9-17,19-36,49,52-55,65
+  s_d84ddf5b277c7b::t_875077a17d0460 77-80
+tests/support/synthetic-policies.mjs
+  s_d84ddf5b277c7b::t_8a6b477b92a756 402,405,534,536-537
+  s_d84ddf5b277c7b::t_850c8d1c8629af 658-659
+  s_d84ddf5b277c7b::t_52974a1662336e 1-401,403-404,406-533,535,538-657,660-689
+tests/block3-multi-document-api.test.mjs
+  s_d84ddf5b277c7b::t_da98266b3d81cf 1-212,223-234
+  s_d84ddf5b277c7b::t_1a66b277e90c56 213-222
+docs/architecture/decision-catalogue.md
+  s_d84ddf5b277c7b::t_df2a576e52d5e7 3-91
+  s_d84ddf5b277c7b::t_51e0bf0c40ec6b 1-2
+scripts/curated-source.mjs
+  s_d84ddf5b277c7b::t_ba94ef8d3a4b65 10-14,39-46
+src/backend/repositories/curated-product-repository.js
+  s_d84ddf5b277c7b::t_f665038b15fde7 360-364,368,370,374-375,378-380,386-390,397
+  s_d84ddf5b277c7b::t_4fb9729a1fb268 365-367,369,371-373,376-377,381-385,398-399,403
+docs/exec-plans/active/block-3-acceptance.md
+  s_d84ddf5b277c7b::t_33d7b4220c0d91 1-88
+  s_d84ddf5b277c7b::t_9249ce4e41fd6f 89-93
+docs/adr/0009-reviewed-facts-and-decision-catalogue.md
+  s_d84ddf5b277c7b::t_5ea0c8069b81e6 1-91
+docs/architecture/security.md
+  s_d84ddf5b277c7b::t_5e760aed1346f3 85-86
+docs/iterations/LATEST.md
+  s_d84ddf5b277c7b::t_74316010f3f01e 3-16
+tests/catalogue-review-api.test.mjs
+  s_d84ddf5b277c7b::t_b5c56537d08d04 534-549
+tests/decision-catalogue-association.test.mjs
+  s_d84ddf5b277c7b::t_fc1325868759dd 4-5,56-70
+docs/research/2026-10-20-source-data-catalogue-reviewer-access.md
+  s_c52538788cad78::t_c188f0d484b1f7 1-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "210bec31254fee2e77728add70f9164c421904d2",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_d84ddf5b277c7b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c6ffc580-b6c6-4675-8b51-797f1c296664",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
