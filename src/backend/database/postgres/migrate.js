@@ -1,25 +1,25 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, realpathSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostgresDatabaseError } from './errors.js';
 
 export const postgresMigrationDirectory = fileURLToPath(new URL('./migrations', import.meta.url));
+export const postgresTestMigrationRoot = fileURLToPath(new URL('../../../../.local/postgres-test-migrations/', import.meta.url));
 
 // One fixed advisory-lock key for the whole migration run (a session lock, held on one connection).
 const MIGRATION_LOCK_KEY = '7283541900012';
 
 export function loadPostgresMigrations(directory = postgresMigrationDirectory) {
-  const allowedRoot = realpathSync(resolve(postgresMigrationDirectory));
-  // The directory is selected by application or test code, never a request.
-  // codeql[js/path-injection]
   const root = realpathSync(resolve(directory));
-  const rootOffset = relative(allowedRoot, root);
-  if (rootOffset && (rootOffset.startsWith('..') || isAbsolute(rootOffset))) {
-    throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'The migration directory path is not allowed.');
+  const productionRoot = realpathSync(postgresMigrationDirectory);
+  const testRoot = resolve(postgresTestMigrationRoot);
+  const insideProductionRoot = root === productionRoot || root.startsWith(productionRoot + sep);
+  const insideTestRoot = root.startsWith(testRoot + sep);
+  if (!insideProductionRoot && !insideTestRoot) {
+    throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'The migration directory is not allowed.');
   }
   // Restrict entries to regular files with fixed migration names, then resolve symlinks before reading.
-  // codeql[js/path-injection]
   return readdirSync(root, { withFileTypes: true })
     .filter(entry => entry.isFile() && /^\d{3}_[a-z0-9_]+\.sql$/.test(entry.name))
     .sort((left, right) => left.name.localeCompare(right.name))
@@ -29,7 +29,6 @@ export function loadPostgresMigrations(directory = postgresMigrationDirectory) {
       if (!offset || offset.startsWith('..') || isAbsolute(offset) || offset.includes('/') || offset.includes('\\')) {
         throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'A migration file path is not allowed.');
       }
-      // codeql[js/path-injection]
       return { version: entry.name, sql: readFileSync(migrationPath, 'utf8') };
     });
 }
@@ -54,9 +53,8 @@ async function applyMigration(client, version, sql) {
       await client.query('COMMIT');
       return false;
     }
-    // Migration SQL is loaded only from the validated, repository-owned migration set above.
-    // Parameter binding cannot represent PostgreSQL DDL. The checksum makes later edits fail closed.
-    // codeql[js/sql-injection]
+    // Migration SQL is loaded only from a fixed, validated migration root. Parameter binding cannot
+    // represent PostgreSQL DDL. The checksum makes later edits fail closed.
     await client.query(sql);
     await client.query(
       'INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ($1, $2, $3)',
