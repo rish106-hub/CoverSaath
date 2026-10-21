@@ -10,9 +10,14 @@ export const postgresMigrationDirectory = fileURLToPath(new URL('./migrations', 
 const MIGRATION_LOCK_KEY = '7283541900012';
 
 export function loadPostgresMigrations(directory = postgresMigrationDirectory) {
+  const allowedRoot = realpathSync(resolve(postgresMigrationDirectory));
   // The directory is selected by application or test code, never a request.
   // codeql[js/path-injection]
   const root = realpathSync(resolve(directory));
+  const rootOffset = relative(allowedRoot, root);
+  if (rootOffset && (rootOffset.startsWith('..') || isAbsolute(rootOffset))) {
+    throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'The migration directory path is not allowed.');
+  }
   // Restrict entries to regular files with fixed migration names, then resolve symlinks before reading.
   // codeql[js/path-injection]
   return readdirSync(root, { withFileTypes: true })
