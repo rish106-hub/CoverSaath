@@ -8,7 +8,7 @@ Close every open CodeQL alert on `main` without weakening runtime, privacy, cons
 
 - Provider smoke scripts: stop loading secrets from files and sending file-derived values over HTTP.
 - Evaluation code: replace dynamic object writes with `Map` plus explicit object conversion.
-- PostgreSQL migration tooling: harden path handling and document the intentional execution of repository-owned SQL.
+- PostgreSQL migration tooling: restrict migration loading to fixed production and test roots, reject links, and execute only validated migration files.
 - CodeQL configuration: remove the checked-in advanced workflow only if GitHub default setup remains active.
 
 ## Non-goals
