@@ -1,0 +1,26 @@
+src/features/household-reasoning/relevance.js
+  s_d74e1a9e70bc38::t_57d456de977c4e 20-21
+tests/household-reasoning-contracts.test.mjs
+  s_d74e1a9e70bc38::t_33ec4ae0a83afa 165-174
+tests/context-gap-resolver.test.mjs
+  s_d74e1a9e70bc38::t_33ec4ae0a83afa 190-196
+src/features/household-reasoning/scenario-input.js
+  s_d74e1a9e70bc38::t_49cfb0ce58deba 8
+  s_d74e1a9e70bc38::t_6f35ba0fcbd947 128-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "786d90aaf7a1f3d552a70149b58bf89bc2f12fc7",
+  "prompts": {},
+  "sessions": {
+    "s_d74e1a9e70bc38": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e22ab5b4-8acf-4123-80e3-4e60a919eb4b",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
