@@ -28,7 +28,7 @@ function world(t) {
   const database = openDatabase({ path: join(directory, 'app.sqlite') });
   let now = new Date('2026-10-20T10:00:00.000Z');
   const clock = () => now;
-  const services = createBackendServices(database, { clock, env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken } });
+  const services = createBackendServices(database, { clock, env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, CURATED_SOURCE_HOSTS: 'insurer.example' } });
   const adult = name => services.households.createAdult({ displayName: `Synthetic ${name}` }).id;
   const people = { curator: adult('curator'), checker: adult('checker'), second: adult('second checker'), nobody: adult('nobody') };
   const repo = services.curatedProducts;
@@ -103,8 +103,16 @@ test('collection: bad claims, bad identity, stale wording and a competing docume
   assert.equal(w.database.prepare('SELECT count(*) AS n FROM curated_product_submissions').get().n, 1);
 });
 
-test('collection: an insurer host allowlist, when configured, refuses other hosts', t => {
+test('collection: the host allowlist fails closed, matches exact hosts and refuses address-like entries', t => {
   const w = world(t);
+  const open = new w.repo.constructor(w.database, { clock: () => new Date('2026-10-20T10:00:00.000Z'), env: {} });
+  assert.equal(code(() => open.register({ curatorId: w.people.curator, ...base() })).code, 'SOURCE_HOSTS_NOT_CONFIGURED', 'unset allowlist permits nothing');
+  for (const entry of ['127.0.0.1', 'localhost', 'a.localhost', '169.254.169.254', 'metadata.internal', 'insurer']) {
+    assert.throws(() => new w.repo.constructor(w.database, { env: { CURATED_SOURCE_HOSTS: entry } }), TypeError, entry);
+  }
+  for (const sourceUrl of ['https://insurer.example.evil.example/w.pdf', 'https://notinsurer.example/w.pdf', 'https://insurer.example:8443/w.pdf']) {
+    assert.equal(code(() => w.repo.register({ curatorId: w.people.curator, ...base({ sourceUrl }) })).code, 'CURATED_PRODUCT_INVALID', sourceUrl);
+  }
   const strict = new w.repo.constructor(w.database, { clock: () => new Date('2026-10-20T10:00:00.000Z'), env: { CURATED_SOURCE_HOSTS: 'insurer.example, other.example' } });
   assert.equal(code(() => strict.register({ curatorId: w.people.curator, ...base({ sourceUrl: 'https://evil.example/w.pdf' }) })).code, 'CURATED_PRODUCT_INVALID');
   assert.equal(strict.register({ curatorId: w.people.curator, ...base() }).state, 'collected');
@@ -301,6 +309,25 @@ test('concurrent check and revocation: whichever lands first decides, and a late
   other.repo.revokeRole({ grantId: other.grants.second.id });
   assert.equal(code(() => other.repo.publish({ actorId: other.people.second, submissionId: checked })).code, 'SOURCE_ROLE_NOT_AUTHORISED', 'revoked before publishing');
   assert.equal(other.repo.get({ adultId: other.people.checker, submissionId: checked }).state, 'checked');
+});
+
+test('grant expiry ends future authority only: a published review stays valid, invalidation is a separate recorded act', t => {
+  const w = world(t);
+  const id = candidate(w);
+  accept(w, id, w.people.checker);
+  w.repo.publish({ actorId: w.people.second, submissionId: id });
+  w.setNow('2026-11-25T10:00:00.000Z');
+  assert.equal(w.repo.activeRole(w.people.checker, 'checker'), null, 'the grant has expired');
+  const kept = w.repo.listVerified({ today: '2026-11-25' });
+  assert.equal(kept.length, 1, 'the completed review is still historically valid');
+  assert.equal(kept[0].verified, true);
+  assert.equal(code(() => accept(w, id, w.people.checker)).code, 'SOURCE_ROLE_NOT_AUTHORISED', 'no new reviews');
+  const before = w.database.prepare('SELECT checked_by, checked_at FROM curated_product_submissions WHERE id = ?').get(id);
+  assert.equal(code(() => w.repo.invalidate({ submissionId: id, operatorId: 'op', reasonCode: 'nonsense' })).code, 'CURATED_PRODUCT_INVALID');
+  assert.equal(w.repo.invalidate({ submissionId: id, operatorId: 'op', reasonCode: 'checker_compromised' }).state, 'needs_revalidation');
+  assert.deepEqual(w.database.prepare('SELECT checked_by, checked_at FROM curated_product_submissions WHERE id = ?').get(id), before, 'review record is not rewritten');
+  assert.equal(w.repo.listVerified({ today: '2026-11-25' }).length, 0, 'invalidated product informs nobody');
+  assert.equal(code(() => w.repo.invalidate({ submissionId: id, operatorId: 'op', reasonCode: 'checker_compromised' })).code, 'SUBMISSION_STATE_CONFLICT');
 });
 
 async function startApi(w) {

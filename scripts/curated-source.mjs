@@ -5,8 +5,10 @@
 //   node scripts/curated-source.mjs revoke-role  <grantId> <operatorId>
 //   node scripts/curated-source.mjs register     <curatorAdultId> <metadata.json> <document.pdf> [pageTexts.json]
 //   node scripts/curated-source.mjs propose      <curatorAdultId> <submissionId> <facts.json>
+//   node scripts/curated-source.mjs invalidate  <submissionId> <operatorId> <checker_compromised|review_found_wrong|source_superseded>
 //   node scripts/curated-source.mjs revalidate   <actorAdultId> <submissionId> <document.pdf> <sourceVersionId> [pageTexts.json]
 //
+// CURATED_SOURCE_HOSTS (comma separated exact DNS names) must be set or register refuses every source.
 // metadata.json: { uin, insurer, productName, wordingVersion, sourceUrl, sourceVersionId, retrievedOn, effectiveFrom? }
 import { readFileSync } from 'node:fs';
 import { openDatabase } from '../src/backend/database/index.js';
@@ -21,6 +23,7 @@ try {
   let out;
   if (command === 'grant-role') { need(4, 'grant-role <adultId> <role> <operatorId> <expiresAt>'); out = repo.grantRole({ adultUserId: args[0], role: args[1], operatorId: args[2], expiresAt: args[3] }); }
   else if (command === 'revoke-role') { need(2, 'revoke-role <grantId> <operatorId>'); out = { revoked: repo.revokeRole({ grantId: args[0], revokedBy: args[1] }) }; }
+  else if (command === 'invalidate') { need(3, 'invalidate <submissionId> <operatorId> <reasonCode>'); out = repo.invalidate({ submissionId: args[0], operatorId: args[1], reasonCode: args[2] }); }
   else if (command === 'register') {
     need(3, 'register <curatorAdultId> <metadata.json> <document.pdf> [pageTexts.json]');
     out = repo.register({ curatorId: args[0], ...json(args[1]), bytes: readFileSync(args[2]), pageTexts: args[3] ? json(args[3]) : null });
@@ -28,7 +31,7 @@ try {
   else if (command === 'revalidate') {
     need(4, 'revalidate <actorAdultId> <submissionId> <document.pdf> <sourceVersionId> [pageTexts.json]');
     out = repo.revalidate({ actorId: args[0], submissionId: args[1], bytes: readFileSync(args[2]), sourceVersionId: args[3], pageTexts: args[4] ? json(args[4]) : null });
-  } else throw new Error('commands: grant-role, revoke-role, register, propose, revalidate');
+  } else throw new Error('commands: grant-role, revoke-role, invalidate, register, propose, revalidate');
   const { pageTexts: _omit, ...printable } = out ?? {};
   process.stdout.write(`${JSON.stringify(printable, null, 2)}\n`);
 } catch (error) {
