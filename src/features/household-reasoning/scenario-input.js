@@ -5,6 +5,7 @@ import {
   ANSWER_KEYS, HouseholdReasoningError, LIMITS, NOT_KNOWN, RELATIONS, REPORTED_POLICY_TYPES, SCENARIO_TYPES, SCENARIO_VERSION, SENTINELS, SKIPPED,
   deepFreeze, hasForbiddenCharacters, isIsoDate, isIsoMonth, isRecord,
 } from './contracts.js';
+import { isSpecificProcedure } from './relevance.js';
 
 const fail = (code, message) => { throw new HouseholdReasoningError(code, message, 400); };
 const AUTHORITY_KEY = /^(handoffs?|verified|isVerified|known|citations?|coverage|association|associationVerified|membership|enrolled|enrolment|enrollment|reviewer|reviewerRole|role|authority|trust|trustState|state|status|amount|amountMinor|sumInsured|payable|combinedPayableAmount|spendableCash|limit|policy|policies|policyId|policyNumber|financial|calculation|calculate|provenance|origin)$/i;
@@ -124,8 +125,10 @@ export function validateScenarioInput(body) {
     hospitalName: merge(scenario.hospital.name, 'hospital_name', sameText),
     hospitalCity: merge(scenario.hospital.city, 'hospital_city', sameText),
     hospitalBranch: merge(scenario.hospital.branch, 'hospital_branch', sameText),
-    procedureDetail: scenario.answers.procedure_detail?.state === 'answered' ? scenario.answers.procedure_detail.value : null,
-    topicDetail: scenario.answers.topic_detail?.state === 'answered' ? scenario.answers.topic_detail.value : null,
+    // A specific direct procedure may be repeated but not contradicted; a nonspecific one ("surgery") is what the
+    // procedure question refines, so the answer then replaces it for matching.
+    procedureDetail: merge(scenario.procedureText && isSpecificProcedure(scenario.procedureText) ? scenario.procedureText : null, 'procedure_detail', sameText),
+    topicDetail: merge(scenario.topic, 'topic_detail', sameText),
   };
   if (effective.plannedDate && scenario.plannedMonth && !effective.plannedDate.startsWith(`${scenario.plannedMonth}-`)) {
     fail('HOUSEHOLD_SCENARIO_CONTRADICTORY', 'The exact date is not in plannedMonth.');

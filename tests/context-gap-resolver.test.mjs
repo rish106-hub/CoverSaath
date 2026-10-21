@@ -187,3 +187,10 @@ test('gaps are deterministic, sorted and carry every contract field', () => {
     for (const field of ['gapKey', 'sourceClass', 'reason', 'impact', 'priority', 'currentState', 'expectedResolver', 'blocking', 'eligibleQuestionId', 'relatedPolicyIds', 'relatedRuleKeys']) assert.ok(field in g, `${g.gapKey} lacks ${field}`);
   }
 });
+
+test('G05: explicit uncertainty text stays nonspecific and still asks for the procedure', () => {
+  for (const procedureText of ["I don't know", 'not sure', 'I_DO_NOT_KNOW', 'SKIPPED', 'unknown yet', 'surgery, not decided']) {
+    const gap = find(gapsOf({ memberId: MEMBER_A, procedureText }, [one([enrolled()])]), 'procedure_unspecific');
+    assert.equal(gap?.eligibleQuestionId, 'Q_PROCEDURE_DETAIL', procedureText);
+  }
+});

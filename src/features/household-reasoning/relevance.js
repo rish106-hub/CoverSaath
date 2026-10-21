@@ -17,6 +17,8 @@ const CORE_BY_SCENARIO = Object.freeze({
 const GENERIC_PROCEDURE_TERMS = new Set([
   'surgery', 'operation', 'procedure', 'treatment', 'hospitalisation', 'hospitalization', 'admission', 'admit', 'admitted', 'stay', 'care',
   'a', 'an', 'the', 'my', 'his', 'her', 'for', 'of', 'to', 'at', 'in', 'on', 'and', 'needs', 'need', 'planned', 'medical', 'health', 'something', 'some', 'any', 'major', 'minor', 'big', 'small', 'is', 'be', 'has', 'have', 'will', 'father', 'mother', 'wife', 'husband',
+  // Explicit uncertainty ("I don't know", "not sure", the answer sentinels) names no procedure.
+  'i', 'we', 'you', 'do', 'doe', 'don', 't', 'know', 'not', 'sure', 'unsure', 'unknown', 'skipped', 'idea', 'no', 'yet', 'decided', 'unclear', 'maybe', 'tbd', 'dunno', 'cannot', 'nothing', 'say', 'tell',
   'eye', 'ear', 'nose', 'throat', 'heart', 'knee', 'hip', 'back', 'spine', 'stomach', 'kidney', 'brain', 'leg', 'arm', 'tooth', 'teeth', 'bone', 'skin', 'chest',
 ]);
 
