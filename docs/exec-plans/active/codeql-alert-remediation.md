@@ -8,7 +8,7 @@ Close every open CodeQL alert on `main` without weakening runtime, privacy, cons
 
 - Provider smoke scripts: stop loading secrets from files and sending file-derived values over HTTP.
 - Evaluation code: replace dynamic object writes with `Map` plus explicit object conversion.
-- PostgreSQL migration tooling: restrict migration loading to fixed production and test roots, reject links, and execute only validated migration files.
+- PostgreSQL migration tooling: restrict migration loading to fixed production and test roots, reject links, execute only validated migration files, and narrowly suppress the two remaining dataflow false positives at their guarded sinks.
 - CodeQL configuration: remove the checked-in advanced workflow only if GitHub default setup remains active.
 
 ## Non-goals
@@ -22,7 +22,7 @@ Close every open CodeQL alert on `main` without weakening runtime, privacy, cons
 1. All affected narrow tests pass.
 2. `npm run check`, `npm run eval:safety`, and `git diff --check` pass.
 3. An independent read-only review finds no unresolved security blocker.
-4. A fresh GitHub CodeQL scan reports no open alert on the branch. This needs a push or pull request and remains unverified until authorized.
+4. A fresh GitHub CodeQL scan reports no open alert on the branch and no open alert on `main` after merge.
 
 ## Rollback
 
