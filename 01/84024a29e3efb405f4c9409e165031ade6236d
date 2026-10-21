@@ -1,0 +1,32 @@
+tests/postgres-migration-loader.test.mjs
+  s_8db98385d48fd9::t_302d2bbfe91421 27-33
+  s_8db98385d48fd9::t_3abcb3a51d6290 34-47
+  s_8db98385d48fd9::t_4ded7fd769352d 6,9-10
+tests/postgres-runner.test.mjs
+  s_8db98385d48fd9::t_4ded7fd769352d 4,7-8,18-19
+docs/exec-plans/active/codeql-alert-remediation.md
+  s_8db98385d48fd9::t_302d2bbfe91421 11
+docs/iterations/LATEST.md
+  s_8db98385d48fd9::t_4e29f1a2ec00df 8
+  s_8db98385d48fd9::t_302d2bbfe91421 5
+src/backend/database/postgres/index.js
+  s_8db98385d48fd9::t_4ded7fd769352d 4-5
+src/backend/database/postgres/migrate.js
+  s_8db98385d48fd9::t_4ded7fd769352d 3,8,15-21,56-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0184024a29e3efb405f4c9409e165031ade6236d",
+  "prompts": {},
+  "sessions": {
+    "s_8db98385d48fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a15ca0-4c4d-75c2-b383-f23312bcb248",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
