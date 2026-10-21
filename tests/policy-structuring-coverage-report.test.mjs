@@ -78,6 +78,17 @@ test('chunks without an outcome are counted as unaccounted', () => {
   assert.equal(report.commit, undefined);
 });
 
+test('coverage tallies keep hostile reason names as data properties', () => {
+  const report = buildCoverageReport({
+    sectioned: { chunks: [{ id: 'synthetic', page: 1 }], dropped: [{ reason: '__proto__' }] },
+    extraction: { accepted: [], proposals: [], rejected: [], chunkOutcomes: { synthetic: { status: 'skipped', reason: '__proto__' } } },
+    reconciliation: { conflicts: [] },
+  });
+  assert.equal(Object.hasOwn(report.skippedReasons, '__proto__'), true);
+  assert.equal(report.skippedReasons.__proto__, 1);
+  assert.equal(report.dropped.__proto__, 1);
+});
+
 test('scoreStructuring reports recall, hallucination rate and conflict recall', async () => {
   const { extraction, reconciliation } = await journey();
   const golden = { structuring: {

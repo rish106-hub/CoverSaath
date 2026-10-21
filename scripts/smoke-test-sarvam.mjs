@@ -4,37 +4,22 @@
  * Usage: node scripts/smoke-test-sarvam.mjs
  */
 
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import assert from 'node:assert/strict';
 
-// Try to get API key from environment, then fall back to reading .env file
-let API_KEY = process.env.SARVAM_API_KEY;
-
-if (!API_KEY) {
-  try {
-    const envPath = resolve('.env');
-    const envContent = readFileSync(envPath, 'utf-8');
-    const match = envContent.match(/^SARVAM_API_KEY=(.+)$/m);
-    if (match) {
-      API_KEY = match[1].trim();
-    }
-  } catch (e) {
-    // .env file doesn't exist or can't be read
-  }
-}
+const API_KEY = process.env.SARVAM_API_KEY;
 const API_BASE = 'https://api.sarvam.ai';
+
+function requiredApiKey(value) {
+  assert.ok(typeof value === 'string' && value.trim().length > 0, 'SARVAM_API_KEY is required. Load it with Node --env-file or export it in the shell.');
+  return value;
+}
 
 async function smokeTest() {
   console.log('🔬 Sarvam API Smoke Test');
   console.log('========================\n');
 
-  if (!API_KEY) {
-    console.error('❌ SARVAM_API_KEY not found in environment or .env file');
-    console.log('   Please set SARVAM_API_KEY in your .env file');
-    process.exit(1);
-  }
-
-  console.log('✅ API Key found');
+  const apiKey = requiredApiKey(API_KEY);
+  console.log('✅ API request configured');
   console.log('📍 API Base:', API_BASE);
   console.log();
 
@@ -49,7 +34,7 @@ async function smokeTest() {
     const response = await fetch(`${API_BASE}/doc-ai/v1/job/digitise`, {
       method: 'POST',
       headers: {
-        'api-subscription-key': API_KEY,
+        'api-subscription-key': apiKey,
       },
       body: new FormData(),
       signal: controller.signal,
@@ -60,7 +45,7 @@ async function smokeTest() {
     // We expect this to fail (no file provided), but we should get a 400/422, not a 401/403
     if (response.status === 401 || response.status === 403) {
       console.error('❌ Authentication failed (401/403)');
-      console.error('   The API key may be invalid or expired');
+      console.error('   The API key is missing, invalid, or expired');
       process.exit(1);
     }
 
@@ -100,4 +85,7 @@ async function smokeTest() {
   }
 }
 
-smokeTest();
+smokeTest().catch(error => {
+  console.error('❌ Smoke test setup failed:', error.message);
+  process.exitCode = 1;
+});
