@@ -4,11 +4,11 @@
 import { isConflict } from './reconciler.js';
 import { inferValueType, normalizeValue } from './validator.js';
 
-const tally = (list, pick) => list.reduce((counts, entry) => {
+const tally = (list, pick) => Object.fromEntries(list.reduce((counts, entry) => {
   const key = pick(entry);
-  counts[key] = (counts[key] ?? 0) + 1;
+  counts.set(key, (counts.get(key) ?? 0) + 1);
   return counts;
-}, {});
+}, new Map()));
 const count = value => (Number.isFinite(value) ? value : 0);
 
 function chunkOutcome(chunk, outcome, storedIds, proposedIds) {
@@ -188,7 +188,7 @@ export function readingMatches(expected, reading) {
 export function scoreCriticalFields(goldenFields, review, { modelForbiddenKeys = [] } = {}) {
   const byKey = new Map((review?.parameters ?? []).map(parameter => [parameter.key, parameter]));
   const forbidden = new Set(modelForbiddenKeys);
-  const fields = Object.create(null); // keys come from golden files and model output: no prototype to pollute
+  const fieldMap = new Map();
   for (const [field, expected] of Object.entries(goldenFields ?? {})) {
     const key = CRITICAL_FIELD_KEYS[field];
     if (!key) continue;
@@ -203,7 +203,8 @@ export function scoreCriticalFields(goldenFields, review, { modelForbiddenKeys =
       const asserted = readings.find(reading => reading.selected) ?? readings.at(-1);
       outcome = readingMatches(expected.value, asserted) ? 'correct' : 'wrong';
     }
-    fields[field] = { key, outcome, state: parameter?.state ?? 'unknown', readings: readings.length };
+    fieldMap.set(field, { key, outcome, state: parameter?.state ?? 'unknown', readings: readings.length });
   }
-  return { fields, totals: tally(Object.values(fields), entry => entry.outcome) };
+  const fields = Object.fromEntries(fieldMap);
+  return { fields, totals: tally([...fieldMap.values()], entry => entry.outcome) };
 }
