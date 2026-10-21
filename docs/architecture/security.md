@@ -82,6 +82,8 @@ Status: describes controls present in the repository at the commit that added th
 
 ## Known gaps
 
+- Decision-catalogue reviewers and curated-source curators/checkers have no trusted operator or staff identity model; see [reviewer-security.md](reviewer-security.md).
+
 - No identity provider or MFA. Bootstrap token plus self-issued bearer sessions only (`README.md`).
 - PDF inspection runs in the API process, not a sandbox; it is bounded and dependency-free but is still parsing untrusted bytes in a process that can reach the database (ADR 0005).
 - Malware scanning was exercised against a real local clamd (ClamAV 1.5.4, runbook settings) by the opt-in `tests/clamd-integration.test.mjs` and one manual upload run. ClamAV's EICAR signature matches only at offset 0, so the blocked path cannot be driven end to end through the PDF upload route; it is covered at scanner level (real clamd) and through the API with a fake clamd. With `DOCUMENT_SCAN_MODE=disabled` no upload ever reaches OCR.

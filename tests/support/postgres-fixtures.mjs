@@ -91,14 +91,17 @@ const defaults = {
     clause_ids_json: '["pc-1"]', source_digests_json: '["' + 'c'.repeat(64) + '"]', fact_key: 'f'.repeat(64), fact_json: '{}', created_at: at,
   }),
   source_curator_grants: id => ({
-    id, adult_user_id: 'adult-a', role: 'curator', status: 'active', granted_by: 'operator:test', created_at: at, expires_at: later, revoked_at: null,
+    id, adult_user_id: 'adult-a', role: 'curator', status: 'active', granted_by: 'operator:test', created_at: at, expires_at: later, revoked_at: null, public_key: null,
+  }),
+  curated_action_nonces: id => ({
+    nonce: id, grant_id: 'scg-1', action: 'check', submission_id: 'cps-1', signature_sha256: 'd'.repeat(64), used_at: at,
   }),
   curated_source_archives: id => ({ sha256: id, byte_size: 3, content: Buffer.from('abc'), created_at: at }),
   curated_product_submissions: id => ({
     id, uin: 'SYNTHHLIP26001V012526', insurer: 'Synthetic Insurer', product_name: 'Synthetic Health Plan', wording_version: 'v1',
     source_url: 'https://insurer.example/w.pdf', source_version_id: 'rev-1', content_sha256: 'a'.repeat(64), retrieved_on: '2026-10-15', effective_from: null,
     page_texts_json: null, facts_json: '[]', machine_checks_json: '{}', state: 'collected', collected_by: 'adult-a', checked_by: null, checked_at: null,
-    published_at: null, previous_id: null, last_revalidated_at: null, created_at: at,
+    published_at: null, previous_id: null, last_revalidated_at: null, created_at: at, page_text_origin: null, text_extractor_version: null,
   }),
   policy_answers: id => ({
     id, household_id: 'household-a', case_id: 'case-a', requested_by_adult_id: 'adult-a', idempotency_key: `idem-${id}`,

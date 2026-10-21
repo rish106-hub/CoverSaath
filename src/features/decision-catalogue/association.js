@@ -2,7 +2,11 @@
 // when its own clauses print exactly one policy number. The number is used as a grouping key and is never returned:
 // the logical policy id is a digest of it. Nothing here verifies an association: that needs an authorised reviewer's
 // attestation (ADR 0009). The uploader-selected document kind is not used as evidence of which policy a file belongs to.
-import { createHash } from 'node:crypto';
+//
+// The id is KEYED. Policy numbers are short and structured, so a plain hash of one could be reversed by trying every number
+// in an insurer's format. Without a key from the caller, a random per-process key is used: ids are then stable only until a
+// restart, and reviews recorded against facts on those ids stop matching (they read as stale, never as accepted).
+import { createHmac, randomBytes } from 'node:crypto';
 import { deepFreeze } from './contracts.js';
 
 const POLICY_NUMBER = /\bpolicy\s*(?:no\.?|number|num\.?|#)\s*[:\-–]?\s*([A-Z0-9][A-Z0-9/\-]{5,39})\b/gi;
@@ -18,15 +22,22 @@ export function extractPolicyNumbers(text) {
   return [...found];
 }
 
-export const logicalPolicyId = number => `pol-${createHash('sha256').update(`policy-association/v1:${number}`).digest('hex').slice(0, 24)}`;
+const PROCESS_KEY = randomBytes(32);
+
+/** Logical policy id for a normalised policy number. `key` is a secret of at least 32 bytes held by the server. */
+export function logicalPolicyId(number, key = PROCESS_KEY) {
+  if (!(key instanceof Uint8Array) || key.length < 32) throw new TypeError('A policy id key of at least 32 bytes is required.');
+  return `pol-${createHmac('sha256', key).update(`policy-association/v2:${number}`).digest('hex').slice(0, 32)}`;
+}
 
 /**
  * @param clauseRows   ClauseRepository rows (documentId, text)
  * @param documentIds  documents that back the answer
+ * @param key          server-held secret for the logical policy id (see logicalPolicyId)
  * @returns { policies: [{policyId, documentIds}], documents: [{documentId, status, policyId, basis, verified}] }
  *   status: candidate (exactly one number), ambiguous (several numbers in one document), unestablished (none).
  */
-export function associateDocuments(clauseRows, documentIds) {
+export function associateDocuments(clauseRows, documentIds, { key } = {}) {
   const numbersByDocument = new Map(documentIds.map(id => [id, new Set()]));
   for (const row of clauseRows ?? []) {
     const bucket = numbersByDocument.get(row.documentId);
@@ -36,7 +47,7 @@ export function associateDocuments(clauseRows, documentIds) {
   const documents = documentIds.map(documentId => {
     const numbers = [...numbersByDocument.get(documentId)];
     if (numbers.length === 1) {
-      const policyId = logicalPolicyId(numbers[0]);
+      const policyId = logicalPolicyId(numbers[0], key);
       policies.set(policyId, [...(policies.get(policyId) ?? []), documentId]);
       return { documentId, status: 'candidate', policyId, basis: 'printed_policy_number', verified: false };
     }

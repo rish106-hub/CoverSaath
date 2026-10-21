@@ -3,21 +3,34 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadPostgresMigrations, postgresTestMigrationRoot } from '../src/backend/database/postgres/index.js';
+import { loadPostgresMigrations, postgresMigrationDirectory } from '../src/backend/database/postgres/index.js';
+import { scratchMigrationDirectory } from './support/postgres.mjs';
 
-test('migration loader accepts fixed regular files and ignores links and malformed names', t => {
-  mkdirSync(postgresTestMigrationRoot, { recursive: true });
-  const parent = mkdtempSync(join(postgresTestMigrationRoot, 'loader-'));
-  const directory = join(parent, 'migrations');
-  const outside = join(parent, 'outside.sql');
+function outsideDirectory(t) {
+  const parent = mkdtempSync(join(tmpdir(), 'coversaath-pg-loader-'));
   t.after(() => rmSync(parent, { recursive: true, force: true }));
+  return parent;
+}
 
-  mkdirSync(directory);
-  writeFileSync(outside, 'SELECT 99;\n');
-  writeFileSync(join(directory, '002_second.sql'), 'SELECT 2;\n');
-  writeFileSync(join(directory, '001_first.sql'), 'SELECT 1;\n');
-  writeFileSync(join(directory, '3_bad.sql'), 'SELECT 3;\n');
-  symlinkSync(outside, join(directory, '003_escape.sql'));
+function assertNotAllowed(fn) {
+  assert.throws(fn, error => {
+    assert.equal(error.code, 'POSTGRES_MIGRATION_PATH_NOT_ALLOWED');
+    assert.doesNotMatch(error.message, /\/|\\/);
+    return true;
+  });
+}
+
+test('migration loader accepts fixed regular files and ignores links, subdirectories and malformed names', t => {
+  const outside = outsideDirectory(t);
+  writeFileSync(join(outside, 'outside.sql'), 'SELECT 99;\n');
+  const directory = scratchMigrationDirectory(t, {
+    '002_second.sql': 'SELECT 2;\n',
+    '001_first.sql': 'SELECT 1;\n',
+    '3_bad.sql': 'SELECT 3;\n',
+    '004_UPPER.sql': 'SELECT 4;\n',
+  });
+  symlinkSync(join(outside, 'outside.sql'), join(directory, '003_escape.sql'));
+  mkdirSync(join(directory, '005_nested.sql'));
 
   assert.deepEqual(loadPostgresMigrations(directory), [
     { version: '001_first.sql', sql: 'SELECT 1;\n' },
@@ -25,23 +38,35 @@ test('migration loader accepts fixed regular files and ignores links and malform
   ]);
 });
 
-test('migration loader rejects directories outside its fixed production and test roots', t => {
-  const directory = mkdtempSync(join(tmpdir(), 'coversaath-pg-outside-'));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  writeFileSync(join(directory, '001_outside.sql'), 'SELECT 1;\n');
-
-  assert.throws(() => loadPostgresMigrations(directory), { code: 'POSTGRES_MIGRATION_PATH_NOT_ALLOWED' });
+test('migration loader refuses a directory outside the repository migration root', t => {
+  const outside = outsideDirectory(t);
+  writeFileSync(join(outside, '001_outside.sql'), 'SELECT 1;\n');
+  assertNotAllowed(() => loadPostgresMigrations(outside));
+  assertNotAllowed(() => loadPostgresMigrations(join(postgresMigrationDirectory, '..')));
+  assertNotAllowed(() => loadPostgresMigrations(join(postgresMigrationDirectory, '..', '..', '..')));
 });
 
-test('migration loader rejects an allowed-root directory link that resolves outside', t => {
-  mkdirSync(postgresTestMigrationRoot, { recursive: true });
-  const allowedParent = mkdtempSync(join(postgresTestMigrationRoot, 'linked-loader-'));
-  const outside = mkdtempSync(join(tmpdir(), 'coversaath-pg-linked-outside-'));
-  const linkedDirectory = join(allowedParent, 'migrations');
-  t.after(() => rmSync(allowedParent, { recursive: true, force: true }));
-  t.after(() => rmSync(outside, { recursive: true, force: true }));
+test('migration loader refuses a directory link inside the root that points outside it', t => {
+  const outside = outsideDirectory(t);
   writeFileSync(join(outside, '001_outside.sql'), 'SELECT 1;\n');
-  symlinkSync(outside, linkedDirectory);
+  const holder = scratchMigrationDirectory(t);
+  const link = join(holder, 'escape');
+  symlinkSync(outside, link, 'dir');
+  assertNotAllowed(() => loadPostgresMigrations(link));
+});
 
-  assert.throws(() => loadPostgresMigrations(linkedDirectory), { code: 'POSTGRES_MIGRATION_PATH_NOT_ALLOWED' });
+test('the repository migration set loads and scratch sets never join it', t => {
+  scratchMigrationDirectory(t, { '999_scratch.sql': 'SELECT 1;\n' });
+  const versions = loadPostgresMigrations().map(migration => migration.version);
+  assert.ok(versions.length > 0);
+  assert.ok(!versions.includes('999_scratch.sql'));
+  assert.ok(versions.every(version => /^\d{3}_[a-z0-9_]+\.sql$/.test(version)));
+});
+
+test('a missing migration directory is refused with a coded error that carries no path', () => {
+  assert.throws(() => loadPostgresMigrations('/nonexistent-coversaath-migrations'), error => {
+    assert.equal(error.code, 'POSTGRES_MIGRATION_PATH_NOT_ALLOWED');
+    assert.doesNotMatch(error.message, /nonexistent|\//);
+    return true;
+  });
 });
