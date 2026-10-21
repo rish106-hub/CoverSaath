@@ -1,0 +1,57 @@
+src/backend/database/postgres/index.js
+  s_8db98385d48fd9::t_a2faa2cbaadae1 4
+docs/exec-plans/active/codeql-alert-remediation.md
+  s_8db98385d48fd9::t_c184b27270ce4f 1-29
+docs/iterations/LATEST.md
+  s_8db98385d48fd9::t_891e57a0d8b067 3-10
+scripts/eval-structuring-accuracy.mjs
+  s_8db98385d48fd9::t_43cf033b0f8593 9
+  s_8db98385d48fd9::t_d384b09c4198d9 17
+src/features/ai-analysis/eval-scorer.js
+  s_8db98385d48fd9::t_c184b27270ce4f 26,31,33,37
+src/backend/database/postgres/migrate.js
+  s_8db98385d48fd9::t_a2faa2cbaadae1 2,12,15,18-26,28-31,33,52-53,78
+  s_8db98385d48fd9::t_eeeb961ab91ce0 13-14,16
+  s_8db98385d48fd9::t_9af213f8f913a6 17,27,54
+tests/support/postgres.mjs
+  s_8db98385d48fd9::t_a2faa2cbaadae1 15,56-57
+tests/evals/parse-accuracy.test.mjs
+  s_8db98385d48fd9::t_a2faa2cbaadae1 40-47
+tests/postgres-migration-loader.test.mjs
+  s_8db98385d48fd9::t_06196aa3ac772e 3,14
+  s_8db98385d48fd9::t_9dea74ef245161 1-2,4-13,15-25
+scripts/smoke-test-sarvam.mjs
+  s_8db98385d48fd9::t_13738249d90f5f 88-91
+  s_8db98385d48fd9::t_6820b265d25880 22
+  s_8db98385d48fd9::t_c184b27270ce4f 9-10
+  s_8db98385d48fd9::t_9dea74ef245161 48
+  s_8db98385d48fd9::t_4023e4b7726fe7 7,12,14,21,37
+  s_8db98385d48fd9::t_f29416f1e5d8de 13
+src/features/policy-structuring/coverage-report.js
+  s_8db98385d48fd9::t_c184b27270ce4f 7,9,11,191,206,208-209
+scripts/smoke-test-gemini.mjs
+  s_8db98385d48fd9::t_4023e4b7726fe7 7,11-12,14-15,37,61
+  s_8db98385d48fd9::t_f29416f1e5d8de 13
+  s_8db98385d48fd9::t_9dea74ef245161 77
+  s_8db98385d48fd9::t_c184b27270ce4f 9-10
+  s_8db98385d48fd9::t_13738249d90f5f 130-133
+  s_8db98385d48fd9::t_6820b265d25880 38
+tests/policy-structuring-coverage-report.test.mjs
+  s_8db98385d48fd9::t_a2faa2cbaadae1 81-91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f0e4b90e0e3a76cd082cff3c5494b12121b2d370",
+  "prompts": {},
+  "sessions": {
+    "s_8db98385d48fd9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a15ca0-4c4d-75c2-b383-f23312bcb248",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
