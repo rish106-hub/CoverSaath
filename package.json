@@ -10,6 +10,7 @@
     "dev": "node --env-file-if-exists=.env.local --watch src/server/server.js",
     "db:init": "node --env-file-if-exists=.env.local scripts/database.mjs",
     "eval:safety": "node scripts/run-safety-evals.mjs",
+    "eval:household": "node scripts/eval-household-reasoning.mjs",
     "eval:retrieval": "node scripts/eval-retrieval-recall.mjs",
     "build": "node --check src/server/server.js",
     "test": "node --test tests/*.test.mjs tests/evals/*.test.mjs",

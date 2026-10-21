@@ -2,6 +2,7 @@ import { readBody } from '../http/request.js';
 import { isLoopbackRequest, readBinaryBody } from '../../shared/http/index.js';
 import { MAX_DOCUMENT_BYTES } from '../../features/input/index.js';
 import { toHandoff } from '../../features/decision-catalogue/index.js';
+import { LIMITS as HOUSEHOLD_PREVIEW_LIMITS } from '../../features/household-reasoning/index.js';
 import { documentDto } from '../../backend/services/index.js';
 import { validateSchema } from '../../backend/database/index.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
@@ -194,7 +195,7 @@ function requireOwnedDocument({ services, documentUploads, principal, documentId
   }
 }
 
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -408,6 +409,19 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       });
       // ?format=handoff returns the flat Block 4 view of the same catalogue (decision-handoff/v1).
       return { status: 200, body: url.searchParams.get('format') === 'handoff' ? toHandoff(built) : built };
+    }
+    // Household coverage preview (Block 4): read-only computation over authorised Block 3 evidence. POST because the
+    // body carries bounded scenario details and several source references. Nothing is stored and no provider is called.
+    const previewMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/coverage-preview$/);
+    if (req.method === 'POST' && previewMatch) {
+      const body = await readBody(req, { limitBytes: HOUSEHOLD_PREVIEW_LIMITS.requestBytes });
+      return {
+        status: 200,
+        body: getHouseholdPreviewService().preview({
+          principal, householdId: previewMatch[1], body,
+          authorizeCase: caseRecord => responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack }),
+        }),
+      };
     }
     const sourcePackMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/source-pack$/);
     if (req.method === 'GET' && sourcePackMatch) {

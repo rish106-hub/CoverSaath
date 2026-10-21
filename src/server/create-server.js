@@ -4,7 +4,7 @@ import { prepareJsonResponse, sendJson } from './http/request.js';
 import { assertLocalRequest } from './http/security.js';
 import { createRateLimiter } from '../shared/http/index.js';
 import { openDatabase } from '../backend/database/index.js';
-import { createBackendServices, createCoverageAnalysisPort, createDecisionCatalogueService, createDocumentUploadService, createPolicyEvidenceService, createPolicyStructuringService } from '../backend/services/index.js';
+import { createBackendServices, createCoverageAnalysisPort, createDecisionCatalogueService, createDocumentUploadService, createHouseholdPreviewService, createPolicyEvidenceService, createPolicyStructuringService } from '../backend/services/index.js';
 import {
   createClamdScanner,
   createDocumentScanWorker,
@@ -104,6 +104,11 @@ export function createApiServer({
     catalogueService ||= createDecisionCatalogueService({ services: getBackend().services, evidence: getEvidenceService(), env });
     return catalogueService;
   };
+  let householdPreviewService = null;
+  const getHouseholdPreviewService = () => {
+    householdPreviewService ||= createHouseholdPreviewService({ services: getBackend().services, catalogue: getCatalogueService() });
+    return householdPreviewService;
+  };
   const ownsDatabase = !injectedDatabase;
   let database = injectedDatabase ?? null;
   let services = backendServices ?? null;
@@ -170,7 +175,7 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');
