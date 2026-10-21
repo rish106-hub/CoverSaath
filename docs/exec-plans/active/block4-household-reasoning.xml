@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Block 4 implementation map (WP0). Synthetic data only. Not production-validated. -->
+<block4-household-reasoning>
+  <baseline>
+    <sha>434de7ee66bde11f83940fae579cb59e57e5893c</sha>
+    <branch>block3/synthetic-acceptance</branch>
+    <worktree>clean at start (no local user changes)</worktree>
+    <tests>npm test: 1246 tests, 1171 pass, 0 fail, 75 skipped (PostgreSQL and live-provider suites skip without their environment).</tests>
+    <note>The brief names main 1308e818 (PR 44). The checkout is the Block 3 closeout branch 434de7e. The decision-handoff/v1 contract inspected here is the authority.</note>
+  </baseline>
+
+  <reused>
+    <item>src/features/decision-catalogue/handoff.js: toHandoff, assertHandoffContract, HANDOFF_VERSION, HANDOFF_STATES</item>
+    <item>src/backend/services/decision-catalogue-service.js: build({ caseRecord, answerId, asOf, memberId }) (consent, document-currency, review replay)</item>
+    <item>src/backend/services/policy-evidence-service.js: readForCatalogue (requireAnswerAccess, answerIsCurrent, POLICY_EVIDENCE_ANSWER_STALE)</item>
+    <item>src/server/routes/v1-backend-routes.js: requireDocumentCase (indistinguishable 404), responses.requireCaseField(READ_FIELDS.sourcePack), errorResponse</item>
+    <item>src/shared/http/request.js: readBody (16 KiB limit, 413)</item>
+    <item>src/server/create-server.js: getCatalogueService composition</item>
+    <item>tests/block3-multi-document-api.test.mjs: real-application journey harness (upload, OCR mock, Gemini mock, revoke)</item>
+    <item>src/backend/repositories/household-repository.js listMembers: member must belong to the requested household</item>
+  </reused>
+
+  <not-reused>
+    <item>Independent-reviewer path (independentReviewerCase): never used for a household preview.</item>
+    <item>src/features/coverage-analysis: parameter-registry pipeline, a different product path. Not duplicated.</item>
+  </not-reused>
+
+  <owned-paths>
+    <path>src/features/household-reasoning/ (pure, no I/O, no clock, no randomness)</path>
+    <path>src/backend/services/household-preview-service.js (thin adapter; exported from services/index.js)</path>
+    <path>src/server/routes/v1-backend-routes.js (one POST route) and src/server/create-server.js (service wiring)</path>
+    <path>tests/household-*.test.mjs, tests/context-*.test.mjs, tests/support/household-fixtures.mjs, scripts/eval-household-reasoning.mjs</path>
+    <path>docs/architecture/household-reasoning.md, docs/exec-plans/active/block4-acceptance.md</path>
+  </owned-paths>
+
+  <facts-found>
+    <fact>Services build every handoff policy with kind 'unresolved' today; policy ids are keyed HMAC ids or unresolved-{answerId}.</fact>
+    <fact>Through the ordinary HTTP path model facts are extracted_unverified, so items are missing or unverified. Known items need an independent reviewer batch, which is disabled by default.</fact>
+    <fact>handoff.completeness.retrievalComplete is always false.</fact>
+    <fact>Item reason 'as_of_required' marks a dated fact set aside because no asOf was given.</fact>
+    <fact>not_permitted means explicitly not permitted by a non-model source (a documented restriction), not an authorization failure.</fact>
+    <fact>Authorization failures (consent revoked or expired, deleted document, superseded document) surface from readForCatalogue as coded errors; revocation erases the answer (404).</fact>
+  </facts-found>
+
+  <risk>security-sensitive (household read path, consent) and data-sensitive. No migration. No new dependency.</risk>
+
+  <gaps>
+    <gap>No existing route accepts several sources; the new POST route is added instead of widening the GET catalogue route.</gap>
+    <gap>Known-fact HTTP journeys need reviewed facts; the service adapter takes an injectable catalogue builder so tests can supply handoffs built from buildDecisionCatalogue with an accepted human_review batch, while the real catalogue service is used for the unverified and revocation journeys.</gap>
+  </gaps>
+
+  <tests-to-add>
+    household-reasoning-contracts, household-reasoning-evidence, household-coverage-map, household-policy-comparison,
+    context-gap-resolver, context-question-planner, household-scenario-analysis, household-coverage-preview-api,
+    household-golden-matrix (40+ cases), household-security-adversarial.
+  </tests-to-add>
+</block4-household-reasoning>
