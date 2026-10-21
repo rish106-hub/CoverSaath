@@ -1,5 +1,14 @@
 # Latest iteration
 
+## Block 4 household reasoning (2026-10-21, branch `block3/synthetic-acceptance`, uncommitted)
+
+Base `434de7e`. Synthetic data only. No provider call, no network, no migration, no new dependency. Status: IMPLEMENTED and AUTOMATED_TESTED; see `docs/exec-plans/active/block4-acceptance.md` for the gate record and the final status. Not externally validated, not production ready.
+
+- New: `POST /api/v1/households/{householdId}/coverage-preview` (read-only, stateless). Server builds each Block 3 handoff from the live stored answer; the client names `caseId` and `answerId` only. Contract `household-scenario/v1` in, `household-coverage-preview/v1` out. Design and schemas: `docs/architecture/household-reasoning.md`.
+- New pure engine `src/features/household-reasoning/` (validate, normalise, coverage map, comparison, context gaps G01 to G10, question planner, next actions, output contract) and adapter `src/backend/services/household-preview-service.js`.
+- New command `npm run eval:household` (51-case golden matrix; writes `.local/eval/household-reasoning-report.json` and `-summary.md`).
+- Not done and deliberately out of scope: Insurance Data API integration, live network or cashless checks, durable multi-turn state, any frontend, real-policy validation.
+
 ## Post-CodeQL engineering closeout (2026-10-21, branch `block3/synthetic-acceptance`, uncommitted)
 
 Base `main` `e5d448c` (PRs #39 to #43). Synthetic PDFs and test identities only. No provider call, no network, no deployment. Not production-validated.
