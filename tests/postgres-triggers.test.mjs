@@ -991,7 +991,11 @@ test('catalogue reviews need an active grant, stay immutable and erase with thei
   // The grant trigger: a household confirmer must hold a role in that household.
   await insert(pool, 'adult_users', { id: 'adult-outsider' });
   await rejects(insert(pool, 'catalogue_reviewer_grants', { id: 'grant-outsider', household_id: a.household, adult_user_id: 'adult-outsider' }), 'a household confirmer must hold a role in the household');
-  await insert(pool, 'catalogue_reviewer_grants', { id: 'grant-independent', household_id: a.household, adult_user_id: 'adult-outsider', kind: 'independent_reviewer', granted_by: 'operator:test' });
+  await insert(pool, 'catalogue_reviewer_grants', { id: 'grant-independent', household_id: a.household, adult_user_id: 'adult-outsider', kind: 'independent_reviewer', granted_by: 'operator:test', expires_at: later, case_id: a.case });
+  await rejects(insert(pool, 'catalogue_reviewer_grants', { id: 'grant-bad-independent', household_id: a.household, adult_user_id: 'adult-outsider2', kind: 'independent_reviewer', granted_by: 'operator:test' }), 'an independent reviewer grant needs an expiry and a case of the household');
+  proves('catalogue_reviewer_grants_independent_insert');
+  await rejects(pool.query("UPDATE catalogue_reviewer_grants SET expires_at = NULL WHERE id = 'grant-independent'"), 'an independent reviewer grant needs an expiry and a case of the household');
+  proves('catalogue_reviewer_grants_independent_update');
   await insert(pool, 'catalogue_reviewer_grants', { id: 'grant-a', household_id: a.household, adult_user_id: a.adult });
   proves('catalogue_reviewer_grants_scope_insert');
 
@@ -1012,6 +1016,33 @@ test('catalogue reviews need an active grant, stay immutable and erase with thei
   assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM catalogue_reviews')).n, 0);
   assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM catalogue_reviewer_grants')).n, 2, 'grants are not content and survive');
   proves('catalogue_reviews_erase_on_document_erasure');
+});
+
+test('curated source archives and submissions are immutable, never deleted, and a checker differs from the collector', postgresTestOptions(), async t => {
+  const { pool, a } = await worlds(t);
+  await addAdult(pool, a.household, 'checker');
+  const sha = 'a'.repeat(64);
+  await insert(pool, 'curated_source_archives', { sha256: sha, byte_size: 3 });
+  await assert.rejects(insert(pool, 'curated_source_archives', { sha256: 'b'.repeat(64), byte_size: 9 }), /violates check constraint/);
+  await rejects(pool.query('UPDATE curated_source_archives SET byte_size = 3'), 'curated source archives are immutable');
+  await rejects(pool.query('DELETE FROM curated_source_archives'), 'curated source archives are never deleted');
+  assert.equal((await pool.query('UPDATE curated_source_archives SET byte_size = 3 WHERE false')).rowCount, 0, 'row-level: no row, no fire');
+  proves('curated_source_archives_immutable', 'curated_source_archives_no_delete');
+
+  await insert(pool, 'curated_product_submissions', { id: 'cps-1' });
+  await assert.rejects(insert(pool, 'curated_product_submissions', { id: 'cps-self', wording_version: 'v2', state: 'checked', checked_by: 'adult-a', checked_at: at }), /violates check constraint/);
+  await assert.rejects(insert(pool, 'curated_product_submissions', { id: 'cps-unchecked', wording_version: 'v3', state: 'published', published_at: at }), /violates check constraint/);
+  await rejects(pool.query("UPDATE curated_product_submissions SET wording_version = 'v9'"), 'curated product content is immutable once written; register a new submission instead');
+  await pool.query("UPDATE curated_product_submissions SET facts_json = '[{}]', state = 'candidate'");
+  await pool.query("UPDATE curated_product_submissions SET state = 'checked', checked_by = 'adult-checker', checked_at = $1", [at]);
+  await rejects(pool.query("UPDATE curated_product_submissions SET facts_json = '[]'"), 'curated product content is immutable once written; register a new submission instead');
+  await assert.rejects(pool.query("UPDATE curated_product_submissions SET checked_by = 'adult-a'"), /violates check constraint|immutable/);
+  await rejects(pool.query("UPDATE curated_product_submissions SET state = 'collected'"), 'illegal curated product state transition');
+  proves('curated_product_submissions_state_transition');
+  await pool.query("UPDATE curated_product_submissions SET state = 'published', published_at = $1", [at]);
+  await assert.rejects(insert(pool, 'curated_product_submissions', { id: 'cps-dup', state: 'published', checked_by: 'adult-checker', checked_at: at, published_at: at }), /curated_product_submissions_one_published_idx/);
+  await rejects(pool.query('DELETE FROM curated_product_submissions'), 'curated product submissions are never deleted');
+  proves('curated_product_submissions_content_immutable', 'curated_product_submissions_no_delete');
 });
 
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {

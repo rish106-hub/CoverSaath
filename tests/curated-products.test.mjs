@@ -15,10 +15,10 @@ const record = (over = {}) => ({
 test('the shipped curated list is empty: nothing is invented', () => {
   assert.deepEqual([...CURATED_PRODUCT_RECORDS], []);
 });
-test('a complete record validates and is verified only because a different person checked it', () => {
+test('a complete record validates but is never verified by its shape: two names prove nothing', () => {
   const out = validateCuratedProduct(record(), { today });
   assert.equal(out.valid, true);
-  assert.equal(out.verified, true);
+  assert.equal(out.verified, false);
   assert.equal(out.mayOverrideContract, false);
   assert.equal(out.freshness, 'current');
 });
@@ -57,7 +57,9 @@ test('UIN extraction needs a label, a letter and a digit', () => {
   assert.deepEqual(extractUins('SYNTHHLIP26001V012526 alone'), []);
 });
 
-const products = loadCuratedProducts([record()], { today });
+// What the repository returns for a published, independently checked submission. Verification is added only there.
+const asRepository = list => list.map(item => ({ ...item, verified: true }));
+const products = asRepository(loadCuratedProducts([record()], { today }));
 const row = (documentId, text) => ({ documentId, text });
 const fact = (documentId, months) => ({ documentId, factType: 'waiting_period', topic: 'pre-existing disease waiting period', value: { months } });
 
@@ -74,10 +76,17 @@ test('no UIN, several UINs, no record and an ambiguous version never compare', (
   assert.equal(status([row('d1', 'Room rent applies')]), 'no_uin');
   assert.equal(status([row('d1', 'UIN: SYNTHHLIP26001V012526\nUIN: OTHERHLIP26002V012526')]), 'several_uins');
   assert.equal(status([row('d1', 'UIN: OTHERHLIP26002V012526')]), 'no_curated_record');
-  const two = loadCuratedProducts([record(), record({ wordingVersion: 'v2' })], { today });
+  const two = asRepository(loadCuratedProducts([record(), record({ wordingVersion: 'v2' })], { today }));
   assert.equal(status([row('d1', 'UIN: SYNTHHLIP26001V012526')], two), 'version_ambiguous');
-  const stale = loadCuratedProducts([record({ retrievedOn: '2025-01-01', checkedOn: '2025-01-02' })], { today });
+  const stale = asRepository(loadCuratedProducts([record({ retrievedOn: '2025-01-01', checkedOn: '2025-01-02' })], { today }));
   assert.equal(status([row('d1', 'UIN: SYNTHHLIP26001V012526')], stale), 'no_curated_record');
+});
+test('a loaded record that nobody verified is reported as unverified and never compared', () => {
+  const unverified = loadCuratedProducts([record({ verified: true })], { today });
+  assert.ok(unverified.every(item => item.verified === false));
+  const out = compareToCurated({ clauseRows: [row('d1', 'UIN: SYNTHHLIP26001V012526')], facts: [fact('d1', 48)], products: unverified })[0];
+  assert.equal(out.status, 'unverified_record');
+  assert.deepEqual(out.comparisons, []);
 });
 test('a curated difference informs only: the household fact and the catalogue state are unchanged', () => {
   const clauseRows = [{ id: 'c1', documentId: 'd1', sourceVersion: 'v1', page: 1, digest: 'x'.repeat(64), text: 'UIN: SYNTHHLIP26001V012526' }];

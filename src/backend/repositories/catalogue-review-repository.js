@@ -11,6 +11,8 @@ export const REVIEW_REASON_CODES = Object.freeze(['matches_clause', 'does_not_ma
 function coded(code, message, statusCode) { return Object.assign(new Error(message), { code, statusCode }); }
 const invalid = message => coded('CATALOGUE_REVIEW_INVALID', message, 400);
 const notAuthorised = () => coded('REVIEWER_NOT_AUTHORISED', 'The caller is not an active reviewer for this household.', 403);
+export const MAX_INDEPENDENT_GRANT_DAYS = 30;
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;
 const str = (value, name, max = 256) => {
   if (typeof value !== 'string' || !value || value.length > max) throw invalid(`${name} is invalid.`);
   return value;
@@ -48,20 +50,28 @@ export class CatalogueReviewRepository {
     }
   }
 
-  #grant(householdId, adultUserId, kind, grantedBy, actorType) {
+  // A grant is live only while it is active and unexpired. A grant with no expiry is live for a household confirmer (their
+  // authority ends with their household role) and never for an independent reviewer: that kind must be temporary.
+  #live(row) {
+    if (!row || row.status !== 'active') return false;
+    if (row.expires_at == null) return row.kind !== 'independent_reviewer';
+    return Date.parse(row.expires_at) > this.clock().getTime();
+  }
+
+  #grant(householdId, adultUserId, kind, grantedBy, actorType, { caseId = null, expiresAt = null } = {}) {
     return this.#atomic(() => {
       const at = this.clock().toISOString();
       const existing = this.database.prepare('SELECT * FROM catalogue_reviewer_grants WHERE household_id = ? AND adult_user_id = ? AND kind = ?').get(householdId, adultUserId, kind);
-      if (existing?.status === 'active') return existing;
+      if (existing && this.#live(existing) && kind === 'household_confirmer') return existing;
       let id = existing?.id;
       if (existing) {
-        this.database.prepare("UPDATE catalogue_reviewer_grants SET status = 'active', revoked_at = NULL, granted_by = ? WHERE id = ?").run(grantedBy, id);
+        this.database.prepare("UPDATE catalogue_reviewer_grants SET status = 'active', revoked_at = NULL, granted_by = ?, expires_at = ?, case_id = ?, granted_at = ? WHERE id = ?").run(grantedBy, expiresAt, caseId, at, id);
       } else {
         id = `crg-${randomUUID()}`;
-        this.database.prepare(`INSERT INTO catalogue_reviewer_grants (id, household_id, adult_user_id, kind, status, granted_by, created_at)
-          VALUES (?, ?, ?, ?, 'active', ?, ?)`).run(id, householdId, adultUserId, kind, grantedBy, at);
+        this.database.prepare(`INSERT INTO catalogue_reviewer_grants (id, household_id, adult_user_id, kind, status, granted_by, created_at, expires_at, case_id, granted_at)
+          VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`).run(id, householdId, adultUserId, kind, grantedBy, at, expiresAt, caseId, at);
       }
-      this.audit.append({ householdId, actorType, actorId: grantedBy, action: existing ? 'catalogue_reviewer.regranted' : 'catalogue_reviewer.granted', resourceType: 'catalogue_reviewer_grant', resourceId: id, payload: { kind } });
+      this.audit.append({ householdId, caseId, actorType, actorId: grantedBy, action: existing ? 'catalogue_reviewer.regranted' : 'catalogue_reviewer.granted', resourceType: 'catalogue_reviewer_grant', resourceId: id, payload: { kind, expiresAt } });
       return this.database.prepare('SELECT * FROM catalogue_reviewer_grants WHERE id = ?').get(id);
     });
   }
@@ -76,14 +86,22 @@ export class CatalogueReviewRepository {
     return this.#grant(householdId, adultUserId, 'household_confirmer', grantedByAdultId, 'adult_user');
   }
 
-  /** Operator tooling only: no route calls this. An independent reviewer is a person outside the household's own data. */
-  grantIndependentReviewer({ householdId, adultUserId, operatorId }) {
-    str(householdId, 'householdId'); str(adultUserId, 'adultUserId'); str(operatorId, 'operatorId', 128);
+  /**
+   * Operator tooling only: no route calls this. An independent reviewer is a person outside the household's own data, bound
+   * to one case of that household and to a short window. A regrant replaces the case and the window.
+   */
+  grantIndependentReviewer({ householdId, adultUserId, operatorId, caseId, expiresAt }) {
+    str(householdId, 'householdId'); str(adultUserId, 'adultUserId'); str(operatorId, 'operatorId', 128); str(caseId, 'caseId');
+    if (operatorId === adultUserId) throw invalid('An operator cannot grant themselves.');
+    if (!this.database.prepare('SELECT 1 FROM service_cases WHERE id = ? AND household_id = ?').get(caseId, householdId)) throw invalid('caseId is not a case of this household.');
+    const now = this.clock().getTime();
+    if (typeof expiresAt !== 'string' || !ISO_INSTANT.test(expiresAt) || !(Date.parse(expiresAt) > now)
+      || Date.parse(expiresAt) > now + MAX_INDEPENDENT_GRANT_DAYS * 86_400_000) throw invalid(`expiresAt must be a future UTC instant within ${MAX_INDEPENDENT_GRANT_DAYS} days.`);
     // Independent means outside the household's own data: an adult with any role in this household is refused.
     if (this.database.prepare('SELECT 1 FROM household_roles WHERE household_id = ? AND adult_user_id = ?').get(householdId, adultUserId)) {
       throw invalid('A person with a role in this household cannot be its independent reviewer.');
     }
-    return this.#grant(householdId, adultUserId, 'independent_reviewer', `operator:${operatorId}`.slice(0, 128), 'system');
+    return this.#grant(householdId, adultUserId, 'independent_reviewer', `operator:${operatorId}`.slice(0, 128), 'system', { caseId, expiresAt });
   }
 
   revokeGrant({ householdId, grantId, revokedBy = 'operator' }) {
@@ -93,9 +111,13 @@ export class CatalogueReviewRepository {
     return Number(done.changes) > 0;
   }
 
-  /** The strongest active grant wins. Authority comes from this row, never from the request. */
-  activeGrant(householdId, adultUserId) {
-    const rows = this.database.prepare("SELECT * FROM catalogue_reviewer_grants WHERE household_id = ? AND adult_user_id = ? AND status = 'active'").all(householdId, adultUserId);
+  /**
+   * The strongest live grant wins. Authority comes from this row, never from the request. Expiry, revocation and the case
+   * binding are re-checked on every call. An independent grant answers only for the case it was issued for.
+   */
+  activeGrant(householdId, adultUserId, caseId = null) {
+    const rows = this.database.prepare("SELECT * FROM catalogue_reviewer_grants WHERE household_id = ? AND adult_user_id = ? AND status = 'active'").all(householdId, adultUserId)
+      .filter(row => this.#live(row) && (row.kind !== 'independent_reviewer' || (caseId != null && row.case_id === caseId)));
     return rows.find(row => row.kind === 'independent_reviewer') ?? rows[0] ?? null;
   }
 
@@ -111,13 +133,15 @@ export class CatalogueReviewRepository {
     if (key.length < 8) throw invalid('idempotencyKey is invalid.');
     if (!REVIEW_DECISIONS.includes(review.decision)) throw invalid('decision is not supported.');
     if (!REVIEW_REASON_CODES.includes(review.reasonCode)) throw invalid('reasonCode is not supported.');
-    const grant = this.activeGrant(householdId, str(review.reviewerAdultId, 'reviewerAdultId'));
-    if (!grant) throw notAuthorised();
-    const authority = grant.kind === 'independent_reviewer' ? 'independent' : 'household';
+    str(review.reviewerAdultId, 'reviewerAdultId');
     const factJson = JSON.stringify(review.fact ?? null);
     if (factJson.length > 16000) throw invalid('The reviewed fact is too large to store.');
-    const requestDigest = createHash('sha256').update(JSON.stringify([review.factKey, review.decision, review.reasonCode, review.sourceVersion, review.clauseIds, factJson, authority])).digest('hex');
     return this.#atomic(() => {
+    // The grant is read inside the write transaction: a revocation or expiry that lands first is seen, one that lands after leaves a review whose reviewer is no longer active.
+    const grant = this.activeGrant(householdId, review.reviewerAdultId, caseId);
+    if (!grant) throw notAuthorised();
+    const authority = grant.kind === 'independent_reviewer' ? 'independent' : 'household';
+    const requestDigest = createHash('sha256').update(JSON.stringify([review.factKey, review.decision, review.reasonCode, review.sourceVersion, review.clauseIds, factJson, authority])).digest('hex');
     const prior = this.database.prepare('SELECT * FROM catalogue_reviews WHERE household_id = ? AND case_id = ? AND idempotency_key = ?').get(householdId, caseId, key);
     if (prior) {
       if (prior.request_digest !== requestDigest || prior.reviewer_adult_id !== review.reviewerAdultId) throw coded('IDEMPOTENCY_CONFLICT', 'The idempotency key was used for a different review.', 409);
@@ -155,16 +179,21 @@ export class CatalogueReviewRepository {
    * returned with `reviewerActive: false` and count for nothing.
    */
   list({ householdId, caseId }) {
-    const rows = this.database.prepare(`SELECT review.*, reviewer_grant.status AS grant_status FROM catalogue_reviews review
+    const rows = this.database.prepare(`SELECT review.*, reviewer_grant.status AS grant_status, reviewer_grant.kind AS grant_kind, reviewer_grant.expires_at AS grant_expires_at, reviewer_grant.case_id AS grant_case_id, reviewer_grant.granted_at AS grant_granted_at FROM catalogue_reviews review
       JOIN catalogue_reviewer_grants reviewer_grant ON reviewer_grant.id = review.grant_id
       WHERE review.household_id = ? AND review.case_id = ? ORDER BY review.created_at, review.rowid`).all(str(householdId, 'householdId'), str(caseId, 'caseId'));
     const rank = row => (row.authority === 'independent' ? 2 : 1);
+    // A review counts only while its reviewer's grant is live: not revoked, not expired, and (independent) still bound to this case.
+    const live = row => this.#live({ status: row.grant_status, kind: row.grant_kind, expires_at: row.grant_expires_at })
+      // An independent review counts only inside the grant window that is current now: a regrant does not revive older reviews.
+      && (row.grant_kind !== 'independent_reviewer' || (row.grant_case_id === row.case_id && (row.grant_granted_at == null || row.created_at >= row.grant_granted_at)));
+    for (const row of rows) row.reviewer_live = live(row);
     const winner = new Map();
     for (const row of rows) {
-      if (row.grant_status !== 'active') continue;
+      if (!row.reviewer_live) continue;
       const held = winner.get(row.fact_key);
       if (!held || rank(row) >= rank(held)) winner.set(row.fact_key, row);
     }
-    return rows.map(row => ({ ...this.#dto(row), reviewerActive: row.grant_status === 'active', superseded: row.grant_status === 'active' && winner.get(row.fact_key)?.id !== row.id }));
+    return rows.map(row => ({ ...this.#dto(row), reviewerActive: row.reviewer_live, superseded: row.reviewer_live && winner.get(row.fact_key)?.id !== row.id }));
   }
 }

@@ -58,7 +58,7 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
     return buildDecisionCatalogue({
     householdId: ctx.householdId, clauseRows: evidenceRows(ctx.clauseRows), batches,
     policies: ctx.policyIds.map(policyId => ({ policyId, kind: 'unresolved', coverBasis: 'unknown' })), asOf, memberId,
-    officialSources: CURATED_OFFICIAL_SOURCES, curatedProducts: loadCuratedProducts(CURATED_PRODUCT_RECORDS, { today }), today,
+    officialSources: CURATED_OFFICIAL_SOURCES, curatedProducts: [...loadCuratedProducts(CURATED_PRODUCT_RECORDS, { today }), ...(services.curatedProducts?.listVerified({ today }) ?? [])], today,
     });
   };
   const modelBatch = candidates => ({ origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates });
@@ -125,7 +125,7 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   /** Who may review: a household confirmer who still holds a household role, or (when enabled) an independent reviewer. */
   function reviewerCase(principal, caseId) {
     const caseRecord = typeof caseId === 'string' ? services.access.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId) : null;
-    const grant = caseRecord && reviews?.activeGrant(caseRecord.household_id, principal.adultId);
+    const grant = caseRecord && reviews?.activeGrant(caseRecord.household_id, principal.adultId, caseRecord.id);
     if (!grant || !activeHousehold(caseRecord.household_id)) throw notFound();
     if (grant.kind === 'independent_reviewer') {
       if (!independentEnabled) throw notFound();
@@ -159,7 +159,7 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   function independentReviewerCase(principal, caseId) {
     if (!independentEnabled || !reviews || typeof caseId !== 'string') return null;
     const caseRecord = services.access.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId);
-    const grant = caseRecord && activeHousehold(caseRecord.household_id) && reviews.activeGrant(caseRecord.household_id, principal.adultId);
+    const grant = caseRecord && activeHousehold(caseRecord.household_id) && reviews.activeGrant(caseRecord.household_id, principal.adultId, caseRecord.id);
     if (grant?.kind !== 'independent_reviewer') return null;
     // Every independent read is audited before it is served. If the audit write fails the read fails: no unaudited view.
     services.audit.append({
