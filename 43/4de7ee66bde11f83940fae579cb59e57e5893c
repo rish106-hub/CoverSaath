@@ -1,0 +1,162 @@
+src/features/input/sandboxed-pdf-text.js
+  s_af5a21f7d4e678::t_16c52361af0171 1-103
+src/features/input/index.js
+  s_af5a21f7d4e678::t_16c52361af0171 30-31
+docs/adr/0010-signed-curated-actions-and-derived-text.md
+  s_af5a21f7d4e678::t_84a5127f565db8 1-32
+  s_af5a21f7d4e678::t_3afb8db5129d38 33-34
+src/features/input/pdf-text-child.mjs
+  s_af5a21f7d4e678::t_16c52361af0171 1-35
+src/backend/database/postgres/migrate.js
+  s_af5a21f7d4e678::t_e63445221698b0 3,17-19,27,31
+  s_af5a21f7d4e678::t_e97ce86eea0bd1 21-25
+tests/database-integrity-v2.test.mjs
+  s_af5a21f7d4e678::t_17bb72673f0299 96
+tests/support/postgres.mjs
+  s_af5a21f7d4e678::t_1292bf6bd162fe 11-15,17-18,61-68
+  s_af5a21f7d4e678::t_a67f66354b1c86 60
+  s_af5a21f7d4e678::t_4ec8158379cd51 69-70
+tests/postgres-catalog-parity.test.mjs
+  s_af5a21f7d4e678::t_9c0923185c8d85 215
+tests/curated-signed-actions.test.mjs
+  s_af5a21f7d4e678::t_273d210dd85d64 140
+  s_af5a21f7d4e678::t_50c95794fdadfe 12,16,19,23,32,35,50-51,67-68,83-84,101-102,113-114,128-129,146-147
+  s_af5a21f7d4e678::t_30dd027c72e3b0 155
+  s_af5a21f7d4e678::t_9c7450f8c3d0e2 162-184
+  s_af5a21f7d4e678::t_9467262927bc3c 44
+  s_af5a21f7d4e678::t_b6900983e74ccb 1-11,13-15,17-18,20-22,24-31,33-34,36-43,46-49,52-66,69-82,85-100,103-112,115-127,130-139,141-145,148-154,156-161
+  s_af5a21f7d4e678::t_aecfc361889dc7 45
+src/features/decision-catalogue/verified-product-records.js
+  s_af5a21f7d4e678::t_7ebe008952f289 1-260
+scripts/curated-source.mjs
+  s_af5a21f7d4e678::t_781140a24e9672 18-19,24-26,34,45-49,55,61,65,70,73,117-121
+  s_af5a21f7d4e678::t_27b50c00657f58 4-5,9-12,16-17,20-23,27,33,38-40,43-44,50-54,56-60,62-64,67,69,71-72,74-92,94-100,102-103,105-116,123
+  s_af5a21f7d4e678::t_765737c53c3e7c 28-29,66,93,101,104
+  s_af5a21f7d4e678::t_91373e39c524c2 68,122
+.gitignore
+  s_af5a21f7d4e678::t_a67f66354b1c86 27
+  s_af5a21f7d4e678::t_7498e3b6f5f101 26
+tests/postgres-migration-loader.test.mjs
+  s_af5a21f7d4e678::t_7498e3b6f5f101 6-7,9-10,12-13,15-33,41-46,49-50,52-63
+  s_af5a21f7d4e678::t_91373e39c524c2 64
+  s_af5a21f7d4e678::t_e97ce86eea0bd1 66-71
+tests/curated-source-integrity.test.mjs
+  s_af5a21f7d4e678::t_90aeda2a7eb6ac 15,43,62,76,79,82,91,98,118,128,138,205
+  s_af5a21f7d4e678::t_ba21d46310588d 240-241,243-249,254,257
+  s_af5a21f7d4e678::t_3bfa7854828081 161-198
+  s_af5a21f7d4e678::t_29064fa95cc73f 7,212,217,220,222-225,227-233,242,250-253,255,258-260
+  s_af5a21f7d4e678::t_50c95794fdadfe 139,141-160,206
+  s_af5a21f7d4e678::t_91373e39c524c2 226
+  s_af5a21f7d4e678::t_b6900983e74ccb 256
+  s_af5a21f7d4e678::t_8aed41b5eec5ee 14,49-50,52,65-67
+  s_af5a21f7d4e678::t_4a8f781bff526c 140
+tests/postgres-triggers.test.mjs
+  s_af5a21f7d4e678::t_679cfd37f7ca1c 1048-1050,1053,1057-1059,1061-1071,1080-1081
+  s_af5a21f7d4e678::t_c5d59a5db93179 1072,1074-1079
+  s_af5a21f7d4e678::t_dc13c1e2250a45 1051-1052,1054-1056,1060
+  s_af5a21f7d4e678::t_3892388a1b1c9d 1073
+tests/curated-product-workflow.test.mjs
+  s_af5a21f7d4e678::t_784823dcce1925 94-95,362,375,377-386
+  s_af5a21f7d4e678::t_cee203699f13fd 12,40-41,44-45,47-48,50,57-58,152,154,157,170,197,211,244,258,277-278,297,326,334
+  s_af5a21f7d4e678::t_8aed41b5eec5ee 266-267
+  s_af5a21f7d4e678::t_ce4fd5498e2a17 13,21-23,35,53,55,83,87,98,101-109,116,119,127,131,133,146,148,166,187,191,193,205,208,221,223,240,242,245,252,272,274,285,287,317,319,323,330,332,369
+  s_af5a21f7d4e678::t_029ca91da09366 85-86,100,111-112,124,128,171,201,249-251,307
+  s_af5a21f7d4e678::t_0d99b9de7b94dc 164,175,177-185
+tests/pdf-text-extraction.test.mjs
+  s_af5a21f7d4e678::t_4814dd20404f79 5,7,42,44-52
+  s_af5a21f7d4e678::t_16c52361af0171 115-127
+  s_af5a21f7d4e678::t_2fbb8f67cec077 1-4,6,8-41,43,53-114
+  s_af5a21f7d4e678::t_d7c8e6ec94dcd1 128-146
+src/backend/database/database.js
+  s_ada425c56afe26::t_e19718dbb8c3d7 74
+  s_af5a21f7d4e678::t_c5d59a5db93179 82
+src/backend/database/migrations/019_curated_signed_actions.sql
+  s_af5a21f7d4e678::t_2761f1d4dd2b08 2-8,12-48,59
+  s_af5a21f7d4e678::t_c5d59a5db93179 1,9-11,49-58
+src/backend/repositories/curated-product-repository.js
+  s_af5a21f7d4e678::t_781140a24e9672 6,276-278
+  s_af5a21f7d4e678::t_765737c53c3e7c 178,566
+  s_af5a21f7d4e678::t_6aca94797e163a 255-258,311-312,403,409-414,421-423,426,434-435,441,444-445,447,453-454,456-458
+  s_af5a21f7d4e678::t_90aeda2a7eb6ac 513-514
+  s_af5a21f7d4e678::t_6f0da99d258a1c 5,15-16,98-102,106,115,118-119,121,290-293,295-310,313-328,330-338,340-342,361,370,375-402,404-405
+  s_af5a21f7d4e678::t_2609c935f69b28 8,18-20,29-31,45-49,52,141-166,215,220-221,224,232,234,246-249,261,347,366-367
+  s_af5a21f7d4e678::t_9c7450f8c3d0e2 526-535,545
+  s_af5a21f7d4e678::t_c5943cb9d42e37 195-199,201-202,416,424-425,427-428,450-451,455,488-489,503-512,515-525
+  s_af5a21f7d4e678::t_e97ce86eea0bd1 536,538-543
+  s_af5a21f7d4e678::t_20ba4bdf9e5dcf 167
+src/features/decision-catalogue/index.js
+  s_af5a21f7d4e678::t_6f0da99d258a1c 15-16,18
+  s_af5a21f7d4e678::t_781140a24e9672 17
+  s_af5a21f7d4e678::t_0f9c1cc57d21a2 19
+src/features/decision-catalogue/source-verification.js
+  s_af5a21f7d4e678::t_e97ce86eea0bd1 5-6
+src/features/decision-catalogue/curated-actions.js
+  s_af5a21f7d4e678::t_54e2bb03e793d9 1-22,24-53,55-91,93-122,132
+  s_af5a21f7d4e678::t_765737c53c3e7c 23,54,92
+  s_af5a21f7d4e678::t_781140a24e9672 123-131
+src/server/routes/v1-backend-routes.js
+  s_ada425c56afe26::t_e19718dbb8c3d7 388-393
+src/backend/database/postgres/index.js
+  s_af5a21f7d4e678::t_e63445221698b0 4
+tests/support/postgres-fixtures.mjs
+  s_af5a21f7d4e678::t_679cfd37f7ca1c 94-97
+  s_af5a21f7d4e678::t_c5d59a5db93179 104
+src/backend/database/postgres/migrations/015_curated_signed_actions.sql
+  s_af5a21f7d4e678::t_c5d59a5db93179 1-3,55-71
+  s_af5a21f7d4e678::t_2761f1d4dd2b08 4-54
+tests/postgres-runner.test.mjs
+  s_af5a21f7d4e678::t_1292bf6bd162fe 4,10-11
+  s_af5a21f7d4e678::t_7498e3b6f5f101 48,66,90,116
+  s_af5a21f7d4e678::t_9c0923185c8d85 15,37
+  s_af5a21f7d4e678::t_dc9b705387a9f5 7
+tests/database-schema.test.mjs
+  s_af5a21f7d4e678::t_9c0923185c8d85 35
+tests/evidence-completion-persistence.test.mjs
+  s_af5a21f7d4e678::t_17bb72673f0299 85
+tests/support/curated-text.mjs
+  s_af5a21f7d4e678::t_ce4fd5498e2a17 1-29
+tests/support/curated-keys.mjs
+  s_af5a21f7d4e678::t_cee203699f13fd 1-13
+src/features/input/pdf-text-extraction.js
+  s_af5a21f7d4e678::t_3892388a1b1c9d 14
+  s_af5a21f7d4e678::t_d7c8e6ec94dcd1 7-10,71,76,80,89,97-98,111,172-173,251-256,274-275,279-283,287-290
+  s_af5a21f7d4e678::t_4814dd20404f79 354-355,358-360
+  s_af5a21f7d4e678::t_91373e39c524c2 379-380
+  s_af5a21f7d4e678::t_36d4843c92b1c7 1-6,11-13,15-70,72-75,77-79,81-88,90-96,99-110,112-171,174-250,257-273,276-278,284-286,291-353,356-357,361-378
+tests/verified-product-records-contract.test.mjs
+  s_af5a21f7d4e678::t_7ebe008952f289 1-282
+docs/architecture/reviewer-security.md
+  s_af5a21f7d4e678::t_1d82e4eba92386 10,20,35-36,47,67
+docs/architecture/verified-product-records.md
+  s_af5a21f7d4e678::t_f60e1990a2034f 1-45
+docs/iterations/LATEST.md
+  s_af5a21f7d4e678::t_687c2fce0df383 3-15
+docs/runbooks/curated-sources.md
+  s_af5a21f7d4e678::t_5241944b76fa2a 5,16,22,31-40,45,55,63,67-91,93,95,103-104,111,126-127,133
+docs/runbooks/local-postgres.md
+  s_af5a21f7d4e678::t_7c46283766dd72 95-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "434de7ee66bde11f83940fae579cb59e57e5893c",
+  "prompts": {},
+  "sessions": {
+    "s_ada425c56afe26": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a15ca0-4c4d-75c2-b383-f23312bcb248",
+        "model": "unknown"
+      },
+      "human_author": null
+    },
+    "s_af5a21f7d4e678": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f9281264-5877-45f3-994c-ec94fad8a3c6",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
