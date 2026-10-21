@@ -357,18 +357,50 @@ export class CuratedProductRepository {
   // ---- Use ---------------------------------------------------------------------------------------------------------------
 
   /**
-   * The only producer of `verified: true`. Reads PUBLISHED rows (so a checker's accepted action exists) and shape-validates
-   * them again. A row that no longer validates is left out, which reads as unknown, never as a term.
+   * Machine checks re-run against the archived bytes of one row, without throwing: the digest, PDF header, printed UIN and
+   * version and every quotation. Triggers keep the archive immutable, but a damaged file or an edit made outside the
+   * application bypasses them, so a trusted read never relies on an earlier pass.
+   */
+  #archiveBlocking(row) {
+    let pageTexts; let facts;
+    try { pageTexts = row.page_texts_json ? JSON.parse(row.page_texts_json) : null; facts = JSON.parse(row.facts_json); } catch { return ['stored_json_invalid']; }
+    if (!Array.isArray(facts)) return ['stored_json_invalid'];
+    const bytes = this.#archive(row.content_sha256);
+    const evidence = verifySourceEvidence({
+      record: { uin: row.uin, wordingVersion: row.wording_version, contentSha256: row.content_sha256 },
+      bytes: bytes ? new Uint8Array(bytes) : null, pageTexts, facts,
+    });
+    return evidence.blocking;
+  }
+
+  #parsedFacts(row) { try { const facts = JSON.parse(row.facts_json); return Array.isArray(facts) ? facts : null; } catch { return null; } }
+
+  /** Operator check of every published submission's archive (CLI `verify-archives`). Reports, never repairs or changes state. */
+  verifyPublishedArchives() {
+    return this.database.prepare("SELECT * FROM curated_product_submissions WHERE state = 'published' ORDER BY uin, wording_version").all()
+      .map(row => {
+        const blocking = this.#archiveBlocking(row);
+        // Without page text only the bytes are machine-checked; the UIN, version and quotes rest on the checker's attestation.
+        return { submissionId: row.id, uin: row.uin, ok: blocking.length === 0, blocking, quotesMachineChecked: Boolean(row.page_texts_json) };
+      });
+  }
+
+  /**
+   * The only producer of `verified: true`. Reads PUBLISHED rows (so a checker's accepted action exists), re-hashes their
+   * archived bytes and shape-validates them again. A row that fails either is left out, which reads as unknown, never as a term.
    */
   listVerified({ today = this.#today() } = {}) {
     const rows = this.database.prepare("SELECT * FROM curated_product_submissions WHERE state = 'published' ORDER BY uin, wording_version").all();
     const out = [];
     for (const row of rows) {
       if (!row.checked_by || !row.checked_at || row.checked_by === row.collected_by) continue;
+      if (this.#archiveBlocking(row).length) continue;
+      const facts = this.#parsedFacts(row);
+      if (!facts) continue;
       const checked = validateCuratedProduct({
         uin: row.uin, insurer: row.insurer, productName: row.product_name, wordingVersion: row.wording_version, sourceUrl: row.source_url,
         contentSha256: row.content_sha256, retrievedOn: row.retrieved_on, checkedOn: row.checked_at.slice(0, 10), effectiveFrom: row.effective_from,
-        curatedBy: row.collected_by, checkedBy: row.checked_by, facts: JSON.parse(row.facts_json),
+        curatedBy: row.collected_by, checkedBy: row.checked_by, facts,
       }, { today });
       if (!checked.valid) continue;
       out.push(Object.freeze({ ...checked, verified: true, verification: Object.freeze({ submissionId: row.id, sourceVersionId: row.source_version_id, checkedAt: row.checked_at }) }));

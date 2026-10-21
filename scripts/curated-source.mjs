@@ -7,6 +7,11 @@
 //   node scripts/curated-source.mjs propose      <curatorAdultId> <submissionId> <facts.json>
 //   node scripts/curated-source.mjs invalidate  <submissionId> <operatorId> <checker_compromised|review_found_wrong|source_superseded>
 //   node scripts/curated-source.mjs revalidate   <actorAdultId> <submissionId> <document.pdf> <sourceVersionId> [pageTexts.json]
+//   node scripts/curated-source.mjs verify-archives
+//
+// There is deliberately no check or publish command: those need an authenticated checker session (API routes), and an
+// operator-supplied id is not proof of who is acting. verify-archives re-runs the machine checks of every published
+// submission against its archived bytes and reports; it changes nothing.
 //
 // CURATED_SOURCE_HOSTS (comma separated exact DNS names) must be set or register refuses every source.
 // metadata.json: { uin, insurer, productName, wordingVersion, sourceUrl, sourceVersionId, retrievedOn, effectiveFrom? }
@@ -31,9 +36,14 @@ try {
   else if (command === 'revalidate') {
     need(4, 'revalidate <actorAdultId> <submissionId> <document.pdf> <sourceVersionId> [pageTexts.json]');
     out = repo.revalidate({ actorId: args[0], submissionId: args[1], bytes: readFileSync(args[2]), sourceVersionId: args[3], pageTexts: args[4] ? json(args[4]) : null });
-  } else throw new Error('commands: grant-role, revoke-role, invalidate, register, propose, revalidate');
-  const { pageTexts: _omit, ...printable } = out ?? {};
-  process.stdout.write(`${JSON.stringify(printable, null, 2)}\n`);
+  } else if (command === 'verify-archives') {
+    out = repo.verifyPublishedArchives();
+    // Exit 2 when any published archive fails, so a scheduled check can alert on the status alone.
+    if (out.some(row => !row.ok)) process.exitCode = 2;
+  }
+  else throw new Error('commands: grant-role, revoke-role, invalidate, register, propose, revalidate, verify-archives');
+  const { pageTexts: _omit, ...printable } = Array.isArray(out) ? {} : out ?? {};
+  process.stdout.write(`${JSON.stringify(Array.isArray(out) ? out : printable, null, 2)}\n`);
 } catch (error) {
   process.stderr.write(`${error.code ?? 'ERROR'}: ${error.message}${error.details ? ` ${JSON.stringify(error.details)}` : ''}\n`);
   process.exitCode = 1;

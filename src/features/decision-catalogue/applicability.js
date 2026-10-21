@@ -6,16 +6,34 @@ import { compareVersions } from '../insurance-rules/index.js';
 const rank = fact => (Object.hasOwn(CONTRACTUAL_SOURCES, fact.sourceType) ? CONTRACTUAL_SOURCES[fact.sourceType] : -1);
 const cite = fact => ({ factId: fact.factId, documentId: fact.documentId, sourceVersion: fact.sourceVersion, page: fact.page, clauseIds: fact.clauseIds, sourceType: fact.sourceType });
 
-function latestPerFamily(facts) {
-  const best = new Map();
-  for (const fact of facts) {
-    const key = `${fact.familyId}|${fact.sourceType}`;
-    const held = best.get(key) ?? [];
-    const order = held.length ? compareVersions(fact.sourceVersion, held[0].sourceVersion) : 1;
-    if (order > 0) best.set(key, [fact]);
-    else if (order === 0) held.push(fact);
+// The newest version of a document family is judged across every fact of the policy that applies to this member and date,
+// not only facts of this type and topic: a term the newer version no longer states must not be answered from the older one.
+// A newer version that is not in effect yet (or is about another member) does not displace the one that applies.
+const familyKey = fact => `${fact.familyId}|${fact.sourceType}`;
+function latestPerFamily(facts, policyFacts) {
+  const newest = new Map();
+  for (const fact of policyFacts) {
+    const held = newest.get(familyKey(fact));
+    if (held === undefined || compareVersions(fact.sourceVersion, held) > 0) newest.set(familyKey(fact), fact.sourceVersion);
   }
-  return [...best.values()].flat();
+  return facts.filter(fact => compareVersions(fact.sourceVersion, newest.get(familyKey(fact))) === 0);
+}
+
+// Who is enrolled is always a statement about one member. Continuity for a named member must be that member's own: a
+// policy-wide record does not show when a member added later joined.
+// Continuity is always per member, also when no member is named: a floater's policy-wide record would otherwise complete
+// a waiting period for a member who joined later.
+const needsMemberScope = factType => factType === 'member_enrolment' || factType === 'continuous_cover';
+
+// Policy, member and date filters shared by the rule's own facts and the family-version check.
+function exclusionReason(fact, { policyId, memberKey, asOf }) {
+  if (!fact.policyId) return 'unassociated_policy';
+  if (fact.policyId !== policyId) return 'other_policy';
+  if (fact.subject.memberId && fact.subject.memberId !== memberKey) return 'other_member';
+  if (!fact.subject.memberId && needsMemberScope(fact.factType)) return 'member_scope_missing';
+  if (!asOf && (fact.effective.from || fact.effective.to)) return 'as_of_required';
+  if (asOf && ((fact.effective.from && asOf < fact.effective.from) || (fact.effective.to && asOf > fact.effective.to))) return 'not_in_effect';
+  return null;
 }
 
 /**
@@ -28,14 +46,13 @@ export function resolveApplicable(facts, { policyId, memberId = null, asOf = nul
   memberId = memberKey;
   const excluded = [];
   const pool = [];
+  const undated = [];
   for (const fact of facts) {
     if (fact.factType !== factType || fact.topic !== topic) continue;
-    if (!fact.policyId) excluded.push({ factId: fact.factId, reason: 'unassociated_policy' });
-    else if (fact.policyId !== policyId) excluded.push({ factId: fact.factId, reason: 'other_policy' });
-    else if (fact.subject.memberId && fact.subject.memberId !== memberKey) excluded.push({ factId: fact.factId, reason: 'other_member' });
-    else if (!asOf && (fact.effective.from || fact.effective.to)) excluded.push({ factId: fact.factId, reason: 'as_of_required' });
-    else if (asOf && ((fact.effective.from && asOf < fact.effective.from) || (fact.effective.to && asOf > fact.effective.to))) excluded.push({ factId: fact.factId, reason: 'not_in_effect' });
-    else pool.push(fact);
+    const reason = exclusionReason(fact, { policyId, memberKey, asOf });
+    if (reason) excluded.push({ factId: fact.factId, reason });
+    if (reason === 'as_of_required') undated.push(fact);
+    if (!reason) pool.push(fact);
   }
   // Only a contractual fact may supersede, and never one from a higher layer than itself.
   const superseded = new Set(pool.filter(fact => fact.contractual).flatMap(fact => fact.supersedes.filter(id => {
@@ -45,7 +62,7 @@ export function resolveApplicable(facts, { policyId, memberId = null, asOf = nul
   const live = latestPerFamily(pool.filter(fact => {
     if (superseded.has(fact.factId)) { excluded.push({ factId: fact.factId, reason: 'superseded' }); return false; }
     return true;
-  }));
+  }), facts.filter(fact => !exclusionReason(fact, { policyId, memberKey, asOf })));
   for (const fact of pool) if (!live.includes(fact) && !superseded.has(fact.factId)) excluded.push({ factId: fact.factId, reason: 'older_version' });
 
   const contractual = live.filter(fact => fact.contractual);
@@ -57,7 +74,10 @@ export function resolveApplicable(facts, { policyId, memberId = null, asOf = nul
   const base = { factType, topic, policyId, memberId, asOf, excluded, citations: controlling.map(cite), value: null, candidateValue: null, selection: 'unspecified', conditions: [], exceptions: [], overrides: [], effectiveUnknown: false, discrepancies: [] };
   const done = (status, extra = {}) => deepFreeze({ ...base, status, ...extra });
 
-  if (!controlling.length) {
+  // A dated contract fact that could control (same or higher layer) was set aside only because no date was given: whether
+  // it applies is unknown, so the undated fact must not be reported as the answer.
+  const dateDecides = undated.some(fact => fact.contractual && rank(fact) >= top);
+  if (!controlling.length || dateDecides) {
     const dated = excluded.some(item => item.reason === 'as_of_required');
     return done('unknown', { reason: dated ? 'as_of_required' : advisory.length ? 'only_non_contractual_sources' : 'no_applicable_evidence', discrepancies: advisory.map(cite) });
   }
