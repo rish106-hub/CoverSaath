@@ -1,0 +1,95 @@
+tests/database-integrity-v2.test.mjs
+  s_c52538788cad78::t_5084314a300d6b 95
+src/backend/repositories/curated-product-repository.js
+  s_c52538788cad78::t_05159bb357c36a 36,41-43,180
+  s_c52538788cad78::t_7b661d6d914c87 1-35,37-40,44-125,127-134,138-179,181-188,190-202,204-225,227-229,241,243-254,256,262-272,274-294,296-299,302-309,311-352
+  s_c52538788cad78::t_742c4b0b3e516b 126,135-137,189,203,226,230-240,242,255,257-261,273,295,300-301,310
+tests/evidence-completion-persistence.test.mjs
+  s_c52538788cad78::t_5084314a300d6b 84
+src/server/routes/v1-backend-routes.js
+  s_c52538788cad78::t_742c4b0b3e516b 399
+  s_c52538788cad78::t_4a477d3d4c2025 388-398,400-404
+tests/catalogue-review-api.test.mjs
+  s_c52538788cad78::t_a8208ea8bcef6b 462-509,512-513,521-533
+  s_c52538788cad78::t_0c3b9c7d6a0e64 219,259,282,358,367,409
+  s_c52538788cad78::t_60bfde8374492b 510-511,514-520
+scripts/curated-source.mjs
+  s_c52538788cad78::t_de56194cbfbbe3 1-39
+src/features/decision-catalogue/curated-products.js
+  s_c52538788cad78::t_fccfb448b14c07 5-8,57-61,67-72,82,86,96,127-130
+  s_c52538788cad78::t_cb033e1cef7e50 35,38,42-56,75,77-78,84
+  s_c52538788cad78::t_9611ca71ebb68d 73-74,76,79-81
+src/backend/database/database.js
+  s_c52538788cad78::t_1e6fefd45e5e7a 74
+  s_c52538788cad78::t_05159bb357c36a 81,142
+tests/postgres-triggers.test.mjs
+  s_c52538788cad78::t_60bfde8374492b 994-996
+  s_c52538788cad78::t_32b9560cdefbfc 1021-1025,1027-1032,1035-1038,1042,1044-1047
+  s_c52538788cad78::t_9e2fc5cc6d16d7 1026,1039,1043
+  s_c52538788cad78::t_742c4b0b3e516b 1040-1041
+  s_c52538788cad78::t_793d322a5b2952 1033-1034
+  s_c52538788cad78::t_de56194cbfbbe3 997-998
+tests/curated-product-workflow.test.mjs
+  s_c52538788cad78::t_de56194cbfbbe3 106-112
+  s_c52538788cad78::t_742c4b0b3e516b 47-48,146-181,241-242,290,328
+  s_c52538788cad78::t_f0379f56148387 213,323-325
+  s_c52538788cad78::t_c02b5bd718062e 350-352
+  s_c52538788cad78::t_4fdb4ac6337474 102,237
+  s_c52538788cad78::t_38bab7ead5e135 1-46,49-101,103-105,113-145,182-212,214-236,238-240,243-289,291-322,326-327,329-349,353
+tests/curated-products.test.mjs
+  s_c52538788cad78::t_a316433b093639 18,21,60-62,79,81,84-89
+  s_c52538788cad78::t_f8a73b287485b5 90
+src/backend/services/backend-services.js
+  s_c52538788cad78::t_4a477d3d4c2025 1,17,27
+tests/support/postgres-fixtures.mjs
+  s_c52538788cad78::t_a8c8f38e2f4e09 93-102
+tests/postgres-runner.test.mjs
+  s_c52538788cad78::t_fccfb448b14c07 15
+  s_c52538788cad78::t_9e2fc5cc6d16d7 43
+src/backend/services/decision-catalogue-service.js
+  s_c52538788cad78::t_a2f25083ea9d99 128,162
+  s_c52538788cad78::t_4a477d3d4c2025 61
+src/backend/database/migrations/018_curated_product_workflow.sql
+  s_c52538788cad78::t_05159bb357c36a 14-31
+  s_c52538788cad78::t_742c4b0b3e516b 58,100,102,105-117
+  s_c52538788cad78::t_5ea67df182d6ed 1-13,32-57,59-99,101,103-104,118-124
+src/features/decision-catalogue/index.js
+  s_c52538788cad78::t_cb033e1cef7e50 13
+  s_c52538788cad78::t_eba2c5c14cc08f 14
+src/backend/database/postgres/migrations/014_curated_product_workflow.sql
+  s_c52538788cad78::t_742c4b0b3e516b 52,105,107,118-137
+  s_c52538788cad78::t_5ea67df182d6ed 1-5,26-51,53-104,106,108-117,138-148
+  s_c52538788cad78::t_05159bb357c36a 6-25
+tests/database-schema.test.mjs
+  s_c52538788cad78::t_9e2fc5cc6d16d7 35
+src/backend/repositories/index.js
+  s_c52538788cad78::t_4a477d3d4c2025 14
+tests/postgres-catalog-parity.test.mjs
+  s_c52538788cad78::t_1e6fefd45e5e7a 215
+  s_c52538788cad78::t_9e2fc5cc6d16d7 7
+src/features/decision-catalogue/source-verification.js
+  s_c52538788cad78::t_742c4b0b3e516b 39
+  s_c52538788cad78::t_eba2c5c14cc08f 7
+  s_c52538788cad78::t_cd5c2d83b3b6db 1-6,8-38,40-61
+src/backend/repositories/catalogue-review-repository.js
+  s_c52538788cad78::t_05159bb357c36a 68,71-72,182,188-189
+  s_c52538788cad78::t_a2f25083ea9d99 14-15,53-61,65,74,89-99,104,114-120,136,140-144,186-187,190,193,197
+docs/iterations/LATEST.md
+  s_c52538788cad78::t_794ca745ba28ab 263,267-278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0f9e4288b2c475358ee9345d26b39e4964c2910a",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
