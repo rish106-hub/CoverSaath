@@ -1,0 +1,26 @@
+tests/curated-product-workflow.test.mjs
+  s_c52538788cad78::t_c891457bcf7c6c 319
+  s_c52538788cad78::t_05805763f159c1 31,106,108-115,314-318,320-330
+  s_c52538788cad78::t_a0e0016346319d 331-332
+scripts/curated-source.mjs
+  s_c52538788cad78::t_057080f68fbfd4 8,11,26,34
+src/backend/repositories/curated-product-repository.js
+  s_c52538788cad78::t_05805763f159c1 24,42-43,45-50,187-188,339-353
+  s_c52538788cad78::t_a38a0b0a714065 354-356
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1ca86b1ff42ada5d142e460d0aa0829348192821",
+  "prompts": {},
+  "sessions": {
+    "s_c52538788cad78": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "99d83c65-56bc-4ce7-a97e-48ef6d98d8cb",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
