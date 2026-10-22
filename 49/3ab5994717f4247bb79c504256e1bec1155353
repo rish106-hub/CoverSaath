@@ -1,0 +1,230 @@
+src/features/policy-structuring/coverage-report.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 7,9,11,191,206,208-209
+src/backend/database/postgres/migrate.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 2,12-44,46,65-67,91
+tests/context-question-planner.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-154
+tests/policy-structuring-coverage-report.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 81-91
+src/features/decision-catalogue/verified-product-records.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-260
+tests/support/curated-text.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-29
+tests/postgres-catalog-parity.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 215
+src/server/create-server.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 7,107-111,178
+src/features/decision-catalogue/curated-actions.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-132
+tests/database-schema.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 35
+src/features/ai-analysis/eval-scorer.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 26,31,33,37
+src/features/household-reasoning/output-contract.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-70
+tests/decision-catalogue-association.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 4-5,56-69
+  s_8d3aebb313e171::t_ba8cabbf4c90ef 70
+tests/postgres-triggers.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1048-1081
+scripts/eval-structuring-accuracy.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 9,17
+src/backend/repositories/curated-product-repository.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 5-6,8,15-16,18-20,29-31,45-49,52,98-102,106,115,118-119,121,141-167,178,195-199,201-202,215,220-221,224,232,234,246-249,255-258,261,276-278,290-293,295-328,330-338,340-342,347,361,366-367,370,375-405,409-414,416,421-428,434-435,441,444-445,447,450-451,453-458,483-550,557-559,563,566
+scripts/eval-household-reasoning.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-42
+scripts/smoke-test-gemini.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 7,9-15,37-38,61,77,130-133
+src/features/decision-catalogue/handoff.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 74,76,78-79,83
+src/features/input/pdf-text-extraction.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-380
+src/backend/database/database.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 74,82
+src/backend/database/postgres/migrations/015_curated_signed_actions.sql
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-71
+src/backend/services/household-preview-service.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-64
+src/features/household-reasoning/index.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-10
+src/features/input/sandboxed-pdf-text.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-103
+tests/block3-multi-document-api.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-234
+tests/pdf-text-extraction.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-146
+src/features/decision-catalogue/source-verification.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 5-6
+tests/household-security-adversarial.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-293
+tests/postgres-migration-loader.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-72
+tests/postgres-runner.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 4,10-11,15,37,48,66,90,116
+src/server/routes/v1-backend-routes.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 5,198,389-394,400-401,408,413-424
+  s_8d3aebb313e171::t_13d999a97ba7cb 425
+tests/catalogue-review-api.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 534-549
+tests/support/curated-keys.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-13
+src/backend/database/postgres/index.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 4
+tests/decision-catalogue-handoff.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 3,115-138
+  s_8d3aebb313e171::t_51e3f6fab3b0e7 139
+tests/support/synthetic-policies.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-689
+scripts/smoke-test-sarvam.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 7,9-10,12-14,21-22,37,48,88-91
+docs/iterations/LATEST.md
+  s_8d3aebb313e171::t_1be77694e5056b 5-49
+src/features/decision-catalogue/applicability.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 9-17,19-36,49,52-55,65,77-80
+src/features/decision-catalogue/index.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 15-19
+tests/context-gap-resolver.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-216
+src/features/household-reasoning/question-planner.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-76
+tests/support/household-golden-cases.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-303
+tests/verified-product-records-contract.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-282
+src/backend/services/decision-catalogue-service.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1,33-38,40-42,46,52,65-69,75,94-96,98-99,101,153-154,160,166,178,189
+tests/evals/parse-accuracy.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 40-47
+package.json
+  s_b4c34ff84478b9::t_bc3f7a20971c88 13,22-23
+src/features/household-reasoning/next-actions.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-74
+tests/household-reasoning-evidence.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-273
+tests/support/household-api-harness.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-160
+tests/block3-synthetic-matrix.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-232
+tests/support/household-evaluation.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-197
+src/backend/services/index.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 7
+tests/household-scenario-analysis.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-162
+tests/support/postgres.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 11-15,17-18,21,60-70,73-74
+tests/decision-catalogue-rules-phase5.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 11-13,22,27,37,42,103-136
+src/features/household-reasoning/normalize.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-239
+src/features/household-reasoning/scenario-input.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-137
+src/features/household-reasoning/relevance.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-61
+tests/curated-product-workflow.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 12-13,21-23,35,40-41,44-45,47-48,50,53,55,57-58,83,85-87,94-95,98,100-109,111-112,116,119,124,127-128,131,133,146,148,152,154,157,164,166,170-171,175,177-185,187,191,193,197,201,205,208,211,221,223,240,242,244-245,249-252,258,266-267,272,274,277-278,285,287,297,307,317,319,323,326,330,332,334,362,369,375,377-386
+tests/curated-source-integrity.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-261
+tests/household-coverage-preview-api.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-287
+tests/household-policy-comparison.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-147
+tests/household-preview-latency.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-38
+.gitignore
+  s_b4c34ff84478b9::t_bc3f7a20971c88 26-27
+tests/household-coverage-map.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-167
+src/features/household-reasoning/context-gaps.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-187
+tests/database-integrity-v2.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 96
+src/features/decision-catalogue/association.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 5-9,25-31,36,40,50
+src/features/household-reasoning/preview.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-82
+src/features/household-reasoning/comparison.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-91
+tests/decision-catalogue.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 139,141,143
+tests/curated-sources-empty.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-27
+src/features/input/index.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 30-31
+src/features/household-reasoning/contracts.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-103
+src/backend/database/migrations/019_curated_signed_actions.sql
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-59
+src/features/household-reasoning/coverage-map.js
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-100
+src/features/input/pdf-text-child.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-35
+tests/household-golden-matrix.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-56
+tests/household-reasoning-contracts.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-179
+tests/curated-signed-actions.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-184
+scripts/curated-source.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 4-5,9-12,14-29,33-34,38-40,43-123
+tests/evidence-completion-persistence.test.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 85
+tests/support/household-fixtures.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 1-87
+tests/support/postgres-fixtures.mjs
+  s_b4c34ff84478b9::t_bc3f7a20971c88 94-97,104
+docs/adr/0009-reviewed-facts-and-decision-catalogue.md
+  s_8d3aebb313e171::t_3706834241780a 1-91
+docs/adr/0010-signed-curated-actions-and-derived-text.md
+  s_8d3aebb313e171::t_5615dea8a0ed31 1-34
+docs/architecture/decision-catalogue.md
+  s_8d3aebb313e171::t_4a8a866b397cf0 1-91
+docs/architecture/household-reasoning.md
+  s_8d3aebb313e171::t_ec1351fc024982 1-141
+docs/architecture/reviewer-security.md
+  s_8d3aebb313e171::t_dad8219a898c48 1-72
+docs/architecture/security.md
+  s_8d3aebb313e171::t_63c6e2ec69e478 85-86
+docs/architecture/verified-product-records.md
+  s_8d3aebb313e171::t_eaefb54695bb61 1-45
+docs/exec-plans/active/block-3-acceptance.md
+  s_8d3aebb313e171::t_3d5e19ed8e77ea 1-93
+docs/exec-plans/active/block4-acceptance.md
+  s_8d3aebb313e171::t_372f9236a0669e 1-115
+docs/exec-plans/active/block4-household-reasoning.xml
+  s_8d3aebb313e171::t_9fd3abad47da10 1-57
+docs/exec-plans/active/codeql-alert-remediation.md
+  s_8d3aebb313e171::t_2b71000808ea9f 1-29
+docs/research/2026-10-20-source-data-catalogue-reviewer-access.md
+  s_8d3aebb313e171::t_c30bc40935068c 1-178
+docs/runbooks/curated-sources.md
+  s_8d3aebb313e171::t_f2b2b0eb2bb6ab 1-134
+docs/runbooks/local-postgres.md
+  s_8d3aebb313e171::t_c807607489514f 95-96
+package-lock.json
+  s_8d3aebb313e171::t_f69f50a253455b 11-12,21-23,26-27,38-40,43-44,54-56,66-68,71,124-126,129-131
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "493ab5994717f4247bb79c504256e1bec1155353",
+  "prompts": {},
+  "sessions": {
+    "s_8d3aebb313e171": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1620a-9786-73e0-a167-77d2da35196a",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_b4c34ff84478b9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "01a1620a-9786-73e0-a167-77d2da35196a",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
