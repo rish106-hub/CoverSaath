@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { CONTRACTUAL_SOURCES, isIsoDate } from '../../features/decision-catalogue/contracts.js';
 import { CURATED_OFFICIAL_SOURCES, CURATED_PRODUCT_RECORDS, loadCuratedProducts, answerToCandidates, associateDocuments, buildDecisionCatalogue, typedTwins } from '../../features/decision-catalogue/index.js';
 
@@ -30,17 +30,26 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   // The independent-reviewer path reads a household's facts without a household role or the subject's source-pack
   // consent (ADR 0009 item 7, review P1). Off until a consent purpose and a staff access model exist.
   const independentEnabled = env.CATALOGUE_INDEPENDENT_REVIEW_ENABLED === 'true';
+  // Logical policy ids are keyed so a client cannot recover a policy number by hashing guesses (association.js). The key
+  // is derived from the server's document key, as the answer request digest is; without one (development) it is random
+  // per process, so policy ids, and the reviews recorded against them, do not survive a restart.
+  const configuredKey = env.DOCUMENT_ENCRYPTION_KEY_BASE64 ? Buffer.from(env.DOCUMENT_ENCRYPTION_KEY_BASE64, 'base64') : null;
+  if (configuredKey && configuredKey.length < 32) throw coded('DECISION_CATALOGUE_CONFIG_INVALID', 'The document encryption key must decode to at least 32 bytes.', 500);
+  const policyIdKey = createHmac('sha256', configuredKey ?? randomBytes(32)).update('decision-catalogue-policy-id-v1').digest();
 
-  function load({ caseRecord, answerId }) {
+  // `documentsUntil` (independent reviewers only): the grant covers the documents the case held when it was issued. An answer
+  // that reads a document uploaded later is not found until an operator regrants, so a grant never widens by itself.
+  function load({ caseRecord, answerId, documentsUntil = null }) {
     if (typeof answerId !== 'string' || !answerId || answerId.length > 256) throw coded('VALIDATION_ERROR', 'answerId is required.', 400);
     const householdId = caseRecord.household_id;
     const stored = evidence.readForCatalogue({ caseRecord, answerId });
+    if (documentsUntil !== null && stored.documentIds.some(id => !(services.documents.getDocument(id)?.createdAt <= documentsUntil))) throw notFound();
     const clauseRows = services.clauses.listClauses({ householdId, caseId: caseRecord.id, documentIds: stored.documentIds });
     const documentKinds = new Map(stored.documentIds.map(id => [id, services.documents.getDocument(id)?.documentKind]));
     // Which policy a document belongs to is a CANDIDATE finding only (printed policy number, see association.js) and is
     // never verified by this path. A document with no single printed number stays on one unresolved policy per answer.
     const unresolvedId = `unresolved-${stored.answerId}`;
-    const association = associateDocuments(clauseRows, stored.documentIds);
+    const association = associateDocuments(clauseRows, stored.documentIds, { key: policyIdKey });
     const policyByDocument = new Map(association.documents.filter(d => d.policyId).map(d => [d.documentId, d]));
     const { candidates: base, skipped } = answerToCandidates(stored.answer, { clauseRows, documentKinds, policyId: unresolvedId });
     const placed = base.map(candidate => {
@@ -53,12 +62,17 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   }
 
   const evidenceRows = rows => rows.map(row => ({ id: row.clauseId, documentId: row.documentId, sourceVersion: row.sourceVersion, page: row.page, digest: row.digest }));
+  // Curated products are read once per request: listVerified re-hashes every published archive, so it is not repeated per probe.
+  const curatedFor = (ctx, today) => {
+    if (ctx.curated?.today !== today) ctx.curated = { today, products: [...loadCuratedProducts(CURATED_PRODUCT_RECORDS, { today }), ...(services.curatedProducts?.listVerified({ today }) ?? [])] };
+    return ctx.curated.products;
+  };
   const compose = (ctx, batches, { asOf, memberId }) => {
     const today = new Date().toISOString().slice(0, 10);
     return buildDecisionCatalogue({
     householdId: ctx.householdId, clauseRows: evidenceRows(ctx.clauseRows), batches,
     policies: ctx.policyIds.map(policyId => ({ policyId, kind: 'unresolved', coverBasis: 'unknown' })), asOf, memberId,
-    officialSources: CURATED_OFFICIAL_SOURCES, curatedProducts: [...loadCuratedProducts(CURATED_PRODUCT_RECORDS, { today }), ...(services.curatedProducts?.listVerified({ today }) ?? [])], today,
+    officialSources: CURATED_OFFICIAL_SOURCES, curatedProducts: curatedFor(ctx, today), today,
     });
   };
   const modelBatch = candidates => ({ origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates });
@@ -77,10 +91,14 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
     }) && modelFactIds.has(review.factKey);
   };
 
-  function build({ caseRecord, answerId, asOf = null, memberId = null }) {
+  // `curatedCache` is an optional caller-owned `{}` shared by several builds of one request, so the published archives are
+  // verified once per request rather than once per source. It changes no result: the cache is keyed by the same date.
+  function build({ caseRecord, answerId, asOf = null, memberId = null, documentsUntil = null, curatedCache = null }) {
     checkQuery({ asOf, memberId });
-    const ctx = load({ caseRecord, answerId });
+    const ctx = load({ caseRecord, answerId, documentsUntil });
+    if (curatedCache?.value) ctx.curated = curatedCache.value;
     const first = compose(ctx, [modelBatch(ctx.candidates)], { asOf, memberId });
+    if (curatedCache) curatedCache.value = ctx.curated;
     const factByKey = new Map(first.facts.map(fact => [factKeyOf(fact.factId), fact]));
     const all = reviews ? reviews.list({ householdId: ctx.householdId, caseId: caseRecord.id }) : [];
     const reviewSummary = [];
@@ -132,19 +150,20 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
     } else {
       try { services.access.requireHousehold(principal, caseRecord.household_id, { write: false }); } catch { throw notFound(); }
     }
-    return { caseRecord, kind: grant.kind };
+    // A grant row without granted_at predates the column: '' admits no document (fail closed).
+    return { caseRecord, kind: grant.kind, documentsUntil: grant.kind === 'independent_reviewer' ? grant.granted_at ?? '' : null };
   }
 
   function record({ principal, caseId, answerId, factId, decision, reasonCode, attestedSourceType = null, attestsPolicyAssociation = false, idempotencyKey, asOf = null, memberId = null }) {
     if (!reviews) throw coded('REVIEWS_UNAVAILABLE', 'Reviews are unavailable.', 503);
     checkQuery({ asOf, memberId });
-    const { caseRecord } = reviewerCase(principal, caseId);
+    const { caseRecord, documentsUntil } = reviewerCase(principal, caseId);
     if (typeof factId !== 'string' || !factId || factId.length > 128) throw coded('VALIDATION_ERROR', 'factId is required.', 400);
     if (attestedSourceType !== null && (typeof attestedSourceType !== 'string' || !Object.hasOwn(CONTRACTUAL_SOURCES, attestedSourceType))) throw coded('VALIDATION_ERROR', 'attestedSourceType is not a contractual source type.', 400);
     if (typeof attestsPolicyAssociation !== 'boolean') throw coded('VALIDATION_ERROR', 'attestsPolicyAssociation must be a boolean.', 400);
     // The reviewed fact is rebuilt on the server from live clauses after the consent and currency re-check. The caller
     // names a factId and never supplies a value, a clause or a digest.
-    const ctx = load({ caseRecord, answerId });
+    const ctx = load({ caseRecord, answerId, documentsUntil });
     const fact = compose(ctx, [modelBatch(ctx.candidates)], { asOf, memberId }).facts.find(item => item.factId === factId);
     if (!fact) throw notFound();
     const stored = reviews.record({
@@ -156,6 +175,7 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   }
 
   // Only an enabled, active independent grant on an active household opens a case without a household role.
+  // Returns { caseRecord, documentsUntil } or null.
   function independentReviewerCase(principal, caseId) {
     if (!independentEnabled || !reviews || typeof caseId !== 'string') return null;
     const caseRecord = services.access.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId);
@@ -166,7 +186,7 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
       householdId: caseRecord.household_id, caseId: caseRecord.id, actorType: 'human_reviewer', actorId: principal.adultId,
       action: 'catalogue_reviewer.viewed', resourceType: 'service_case', resourceId: caseRecord.id,
     });
-    return caseRecord;
+    return { caseRecord, documentsUntil: grant.granted_at ?? '' };
   }
 
   /** The household source-pack field gate for a household confirmer's write, matching the read route. Returns the case. */

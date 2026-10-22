@@ -27,3 +27,5 @@ export {
   assertByteStorage,
   assertDocumentRepository,
 } from './contracts.js';
+export { PDF_TEXT_EXTRACTOR_VERSION, PDF_TEXT_LIMITS } from './pdf-text-extraction.js';
+export { PDF_TEXT_SANDBOX_LIMITS, createSandboxedPdfTextExtractor } from './sandboxed-pdf-text.js';

@@ -2,8 +2,8 @@
 //
 // What this proves: the archived bytes hash to the recorded digest, and (when page text is supplied) the printed UIN, the
 // wording version and every quoted passage appear in that text. What it does not prove: that the page text was extracted
-// faithfully from the PDF. Page text is curator-asserted, so a human checker must still read the real source (see the
-// repository's check step). A check that cannot be made is reported as a human-review item, never as a pass.
+// faithfully from the PDF. The curated repository passes only text derived from the archived bytes by the PDF text
+// extractor (ADR 0010); a human checker must still read the real source, since a file's own font maps could misstate text. A check that cannot be made is reported as a human-review item, never as a pass.
 import { extractUins, sha256Hex } from './curated-products.js';
 
 const SHA256 = /^[0-9a-f]{64}$/;

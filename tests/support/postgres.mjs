@@ -8,12 +8,17 @@
 //
 // COVERSAATH_PG_MIGRATIONS_DIR points the harness at another migration directory. Mutation checks
 // use it to prove a test fails when a trigger is broken; its digest selects its own template.
+//
+// The loader only reads directories inside the repository migration directory (CodeQL alert 40),
+// so runner tests write scratch migration sets under SCRATCH_PARENT (gitignored) instead of the
+// system temp directory. The loader reads only regular files at the top level of a directory it
+// is given, so scratch subdirectories never join the real migration set.
 import { createHash, randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { resolve, sep } from 'node:path';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import pg from 'pg';
 import {
-  createPostgresPool, postgresMigrationDirectory, postgresMigrationFiles, runPostgresMigrations,
+  createPostgresPool, loadPostgresMigrations, postgresMigrationDirectory, runPostgresMigrations,
 } from '../../src/backend/database/postgres/index.js';
 
 export const SKIP_REASON = 'TEST_DATABASE_URL not set';
@@ -52,10 +57,21 @@ export function migrationDirectory() {
   throw new Error('COVERSAATH_PG_MIGRATIONS_DIR must be within the default migrations directory.');
 }
 
+export const SCRATCH_PARENT = join(postgresMigrationDirectory, 'test-scratch');
+
+// A fresh migration directory inside the approved root, removed when the test ends.
+export function scratchMigrationDirectory(t, files = {}) {
+  mkdirSync(SCRATCH_PARENT, { recursive: true });
+  const directory = mkdtempSync(join(SCRATCH_PARENT, 'set-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  for (const [name, sql] of Object.entries(files)) writeFileSync(join(directory, name), sql);
+  return directory;
+}
+
 export function migrationSetDigest(directory = migrationDirectory()) {
   const hash = createHash('sha256');
-  for (const name of postgresMigrationFiles(directory)) {
-    hash.update(name).update('\0').update(readFileSync(resolve(directory, name))).update('\0');
+  for (const { version, sql } of loadPostgresMigrations(directory)) {
+    hash.update(version).update('\0').update(sql).update('\0');
   }
   return hash.digest('hex').slice(0, 12);
 }
