@@ -8,6 +8,17 @@ Labels: IMPLEMENTED (code exists) · NOT_IMPLEMENTED (absent, not planned or ass
 
 Line numbers are for the commits above. Marketing line numbers shift with the dirty tree; re-resolve before relying on them. Paths marked `K:` are in `Knowvia_website`, all others in `CoverSaath`.
 
+## Update 2026-10-22: real-backend smoke test (supersedes parts of this audit)
+
+A BFF now exists (uncommitted, `Knowvia_website-block5`, branch `block5/app`, see its `docs/block5/bff.md`) and was run against an isolated CoverSaath built from `block4/household-reasoning` (temp SQLite, local clamd, no provider keys). Facts this changes:
+
+- Sections 3 and 6 said the consent chain was UNVERIFIED. Verified end to end up to OCR: sign-in (dev only), household, case, `collect` consent, PDF upload with replay and conflict, clamd scan to `accepted`, OCR and question consents, consent revocation, deletion (stored bytes erased), session revocation. OCR start answers 503 `OCR_PROVIDER_DISABLED` and questions 409 `POLICY_EVIDENCE_UNAVAILABLE` without a Sarvam or Gemini key; OCR success, evidence answers and a real coverage preview were not exercised (paid providers).
+- `coverage-preview` (route line numbers in section 1) exists only on `block4/household-reasoning`, which is not merged into `main` or this branch. A backend built from this branch has no such route.
+- Revoking the `collect` consent makes the backend answer 403 `FIELD_ACCESS_REQUIRED` on document list and get, and moves held documents to `deletion_pending`. `GET .../documents/deletion-inventory` stays readable. Clients must fall back to it (the BFF now does).
+- `POLICY_EVIDENCE_ENABLED` gates `/questions` and the catalogue read (503 `EVIDENCE_DISABLED`); `.env.example` now lists it with `POLICY_STRUCTURING_ENABLED` and `CATALOGUE_INDEPENDENT_REVIEW_ENABLED`, and `SARVAM_OCR_ENABLED` is `false` there to match its "off by default" comment.
+- Topology (D2), measured: the backend answers 403 `Local access only.` for any Host other than `127.0.0.1` or `localhost` on its bound port and 403 `Origin not permitted.` for any Origin except `:5173`. A same-host server-side BFF calling `http://127.0.0.1:<port>` works unchanged (Node `fetch` sends no Origin or forwarding headers). A remote or proxied API does not, and the guard was not weakened. All BFF traffic shares one backend rate-limit bucket (socket address) and the backend caps active sessions (100) and cases (100) globally.
+- Still no backend route to list cases or consent grants, so server-side state is a sealed cookie in the BFF; a lost cookie orphans a case or grants.
+
 ## 0. Verdict
 
 The backend is a guarded local API, not a product backend a browser can use. Marketing onboarding is a static mock with no handler that calls an API. Block 5 is therefore blocked on identity, deployment topology and member management before any real screen can work. Slice 0 (design baseline) is the only unblocked work.
