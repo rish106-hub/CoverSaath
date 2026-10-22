@@ -1,5 +1,9 @@
 # Latest iteration
 
+## Block 5 real-backend smoke test and BFF remediation (2026-10-22)
+
+No CoverSaath source changed; `.env.example` lists the three feature switches and `SARVAM_OCR_ENABLED=false`. Branch `block5/frontend-audit`, uncommitted. The BFF under test lives in `Knowvia_website-block5` (see the exec-plan addendum in [block5-frontend-audit.md](../exec-plans/active/block5-frontend-audit.md)). Verified against an isolated backend built from `block4/household-reasoning` (not merged): journey through upload, real clamd scan, consents, revocation, deletion and sign-out. OCR success, evidence answers and a real coverage preview were not run (paid providers). BFF defects found by the run and by an independent review were fixed in the website worktree with regression tests and re-reviewed (no P0 or P1 left). Open: D1 identity, D2 topology, backend list-cases and list-grants routes, per-caller backend rate limit, merge of Block 4.
+
 ## Closeout status (2026-10-20, `main`)
 
 - Pushed to `main` with CI green (PostgreSQL 17 suite included: migration 013, parity, runner, trigger tests).

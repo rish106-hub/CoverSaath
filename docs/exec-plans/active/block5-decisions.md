@@ -16,6 +16,10 @@ Status for every item: **OPEN**.
 | D8 | Marketing repo state: commit, stash or discard 19 modified files plus untracked `docs/` on `codex/lean-agent-operating-model`; branch strategy; regenerate-and-diff before Block 5 work | Owner commits or stashes first; branch Block 5 from a clean base | S0 | Owner |
 | D9 | UI home and frontend ADR. Recommended: `Knowvia_website` `/app` route group with server-only BFF. If any UI lands in CoverSaath, an accepted task and ADR for framework/tooling are required first (`check-architecture.mjs:17` rejects `src/ui`) | `Knowvia_website`; no CoverSaath ADR needed unless that changes | S1 | Owner |
 
+## D2 evidence from the 2026-10-22 smoke test
+
+A same-host BFF to a loopback API works without changing any backend control. Anything else (remote API, proxy that rewrites Host, browser calling the API) is refused by `assertLocalRequest` and cannot be fixed by the frontend. Viable options: (1) run the BFF on the same host as the API (simple, no deployment target exists); (2) add a reviewed, narrow server-to-server allowance in the backend (a configured allow-listed Host and a service credential, separate from user bearer tokens) with an ADR and independent security review; (3) put both behind one trusted gateway that terminates TLS and keeps the API loopback-only. Also needed whichever is chosen: backend routes to list a household's cases and consent grants (so BFF state need not live in a cookie), and a per-caller rate-limit key that survives a single trusted peer.
+
 ## Not decisions, but follow-ups found
 
 - `docs/iterations/LATEST.md:3` names the wrong branch and says "uncommitted". Update in its own change when durable state is next touched.
