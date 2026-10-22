@@ -23,18 +23,18 @@ export function classify(goldenValue, extractedValue, grounded = () => true) {
 // adjudications: [{ field, accepted, value, state }] - an accepted verdict replaces the extractor value.
 export function scoreFields(golden, extracted, adjudications = [], { grounded = () => true } = {}) {
   const overrides = new Map(adjudications.filter(item => item.accepted).map(item => [item.field, item]));
-  const fields = Object.create(null); // keys come from golden files: no prototype to pollute
+  const fieldMap = new Map();
   for (const [field, truth] of Object.entries(golden.fields)) {
     if (truth.confirmed !== true) continue;
     const override = overrides.get(field);
     const value = override ? override.value : extracted[field]?.value;
-    fields[field] = { classification: classify(truth.value, value, text => grounded(field, text)), critical: CRITICAL_FIELDS.includes(field), adjudicated: Boolean(override) };
+    fieldMap.set(field, { classification: classify(truth.value, value, text => grounded(field, text)), critical: CRITICAL_FIELDS.includes(field), adjudicated: Boolean(override) });
   }
-  const entries = Object.values(fields);
+  const entries = [...fieldMap.values()];
   const critical = entries.filter(entry => entry.critical);
   const ratio = (list, test) => (list.length ? list.filter(test).length / list.length : null);
   return {
-    fields,
+    fields: Object.fromEntries(fieldMap),
     summary: {
       scored: entries.length,
       fieldAccuracy: ratio(entries, entry => entry.classification === 'match'),

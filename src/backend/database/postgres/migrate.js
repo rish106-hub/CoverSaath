@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostgresDatabaseError } from './errors.js';
@@ -9,10 +9,41 @@ export const postgresMigrationDirectory = fileURLToPath(new URL('./migrations', 
 // One fixed advisory-lock key for the whole migration run (a session lock, held on one connection).
 const MIGRATION_LOCK_KEY = '7283541900012';
 
+function isWithinDirectory(base, target) {
+  const offset = relative(base, target);
+  return offset === '' || (!offset.startsWith('..') && !isAbsolute(offset));
+}
+
+// Reads only directories inside the repository migration directory (CodeQL alert 40). Tests write scratch migration sets
+// in a gitignored subdirectory of it (tests/support/postgres.mjs); there is no second root, so nothing outside the
+// repository's own migrations is ever read and no optional directory has to exist at runtime.
+export function loadPostgresMigrations(directory = postgresMigrationDirectory) {
+  let root;
+  try { root = realpathSync(resolve(directory)); } catch {
+    // Errors never carry filesystem paths.
+    throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'The migration directory is not allowed.');
+  }
+  const productionRoot = realpathSync(resolve(postgresMigrationDirectory));
+  if (!isWithinDirectory(productionRoot, root)) {
+    throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'The migration directory is not allowed.');
+  }
+  // Restrict entries to regular files with fixed migration names, then resolve symlinks before reading.
+  // lgtm[js/path-injection] The canonical directory is restricted above to the fixed repository migration root.
+  return readdirSync(root, { withFileTypes: true })
+    .filter(entry => entry.isFile() && /^\d{3}_[a-z0-9_]+\.sql$/.test(entry.name))
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map(entry => {
+      const migrationPath = realpathSync(resolve(root, entry.name));
+      const offset = relative(root, migrationPath);
+      if (!offset || offset.startsWith('..') || isAbsolute(offset) || offset.includes('/') || offset.includes('\\')) {
+        throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'A migration file path is not allowed.');
+      }
+      return { version: entry.name, sql: readFileSync(migrationPath, 'utf8') };
+    });
+}
+
 export function postgresMigrationFiles(directory = postgresMigrationDirectory) {
-  return readdirSync(directory)
-    .filter(name => /^\d{3}_[a-z0-9_]+\.sql$/.test(name))
-    .sort();
+  return loadPostgresMigrations(directory).map(migration => migration.version);
 }
 
 export function migrationChecksum(sql) {
@@ -31,6 +62,9 @@ async function applyMigration(client, version, sql) {
       await client.query('COMMIT');
       return false;
     }
+    // Migration SQL is loaded only from a fixed, validated migration root. Parameter binding cannot
+    // represent PostgreSQL DDL. The checksum makes later edits fail closed.
+    // lgtm[js/sql-injection] PostgreSQL DDL comes only from the validated migration loader above.
     await client.query(sql);
     await client.query(
       'INSERT INTO schema_migrations (version, checksum, applied_at) VALUES ($1, $2, $3)',
@@ -54,15 +88,7 @@ export async function runPostgresMigrations(pool, { directory = postgresMigratio
   // The directory is supplied by code (tests use scratch directories), never by a request.
   // Filenames must match NNN_name.sql and each resolved path must stay inside the directory.
   // Errors never include filesystem paths.
-  const root = resolve(directory);
-  const files = postgresMigrationFiles(root).map(version => {
-    const migrationPath = resolve(root, version);
-    const offset = relative(root, migrationPath);
-    if (!offset || offset.startsWith('..') || isAbsolute(offset) || offset.includes('/') || offset.includes('\\')) {
-      throw new PostgresDatabaseError('POSTGRES_MIGRATION_PATH_NOT_ALLOWED', 'A migration file path is not allowed.');
-    }
-    return { version, sql: readFileSync(migrationPath, 'utf8') };
-  });
+  const files = loadPostgresMigrations(directory);
   let client;
   try {
     client = await pool.connect();

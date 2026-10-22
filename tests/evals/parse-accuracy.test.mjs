@@ -37,6 +37,14 @@ test('extractor meets critical, overall and hallucination thresholds against the
   assert.ok(score.summary.fieldAccuracy >= 0.85, `field accuracy ${score.summary.fieldAccuracy}`);
 });
 
+test('score fields safely preserves a hostile golden field name', () => {
+  const golden = { fields: Object.fromEntries([['__proto__', { confirmed: true, value: 'unknown' }]]) };
+  const score = scoreFields(golden, Object.create(null));
+  assert.equal(Object.hasOwn(score.fields, '__proto__'), true);
+  assert.equal(score.fields.__proto__.classification, 'match');
+  assert.equal(Object.getPrototypeOf(score.fields), Object.prototype);
+});
+
 test('Gemini negative control: a snippet without the value yields unknown', {
   skip: enabled && process.env.RUN_GEMINI_LIVE === '1' ? false : 'set RUN_GEMINI_LIVE=1 for the billable negative control',
   timeout: 60_000,
