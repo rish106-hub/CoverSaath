@@ -78,8 +78,13 @@ test('versioned backend persists cases and queued analysis across restart', asyn
     method: 'POST', token: bootstrapToken,
     body: { displayName: 'Other synthetic household', owner: { displayName: 'Other synthetic owner' } },
   });
+  const otherToken = otherIdentity.data.session.token;
+  assert.notEqual(token, otherToken, 'separately-created sessions must receive distinct credentials');
   const hiddenMatrix = await app.call(`/api/v1/households/${otherIdentity.data.household.id}`, { token });
   assert.equal(hiddenMatrix.status, 404);
+
+  // The owner cannot use a valid token to read a different household.
+  assert.equal((await app.call(`/api/v1/households/${otherIdentity.data.household.id}`, { token: otherToken })).status, 200);
 
   const setup = createBackendServices(database, { env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken } });
   const householdViewer = setup.households.createAdult({ displayName: 'Synthetic household viewer' });
@@ -324,6 +329,14 @@ test('versioned backend persists cases and queued analysis across restart', asyn
   assert.equal(revoked.status, 200);
   const revokedJob = await app.call(`/api/v1/jobs/${analysis.data.id}`, { token });
   assert.equal(revokedJob.status, 403);
+
+  // Session revocation is scoped to the authenticated session, not the adult or server process.
+  assert.equal((await app.call('/api/v1/integrations', { token: otherToken })).status, 200);
+  assert.equal((await app.call('/api/v1/sessions/current/revoke', { method: 'POST', token })).status, 200);
+  assert.equal((await app.call('/api/v1/integrations', { token })).status, 401);
+  assert.equal((await app.call(`/api/v1/households/${otherIdentity.data.household.id}`, { token: otherToken })).status, 200);
+  assert.equal((await app.call('/api/v1/sessions/current/revoke', { method: 'POST', token: otherToken })).status, 200);
+  assert.equal((await app.call('/api/v1/integrations', { token: otherToken })).status, 401);
 
   await stop(app.server);
   database.close();
