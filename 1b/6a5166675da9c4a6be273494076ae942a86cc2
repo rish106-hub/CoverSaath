@@ -1,0 +1,24 @@
+tests/backend-api.test.mjs
+  s_8d3aebb313e171::t_2850fb2f324cbe 81-82,87
+  s_8d3aebb313e171::t_bbcdf62480aa21 86,333-339
+  s_8d3aebb313e171::t_7c43958ade6ab8 88
+  s_8d3aebb313e171::t_9dd808159cdf08 340
+docs/iterations/LATEST.md
+  s_8d3aebb313e171::t_8d54876c6aaaf9 3-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1b6a5166675da9c4a6be273494076ae942a86cc2",
+  "prompts": {},
+  "sessions": {
+    "s_8d3aebb313e171": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1620a-9786-73e0-a167-77d2da35196a",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
