@@ -1,0 +1,26 @@
+.env.example
+  s_73f848dc1eb035::t_3fb943c44f7f76 44-51
+  s_73f848dc1eb035::t_1051887b7675a3 54
+docs/exec-plans/active/block5-decisions.md
+  s_73f848dc1eb035::t_9be1ca9a03213d 19-22
+docs/exec-plans/active/block5-frontend-audit.md
+  s_73f848dc1eb035::t_a63387a9ffaf44 11-21
+docs/iterations/LATEST.md
+  s_73f848dc1eb035::t_28abac9e355b8a 3-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5676a899e0ee5fb5fb29e477bed04120db2a9e21",
+  "prompts": {},
+  "sessions": {
+    "s_73f848dc1eb035": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "52d2e35a-59b5-4fb3-87c5-cbc29cc29443",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
