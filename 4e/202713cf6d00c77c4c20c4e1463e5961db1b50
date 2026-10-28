@@ -1,0 +1,22 @@
+tests/support/live-analysis-scenario.mjs
+  s_692c874d7b8ff3::t_93d24d30f8418a 6,63
+  s_692c874d7b8ff3::t_b4ad3809573665 88,90,98,104,115,118,149-150,152,157,175-176
+tests/support/household-api-harness.mjs
+  s_692c874d7b8ff3::t_93d24d30f8418a 9,82,96,155-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e202713cf6d00c77c4c20c4e1463e5961db1b50",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
