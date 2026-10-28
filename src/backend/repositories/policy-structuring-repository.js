@@ -1,12 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { AuditRepository } from './audit-repository.js';
 import { CoverageParameterRepository } from './coverage-parameter-repository.js';
+import { isDatabaseInterface } from '../database/postgres/db.js';
+import { PostgresDatabaseError, classifyDatabaseError } from '../database/postgres/errors.js';
+import { householdLock } from '../database/postgres/locks.js';
 import {
   getPolicyParameterDefinition,
   getPolicyParameterRegistry,
 } from '../../features/coverage-analysis/policy-parameter-registry.js';
 
-// Storage for policy document structuring (ADR 0006, SQLite migration 011, PostgreSQL 007).
+// Storage for policy document structuring (ADR 0006, PostgreSQL migrations 007 and 010) on the async
+// PostgreSQL interface (S3.2).
 // Models propose, deterministic code decides: this repository only records decisions already
 // made by deterministic code, never above `extracted_unverified` / `conflicting`, and proposals
 // for keys outside the registry as `pending_review`. Every read and write is household-scoped.
@@ -58,8 +62,15 @@ const decisionInvalid = message => coded('STRUCTURING_DECISION_INVALID', message
 // document) so a caller cannot probe another household's identifiers.
 // Coded application errors (STRUCTURING_*, CONSENT_*, ...) pass through; driver, trigger and runtime
 // failures become one generic code with the original kept only as `cause` for server-side logs.
+// A PostgreSQL SQLSTATE such as P0001 (trigger abort) looks like an application code, so database
+// errors are classified first: a transient condition becomes 503 DATABASE_UNAVAILABLE (decision 2,
+// no driver text) and every other database or interface error becomes the generic code.
+const UNIQUE_VIOLATION = '23505';
 function clientSafe(error) {
-  if (typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(error.code) && !error.code.startsWith('ERR_')) return error;
+  const database = classifyDatabaseError(error);
+  if (database?.code === 'DATABASE_UNAVAILABLE') return database;
+  if (!database && !(error instanceof PostgresDatabaseError)
+    && typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(error.code) && !error.code.startsWith('ERR_')) return error;
   return Object.assign(new Error('The structuring result could not be stored.'), {
     code: 'STRUCTURING_COMMIT_FAILED', statusCode: 500, cause: error,
   });
@@ -308,59 +319,37 @@ function validateOutcome(outcome) {
 
 export class PolicyStructuringRepository {
   constructor(database, { clock = () => new Date(), audit = null, coverageParameters = null } = {}) {
-    if (!database?.prepare || !database?.exec) throw new TypeError('A database is required.');
+    if (!isDatabaseInterface(database)) throw new TypeError('A database is required.');
     this.database = database;
     this.clock = clock;
     this.audit = audit ?? new AuditRepository(database, { clock });
     this.coverageParameters = coverageParameters ?? new CoverageParameterRepository(database, { clock, audit: this.audit });
   }
 
-  // Same transaction model as CoverageParameterRepository: joins an open transaction through a
-  // savepoint, otherwise opens BEGIN IMMEDIATE (which also serialises concurrent commits).
-  #atomic(work) {
-    const savepoint = `policy_structuring_${randomUUID().replaceAll('-', '')}`;
-    let nested;
-    if (typeof this.database.isTransaction === 'boolean') {
-      nested = this.database.isTransaction;
-      if (!nested) this.database.exec('BEGIN IMMEDIATE');
-    } else {
-      try {
-        this.database.exec('BEGIN IMMEDIATE');
-        nested = false;
-      } catch (error) {
-        if (!/within a transaction/i.test(String(error?.message))) throw error;
-        nested = true;
-      }
-    }
-    if (nested) this.database.exec(`SAVEPOINT ${savepoint}`);
-    try {
-      const result = work();
-      this.database.exec(nested ? `RELEASE ${savepoint}` : 'COMMIT');
-      return result;
-    } catch (error) {
-      this.database.exec(nested ? `ROLLBACK TO ${savepoint}` : 'ROLLBACK');
-      if (nested) this.database.exec(`RELEASE ${savepoint}`);
-      throw error;
-    }
+  // One transaction (a savepoint inside a caller's transaction) that takes the household advisory
+  // lock first (lock order, design section 3). It serialises commits, attempts and erasure of one
+  // household, so a replayed or concurrent commit sees the first one's run row.
+  #atomic(householdId, work) {
+    return this.database.transaction(work, { locks: [householdLock(householdId)] });
   }
 
   // Run and document must both belong to the household and the run's case; the document must be
   // active. Any failure is the same coded error.
-  #scope({ householdId, workflowRunId, documentId, requireActive }) {
-    const row = this.database.prepare(`SELECT run.case_id, run.status AS run_status,
+  async #scope({ householdId, workflowRunId, documentId, requireActive }) {
+    const row = await this.database.one(`SELECT run.case_id, run.status AS run_status,
         document.lifecycle_state, document.case_id AS document_case_id
       FROM workflow_runs run
       JOIN service_cases service_case ON service_case.id = run.case_id
       JOIN document_uploads document ON document.id = ?
-      WHERE run.id = ? AND service_case.household_id = ? AND document.household_id = ?`)
-      .get(documentId, workflowRunId, householdId, householdId);
+      WHERE run.id = ? AND service_case.household_id = ? AND document.household_id = ?`,
+    [documentId, workflowRunId, householdId, householdId]);
     if (!row || row.document_case_id !== row.case_id) throw scopeNotFound();
     if (requireActive && row.lifecycle_state !== 'active') throw scopeNotFound();
     return row;
   }
 
-  #requireDocumentInHousehold(householdId, documentId) {
-    const row = this.database.prepare('SELECT 1 FROM document_uploads WHERE id = ? AND household_id = ?').get(documentId, householdId);
+  async #requireDocumentInHousehold(householdId, documentId) {
+    const row = await this.database.one('SELECT 1 AS found FROM document_uploads WHERE id = ? AND household_id = ?', [documentId, householdId]);
     if (!row) throw scopeNotFound();
   }
 
@@ -370,8 +359,10 @@ export class PolicyStructuringRepository {
    * and resolutions for registry keys (never above extracted_unverified / conflicting), proposals
    * for keys outside the registry, the counts-only run row and one counts-only audit event.
    * Any failure rolls everything back. Returns counts; a replay returns the stored counts.
+   * consentCheck may be synchronous or async; it is awaited inside the transaction and a throw or
+   * rejection writes nothing.
    */
-  commitStructuring({
+  async commitStructuring({
     householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
     decisions = [], proposals = [], coverage = null, outcome = null, consentCheck, at = this.clock().toISOString(),
   } = {}) {
@@ -391,7 +382,7 @@ export class PolicyStructuringRepository {
     const checkedOutcome = validateOutcome(outcome);
 
     try {
-      return this.#commit({
+      return await this.#commit({
         householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
         decisions: checkedDecisions, proposals: checkedProposals, coverage: checkedCoverage, outcome: checkedOutcome, consentCheck, at,
       });
@@ -404,41 +395,36 @@ export class PolicyStructuringRepository {
     householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
     decisions: checkedDecisions, proposals: checkedProposals, coverage, outcome, consentCheck, at,
   }) {
-    return this.#atomic(() => {
-      const scope = this.#scope({ householdId, workflowRunId, documentId, requireActive: true });
+    return this.#atomic(householdId, async () => {
+      const scope = await this.#scope({ householdId, workflowRunId, documentId, requireActive: true });
       // Consent is re-checked inside the transaction, immediately before anything is written.
-      const pending = consentCheck();
-      if (pending && typeof pending.then === 'function') {
-        Promise.resolve(pending).catch(() => {});
-        throw invalid('consentCheck must be synchronous.');
-      }
-      const existing = this.database.prepare(`SELECT * FROM policy_structuring_runs
+      await consentCheck();
+      const existing = await this.database.one(`SELECT * FROM policy_structuring_runs
         WHERE workflow_run_id = ? AND document_id = ? AND source_version = ? AND pipeline_version = ?
-          AND erased_at IS NULL`).get(workflowRunId, documentId, sourceVersion, pipelineVersion);
+          AND erased_at IS NULL`, [workflowRunId, documentId, sourceVersion, pipelineVersion]);
       if (existing) return Object.freeze({ replayed: true, structuringRunId: existing.id, ...JSON.parse(existing.counts_json) });
       if (!['queued', 'running', 'completed'].includes(scope.run_status)) {
         throw coded('STRUCTURING_RUN_NOT_ACTIVE', 'The run no longer accepts structuring results.', 409);
       }
-      const pin = this.coverageParameters.getRegistryPin(workflowRunId);
+      const pin = await this.coverageParameters.getRegistryPin(workflowRunId);
       if (pin && pin.registryVersion !== registryVersion) {
         throw coded('STRUCTURING_REGISTRY_MISMATCH', 'The registry version does not match the run.', 409);
       }
 
-      const pageLookup = this.database.prepare(`SELECT id, page_sha256 FROM source_pages
-        WHERE document_upload_id = ? AND source_version = ? AND page_number = ?`);
       const pages = new Map();
       const pageNumbers = [
         ...checkedDecisions.flatMap(decision => decision.observations.map(observation => observation.page)),
         ...checkedProposals.map(proposal => proposal.page),
       ];
       for (const page of new Set(pageNumbers)) {
-        const row = pageLookup.get(documentId, sourceVersion, page);
+        const row = await this.database.one(`SELECT id, page_sha256 FROM source_pages
+          WHERE document_upload_id = ? AND source_version = ? AND page_number = ?`, [documentId, sourceVersion, page]);
         if (!row) throw coded('STRUCTURING_PAGE_NOT_FOUND', 'A cited page was not found for the document version.', 422);
         pages.set(page, row);
       }
 
-      const records = new Map(this.coverageParameters.listForRun(workflowRunId, { limit: maximumRunParameters })
-        .map(record => [record.parameterKey, record]));
+      const listed = await this.coverageParameters.listForRun(workflowRunId, { limit: maximumRunParameters });
+      const records = new Map(listed.map(record => [record.parameterKey, record]));
       let observations = 0;
       let parameters = 0;
       let conflicting = 0;
@@ -452,13 +438,13 @@ export class PolicyStructuringRepository {
           skippedKeys += 1;
           continue;
         }
-        const prior = this.coverageParameters.listObservations(record.id, { limit: maximumObservations })
+        const prior = (await this.coverageParameters.listObservations(record.id, { limit: maximumObservations }))
           .filter(observation => !observation.redactedAt && USABLE_REVIEW_STATUSES.has(observation.reviewStatus));
         let latestObservationId = null;
         let selectedObservationId = null;
         for (const observation of decision.observations) {
           const page = pages.get(observation.page);
-          latestObservationId = this.coverageParameters.appendObservation({
+          latestObservationId = (await this.coverageParameters.appendObservation({
             parameterRecordId: record.id,
             sourceId: page.id,
             documentId,
@@ -470,7 +456,7 @@ export class PolicyStructuringRepository {
             sourceDigest: page.page_sha256,
             observedAt: at,
             recordedBy,
-          }).id;
+          })).id;
           if (decision.selectedQuote !== null && selectedObservationId === null && observation.value.evidenceQuote === decision.selectedQuote) {
             selectedObservationId = latestObservationId;
           }
@@ -483,12 +469,12 @@ export class PolicyStructuringRepository {
         const disagreesWithPrior = decision.state === 'extracted_unverified' && prior.length > 0 && keys.size > 1;
         if (decision.state === 'conflicting' || disagreesWithPrior) {
           conflicting += 1;
-          this.coverageParameters.setResolution({
+          await this.coverageParameters.setResolution({
             parameterRecordId: record.id, state: 'conflicting', authority: 'model',
             reasonCode: disagreesWithPrior ? 'model_observations_conflict' : decision.reasonCode, updatedBy: recordedBy, at,
           });
         } else {
-          this.coverageParameters.setResolution({
+          await this.coverageParameters.setResolution({
             parameterRecordId: record.id, state: 'extracted_unverified', observationId: selectedObservationId ?? latestObservationId,
             reasonCode: decision.reasonCode, updatedBy: recordedBy, at,
           });
@@ -497,23 +483,22 @@ export class PolicyStructuringRepository {
 
       const counts = Object.freeze({ observations, parameters, conflicting, skippedKeys, proposals: checkedProposals.length });
       const structuringRunId = id('structuring');
-      this.database.prepare(`INSERT INTO policy_structuring_runs
+      await this.database.run(`INSERT INTO policy_structuring_runs
         (id, household_id, case_id, workflow_run_id, document_id, source_version, pipeline_version, counts_json, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         structuringRunId, householdId, scope.case_id, workflowRunId, documentId, sourceVersion, pipelineVersion,
         JSON.stringify({ ...counts, ...(coverage ? { coverage } : {}), ...(outcome ? { outcome } : {}) }), at,
-      );
-      const insertProposal = this.database.prepare(`INSERT INTO proposed_parameters
-        (id, structuring_run_id, household_id, document_id, source_page_id, registry_version, proposed_key,
-         category, label, value_json, page, block_index, status, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?)`);
+      ]);
       for (const proposal of checkedProposals) {
-        insertProposal.run(
+        await this.database.run(`INSERT INTO proposed_parameters
+          (id, structuring_run_id, household_id, document_id, source_page_id, registry_version, proposed_key,
+           category, label, value_json, page, block_index, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?)`, [
           id('proposal'), structuringRunId, householdId, documentId, pages.get(proposal.page).id, registryVersion,
           proposal.proposedKey, proposal.category, proposal.label, proposal.valueJson, proposal.page, proposal.blockIndex, at,
-        );
+        ]);
       }
-      this.audit.append({
+      await this.audit.append({
         householdId,
         caseId: scope.case_id,
         action: 'policy_structuring.committed',
@@ -529,34 +514,34 @@ export class PolicyStructuringRepository {
    * Unredacted proposals of one structuring run of one document, household-scoped and bounded.
    * The run id is required: another run on the same document never contributes proposals.
    */
-  listProposals({ householdId, documentId, structuringRunId, limit } = {}) {
+  async listProposals({ householdId, documentId, structuringRunId, limit } = {}) {
     requireBounded(householdId, 'householdId');
     requireBounded(documentId, 'documentId');
     requireBounded(structuringRunId, 'structuringRunId');
     const bound = requireLimit(limit, defaultProposalLimit, maximumProposalLimit);
-    this.#requireDocumentInHousehold(householdId, documentId);
-    return this.database.prepare(`SELECT * FROM proposed_parameters
+    await this.#requireDocumentInHousehold(householdId, documentId);
+    return (await this.database.many(`SELECT * FROM proposed_parameters
       WHERE structuring_run_id = ? AND document_id = ? AND household_id = ? AND redacted_at IS NULL
-      ORDER BY page, block_index, id LIMIT ?`).all(structuringRunId, documentId, householdId, bound).map(mapProposal);
+      ORDER BY page, block_index, id LIMIT ?`, [structuringRunId, documentId, householdId, bound])).map(mapProposal);
   }
 
   /** The most recent structuring run (counts only) of one document for one run, or null. */
-  getStructuringRun({ householdId, workflowRunId, documentId } = {}) {
+  async getStructuringRun({ householdId, workflowRunId, documentId } = {}) {
     requireBounded(householdId, 'householdId');
     requireBounded(workflowRunId, 'workflowRunId');
     requireBounded(documentId, 'documentId');
-    this.#scope({ householdId, workflowRunId, documentId, requireActive: false });
-    return mapRun(this.database.prepare(`SELECT * FROM policy_structuring_runs
+    await this.#scope({ householdId, workflowRunId, documentId, requireActive: false });
+    return mapRun(await this.database.one(`SELECT * FROM policy_structuring_runs
       WHERE workflow_run_id = ? AND document_id = ? AND household_id = ?
-      ORDER BY created_at DESC, id DESC LIMIT 1`).get(workflowRunId, documentId, householdId));
+      ORDER BY created_at DESC, id DESC LIMIT 1`, [workflowRunId, documentId, householdId]));
   }
 
   /**
-   * Durable job state (SQLite 013, PostgreSQL 010): records a new running attempt for one document and
-   * one run, numbered after the previous attempt. Identifiers and codes only. A second active attempt for
-   * the same key is refused by the partial unique index and reported as STRUCTURING_ALREADY_RUNNING.
+   * Durable job state (PostgreSQL 010): records a new running attempt for one document and one run,
+   * numbered after the previous attempt. Identifiers and codes only. A second active attempt for the
+   * same key is refused by the partial unique index and reported as STRUCTURING_ALREADY_RUNNING.
    */
-  startJob({ householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, consentGrantId, at = this.clock().toISOString() } = {}) {
+  async startJob({ householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, consentGrantId, at = this.clock().toISOString() } = {}) {
     requireBounded(householdId, 'householdId');
     requireBounded(workflowRunId, 'workflowRunId');
     requireBounded(documentId, 'documentId');
@@ -565,23 +550,23 @@ export class PolicyStructuringRepository {
     requireBounded(consentGrantId, 'consentGrantId');
     requireTimestamp(at, 'at');
     try {
-      return this.#atomic(() => {
-        const scope = this.#scope({ householdId, workflowRunId, documentId, requireActive: true });
-        const previous = this.database.prepare(`SELECT max(attempt) AS attempt FROM policy_structuring_jobs
-          WHERE workflow_run_id = ? AND document_id = ?`).get(workflowRunId, documentId)?.attempt;
+      return await this.#atomic(householdId, async () => {
+        const scope = await this.#scope({ householdId, workflowRunId, documentId, requireActive: true });
+        const previous = (await this.database.one(`SELECT max(attempt) AS attempt FROM policy_structuring_jobs
+          WHERE workflow_run_id = ? AND document_id = ?`, [workflowRunId, documentId]))?.attempt;
         const attempt = Number(previous ?? 0) + 1;
         if (attempt > MAX_JOB_ATTEMPTS) throw coded('STRUCTURING_ATTEMPTS_EXHAUSTED', 'Too many structuring attempts for this document.', 409);
         const jobId = id('structuring-job');
-        this.database.prepare(`INSERT INTO policy_structuring_jobs
+        await this.database.run(`INSERT INTO policy_structuring_jobs
           (id, household_id, case_id, workflow_run_id, document_id, source_version, pipeline_version, status, attempt,
            consent_grant_id, started_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)`).run(
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?)`, [
           jobId, householdId, scope.case_id, workflowRunId, documentId, sourceVersion, pipelineVersion, attempt, consentGrantId, at, at,
-        );
-        return mapJob(this.database.prepare('SELECT * FROM policy_structuring_jobs WHERE id = ?').get(jobId));
+        ]);
+        return mapJob(await this.database.one('SELECT * FROM policy_structuring_jobs WHERE id = ?', [jobId]));
       });
     } catch (error) {
-      if (/UNIQUE constraint failed|duplicate key/i.test(String(error?.message))) {
+      if (error?.code === UNIQUE_VIOLATION) {
         throw coded('STRUCTURING_ALREADY_RUNNING', 'A structuring attempt is already running.', 409);
       }
       throw clientSafe(error);
@@ -589,31 +574,31 @@ export class PolicyStructuringRepository {
   }
 
   /** Finishes a running attempt with codes only. A finished attempt is final (database guard). */
-  finishJob({ jobId, status, evidenceOutcome = null, errorCode = null, structuringRunId = null, at = this.clock().toISOString() } = {}) {
+  async finishJob({ jobId, status, evidenceOutcome = null, errorCode = null, structuringRunId = null, at = this.clock().toISOString() } = {}) {
     requireBounded(jobId, 'jobId');
     if (!JOB_FINISHED_STATUSES.has(status)) throw invalid('status is invalid.');
     if (evidenceOutcome !== null && !JOB_OUTCOMES.has(evidenceOutcome)) throw invalid('evidenceOutcome is invalid.');
     if (errorCode !== null && (typeof errorCode !== 'string' || !errorCodePattern.test(errorCode))) throw invalid('errorCode is invalid.');
     if (structuringRunId !== null) requireBounded(structuringRunId, 'structuringRunId');
     requireTimestamp(at, 'at');
-    const changes = this.database.prepare(`UPDATE policy_structuring_jobs
+    const { changes } = await this.database.run(`UPDATE policy_structuring_jobs
       SET status = ?, evidence_outcome = ?, error_code = ?, structuring_run_id = ?, finished_at = ?, updated_at = ?
-      WHERE id = ? AND status IN ('queued', 'running')`).run(status, evidenceOutcome, errorCode, structuringRunId, at, at, jobId).changes;
-    return Number(changes) === 1;
+      WHERE id = ? AND status IN ('queued', 'running')`, [status, evidenceOutcome, errorCode, structuringRunId, at, at, jobId]);
+    return changes === 1;
   }
 
   /**
    * Startup recovery: attempts left running by a previous process become interrupted. Nothing is
    * re-dispatched; a new paid attempt needs an explicit restart request. One counts-only audit event.
    */
-  interruptRunningJobs({ at = this.clock().toISOString() } = {}) {
+  async interruptRunningJobs({ at = this.clock().toISOString() } = {}) {
     requireTimestamp(at, 'at');
-    return this.#atomic(() => {
-      const jobs = Number(this.database.prepare(`UPDATE policy_structuring_jobs
+    return this.#atomic(null, async () => {
+      const jobs = (await this.database.run(`UPDATE policy_structuring_jobs
         SET status = 'interrupted', error_code = 'STRUCTURING_INTERRUPTED', finished_at = ?, updated_at = ?
-        WHERE status IN ('queued', 'running')`).run(at, at).changes);
+        WHERE status IN ('queued', 'running')`, [at, at])).changes;
       if (jobs > 0) {
-        this.audit.append({
+        await this.audit.append({
           action: 'policy_structuring.jobs_interrupted', resourceType: 'policy_structuring_jobs', resourceId: 'process_start',
           actorId: 'policy-structuring-repository', payload: { jobs },
         });
@@ -623,24 +608,24 @@ export class PolicyStructuringRepository {
   }
 
   /** The latest attempt of one document for one run (household-scoped), or null. */
-  latestJob({ householdId, workflowRunId, documentId } = {}) {
+  async latestJob({ householdId, workflowRunId, documentId } = {}) {
     requireBounded(householdId, 'householdId');
     requireBounded(workflowRunId, 'workflowRunId');
     requireBounded(documentId, 'documentId');
-    this.#scope({ householdId, workflowRunId, documentId, requireActive: false });
-    return mapJob(this.database.prepare(`SELECT * FROM policy_structuring_jobs
+    await this.#scope({ householdId, workflowRunId, documentId, requireActive: false });
+    return mapJob(await this.database.one(`SELECT * FROM policy_structuring_jobs
       WHERE workflow_run_id = ? AND document_id = ? AND household_id = ?
-      ORDER BY attempt DESC LIMIT 1`).get(workflowRunId, documentId, householdId));
+      ORDER BY attempt DESC LIMIT 1`, [workflowRunId, documentId, householdId]));
   }
 
   /**
    * Erasure path for structuring output. For the given documents (household-scoped when
    * `householdId` is given) and workflow runs: proposals are redacted (label and value nulled),
-   * observations written by those structuring runs are redacted, and the structuring runs are
-   * structuring runs and jobs are stamped erased. One counts-only audit event. Idempotent. Joins the
-   * caller's transaction.
+   * observations written by those structuring runs are redacted, and the structuring runs and jobs
+   * are stamped erased. One counts-only audit event. Idempotent. Joins the caller's transaction
+   * (savepoint) and takes the household lock first.
    */
-  eraseDerived({
+  async eraseDerived({
     householdId = null, documentIds = [], workflowRunIds = [], reasonCode, caseId = null,
     resourceType = 'document', resourceId = null, actorType = 'system', actorId = 'policy-structuring-repository',
     at = this.clock().toISOString(),
@@ -648,59 +633,58 @@ export class PolicyStructuringRepository {
     if (!erasureReasons.has(reasonCode)) throw invalid('reasonCode is not supported.');
     if (!Array.isArray(documentIds) || !Array.isArray(workflowRunIds)) throw invalid('documentIds and workflowRunIds must be arrays.');
     requireTimestamp(at, 'at');
-    return this.#atomic(() => {
+    // A NULL household erases by document id across households, as before; it is never a filter value.
+    const householdFilter = householdId !== null ? ' AND household_id = ?' : '';
+    const householdParams = householdId !== null ? [householdId] : [];
+    return this.#atomic(householdId, async () => {
       const runIds = new Set();
-      const byDocument = this.database.prepare(`SELECT id FROM policy_structuring_runs
-        WHERE document_id = ? AND (? IS NULL OR household_id = ?)`);
-      const byWorkflowRun = this.database.prepare('SELECT id FROM policy_structuring_runs WHERE workflow_run_id = ?');
       for (const documentId of new Set(documentIds)) {
-        for (const row of byDocument.all(documentId, householdId, householdId)) runIds.add(row.id);
+        const rows = await this.database.many(`SELECT id FROM policy_structuring_runs WHERE document_id = ?${householdFilter}`,
+          [documentId, ...householdParams]);
+        for (const row of rows) runIds.add(row.id);
       }
       for (const workflowRunId of new Set(workflowRunIds)) {
-        for (const row of byWorkflowRun.all(workflowRunId)) runIds.add(row.id);
+        const rows = await this.database.many('SELECT id FROM policy_structuring_runs WHERE workflow_run_id = ?', [workflowRunId]);
+        for (const row of rows) runIds.add(row.id);
       }
       let proposals = 0;
       let observations = 0;
       let runs = 0;
-      const redactProposalsOfRun = this.database.prepare(`UPDATE proposed_parameters
-        SET label = NULL, value_json = NULL, redacted_at = ?, redaction_reason_code = ?
-        WHERE structuring_run_id = ? AND redacted_at IS NULL`);
-      const redactProposalsOfDocument = this.database.prepare(`UPDATE proposed_parameters
-        SET label = NULL, value_json = NULL, redacted_at = ?, redaction_reason_code = ?
-        WHERE document_id = ? AND redacted_at IS NULL AND (? IS NULL OR household_id = ?)`);
-      // Observations a structuring run wrote: its document's observations on its run's parameters.
-      const redactObservations = this.database.prepare(`UPDATE coverage_parameter_observations
-        SET value_json = NULL, redacted_at = ?, redaction_reason_code = ?
-        WHERE redacted_at IS NULL AND extraction_method = 'document_extraction'
-          AND document_id = (SELECT document_id FROM policy_structuring_runs WHERE id = ?)
-          AND parameter_record_id IN (SELECT id FROM coverage_parameter_records WHERE workflow_run_id =
-            (SELECT workflow_run_id FROM policy_structuring_runs WHERE id = ?))`);
-      const stampRun = this.database.prepare(`UPDATE policy_structuring_runs
-        SET erased_at = ?, erasure_reason_code = ? WHERE id = ? AND erased_at IS NULL`);
+      let jobs = 0;
       // Jobs hold identifiers and codes only; they are stamped erased (status kept) so an erased attempt
       // never asks for a restart.
-      const stampJobsOfDocument = this.database.prepare(`UPDATE policy_structuring_jobs
-        SET erased_at = ?, erasure_reason_code = ? WHERE document_id = ? AND erased_at IS NULL AND (? IS NULL OR household_id = ?)`);
-      const stampJobsOfRun = this.database.prepare(`UPDATE policy_structuring_jobs
-        SET erased_at = ?, erasure_reason_code = ? WHERE workflow_run_id = ? AND erased_at IS NULL`);
-      let jobs = 0;
       for (const documentId of new Set(documentIds)) {
-        jobs += Number(stampJobsOfDocument.run(at, reasonCode, documentId, householdId, householdId).changes);
+        jobs += (await this.database.run(`UPDATE policy_structuring_jobs
+          SET erased_at = ?, erasure_reason_code = ? WHERE document_id = ? AND erased_at IS NULL${householdFilter}`,
+        [at, reasonCode, documentId, ...householdParams])).changes;
       }
       for (const workflowRunId of new Set(workflowRunIds)) {
-        jobs += Number(stampJobsOfRun.run(at, reasonCode, workflowRunId).changes);
+        jobs += (await this.database.run(`UPDATE policy_structuring_jobs
+          SET erased_at = ?, erasure_reason_code = ? WHERE workflow_run_id = ? AND erased_at IS NULL`,
+        [at, reasonCode, workflowRunId])).changes;
       }
       for (const documentId of new Set(documentIds)) {
-        proposals += Number(redactProposalsOfDocument.run(at, reasonCode, documentId, householdId, householdId).changes);
+        proposals += (await this.database.run(`UPDATE proposed_parameters
+          SET label = NULL, value_json = NULL, redacted_at = ?, redaction_reason_code = ?
+          WHERE document_id = ? AND redacted_at IS NULL${householdFilter}`, [at, reasonCode, documentId, ...householdParams])).changes;
       }
       for (const runId of runIds) {
-        proposals += Number(redactProposalsOfRun.run(at, reasonCode, runId).changes);
-        observations += Number(redactObservations.run(at, reasonCode, runId, runId).changes);
-        runs += Number(stampRun.run(at, reasonCode, runId).changes);
+        proposals += (await this.database.run(`UPDATE proposed_parameters
+          SET label = NULL, value_json = NULL, redacted_at = ?, redaction_reason_code = ?
+          WHERE structuring_run_id = ? AND redacted_at IS NULL`, [at, reasonCode, runId])).changes;
+        // Observations a structuring run wrote: its document's observations on its run's parameters.
+        observations += (await this.database.run(`UPDATE coverage_parameter_observations
+          SET value_json = NULL, redacted_at = ?, redaction_reason_code = ?
+          WHERE redacted_at IS NULL AND extraction_method = 'document_extraction'
+            AND document_id = (SELECT document_id FROM policy_structuring_runs WHERE id = ?)
+            AND parameter_record_id IN (SELECT id FROM coverage_parameter_records WHERE workflow_run_id =
+              (SELECT workflow_run_id FROM policy_structuring_runs WHERE id = ?))`, [at, reasonCode, runId, runId])).changes;
+        runs += (await this.database.run(`UPDATE policy_structuring_runs
+          SET erased_at = ?, erasure_reason_code = ? WHERE id = ? AND erased_at IS NULL`, [at, reasonCode, runId])).changes;
       }
       const counts = Object.freeze({ proposals, observations, runs, jobs });
       if (proposals > 0 || observations > 0 || runs > 0 || jobs > 0) {
-        this.audit.append({
+        await this.audit.append({
           householdId,
           caseId,
           actorType,
