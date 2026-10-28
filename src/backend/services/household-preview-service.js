@@ -5,6 +5,8 @@ import { buildHouseholdCoveragePreview, validateScenarioInput } from '../../feat
 // The server builds every handoff itself from the live stored answer through the same catalogue service, consent and
 // document-currency checks as the decision-catalogue route. A request can name sources; it cannot carry evidence.
 // Nothing is written, no provider is called, and the scenario is neither stored nor logged.
+// Every access check is awaited before the next step, and sources are resolved one at a time (no Promise.all), so a
+// rejected check stops the request instead of escaping it.
 
 const notFound = (code, message) => Object.assign(new Error(message), { code, statusCode: 404 });
 const caseNotFound = () => notFound('CASE_NOT_FOUND', 'Case not found.');
@@ -23,40 +25,42 @@ export function createHouseholdPreviewService({ services, catalogue }) {
    * @param principal      the authenticated principal
    * @param householdId    from the route
    * @param body           the untrusted request body
-   * @param authorizeCase  the route's source-pack field gate: (caseRecord) => void, throws when consent is missing
+   * @param authorizeCase  the route's source-pack field gate: (caseRecord) => void | Promise<void>, rejects when consent is missing
    */
-  function preview({ principal, householdId, body, authorizeCase }) {
+  async function preview({ principal, householdId, body, authorizeCase }) {
     const request = validateScenarioInput(body);
     // Household read access first: a foreign or unknown household is an indistinguishable 404 (HOUSEHOLD_NOT_FOUND).
-    services.access.requireHousehold(principal, householdId, { write: false });
+    await services.access.requireHousehold(principal, householdId, { write: false });
     const { memberId, plannedDate } = request.scenario.effective;
-    if (memberId && !services.households.listMembers(householdId).some(member => member.id === memberId)) throw memberNotFound();
+    if (memberId && !(await services.households.listMembers(householdId)).some(member => member.id === memberId)) throw memberNotFound();
 
     // Resolve and authorise every source before reading any of them, so one foreign reference fails the whole request
     // identically whatever the others are. No source contributes to the response, a count or a question before that.
-    const cases = request.sources.map(source => {
+    const cases = [];
+    for (const source of request.sources) {
       let caseRecord;
-      try { caseRecord = services.access.requireCase(principal, source.caseId, { write: false }); } catch (error) {
-        if (['CASE_NOT_FOUND', 'HOUSEHOLD_NOT_FOUND'].includes(error.code)) throw caseNotFound();
+      try { caseRecord = await services.access.requireCase(principal, source.caseId, { write: false }); } catch (error) {
+        if (['CASE_NOT_FOUND', 'HOUSEHOLD_NOT_FOUND'].includes(error?.code)) throw caseNotFound();
         throw error;
       }
-      if (caseRecord.household_id !== householdId) throw caseNotFound();
-      authorizeCase(caseRecord);
-      return { caseRecord, answerId: source.answerId };
-    });
+      if (!caseRecord || caseRecord.household_id !== householdId) throw caseNotFound();
+      await authorizeCase(caseRecord);
+      cases.push({ caseRecord, answerId: source.answerId });
+    }
 
     // One request-scoped cache: the curated product archives are verified once, not once per source.
     const curatedCache = {};
-    const sources = cases.map(({ caseRecord, answerId }, sourceIndex) => {
+    const sources = [];
+    for (const [sourceIndex, { caseRecord, answerId }] of cases.entries()) {
       try {
-        const built = catalogue.build({ caseRecord, answerId, asOf: plannedDate, memberId, curatedCache });
-        return { sourceIndex, status: 'ok', handoff: toHandoff(built) };
+        const built = await catalogue.build({ caseRecord, answerId, asOf: plannedDate, memberId, curatedCache });
+        sources.push({ sourceIndex, status: 'ok', handoff: toHandoff(built) });
       } catch (error) {
         const reason = REVALIDATION_CODES.get(error?.code);
-        if (reason) return { sourceIndex, status: 'revalidation_required', reason };
-        throw error;
+        if (!reason) throw error;
+        sources.push({ sourceIndex, status: 'revalidation_required', reason });
       }
-    });
+    }
     return buildHouseholdCoveragePreview({ request, sources });
   }
 

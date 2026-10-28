@@ -15,7 +15,8 @@
  */
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { openDatabase } from '../src/backend/database/index.js';
+import { createPostgresPool, postgresPoolOptionsFromEnv } from '../src/backend/database/postgres/index.js';
+import { createDatabase } from '../src/backend/database/postgres/db.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
 import { buildClauses, evaluateRecall } from '../src/features/policy-evidence/index.js';
 import { parameterAt, parameterIds, seedParameterWorld } from '../tests/support/parameter-fixtures.mjs';
@@ -26,15 +27,22 @@ const findingsPath = argument('--findings');
 const tuning = argument('--tuning') === undefined ? undefined : JSON.parse(argument('--tuning'));
 const firstPassFindings = findingsPath ? JSON.parse(await readFile(resolve(findingsPath), 'utf8')) : null;
 const golden = JSON.parse(await readFile(resolve('.local/eval/retrieval-golden.json'), 'utf8'));
-const database = openDatabase({ path: ':memory:' });
+// The synthetic world and the golden clauses live only inside one transaction that is always rolled back, so the
+// database named by DATABASE_URL is left as it was (the SQLite version used a throwaway in-memory database).
+const ROLLBACK = Symbol('rollback');
+const database = createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(process.env)));
+let report;
 try {
-  seedParameterWorld(database);
-  const services = createBackendServices(database, { clock: () => new Date(parameterAt) });
-  const { householdId, caseId, documentId } = parameterIds;
-  const stored = { pages: golden.pages.map(page => ({ page: page.page, status: 'stored', blocks: page.blocks })) };
-  const { clauses } = buildClauses(stored, { documentId, sourceVersion: 'eval-v1' });
-  services.clauses.saveClauses({ householdId, caseId, documentId, clauses });
-  const search = ({ query, kinds, limit }) => services.clauses.searchClauses({ householdId, caseId, documentIds: [documentId], query, kinds, limit });
-  const report = evaluateRecall({ clauses: services.clauses.listClauses({ householdId, caseId, documentIds: [documentId] }), search, golden: golden.questions, maxInputBytes, firstPassFindings, tuning });
+  await database.transaction(async () => {
+    await seedParameterWorld(database);
+    const services = createBackendServices(database, { clock: () => new Date(parameterAt) });
+    const { householdId, caseId, documentId } = parameterIds;
+    const stored = { pages: golden.pages.map(page => ({ page: page.page, status: 'stored', blocks: page.blocks })) };
+    const { clauses } = buildClauses(stored, { documentId, sourceVersion: 'eval-v1' });
+    await services.clauses.saveClauses({ householdId, caseId, documentId, clauses });
+    const search = ({ query, kinds, limit }) => services.clauses.searchClauses({ householdId, caseId, documentIds: [documentId], query, kinds, limit });
+    report = await evaluateRecall({ clauses: await services.clauses.listClauses({ householdId, caseId, documentIds: [documentId] }), search, golden: golden.questions, maxInputBytes, firstPassFindings, tuning });
+    throw ROLLBACK;
+  }).catch(error => { if (error !== ROLLBACK) throw error; });
   console.log(JSON.stringify(report, null, 2));
-} finally { database.close(); }
+} finally { await database.close(); }

@@ -1,4 +1,5 @@
-// Operator tooling for the trusted insurer-source workflow. Runs against DATABASE_PATH; there is no network call:
+// Operator tooling for the trusted insurer-source workflow. Runs against the PostgreSQL database named by DATABASE_URL
+// (DATABASE_SSL_CA_PATH for a hosted database); there is no other network call:
 // every document is a local file a person already downloaded. Roles are issued here and nowhere else.
 //
 // Database commands (operator, needs database access):
@@ -77,25 +78,27 @@ function checkerCommand() {
 }
 
 async function databaseCommand() {
-  const { openDatabase } = await import('../src/backend/database/index.js');
-  const { createBackendServices } = await import('../src/backend/services/index.js');
-  const database = openDatabase({ path: process.env.DATABASE_PATH || '.local/knowvia.sqlite' });
+  const { createPostgresPool, postgresPoolOptionsFromEnv } = await import('../src/backend/database/postgres/index.js');
+  const { createDatabase } = await import('../src/backend/database/postgres/db.js');
+  const { CuratedProductRepository } = await import('../src/backend/repositories/index.js');
+  // DATABASE_URL (and optional DATABASE_SSL_CA_PATH) select the database; the URL is never printed.
+  const database = createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(process.env)));
   try {
-    const repo = createBackendServices(database, { env: process.env }).curatedProducts;
+    const repo = new CuratedProductRepository(database, { env: process.env });
     if (command === 'grant-role') {
       need(4, 'grant-role <adultId> <role> <operatorId> <expiresAt> [publicKey.b64]');
-      return repo.grantRole({ adultUserId: args[0], role: args[1], operatorId: args[2], expiresAt: args[3], publicKey: args[4] ?? null });
+      return await repo.grantRole({ adultUserId: args[0], role: args[1], operatorId: args[2], expiresAt: args[3], publicKey: args[4] ?? null });
     }
-    if (command === 'revoke-role') { need(2, 'revoke-role <grantId> <operatorId>'); return { revoked: repo.revokeRole({ grantId: args[0], revokedBy: args[1] }) }; }
-    if (command === 'invalidate') { need(3, 'invalidate <submissionId> <operatorId> <reasonCode>'); return repo.invalidate({ submissionId: args[0], operatorId: args[1], reasonCode: args[2] }); }
+    if (command === 'revoke-role') { need(2, 'revoke-role <grantId> <operatorId>'); return { revoked: await repo.revokeRole({ grantId: args[0], revokedBy: args[1] }) }; }
+    if (command === 'invalidate') { need(3, 'invalidate <submissionId> <operatorId> <reasonCode>'); return await repo.invalidate({ submissionId: args[0], operatorId: args[1], reasonCode: args[2] }); }
     if (command === 'register') {
       need(3, 'register <curatorAdultId> <metadata.json> <document.pdf> [pageTexts.json]');
       return await repo.register({ curatorId: args[0], ...json(args[1]), bytes: readFileSync(args[2]), pageTexts: args[3] ? json(args[3]) : null });
     }
-    if (command === 'propose') { need(3, 'propose <curatorAdultId> <submissionId> <facts.json>'); return repo.proposeFacts({ curatorId: args[0], submissionId: args[1], facts: json(args[2]) }); }
-    if (command === 'show') { need(2, 'show <adultId> <submissionId>'); return repo.get({ adultId: args[0], submissionId: args[1] }); }
-    if (command === 'check') { need(1, 'check <signedAction.json>'); return repo.check({ signedAction: json(args[0]) }); }
-    if (command === 'publish') { need(1, 'publish <signedAction.json>'); return repo.publish({ signedAction: json(args[0]) }); }
+    if (command === 'propose') { need(3, 'propose <curatorAdultId> <submissionId> <facts.json>'); return await repo.proposeFacts({ curatorId: args[0], submissionId: args[1], facts: json(args[2]) }); }
+    if (command === 'show') { need(2, 'show <adultId> <submissionId>'); return await repo.get({ adultId: args[0], submissionId: args[1] }); }
+    if (command === 'check') { need(1, 'check <signedAction.json>'); return await repo.check({ signedAction: json(args[0]) }); }
+    if (command === 'publish') { need(1, 'publish <signedAction.json>'); return await repo.publish({ signedAction: json(args[0]) }); }
     if (command === 'revalidate') {
       need(4, 'revalidate <actorAdultId> <submissionId> <document.pdf> <sourceVersionId> [pageTexts.json]');
       return await repo.revalidate({ actorId: args[0], submissionId: args[1], bytes: readFileSync(args[2]), sourceVersionId: args[3], pageTexts: args[4] ? json(args[4]) : null });
@@ -108,7 +111,7 @@ async function databaseCommand() {
     }
     throw new Error('commands: grant-role, revoke-role, register, propose, show, check, publish, invalidate, revalidate, verify-archives, keygen, sign-check, sign-publish');
   } finally {
-    database.close();
+    await database.close();
   }
 }
 
