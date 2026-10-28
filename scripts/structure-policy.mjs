@@ -3,7 +3,7 @@
  * Whole-document structuring eval for the local sample (ADR 0006). Opt-in.
  *   (no flag)                  section and privacy-gate only: chunk counts, no provider call
  *   --consent=gemini           billable: extract and reconcile with Gemini, score against golden-structuring.json
- *   --consent=gemini --store   as above, then store through a fresh local SQLite backend (.local/eval/structuring-<time>.sqlite)
+ *   --consent=gemini --store   as above, then store through a local PostgreSQL backend (DATABASE_URL: a disposable, migrated eval database)
  *                              and write a local review of everything stored (.local/eval/structuring-review.md)
  * Reads .local/eval/sarvam-raw.json (block-level pages), normalized.json (page text, for --store) and
  * optional known-identifiers.json. Household names found by the local rule extractor are masked before any call.
@@ -12,7 +12,8 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { openDatabase } from '../src/backend/database/index.js';
+import { createPostgresPool, postgresPoolOptionsFromEnv } from '../src/backend/database/postgres/index.js';
+import { createDatabase } from '../src/backend/database/postgres/db.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
 import { FIELD_NAMES, extractFields } from '../src/features/ai-analysis/eval-extractor.js';
 import { createGeminiCaller } from '../src/features/ai-analysis/field-adjudicator.js';
@@ -59,44 +60,47 @@ function localCapture(pages, fileIdentifiers) {
 
 // A fresh local backend: one household, case, policy, document with its OCR pages, a coverage run with
 // every registry key, and a document-specific grant naming google-gemini. Synthetic ids, real page text.
-function freshBackend(normalized, at) {
-  const path = `eval/structuring-${at.replace(/[:.]/g, '-')}.sqlite`;
-  const database = openDatabase({ path });
+// DATABASE_URL must name a disposable, migrated local eval database (the SQLite version created a new file per run).
+// The ids are fixed, so a second --store run against the same database is refused by its primary keys.
+async function freshBackend(normalized, at) {
+  const database = createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(process.env)));
   const services = createBackendServices(database, { clock: () => new Date() });
-  const run = (sql, ...params) => database.prepare(sql).run(...params);
-  run("INSERT INTO households (id, display_name, created_at, updated_at) VALUES ('household-local', 'Local eval household', ?, ?)", at, at);
-  run("INSERT INTO adult_users (id, display_name, account_status, created_at, updated_at) VALUES ('adult-local', 'Local operator', 'active', ?, ?)", at, at);
-  run("INSERT INTO household_roles (id, household_id, adult_user_id, role, status, created_at) VALUES ('role-local', 'household-local', 'adult-local', 'owner', 'active', ?)", at);
-  run(`INSERT INTO household_members (id, household_id, adult_user_id, display_name, member_kind, created_at, updated_at)
-    VALUES ('member-local', 'household-local', 'adult-local', 'Policyholder', 'adult', ?, ?)`, at, at);
-  run(`INSERT INTO consent_grants (id, household_id, subject_adult_id, granted_to_actor, purpose, notice_version, evidence_method, granted_at, created_at)
-    VALUES ('consent-local', 'household-local', 'adult-local', 'knowvia-local', 'document_processing', 'v1', 'typed', ?, ?)`, at, at);
-  run(`INSERT INTO service_cases (id, household_id, subject_member_id, opened_by_adult_id, trigger_type, status, created_at, updated_at)
-    VALUES ('case-local', 'household-local', 'member-local', 'adult-local', 'renewal', 'processing', ?, ?)`, at, at);
-  run(`INSERT INTO policies (id, household_id, policy_kind, verification_state, created_at, updated_at)
-    VALUES ('policy-local', 'household-local', 'personal', 'unverified', ?, ?)`, at, at);
-  run(`INSERT INTO document_uploads (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind, original_filename,
-      storage_path, content_sha256, mime_type, byte_size, malware_status, encryption_status, lifecycle_state, uploaded_at, source_version)
-    VALUES ('document-local', 'household-local', 'case-local', 'adult-local', 'consent-local', 'policy_schedule', 'policy.pdf',
-      'local/document-local', ?, 'application/pdf', 1, 'clean', 'encrypted_local', 'active', ?, ?)`,
-  normalized.document.contentSha256, at, normalized.document.sourceVersion);
-  run(`INSERT INTO ocr_jobs (id, document_upload_id, provider, status, attempt_count, requested_at, completed_at, updated_at)
-    VALUES ('ocr-local', 'document-local', 'sarvam', 'succeeded', 1, ?, ?, ?)`, at, at, at);
-  for (const page of normalized.pages) {
-    run(`INSERT INTO source_pages (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256, extracted_text,
-        extraction_status, created_at, text_sha256) VALUES (?, 'document-local', 'ocr-local', ?, ?, ?, ?, ?, ?, ?)`,
-    `page-local-${page.pageNumber}`, page.pageNumber, normalized.document.sourceVersion, sha256(page.text), page.text,
-    page.extractionStatus, at, sha256(page.text));
-  }
-  run(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
-    VALUES ('scope-local-gemini', 'consent-local', 'document', 'document-local', 'derive', 'insurance_document', ?, ?)`, GEMINI_MODEL_RECIPIENT, at);
-  run(`INSERT INTO workflow_runs (id, case_id, workflow_name, workflow_version, execution_mode, status, input_digest, input_json, created_at)
-    VALUES ('run-local', 'case-local', 'coverage-reconstruction', 'v2', 'live', 'running', ?, '{}', ?)`, sha256('run-local'), at);
-  services.coverageParameters.initializeRunParameters({
-    workflowRunId: 'run-local', registryVersion: REGISTRY, householdId: 'household-local', caseId: 'case-local',
-    subjectId: 'member-local', policyId: 'policy-local', updatedBy: 'structure-policy-script',
+  await database.transaction(async () => {
+    const run = (sql, ...params) => database.run(sql, params);
+    await run("INSERT INTO households (id, display_name, created_at, updated_at) VALUES ('household-local', 'Local eval household', ?, ?)", at, at);
+    await run("INSERT INTO adult_users (id, display_name, account_status, created_at, updated_at) VALUES ('adult-local', 'Local operator', 'active', ?, ?)", at, at);
+    await run("INSERT INTO household_roles (id, household_id, adult_user_id, role, status, created_at) VALUES ('role-local', 'household-local', 'adult-local', 'owner', 'active', ?)", at);
+    await run(`INSERT INTO household_members (id, household_id, adult_user_id, display_name, member_kind, created_at, updated_at)
+      VALUES ('member-local', 'household-local', 'adult-local', 'Policyholder', 'adult', ?, ?)`, at, at);
+    await run(`INSERT INTO consent_grants (id, household_id, subject_adult_id, granted_to_actor, purpose, notice_version, evidence_method, granted_at, created_at)
+      VALUES ('consent-local', 'household-local', 'adult-local', 'knowvia-local', 'document_processing', 'v1', 'typed', ?, ?)`, at, at);
+    await run(`INSERT INTO service_cases (id, household_id, subject_member_id, opened_by_adult_id, trigger_type, status, created_at, updated_at)
+      VALUES ('case-local', 'household-local', 'member-local', 'adult-local', 'renewal', 'processing', ?, ?)`, at, at);
+    await run(`INSERT INTO policies (id, household_id, policy_kind, verification_state, created_at, updated_at)
+      VALUES ('policy-local', 'household-local', 'personal', 'unverified', ?, ?)`, at, at);
+    await run(`INSERT INTO document_uploads (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind, original_filename,
+        storage_path, content_sha256, mime_type, byte_size, malware_status, encryption_status, lifecycle_state, uploaded_at, source_version)
+      VALUES ('document-local', 'household-local', 'case-local', 'adult-local', 'consent-local', 'policy_schedule', 'policy.pdf',
+        'local/document-local', ?, 'application/pdf', 1, 'clean', 'encrypted_local', 'active', ?, ?)`,
+    normalized.document.contentSha256, at, normalized.document.sourceVersion);
+    await run(`INSERT INTO ocr_jobs (id, document_upload_id, provider, status, attempt_count, requested_at, completed_at, updated_at)
+      VALUES ('ocr-local', 'document-local', 'sarvam', 'succeeded', 1, ?, ?, ?)`, at, at, at);
+    for (const page of normalized.pages) {
+      await run(`INSERT INTO source_pages (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256, extracted_text,
+          extraction_status, created_at, text_sha256) VALUES (?, 'document-local', 'ocr-local', ?, ?, ?, ?, ?, ?, ?)`,
+      `page-local-${page.pageNumber}`, page.pageNumber, normalized.document.sourceVersion, sha256(page.text), page.text,
+      page.extractionStatus, at, sha256(page.text));
+    }
+    await run(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
+      VALUES ('scope-local-gemini', 'consent-local', 'document', 'document-local', 'derive', 'insurance_document', ?, ?)`, GEMINI_MODEL_RECIPIENT, at);
+    await run(`INSERT INTO workflow_runs (id, case_id, workflow_name, workflow_version, execution_mode, status, input_digest, input_json, created_at)
+      VALUES ('run-local', 'case-local', 'coverage-reconstruction', 'v2', 'live', 'running', ?, '{}', ?)`, sha256('run-local'), at);
+    await services.coverageParameters.initializeRunParameters({
+      workflowRunId: 'run-local', registryVersion: REGISTRY, householdId: 'household-local', caseId: 'case-local',
+      subjectId: 'member-local', policyId: 'policy-local', updatedBy: 'structure-policy-script',
+    });
   });
-  return { database, services, path, sourceVersion: normalized.document.sourceVersion };
+  return { database, services, path: 'DATABASE_URL', sourceVersion: normalized.document.sourceVersion };
 }
 
 const label = key => { try { return getPolicyParameterDefinition(REGISTRY, key).label; } catch { return key; } };
@@ -148,18 +152,20 @@ function reviewMarkdown({ result, capture, gated, stored, score, meta }) {
   return `${lines.join('\n')}\n`;
 }
 
-function readStored({ database, services }) {
-  const records = services.coverageParameters.listForRun('run-local', { limit: 500 })
-    .filter(record => record.resolutionState !== 'unknown')
-    .map(record => ({
+async function readStored({ database, services }) {
+  const records = [];
+  for (const record of await services.coverageParameters.listForRun('run-local', { limit: 500 })) {
+    if (record.resolutionState === 'unknown') continue;
+    const observations = await database.many(`SELECT value_json, page FROM coverage_parameter_observations
+      WHERE parameter_record_id = ? AND redacted_at IS NULL ORDER BY created_at, id`, [record.id]);
+    records.push({
       key: record.parameterKey, state: record.resolutionState, reason: record.resolutionReasonCode,
-      observations: database.prepare(`SELECT value_json, page FROM coverage_parameter_observations
-        WHERE parameter_record_id = ? AND redacted_at IS NULL ORDER BY created_at, id`).all(record.id)
-        .map(row => ({ value: JSON.parse(row.value_json), page: row.page })),
-    }));
-  const stored = services.policyStructuring.getStructuringRun({ householdId: 'household-local', workflowRunId: 'run-local', documentId: 'document-local' });
+      observations: observations.map(row => ({ value: JSON.parse(row.value_json), page: row.page })),
+    });
+  }
+  const stored = await services.policyStructuring.getStructuringRun({ householdId: 'household-local', workflowRunId: 'run-local', documentId: 'document-local' });
   const proposals = stored
-    ? services.policyStructuring.listProposals({ householdId: 'household-local', documentId: 'document-local', structuringRunId: stored.id, limit: 500 })
+    ? await services.policyStructuring.listProposals({ householdId: 'household-local', documentId: 'document-local', structuringRunId: stored.id, limit: 500 })
     : [];
   return { records, proposals, counts: stored?.counts };
 }
@@ -179,7 +185,7 @@ async function main() {
   const at = new Date().toISOString();
   const model = process.env.LLM_MODEL;
   const call = createGeminiCaller({ apiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY, model, timeoutMs: 240_000 });
-  const backend = flags.store !== undefined ? freshBackend(await readJson('normalized.json'), at) : null;
+  const backend = flags.store !== undefined ? await freshBackend(await readJson('normalized.json'), at) : null;
   // With --store the grant lives in the database and is re-checked before each call and inside the commit.
   const consentCheck = backend
     ? documentGrantCheck({ consents: backend.services.consents, grantId: 'consent-local', subjectAdultId: 'adult-local', documentId: 'document-local', householdId: 'household-local' })
@@ -198,9 +204,9 @@ async function main() {
   await writeJson('structuring-items.json', { decisions: result.decisions, proposals: result.proposals, conflicts: result.conflicts, notes: result.extraction.accepted.map(item => ({ key: item.parameterKey, page: item.page, note: item.note })) });
   await writeJson('structuring-report.json', { generatedAt: at, model, elapsedMs, report: result.report, score });
   if (backend) {
-    const stored = readStored(backend);
+    const stored = await readStored(backend);
     await writeFile(resolve(OUT, 'structuring-review.md'), reviewMarkdown({ result, capture, gated, stored, score, meta: { at, model, elapsedMs, path: backend.path } }));
-    backend.database.close();
+    await backend.database.close();
   }
   const { chunks, items, conflicts, calls, usage } = result.report;
   console.log(JSON.stringify({ chunks, items: { accepted: items.accepted, proposals: items.proposals, rejected: items.rejected, rejectedReasons: items.rejectedReasons }, conflicts, calls, usage, outcome: result.outcome, stored: result.commit, score: score && { keyRecall: score.keyRecall, hallucinationRate: score.hallucinationRate, conflictRecall: score.conflictRecall } }));
