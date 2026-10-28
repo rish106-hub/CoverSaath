@@ -3,7 +3,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { testTempRoot as tmpdir } from './temp-root.mjs';
-import { openDatabase } from '../../src/backend/database/index.js';
+import { freshDatabase } from './pg.mjs';
 import { createApiServer } from '../../src/server/server.js';
 
 export const bootstrapToken = 'knowvia-live-test-bootstrap-token-001';
@@ -60,12 +60,11 @@ export function stubModelDriver({ modelRequests = [], loadedModels = [], onGener
 
 export async function startLiveServer(t, driverOptions = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'knowvia-live-analysis-'));
-  const database = openDatabase({ path: join(directory, 'knowvia.sqlite') });
+  const { db: database } = await freshDatabase(t);
   const server = createApiServer({ database, env: liveEnv, analysisLiveModelDriver: stubModelDriver(driverOptions) });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
-    database.close();
     rmSync(directory, { recursive: true, force: true });
   });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -86,9 +85,9 @@ export async function startLiveServer(t, driverOptions = {}) {
   };
 }
 
-function insertDocument(database, { suffix, householdId, caseId, adultId, consentGrantId, pageText, at, pageNumber = 1, sourceVersion = '1' }) {
+async function insertDocument(database, { suffix, householdId, caseId, adultId, consentGrantId, pageText, at, pageNumber = 1, sourceVersion = '1' }) {
   const documentId = `document-${suffix}`;
-  database.prepare(`INSERT INTO document_uploads
+  await database.prepare(`INSERT INTO document_uploads
     (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
      original_filename, storage_path, content_sha256, mime_type, byte_size, malware_status,
      encryption_status, lifecycle_state, uploaded_at, logical_document_id, source_version)
@@ -96,13 +95,13 @@ function insertDocument(database, { suffix, householdId, caseId, adultId, consen
       ?, ?, 'application/pdf', 128, 'clean', 'encrypted_local',
       'active', ?, ?, ?)`)
     .run(documentId, householdId, caseId, adultId, consentGrantId, `protected/${documentId}`, suffix.padEnd(64, 'a').slice(0, 64), at, `logical-${suffix}`, sourceVersion);
-  database.prepare(`INSERT INTO ocr_jobs
+  await database.prepare(`INSERT INTO ocr_jobs
     (id, document_upload_id, provider, provider_job_ref, status, attempt_count, requested_at,
      completed_at, contract_version, authorization_json, result_json, result_digest, updated_at)
     VALUES (?, ?, 'fixture', ?, 'succeeded', 1, ?, ?,
       'knowvia.ocr.v1', '{}', '{}', ?, ?)`)
     .run(`ocr-${suffix}`, documentId, `fixture-${suffix}`, at, at, 'b'.repeat(64), at);
-  database.prepare(`INSERT INTO source_pages
+  await database.prepare(`INSERT INTO source_pages
     (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
      extracted_text, extraction_status, confidence_basis_points, created_at,
      output_contract_version, text_sha256, provider_page_ref, provenance_json)
@@ -113,10 +112,10 @@ function insertDocument(database, { suffix, householdId, caseId, adultId, consen
 }
 
 // Adds a further OCR page to a document created by insertDocument.
-function insertPage(database, { documentId, pageNumber, sourceVersion = '1', text, at }) {
+async function insertPage(database, { documentId, pageNumber, sourceVersion = '1', text, at }) {
   const suffix = documentId.replace(/^document-/, '');
   const pageId = `page-${suffix}-p${pageNumber}`;
-  database.prepare(`INSERT INTO source_pages
+  await database.prepare(`INSERT INTO source_pages
     (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
      extracted_text, extraction_status, confidence_basis_points, created_at,
      output_contract_version, text_sha256, provider_page_ref, provenance_json)
@@ -147,15 +146,15 @@ export async function setupLiveCase(app, { pageText = DEFAULT_PAGE_TEXT, recipie
     body: { householdId, subjectAdultId: ownerId, purpose: 'document_processing', scopes: [{ resourceType: 'document', action: 'collect', dataCategory: 'insurance_document' }] },
   });
   const at = new Date().toISOString();
-  const addDocument = ({ suffix: documentSuffix, text = DEFAULT_PAGE_TEXT, scopeRecipient = 'google-gemini', grantId = documentConsent.data.id, pageNumber, sourceVersion } = {}) => {
-    const document = insertDocument(database, { suffix: documentSuffix, householdId, caseId: created.data.id, adultId: ownerId, consentGrantId: grantId, pageText: text, at, pageNumber, sourceVersion });
+  const addDocument = async ({ suffix: documentSuffix, text = DEFAULT_PAGE_TEXT, scopeRecipient = 'google-gemini', grantId = documentConsent.data.id, pageNumber, sourceVersion } = {}) => {
+    const document = await insertDocument(database, { suffix: documentSuffix, householdId, caseId: created.data.id, adultId: ownerId, consentGrantId: grantId, pageText: text, at, pageNumber, sourceVersion });
     const scopeId = `scope-${documentSuffix}`;
-    database.prepare(`INSERT INTO consent_scopes
+    await database.prepare(`INSERT INTO consent_scopes
       (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
       VALUES (?, ?, 'document', ?, 'derive', 'insurance_document', ?, ?)`).run(scopeId, grantId, document.documentId, scopeRecipient, at);
     return { ...document, scopeId };
   };
-  const document = addDocument({ suffix, text: pageText, scopeRecipient: recipient });
+  const document = await addDocument({ suffix, text: pageText, scopeRecipient: recipient });
   return {
     token,
     householdId,
@@ -173,7 +172,7 @@ export async function setupLiveCase(app, { pageText = DEFAULT_PAGE_TEXT, recipie
   };
 }
 
-export function auditActions(database, action) {
-  return database.prepare('SELECT id, resource_id, event_payload_json FROM audit_events WHERE action = ? ORDER BY id').all(action)
+export async function auditActions(database, action) {
+  return (await database.prepare('SELECT id, resource_id, event_payload_json FROM audit_events WHERE action = ? ORDER BY id').all(action))
     .map(row => ({ id: row.id, resourceId: row.resource_id, payload: JSON.parse(row.event_payload_json) }));
 }
