@@ -1,12 +1,11 @@
 // P1-A: the retry, timeout, lease and idempotency contracts match the running code.
-// In-memory SQLite and synthetic data only; no network.
+// PostgreSQL (S3.2 async runtime) and synthetic data only; no network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { openDatabase } from '../src/backend/database/index.js';
-import { createBackendServices } from '../src/backend/services/index.js';
-import { WorkflowRepository } from '../src/backend/repositories/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { AuditRepository, CaseRepository, WorkflowRepository } from '../src/backend/repositories/index.js';
 import {
   COVERAGE_ANALYSIS_WORKFLOW,
   createCoverageAnalysisRuntime,
@@ -31,18 +30,30 @@ import {
 } from '../src/contracts/execution-policy.js';
 
 const START = Date.parse('2026-10-14T09:00:00.000Z');
+const pg = postgresTestOptions();
 
-function world(t) {
+// Households are seeded with direct SQL: this file exercises the workflow and case repositories.
+async function seedHousehold(db, at) {
+  await db.run(`INSERT INTO adult_users (id, display_name, locale, account_status, created_at, updated_at)
+    VALUES ('adult-p1a', 'Synthetic adult', 'en-IN', 'active', ?, ?)`, [at, at]);
+  await db.run(`INSERT INTO households (id, display_name, created_at, updated_at)
+    VALUES ('household-p1a', 'Synthetic household', ?, ?)`, [at, at]);
+  await db.run(`INSERT INTO household_roles (id, household_id, adult_user_id, role, status, starts_at, created_at)
+    VALUES ('role-p1a', 'household-p1a', 'adult-p1a', 'owner', 'active', ?, ?)`, [at, at]);
+  await db.run(`INSERT INTO household_members (id, household_id, adult_user_id, display_name, member_kind, created_at, updated_at)
+    VALUES ('member-p1a', 'household-p1a', 'adult-p1a', 'Synthetic adult', 'adult', ?, ?)`, [at, at]);
+}
+
+async function world(t) {
   let now = START;
   const clock = () => new Date(now);
-  const database = openDatabase({ path: ':memory:' });
-  t.after(() => database.close());
-  const services = createBackendServices(database, { clock });
-  const adult = services.households.createAdult({ id: 'adult-p1a', displayName: 'Synthetic adult' });
-  const household = services.households.createHousehold({ id: 'household-p1a', displayName: 'Synthetic household', ownerAdultId: adult.id });
-  const member = services.households.addMember({ id: 'member-p1a', householdId: household.id, adultUserId: adult.id, displayName: 'Synthetic adult' });
-  services.cases.create({ id: 'case-p1a', householdId: household.id, subjectMemberId: member.id, openedByAdultId: adult.id, triggerType: 'renewal' });
-  const createRun = id => services.workflows.createRunWithTasks({
+  const { db: database } = await freshDatabase(t, { clock });
+  const audit = new AuditRepository(database, { clock });
+  const workflows = new WorkflowRepository(database, { clock, audit });
+  const cases = new CaseRepository(database, { clock, audit });
+  await seedHousehold(database, new Date(now).toISOString());
+  await cases.create({ id: 'case-p1a', householdId: 'household-p1a', subjectMemberId: 'member-p1a', openedByAdultId: 'adult-p1a', triggerType: 'renewal' });
+  const createRun = id => workflows.createRunWithTasks({
     id, caseId: 'case-p1a', workflowName: 'p1a-policy', workflowVersion: '6', executionMode: 'fixture',
     tasks: [
       { key: 'first', agentName: 'p1a/first', taskKind: 'p1a_first', dependsOn: [], input: { key: 'first' } },
@@ -50,10 +61,10 @@ function world(t) {
     ],
   });
   return {
-    database, services, createRun,
+    database, services: { workflows, cases }, createRun,
     advance(ms) { now += ms; },
     now: () => now,
-    task: id => services.workflows.getTask(id),
+    task: id => workflows.getTask(id),
   };
 }
 
@@ -68,38 +79,40 @@ test('P1-A policy: the retry policy constants equal the workflow repository defa
   assert.ok(COVERAGE_ANALYSIS_WORKFLOW.tasks.every(task => task.retryPolicy === TASK_RETRY_POLICY));
 });
 
-test('P1-A policy: claim grants a 60 s lease and only the lease holder can complete', t => {
-  const context = world(t);
-  const run = context.createRun('run-lease');
+test('P1-A policy: claim grants a 60 s lease and only the lease holder can complete', pg, async t => {
+  const context = await world(t);
+  const run = await context.createRun('run-lease');
   const [first] = run.tasks;
-  const claimed = context.services.workflows.claimNext({ workerId: 'worker-a', runId: run.id });
+  const claimed = await context.services.workflows.claimNext({ workerId: 'worker-a', runId: run.id });
   assert.equal(claimed.id, first.id);
   transition('claimNext', first, claimed);
   assert.equal(claimed.attempt_count, 1);
   assert.equal(claimed.lease_owner, 'worker-a');
   assert.equal(Date.parse(claimed.lease_expires_at) - context.now(), TASK_LEASE_DURATION_MS);
   // The dependent task is not claimable before its prerequisite completes.
-  assert.equal(context.services.workflows.claimNext({ workerId: 'worker-b', runId: run.id }), null);
-  assert.throws(() => context.services.workflows.completeTask(first.id, { workerId: 'worker-b', output: {} }), /holding a running task lease/);
-  assert.throws(() => context.services.workflows.failTask(first.id, { workerId: 'worker-b' }), /holding a running task lease/);
-  const completed = context.services.workflows.completeTask(first.id, { workerId: 'worker-a', output: { ok: true } });
+  assert.equal(await context.services.workflows.claimNext({ workerId: 'worker-b', runId: run.id }), null);
+  await assert.rejects(context.services.workflows.completeTask(first.id, { workerId: 'worker-b', output: {} }), /holding a running task lease/);
+  await assert.rejects(context.services.workflows.failTask(first.id, { workerId: 'worker-b' }), /holding a running task lease/);
+  await assert.rejects(context.services.workflows.completeTask('task-missing', { output: {} }), /holding a running task lease/);
+  assert.equal((await context.task(first.id)).status, 'running', 'a rejected completion changes nothing');
+  const completed = await context.services.workflows.completeTask(first.id, { workerId: 'worker-a', output: { ok: true } });
   transition('completeTask', claimed, completed);
   assert.equal(completed.terminal_reason, 'completed');
 });
 
-test('P1-A policy: an expired lease is retried until the attempt cap, then fails and blocks descendants', t => {
-  const context = world(t);
-  const run = context.createRun('run-expiry');
+test('P1-A policy: an expired lease is retried until the attempt cap, then fails and blocks descendants', pg, async t => {
+  const context = await world(t);
+  const run = await context.createRun('run-expiry');
   const [first, second] = run.tasks;
   for (let attempt = 1; attempt <= TASK_MAX_ATTEMPTS; attempt += 1) {
-    const claimed = context.services.workflows.claimNext({ workerId: `worker-${attempt}`, runId: run.id });
+    const claimed = await context.services.workflows.claimNext({ workerId: `worker-${attempt}`, runId: run.id });
     assert.equal(claimed?.id, first.id, `attempt ${attempt} claims the task`);
     assert.equal(claimed.attempt_count, attempt);
     context.advance(TASK_LEASE_DURATION_MS - 1);
-    assert.equal(context.services.workflows.recoverExpiredLeases(), 0, 'lease still valid one millisecond before expiry');
+    assert.equal(await context.services.workflows.recoverExpiredLeases(), 0, 'lease still valid one millisecond before expiry');
     context.advance(1);
-    assert.equal(context.services.workflows.recoverExpiredLeases(), 1);
-    const recovered = context.task(first.id);
+    assert.equal(await context.services.workflows.recoverExpiredLeases(), 1);
+    const recovered = await context.task(first.id);
     if (attempt < TASK_MAX_ATTEMPTS) {
       transition('recoverExpiredLeases', claimed, recovered);
       assert.equal(recovered.retry_available_at, new Date(context.now()).toISOString(), 'retried immediately');
@@ -109,43 +122,45 @@ test('P1-A policy: an expired lease is retried until the attempt cap, then fails
       assert.equal(recovered.terminal_reason, 'LEASE_EXPIRED');
     }
   }
-  const blocked = context.task(second.id);
+  const blocked = await context.task(second.id);
   transition('blockDescendants', second, blocked);
   assert.equal(blocked.terminal_reason, 'UPSTREAM_LEASE_EXPIRED');
-  assert.equal(context.services.workflows.getRun(run.id).status, 'failed');
-  assert.equal(context.services.workflows.claimNext({ workerId: 'worker-late', runId: run.id }), null);
+  assert.equal((await context.services.workflows.getRun(run.id)).status, 'failed');
+  assert.equal(await context.services.workflows.claimNext({ workerId: 'worker-late', runId: run.id }), null);
 });
 
-test('P1-A policy: a thrown task error is terminal; failTask retries only when retryAt is given', t => {
-  const context = world(t);
-  const run = context.createRun('run-fail');
+test('P1-A policy: a thrown task error is terminal; failTask retries only when retryAt is given', pg, async t => {
+  const context = await world(t);
+  const run = await context.createRun('run-fail');
   const [first, second] = run.tasks;
-  const claimed = context.services.workflows.claimNext({ workerId: 'worker-a', runId: run.id });
-  const failed = context.services.workflows.failTask(first.id, { workerId: 'worker-a', code: 'AGENT_CONTRACT_INVALID', message: 'synthetic' });
+  const claimed = await context.services.workflows.claimNext({ workerId: 'worker-a', runId: run.id });
+  const failed = await context.services.workflows.failTask(first.id, { workerId: 'worker-a', code: 'AGENT_CONTRACT_INVALID', message: 'synthetic' });
   transition('failTask', claimed, failed);
   assert.equal(failed.terminal_reason, 'AGENT_CONTRACT_INVALID');
-  assert.equal(context.task(second.id).terminal_reason, 'UPSTREAM_AGENT_CONTRACT_INVALID');
+  assert.equal((await context.task(second.id)).terminal_reason, 'UPSTREAM_AGENT_CONTRACT_INVALID');
+  assert.equal((await context.services.workflows.getRun(run.id)).status, 'failed');
 
-  const retried = context.createRun('run-retry');
+  const retried = await context.createRun('run-retry');
   const retryTask = retried.tasks[0];
-  const retryClaim = context.services.workflows.claimNext({ workerId: 'worker-a', runId: retried.id });
-  const pending = context.services.workflows.failTask(retryTask.id, { workerId: 'worker-a', code: 'TASK_FAILED', retryAt: new Date(context.now() + 5_000).toISOString() });
+  const retryClaim = await context.services.workflows.claimNext({ workerId: 'worker-a', runId: retried.id });
+  const pending = await context.services.workflows.failTask(retryTask.id, { workerId: 'worker-a', code: 'TASK_FAILED', retryAt: new Date(context.now() + 5_000).toISOString() });
   transition('failTask.retry', retryClaim, pending);
-  assert.equal(context.services.workflows.claimNext({ workerId: 'worker-a', runId: retried.id }), null, 'not claimable before retryAt');
+  assert.equal(await context.services.workflows.claimNext({ workerId: 'worker-a', runId: retried.id }), null, 'not claimable before retryAt');
   context.advance(5_000);
-  assert.equal(context.services.workflows.claimNext({ workerId: 'worker-a', runId: retried.id })?.attempt_count, 2);
+  assert.equal((await context.services.workflows.claimNext({ workerId: 'worker-a', runId: retried.id }))?.attempt_count, 2);
 });
 
-test('P1-A policy: a pending task at the attempt cap fails with ATTEMPT_LIMIT on the next claim', t => {
-  const context = world(t);
-  const run = context.createRun('run-limit');
+test('P1-A policy: a pending task at the attempt cap fails with ATTEMPT_LIMIT on the next claim', pg, async t => {
+  const context = await world(t);
+  const run = await context.createRun('run-limit');
   const [first, second] = run.tasks;
-  context.database.prepare('UPDATE workflow_tasks SET attempt_count = ? WHERE id = ?').run(TASK_MAX_ATTEMPTS, first.id);
-  assert.equal(context.services.workflows.claimNext({ workerId: 'worker-a', runId: run.id }), null);
-  const failed = context.task(first.id);
+  await context.database.prepare('UPDATE workflow_tasks SET attempt_count = ? WHERE id = ?').run(TASK_MAX_ATTEMPTS, first.id);
+  assert.equal(await context.services.workflows.claimNext({ workerId: 'worker-a', runId: run.id }), null);
+  const failed = await context.task(first.id);
   transition('claimNext.attemptLimit', first, failed);
   assert.equal(failed.terminal_reason, 'ATTEMPT_LIMIT');
-  assert.equal(context.task(second.id).terminal_reason, 'UPSTREAM_ATTEMPT_LIMIT');
+  assert.equal((await context.task(second.id)).terminal_reason, 'UPSTREAM_ATTEMPT_LIMIT');
+  assert.equal((await context.services.workflows.getRun(run.id)).status, 'failed');
 });
 
 test('P1-A policy: undocumented task transitions are rejected', () => {
@@ -167,18 +182,18 @@ test('P1-A policy: persisted run and task states equal the migration CHECK const
   assert.deepEqual(statesOf('workflow_tasks'), [...PERSISTED_TASK_STATES]);
 });
 
-test('P1-A policy: workflow_task idempotency keys live 24 h and conflict on a changed request', t => {
-  const context = world(t);
-  const run = context.createRun('run-idempotent');
+test('P1-A policy: workflow_task idempotency keys live 24 h and conflict on a changed request', pg, async t => {
+  const context = await world(t);
+  const run = await context.createRun('run-idempotent');
   const request = { runId: run.id, agentName: 'p1a/extra', taskKind: 'p1a_extra', input: { n: 1 }, idempotencyKey: 'p1a-idempotent-1' };
-  const first = context.services.workflows.enqueueTask(request);
-  assert.equal(context.services.workflows.enqueueTask(request).id, first.id);
-  assert.throws(() => context.services.workflows.enqueueTask({ ...request, input: { n: 2 } }), { code: 'IDEMPOTENCY_CONFLICT' });
-  const row = context.database.prepare("SELECT expires_at, created_at, response_status FROM idempotency_keys WHERE scope = 'workflow_task' AND idempotency_key = ?").get(request.idempotencyKey);
+  const first = await context.services.workflows.enqueueTask(request);
+  assert.equal((await context.services.workflows.enqueueTask(request)).id, first.id);
+  await assert.rejects(context.services.workflows.enqueueTask({ ...request, input: { n: 2 } }), { code: 'IDEMPOTENCY_CONFLICT' });
+  const row = await context.database.prepare("SELECT expires_at, created_at, response_status FROM idempotency_keys WHERE scope = 'workflow_task' AND idempotency_key = ?").get(request.idempotencyKey);
   assert.equal(Date.parse(row.expires_at) - Date.parse(row.created_at), IDEMPOTENCY_TTL_MS);
   assert.equal(row.response_status, IDEMPOTENCY_SCOPES.workflow_task.createdStatus);
   context.advance(IDEMPOTENCY_TTL_MS);
-  assert.notEqual(context.services.workflows.enqueueTask({ ...request, input: { n: 2 } }).id, first.id, 'an expired key is reused for a new request');
+  assert.notEqual((await context.services.workflows.enqueueTask({ ...request, input: { n: 2 } })).id, first.id, 'an expired key is reused for a new request');
 });
 
 test('P1-A policy: analysis_run idempotency digests exactly the documented fields with a 24 h expiry', async () => {
