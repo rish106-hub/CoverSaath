@@ -52,6 +52,7 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     throw new TypeError('services, loadKnownIdentifiers and createModelCall are required.');
   }
   let inFlight = 0;
+  const claims = new Set();
 
   // Clauses are derived deterministically on first use; a document without complete stored blocks is skipped.
   function ensureClauses({ householdId, caseId, documentId }) {
@@ -114,118 +115,130 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
   // `pipelineCurrent` is false for an answer stored by an earlier pipeline: it is served as stored, never re-bucketed.
   const publicAnswer = ({ access: _access, ...stored }) => ({ ...stored, pipelineCurrent: stored.answer?.pipelineVersion === INVESTIGATION_VERSION });
 
-  return Object.freeze({
-    async ask({ caseRecord, subjectAdultId, question, consentGrantId, idempotencyKey, documentIds: requestedDocumentIds }) {
-      if (!evidenceEnabled(env)) throw coded('EVIDENCE_DISABLED', 'Policy questions are disabled.', 503);
-      const { id: caseId, household_id: householdId } = caseRecord;
-      if (typeof question !== 'string' || !question.trim() || question.length > 2000) throw coded('VALIDATION_ERROR', 'question is required.', 400);
-      if (typeof consentGrantId !== 'string' || !consentGrantId) throw coded('VALIDATION_ERROR', 'consentGrantId is required.', 400);
-      const named = namedDocuments(requestedDocumentIds);
-      const requestDigest = createHmac('sha256', digestKey).update(JSON.stringify([caseId, question.trim(), consentGrantId, named])).digest('hex');
-      // A replay does no paid work, but it is served only while consent is active and the evidence is still current.
-      const replay = services.clauses.findAnswerByKey({ householdId, caseId, idempotencyKey, requestDigest });
-      if (replay) {
-        const access = requireAnswerAccess({ householdId, stored: replay });
-        if (!answerIsCurrent({ householdId, caseId, access })) {
-          throw coded('POLICY_EVIDENCE_ANSWER_STALE', 'The documents behind this answer have changed. Ask again with a new idempotency key.', 409);
-        }
-        return publicAnswer(replay);
+  async function askOnce({ caseRecord, subjectAdultId, question, consentGrantId, idempotencyKey, documentIds: requestedDocumentIds }) {
+    if (!evidenceEnabled(env)) throw coded('EVIDENCE_DISABLED', 'Policy questions are disabled.', 503);
+    const { id: caseId, household_id: householdId } = caseRecord;
+    if (typeof question !== 'string' || !question.trim() || question.length > 2000) throw coded('VALIDATION_ERROR', 'question is required.', 400);
+    if (typeof consentGrantId !== 'string' || !consentGrantId) throw coded('VALIDATION_ERROR', 'consentGrantId is required.', 400);
+    const named = namedDocuments(requestedDocumentIds);
+    const requestDigest = createHmac('sha256', digestKey).update(JSON.stringify([caseId, question.trim(), consentGrantId, named])).digest('hex');
+    // A replay does no paid work, but it is served only while consent is active and the evidence is still current.
+    const replay = services.clauses.findAnswerByKey({ householdId, caseId, idempotencyKey, requestDigest });
+    if (replay) {
+      const access = requireAnswerAccess({ householdId, stored: replay });
+      if (!answerIsCurrent({ householdId, caseId, access })) {
+        throw coded('POLICY_EVIDENCE_ANSWER_STALE', 'The documents behind this answer have changed. Ask again with a new idempotency key.', 409);
       }
-      if (inFlight >= MAX_IN_FLIGHT) throw coded('EVIDENCE_BUSY', 'Too many questions are in progress.', 503);
+      return publicAnswer(replay);
+    }
+    if (inFlight >= MAX_IN_FLIGHT) throw coded('EVIDENCE_BUSY', 'Too many questions are in progress.', 503);
 
-      // A truncated list could hide a document, so an over-long case fails closed.
-      const listed = services.documents.listForCase(caseId, householdId, MAX_CASE_DOCUMENTS + 1);
-      if (listed.length > MAX_CASE_DOCUMENTS) throw coded('POLICY_EVIDENCE_CASE_TOO_LARGE', 'The case has too many documents to question.', 409);
-      const active = listed.filter(document => document.lifecycleState === 'active');
-      const excluded = new Map();
-      const exclude = (reason, count = 1) => excluded.set(reason, (excluded.get(reason) ?? 0) + count);
-      let pool = active;
-      if (named) {
-        // Named documents are the requester's assertion that they belong to one policy. Each one must be an active
-        // document of this case, granted and current; otherwise the whole request fails.
-        const byId = new Map(active.map(document => [document.id, document]));
-        if (named.some(id => !byId.has(id))) throw coded('POLICY_EVIDENCE_NOT_FOUND', 'The requested policy evidence was not found.', 404);
-        pool = named.map(id => byId.get(id));
-        // Granted, current documents the request left out are counted, so the answer says they were not read.
-        const others = active.filter(document => !named.includes(document.id));
-        const othersCurrent = currentVersionCheck(householdId, others);
-        for (const document of others) {
-          try { questionGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId })(); } catch (error) {
-            if (!/^CONSENT_/.test(String(error?.code))) throw error;
-            continue;
-          }
-          if (othersCurrent(document)) exclude('not_named');
-        }
-      }
-      const isCurrent = currentVersionCheck(householdId, pool);
-      const checks = new Map();
-      for (const document of pool) {
-        const check = questionGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId });
-        try { check(); } catch (error) {
+    // A truncated list could hide a document, so an over-long case fails closed.
+    const listed = services.documents.listForCase(caseId, householdId, MAX_CASE_DOCUMENTS + 1);
+    if (listed.length > MAX_CASE_DOCUMENTS) throw coded('POLICY_EVIDENCE_CASE_TOO_LARGE', 'The case has too many documents to question.', 409);
+    const active = listed.filter(document => document.lifecycleState === 'active');
+    const excluded = new Map();
+    const exclude = (reason, count = 1) => excluded.set(reason, (excluded.get(reason) ?? 0) + count);
+    let pool = active;
+    if (named) {
+      // Named documents are the requester's assertion that they belong to one policy. Each one must be an active
+      // document of this case, granted and current; otherwise the whole request fails.
+      const byId = new Map(active.map(document => [document.id, document]));
+      if (named.some(id => !byId.has(id))) throw coded('POLICY_EVIDENCE_NOT_FOUND', 'The requested policy evidence was not found.', 404);
+      pool = named.map(id => byId.get(id));
+      // Granted, current documents the request left out are counted, so the answer says they were not read.
+      const others = active.filter(document => !named.includes(document.id));
+      const othersCurrent = currentVersionCheck(householdId, others);
+      for (const document of others) {
+        try { questionGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId })(); } catch (error) {
           if (!/^CONSENT_/.test(String(error?.code))) throw error;
-          if (named) throw coded('CONSENT_SCOPE_REQUIRED', 'A document-specific question grant is required for every named document.', 403);
           continue;
         }
-        if (isCurrent(document)) { checks.set(document.id, check); continue; }
-        if (named) throw coded('POLICY_EVIDENCE_SUPERSEDED', 'A newer version of a named document exists.', 409);
-        exclude('superseded_version');
+        if (othersCurrent(document)) exclude('not_named');
       }
-      if (!checks.size && excluded.has('superseded_version')) {
-        throw coded('POLICY_EVIDENCE_SUPERSEDED', 'A newer version of this document exists. A question grant for the current version is required.', 409);
+    }
+    const isCurrent = currentVersionCheck(householdId, pool);
+    const checks = new Map();
+    for (const document of pool) {
+      const check = questionGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId });
+      try { check(); } catch (error) {
+        if (!/^CONSENT_/.test(String(error?.code))) throw error;
+        if (named) throw coded('CONSENT_SCOPE_REQUIRED', 'A document-specific question grant is required for every named document.', 403);
+        continue;
       }
-      if (!checks.size) throw coded('CONSENT_SCOPE_REQUIRED', 'A document-specific question grant is required.', 403);
-      // Which policy a document belongs to is not established (ADR 0007 is blocked), so several documents are read
-      // together only when the request names them; the association is then recorded as asserted, not verified.
-      if (!named && checks.size > 1) {
-        throw coded('POLICY_EVIDENCE_DOCUMENTS_REQUIRED', 'Several current documents are authorised. Name the documents of one policy in documentIds.', 409);
-      }
-      // Every authorised document that is not read is counted and reported, never silently omitted.
-      const authorised = checks.size + (excluded.get('superseded_version') ?? 0) + (excluded.get('not_named') ?? 0);
+      if (isCurrent(document)) { checks.set(document.id, check); continue; }
+      if (named) throw coded('POLICY_EVIDENCE_SUPERSEDED', 'A newer version of a named document exists.', 409);
+      exclude('superseded_version');
+    }
+    if (!checks.size && excluded.has('superseded_version')) {
+      throw coded('POLICY_EVIDENCE_SUPERSEDED', 'A newer version of this document exists. A question grant for the current version is required.', 409);
+    }
+    if (!checks.size) throw coded('CONSENT_SCOPE_REQUIRED', 'A document-specific question grant is required.', 403);
+    // Which policy a document belongs to is not established (ADR 0007 is blocked), so several documents are read
+    // together only when the request names them; the association is then recorded as asserted, not verified.
+    if (!named && checks.size > 1) {
+      throw coded('POLICY_EVIDENCE_DOCUMENTS_REQUIRED', 'Several current documents are authorised. Name the documents of one policy in documentIds.', 409);
+    }
+    // Every authorised document that is not read is counted and reported, never silently omitted.
+    const authorised = checks.size + (excluded.get('superseded_version') ?? 0) + (excluded.get('not_named') ?? 0);
 
-      const documentIds = [];
-      const names = [];
-      for (const documentId of checks.keys()) {
-        let stored;
-        try { stored = ensureClauses({ householdId, caseId, documentId }); } catch (error) {
-          if (Object.hasOwn(SKIP_REASONS, String(error?.code))) { exclude(SKIP_REASONS[error.code]); continue; }
-          throw error;
+    const documentIds = [];
+    const names = [];
+    for (const documentId of checks.keys()) {
+      let stored;
+      try { stored = ensureClauses({ householdId, caseId, documentId }); } catch (error) {
+        if (Object.hasOwn(SKIP_REASONS, String(error?.code))) { exclude(SKIP_REASONS[error.code]); continue; }
+        throw error;
+      }
+      if (!stored) { exclude('ocr_incomplete'); continue; }
+      documentIds.push(documentId);
+      names.push(...documentNames(stored.pages.map(({ page, blocks }) => ({ page, blocks }))));
+    }
+    if (!documentIds.length) throw coded('POLICY_EVIDENCE_UNAVAILABLE', 'No stored policy text is available for this case. Process the document first.', 409);
+
+    const consentCheck = () => { for (const documentId of documentIds) checks.get(documentId)(); };
+    const clauses = services.clauses.listClauses({ householdId, caseId, documentIds });
+    const withClauses = new Set(clauses.map(clause => clause.documentId));
+    const empty = documentIds.filter(documentId => !withClauses.has(documentId)).length;
+    if (empty) exclude('no_clauses', empty);
+    const knownIdentifiers = [...(await loadKnownIdentifiers(caseId)), ...names].slice(0, MAX_KNOWN_IDENTIFIERS);
+    const call = createModelCall({ consentCheck, onCall: () => {} });
+    inFlight += 1;
+    let result;
+    try {
+      result = await investigate({
+        question, clauses, knownIdentifiers, call, consentCheck,
+        documentScope: { authorised, excluded: [...excluded].map(([reason, count]) => ({ reason, count })) },
+        search: ({ query, kinds, limit }) => services.clauses.searchClauses({ householdId, caseId, documentIds, query, kinds, limit }),
+      });
+    } finally { inFlight -= 1; }
+    const access = { consentGrantId, subjectAdultId, documentIds };
+    const answer = named && named.length > 1 ? { ...result.answer, documentAssociation: { basis: 'requester_named', verified: false } } : result.answer;
+    return publicAnswer(services.clauses.saveAnswer({
+      householdId, caseId, requestedByAdultId: subjectAdultId, idempotencyKey, requestDigest, question: result.answer.question,
+      answer, access,
+      // Consent and currency are both re-checked immediately before the answer is written: a newer version that
+      // arrived during the model call means this answer is not stored or returned as current.
+      consentCheck: () => {
+        consentCheck();
+        if (!answerIsCurrent({ householdId, caseId, access })) {
+          throw coded('POLICY_EVIDENCE_ANSWER_STALE', 'The documents changed while the question was answered. Ask again with a new idempotency key.', 409);
         }
-        if (!stored) { exclude('ocr_incomplete'); continue; }
-        documentIds.push(documentId);
-        names.push(...documentNames(stored.pages.map(({ page, blocks }) => ({ page, blocks }))));
-      }
-      if (!documentIds.length) throw coded('POLICY_EVIDENCE_UNAVAILABLE', 'No stored policy text is available for this case. Process the document first.', 409);
+      },
+    }));
+  }
 
-      const consentCheck = () => { for (const documentId of documentIds) checks.get(documentId)(); };
-      const clauses = services.clauses.listClauses({ householdId, caseId, documentIds });
-      const withClauses = new Set(clauses.map(clause => clause.documentId));
-      const empty = documentIds.filter(documentId => !withClauses.has(documentId)).length;
-      if (empty) exclude('no_clauses', empty);
-      const knownIdentifiers = [...(await loadKnownIdentifiers(caseId)), ...names].slice(0, MAX_KNOWN_IDENTIFIERS);
-      const call = createModelCall({ consentCheck, onCall: () => {} });
-      inFlight += 1;
-      let result;
-      try {
-        result = await investigate({
-          question, clauses, knownIdentifiers, call, consentCheck,
-          documentScope: { authorised, excluded: [...excluded].map(([reason, count]) => ({ reason, count })) },
-          search: ({ query, kinds, limit }) => services.clauses.searchClauses({ householdId, caseId, documentIds, query, kinds, limit }),
-        });
-      } finally { inFlight -= 1; }
-      const access = { consentGrantId, subjectAdultId, documentIds };
-      const answer = named && named.length > 1 ? { ...result.answer, documentAssociation: { basis: 'requester_named', verified: false } } : result.answer;
-      return publicAnswer(services.clauses.saveAnswer({
-        householdId, caseId, requestedByAdultId: subjectAdultId, idempotencyKey, requestDigest, question: result.answer.question,
-        answer, access,
-        // Consent and currency are both re-checked immediately before the answer is written: a newer version that
-        // arrived during the model call means this answer is not stored or returned as current.
-        consentCheck: () => {
-          consentCheck();
-          if (!answerIsCurrent({ householdId, caseId, access })) {
-            throw coded('POLICY_EVIDENCE_ANSWER_STALE', 'The documents changed while the question was answered. Ask again with a new idempotency key.', 409);
-          }
-        },
-      }));
+  return Object.freeze({
+    // One question per idempotency key runs at a time. A stored answer is written only after the paid model call, so a
+    // duplicate that arrives meanwhile would miss the replay and bill the model twice. The claim is per process (the
+    // SQLite runtime is one process); a multi-instance PostgreSQL deployment needs a database-level claim instead.
+    async ask(input) {
+      const { caseRecord, idempotencyKey } = input;
+      if (typeof idempotencyKey !== 'string' || !idempotencyKey || !caseRecord) return askOnce(input);
+      const claim = JSON.stringify([caseRecord.household_id, caseRecord.id, idempotencyKey]);
+      if (claims.has(claim)) throw coded('IDEMPOTENCY_IN_PROGRESS', 'This question is already being answered. Retry with the same idempotency key shortly.', 409);
+      claims.add(claim);
+      try { return await askOnce(input); } finally { claims.delete(claim); }
     },
 
     /**
