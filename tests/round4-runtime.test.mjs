@@ -1,21 +1,20 @@
 // Round 4 runtime findings: K1 (known-identifier loading and wiring), K2 (allowlist
-// excerpts), N3 (revocation erases derived run data), N4 (no raw-text digest) and
-// N8 (transaction nesting without DatabaseSync.isTransaction). Every value is synthetic.
+// excerpts), N3 (revocation erases derived run data) and N4 (no raw-text digest). Every value
+// is synthetic. N8 (SQLite transaction nesting) was removed with the SQLite runtime (S3.2 design
+// section 5); savepoint nesting is covered in db-interface.test.mjs.
 //
 // The tests that need the privacy gate itself to honour `knownIdentifiers` live in
 // known-identifier-e2e.test.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
 import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/index.js';
-import { COVERAGE_ANALYSIS_WORKFLOW, createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
+import { createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import { createCoverageAnalysisSourceInput as buildSourceInput } from '../src/features/coverage-analysis/source-input.js';
 // The gate needs an explicit identifier list; these tests have no household identifiers.
 const createCoverageAnalysisSourceInput = (caseRecord, pages, options = {}) => buildSourceInput(caseRecord, pages, { knownIdentifiers: [], ...options });
 import { auditActions, liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
-import { seedParameterWorld } from './support/parameter-fixtures.mjs';
 
 const caseRecord = { id: 'case-synthetic', opened_by_adult_id: 'adult-opened', trigger_type: 'renewal', stated_estimate_minor: 0, consent_grant_id: 'grant-synthetic' };
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -291,7 +290,7 @@ test('N3: revoking the document grant erases a completed run\'s derived data and
   assert.ok(runRow(app.database, run.data.id).input_json.includes(MARKER_ONE), 'the scenario really stored the marker text');
   const otherBefore = runRow(app.database, otherRun.data.id);
 
-  services.consents.revoke({ grantId: scenario.documentConsentId, revokedByAdultId: scenario.ownerId, reason: 'synthetic' });
+  await services.consents.revoke({ grantId: scenario.documentConsentId, revokedByAdultId: scenario.ownerId, reason: 'synthetic' });
 
   assertErased(app.database, run.data.id, MARKER_ONE);
   assert.equal(runRow(app.database, run.data.id).terminal_reason, 'CONSENT_REVOKED');
@@ -310,7 +309,7 @@ test('N3: revoking the document grant erases a completed run\'s derived data and
   assert.ok(otherTasks.every(task => task.status === 'completed' && task.output_json !== null));
 
   // Idempotent: revoking again changes and audits nothing more.
-  services.consents.revoke({ grantId: scenario.documentConsentId, revokedByAdultId: scenario.ownerId, reason: 'again' });
+  await services.consents.revoke({ grantId: scenario.documentConsentId, revokedByAdultId: scenario.ownerId, reason: 'again' });
   assert.equal(auditActions(app.database, 'analysis.derived_data_erased').length, 1);
 });
 
@@ -320,7 +319,7 @@ test('N3: a queued, not yet dispatched run is revoked with its excerpts erased',
   const { services, service } = liveService(app);
   const { job } = await service.createAnalysisRun({ caseId: scenario.caseId, consentGrantId: scenario.coverageConsentId, executionMode: 'live', modelPermission: true, idempotencyKey: 'n3-queued' });
   assert.equal(runRow(app.database, job.id).status, 'queued');
-  services.consents.revoke({ grantId: scenario.documentConsentId, revokedByAdultId: scenario.ownerId });
+  await services.consents.revoke({ grantId: scenario.documentConsentId, revokedByAdultId: scenario.ownerId });
   assertErased(app.database, job.id, MARKER_ONE);
   assert.equal((await service.runUntilSettled(job.id)).status, 'revoked');
 });
@@ -338,7 +337,7 @@ test('N3: with two documents only the revoked document\'s page entry is erased; 
   assert.equal(run.status, 202, run.raw);
   assert.equal(runInput(app.database, run.data.id).sourcePages.length, 2);
 
-  services.consents.revoke({ grantId: second.data.id, revokedByAdultId: scenario.ownerId });
+  await services.consents.revoke({ grantId: second.data.id, revokedByAdultId: scenario.ownerId });
 
   const input = runInput(app.database, run.data.id);
   const byDocument = new Map(input.sourcePages.map(entry => [entry.documentId, entry]));
@@ -357,7 +356,7 @@ test('N3: revoking the coverage grant also erases the excerpts stored in the run
   const services = createBackendServices(app.database);
   const run = await scenario.startLiveRun('n3-coverage');
   assert.ok(runRow(app.database, run.data.id).input_json.includes(MARKER_ONE));
-  services.consents.revoke({ grantId: scenario.coverageConsentId, revokedByAdultId: scenario.ownerId });
+  await services.consents.revoke({ grantId: scenario.coverageConsentId, revokedByAdultId: scenario.ownerId });
   assertErased(app.database, run.data.id, MARKER_ONE);
 });
 
@@ -402,93 +401,4 @@ test('N3: a stop whose cause cannot be attributed to a document erases the whole
   // Every document is still eligible, yet the run is stopped for source reasons.
   port.stopForRevocation(job.id, { reason: 'source_consent_not_current', reasonCode: 'COMMIT_RECHECK_ERROR' });
   assertErased(app.database, job.id, MARKER_ONE);
-});
-
-// ---------------------------------------------------------------------------
-// N8: transaction nesting without DatabaseSync.isTransaction
-// ---------------------------------------------------------------------------
-
-// A runtime without DatabaseSync.isTransaction is simulated with a proxy: the property
-// reads as undefined and every exec() is recorded. `real` is the unwrapped database
-// (used here to hold a caller-owned transaction); `faults.begin` makes BEGIN fail.
-function withoutIsTransaction(t) {
-  const real = openDatabase({ path: ':memory:' });
-  t.after(() => real.close());
-  seedParameterWorld(real);
-  const statements = [];
-  const faults = { begin: null };
-  const exec = sql => { statements.push(sql.trim()); if (faults.begin && /^BEGIN/.test(sql)) throw faults.begin; return real.exec(sql); };
-  const database = new Proxy(real, {
-    get(target, property) {
-      if (property === 'isTransaction') return undefined;
-      if (property === 'exec') return exec;
-      const value = Reflect.get(target, property, target);
-      return typeof value === 'function' ? value.bind(target) : value;
-    },
-  });
-  assert.equal(database.isTransaction, undefined);
-  const idle = () => { real.exec('BEGIN'); real.exec('ROLLBACK'); };
-  return { database, real, faults, statements, idle, services: createBackendServices(database) };
-}
-
-test('N8: without isTransaction a repository call outside any transaction opens and commits its own', t => {
-  const { services, statements, idle } = withoutIsTransaction(t);
-  const result = services.coverageParameters.redactObservationsForDocument({ documentId: 'document-parameters', reasonCode: 'consent_revoked' });
-  assert.equal(result.redactedObservations, 0);
-  assert.deepEqual(statements.filter(sql => /^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)/.test(sql)), ['BEGIN IMMEDIATE', 'COMMIT']);
-  idle();
-});
-
-test('N8: without isTransaction a call inside a caller\'s transaction joins it through a savepoint and rolls back only itself', t => {
-  const { database, real, services, statements, idle } = withoutIsTransaction(t);
-  real.exec('BEGIN IMMEDIATE');
-  database.prepare(`INSERT INTO policies (id, household_id, policy_kind, verification_state, created_at, updated_at)
-    VALUES ('policy-outer', 'household-parameters', 'unknown', 'unverified', 'x', 'x')`).run();
-  statements.length = 0;
-
-  // Success inside the outer transaction: a savepoint, no second BEGIN.
-  services.coverageParameters.redactObservationsForDocument({ documentId: 'document-parameters', reasonCode: 'consent_revoked' });
-  const control = statements.filter(sql => /^(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)/.test(sql));
-  assert.equal(control.length, 3);
-  assert.equal(control[0], 'BEGIN IMMEDIATE', 'the probe is the refused outer BEGIN');
-  assert.match(control[1], /^SAVEPOINT coverage_parameter_/);
-  assert.match(control[2], /^RELEASE coverage_parameter_/);
-  assert.ok(!control.includes('COMMIT'), 'the nested call never commits the caller\'s transaction');
-
-  // Failure inside the savepoint: only the nested work is undone; the caller's insert survives and its transaction stays open.
-  statements.length = 0;
-  assert.throws(() => services.coverageParameters.redactObservationsForDocument({ documentId: 'document-missing', reasonCode: 'consent_revoked' }), /Document was not found/);
-  assert.ok(statements.some(sql => /^ROLLBACK TO coverage_parameter_/.test(sql)));
-  assert.ok(!statements.includes('ROLLBACK'));
-  assert.equal(database.prepare("SELECT count(*) AS count FROM policies WHERE id = 'policy-outer'").get().count, 1, 'the outer transaction is intact');
-  real.exec('COMMIT');
-  assert.equal(database.prepare("SELECT count(*) AS count FROM policies WHERE id = 'policy-outer'").get().count, 1);
-  idle();
-});
-
-test('N8: without isTransaction createRunWithParameters (its own BEGIN, nested repository calls) works and rolls back as one', t => {
-  const { database, services, idle } = withoutIsTransaction(t);
-  const port = createCoverageAnalysisPort({ database, services });
-  const create = parameters => port.createRunWithParameters({
-    id: 'run-n8', caseId: 'case-parameters', workflowName: COVERAGE_ANALYSIS_WORKFLOW.name, workflowVersion: COVERAGE_ANALYSIS_WORKFLOW.version,
-    executionMode: 'fixture', input: {}, tasks: [], parameters,
-  });
-  const good = {
-    registryVersion: 'policy-parameters/v1', householdId: 'household-parameters', caseId: 'case-parameters',
-    subjectId: 'member-parameters', policyId: 'policy-parameters', requestedKeys: ['d.room_rent_limit'], receivedKeys: ['d.room_rent_limit'],
-  };
-  assert.throws(() => create({ ...good, subjectId: 'member-from-nowhere' }));
-  assert.equal(database.prepare("SELECT count(*) AS count FROM workflow_runs WHERE id = 'run-n8'").get().count, 0);
-  idle();
-  const run = create(good);
-  assert.equal(run.id, 'run-n8');
-  assert.ok(database.prepare("SELECT count(*) AS count FROM coverage_parameter_records WHERE workflow_run_id = 'run-n8'").get().count > 0);
-  idle();
-});
-
-test('N8: a BEGIN failure that is not "within a transaction" is rethrown and never mistaken for nesting', t => {
-  const { services, faults, statements } = withoutIsTransaction(t);
-  faults.begin = Object.assign(new Error('database is locked'), { code: 'ERR_SQLITE_ERROR' });
-  assert.throws(() => services.coverageParameters.redactObservationsForDocument({ documentId: 'document-parameters', reasonCode: 'consent_revoked' }), /database is locked/);
-  assert.ok(!statements.some(sql => /^SAVEPOINT/.test(sql)));
 });
