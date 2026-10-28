@@ -1,0 +1,26 @@
+tests/postgres-pool.test.mjs
+  s_692c874d7b8ff3::t_808b85be719ec6 3,71-94
+src/backend/database/postgres/pool.js
+  s_692c874d7b8ff3::t_01cc1872ad1842 1,39-40,55,66-68,77-78,89-105
+  s_692c874d7b8ff3::t_686c637c281f2e 106
+scripts/postgres-migrate.mjs
+  s_692c874d7b8ff3::t_845122588ebff0 1-15
+src/backend/database/postgres/index.js
+  s_692c874d7b8ff3::t_1c940679501da5 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0373444614417fa97de5841a3707051f2b05288d",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
