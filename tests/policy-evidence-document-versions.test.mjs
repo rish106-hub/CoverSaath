@@ -71,7 +71,7 @@ function harness({ documents, granted, others = [] }) {
   };
   const createModelCall = () => async ({ payload }) => {
     state.calls += 1;
-    state.onCall?.();
+    await state.onCall?.();
     for (const clause of payload.clauses) sentDocuments.add(clause.document_id);
     return { json: { findings: [] }, usage: { inputTokens: 1, outputTokens: 1 } };
   };
@@ -253,4 +253,36 @@ test('D1b: an answer is not current when a read document now belongs to another 
   const first = await ask();
   documents[0].caseId = 'other-case';
   assert.equal(get(first.answerId).current, false);
+});
+
+// D5: one in-flight question per idempotency key.
+
+test('D5: a duplicate key while the first question runs is refused, so the model is not billed twice', async () => {
+  const { ask, state } = harness({ documents: [doc('wording-v1', 'wording', 1)], granted: ['wording-v1'] });
+  const releases = [];
+  // The timer only keeps a regression from hanging the suite; it is not part of the behaviour under test.
+  state.onCall = () => new Promise(resolve => { releases.push(resolve); setTimeout(resolve, 400).unref(); });
+  const first = ask();
+  while (!releases.length) await new Promise(resolve => setImmediate(resolve));
+  await assert.rejects(ask(), { code: 'IDEMPOTENCY_IN_PROGRESS', statusCode: 409 });
+  assert.equal(state.calls, 1, 'the duplicate did not start a second model call');
+  // A different key is a different question and is not blocked by the claim.
+  const other = ask({ key: 'idem-key-0002' });
+  while (state.calls < 2) await new Promise(resolve => setImmediate(resolve));
+  releases[0]();
+  await first;
+  state.onCall = undefined;
+  await other;
+  const replay = await ask();
+  assert.equal(replay.replayed, true, 'once finished, the same key replays the stored answer');
+  assert.equal(state.calls, 2);
+});
+
+test('D5: a failed question frees its key for a retry', async () => {
+  const { ask, state } = harness({ documents: [doc('wording-v1', 'wording', 1)], granted: ['wording-v1'] });
+  state.onCall = () => { throw Object.assign(new Error('provider down'), { code: 'PROVIDER_FAILED' }); };
+  await assert.rejects(ask());
+  state.onCall = undefined;
+  const retried = await ask();
+  assert.equal(retried.replayed, false);
 });

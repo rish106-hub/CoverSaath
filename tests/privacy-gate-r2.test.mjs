@@ -246,14 +246,29 @@ test('G4: worst-case inputs at the scan cap finish in bounded time', () => {
   };
   sanitizeEvidenceTextForStorage('warm up Mobile: 98765 43210 मोबाइल ९८७६५४३२१०');
   const timings = {};
+  // CPU time, not wall-clock: the bound catches regex backtracking, and a loaded machine stretches wall-clock without adding work.
+  // Even CPU time rises under heavy parallel load (cache and scheduler contention), so each input gets up to three attempts and
+  // is judged on its best one. A backtracking regression is slow on every attempt; machine noise is not.
+  const measure = text => {
+    const wallStarted = process.hrtime.bigint();
+    const started = process.cpuUsage();
+    try { sanitizeEvidenceTextForStorage(text, { maxBytes: 16_000 }); } catch (error) { assert.equal(error.code, 'RESTRICTED_EVIDENCE'); }
+    const used = process.cpuUsage(started);
+    return { cpuMs: (used.user + used.system) / 1e3, wallMs: Number(process.hrtime.bigint() - wallStarted) / 1e6 };
+  };
   for (const [label, text] of Object.entries(inputs)) {
-    const started = process.hrtime.bigint();
-    try { sanitizeEvidenceTextForStorage(text, { maxBytes: 16_000 }); } catch (error) { assert.equal(error.code, 'RESTRICTED_EVIDENCE', label); }
-    timings[label] = Number(process.hrtime.bigint() - started) / 1e6;
+    let best = measure(text);
+    for (let attempt = 1; attempt < 3 && best.cpuMs >= 200; attempt += 1) {
+      const next = measure(text);
+      if (next.cpuMs < best.cpuMs) best = next;
+    }
+    timings[label] = best.cpuMs;
+    // Work that blocks off the CPU (a sync read, a wait) would not show as CPU time; ten times the bound still catches it.
+    assert.ok(best.wallMs < 2000, `${label} took ${best.wallMs.toFixed(1)}ms wall-clock`);
   }
   const slowest = Object.entries(timings).sort((left, right) => right[1] - left[1])[0];
-  t_diagnostic(`slowest worst-case input: ${slowest[0]} ${slowest[1].toFixed(1)}ms`);
-  for (const [label, ms] of Object.entries(timings)) assert.ok(ms < 200, `${label} took ${ms.toFixed(1)}ms`);
+  t_diagnostic(`slowest worst-case input (cpu): ${slowest[0]} ${slowest[1].toFixed(1)}ms`);
+  for (const [label, ms] of Object.entries(timings)) assert.ok(ms < 200, `${label} used ${ms.toFixed(1)}ms cpu`);
 });
 
 function t_diagnostic(message) {

@@ -311,19 +311,24 @@ test('round-4 worst-case inputs at the scan cap finish in bounded time', () => {
   for (const [label, text] of Object.entries(inputs)) {
     for (const knownIdentifiers of [[], KNOWN, manyKnown]) {
       const key = `${label}/${knownIdentifiers === undefined ? 'none' : knownIdentifiers.length}`;
-      // Fastest of three runs: super-linear backtracking is slow every time, a scheduler stall under load is not.
-      // The 200 ms bound below is unchanged.
+      // Fastest of three runs, in CPU time: super-linear backtracking is slow every time, a scheduler stall or a loaded machine
+      // is not. The 200 ms bound below is unchanged. Wall-clock keeps a looser backstop for work that blocks off the CPU.
       timings[key] = Infinity;
+      let fastestWall = Infinity;
       for (let attempt = 0; attempt < 3; attempt += 1) {
-        const started = process.hrtime.bigint();
+        const wallStarted = process.hrtime.bigint();
+        const started = process.cpuUsage();
         try { sanitizeEvidenceTextForStorage(text, { maxBytes: 16_000, knownIdentifiers }); } catch (error) { assert.equal(error.code, 'RESTRICTED_EVIDENCE', key); }
-        timings[key] = Math.min(timings[key], Number(process.hrtime.bigint() - started) / 1e6);
+        const used = process.cpuUsage(started);
+        timings[key] = Math.min(timings[key], (used.user + used.system) / 1e3);
+        fastestWall = Math.min(fastestWall, Number(process.hrtime.bigint() - wallStarted) / 1e6);
       }
+      assert.ok(fastestWall < 2000, `${key} took ${fastestWall.toFixed(1)}ms wall-clock`);
     }
   }
   const slowest = Object.entries(timings).sort((left, right) => right[1] - left[1])[0];
-  process.stdout.write(`# round-4 slowest worst-case input: ${slowest[0]} ${slowest[1].toFixed(1)}ms\n`);
-  for (const [label, ms] of Object.entries(timings)) assert.ok(ms < 200, `${label} took ${ms.toFixed(1)}ms`);
+  process.stdout.write(`# round-4 slowest worst-case input (cpu): ${slowest[0]} ${slowest[1].toFixed(1)}ms\n`);
+  for (const [label, ms] of Object.entries(timings)) assert.ok(ms < 200, `${label} used ${ms.toFixed(1)}ms cpu`);
   // Every known identifier at its maximum still leaves nothing behind.
   const result = sanitizeEvidenceTextForStorage(`Synthetic Person Number004 Example called 9006006006 and person003@example.test`, { knownIdentifiers: manyKnown });
   assert.equal(result.text.match(PLACEHOLDER)?.length, 3);

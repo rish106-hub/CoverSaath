@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readBody } from '../http/request.js';
 import { isLoopbackRequest, readBinaryBody } from '../../shared/http/index.js';
 import { MAX_DOCUMENT_BYTES } from '../../features/input/index.js';
@@ -70,6 +71,30 @@ function idempotencyKey(req) {
     badRequest('A stable Idempotency-Key header between 8 and 200 characters is required.', 'IDEMPOTENCY_KEY_REQUIRED');
   }
   return key;
+}
+
+// A grant id derived from the caller's key lets a client that timed out after the commit send the same request again and
+// get the same grant back. The household and adult are part of the hash, so two callers can never meet on one id.
+function consentIdForKey(householdId, subjectAdultId, key) {
+  const hex = createHash('sha256').update(JSON.stringify([householdId, subjectAdultId, key])).digest('hex');
+  return `consent-${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+// Stored as text, so both sides compare as text: a numeric resourceId or expiry in the request still matches its stored form.
+const text = value => (value == null ? null : String(value));
+const scopeKey = scope => JSON.stringify([text(scope.resourceType), text(scope.resourceId), text(scope.action), text(scope.dataCategory), text(scope.recipient)]);
+
+function sameConsentRequest(existing, request) {
+  const stored = existing.scopes.map(scope => scopeKey({ resourceType: scope.resource_type, resourceId: scope.resource_id, action: scope.action, dataCategory: scope.data_category, recipient: scope.recipient })).sort();
+  const asked = request.scopes.map(scopeKey).sort();
+  return existing.household_id === request.householdId
+    && existing.subject_adult_id === request.subjectAdultId
+    && existing.granted_to_actor === request.grantedToActor
+    && existing.purpose === request.purpose
+    && existing.notice_version === request.noticeVersion
+    && existing.evidence_method === request.evidenceMethod
+    && text(existing.expires_at) === text(request.expiresAt)
+    && stored.length === asked.length && stored.every((entry, index) => entry === asked[index]);
 }
 
 export function errorResponse(error) {
@@ -269,7 +294,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         error.statusCode = 403;
         throw error;
       }
-      const grant = services.consents.grant({
+      const request = {
         householdId,
         subjectAdultId,
         grantedToActor: body.grantedToActor === undefined ? 'knowvia-local' : requiredString(body.grantedToActor, 'grantedToActor'),
@@ -278,7 +303,33 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         evidenceMethod: body.evidenceMethod ?? 'typed',
         expiresAt: body.expiresAt ?? null,
         scopes: Array.isArray(body.scopes) ? body.scopes : [],
-      });
+      };
+      // The key is optional here (older clients grant without one). With a key, a repeat of the same request returns
+      // the same grant; a different request, or a grant revoked since, is a conflict rather than a silent reuse.
+      if (req.headers['idempotency-key'] !== undefined) {
+        const grantId = consentIdForKey(householdId, subjectAdultId, idempotencyKey(req));
+        const existing = services.consents.get(grantId);
+        if (existing) {
+          const refuse = async (reason, code, message) => {
+            // Counts only: no scope, document or purpose is written.
+            await services.audit.append({ householdId, actorType: 'adult_user', actorId: subjectAdultId, action: 'consent.idempotent_rejected', resourceType: 'consent_grant', resourceId: grantId, payload: { reason } });
+            throw Object.assign(new Error(message), { code, statusCode: 409 });
+          };
+          if (!sameConsentRequest(existing, request)) {
+            await refuse('different_request', 'IDEMPOTENCY_CONFLICT', 'That Idempotency-Key was already used for a different consent request.');
+          }
+          if (existing.revoked_at) {
+            await refuse('revoked', 'CONSENT_REVOKED', 'That permission was withdrawn. Use a new Idempotency-Key to grant it again.');
+          }
+          if (existing.expires_at && Date.parse(existing.expires_at) <= Date.now()) {
+            await refuse('expired', 'CONSENT_EXPIRED', 'That permission has expired. Use a new Idempotency-Key to grant it again.');
+          }
+          await services.audit.append({ householdId, actorType: 'adult_user', actorId: subjectAdultId, action: 'consent.idempotent_replay', resourceType: 'consent_grant', resourceId: grantId, payload: {} });
+          return { status: 200, body: { ...existing, idempotentReplay: true } };
+        }
+        request.id = grantId;
+      }
+      const grant = services.consents.grant(request);
       return { status: 201, body: grant };
     }
     const revokeMatch = url.pathname.match(/^\/api\/v1\/consents\/([^/]+)\/revoke$/);
