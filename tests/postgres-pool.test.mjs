@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPostgresPool } from '../src/backend/database/postgres/index.js';
+import { createPostgresPool, postgresPoolOptionsFromEnv } from '../src/backend/database/postgres/index.js';
 import { postgresTestOptions, testDatabaseUrl } from './support/postgres.mjs';
 
 // These need no server: the factory validates before it builds anything.
@@ -67,4 +67,28 @@ test('defaults apply and the statement timeout cancels a slow query', postgresTe
   const { rows: [row] } = await pool.query("SELECT current_setting('lock_timeout') AS lock, current_setting('application_name') AS name");
   assert.deepEqual({ ...row }, { lock: '5s', name: 'cover_saath' });
   await assert.rejects(pool.query('SELECT pg_sleep(5)'), { code: '57014' });
+});
+
+test('a CA certificate turns on verified TLS and URL ssl parameters cannot weaken it', async () => {
+  const pem = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n';
+  const pool = createPostgresPool({ connectionString: 'postgres://u:p@127.0.0.1:1/db?sslmode=disable&ssl=false&sslrootcert=/x', sslCa: pem });
+  try {
+    assert.deepEqual(pool.options.ssl, { ca: pem, rejectUnauthorized: true });
+    assert.ok(!/ssl/i.test(new URL(pool.options.connectionString).search), 'ssl URL parameters are dropped');
+  } finally {
+    await pool.end();
+  }
+  for (const bad of ['', 'not a pem', 42, null]) {
+    assert.throws(() => createPostgresPool({ connectionString: 'postgres://u:p@localhost/db', sslCa: bad }), { code: 'DATABASE_POOL_OPTION_INVALID' });
+  }
+});
+
+test('pool options come from the environment without echoing values', () => {
+  assert.throws(() => postgresPoolOptionsFromEnv({}), { code: 'DATABASE_URL_REQUIRED' });
+  assert.deepEqual(postgresPoolOptionsFromEnv({ DATABASE_URL: 'postgres://u:p@h/db' }), { connectionString: 'postgres://u:p@h/db' });
+  assert.throws(() => postgresPoolOptionsFromEnv({ DATABASE_URL: 'postgres://u:secret-token@h/db', DATABASE_SSL_CA_PATH: '/nonexistent/ca.pem' }), error => {
+    assert.equal(error.code, 'DATABASE_POOL_OPTION_INVALID');
+    assert.ok(!error.message.includes('secret-token') && !error.message.includes('/nonexistent'));
+    return true;
+  });
 });

@@ -1,5 +1,5 @@
 export { PostgresDatabaseError } from './errors.js';
-export { createPostgresPool } from './pool.js';
+export { createPostgresPool, postgresPoolOptionsFromEnv } from './pool.js';
 export {
   loadPostgresMigrations, migrationChecksum, postgresMigrationDirectory, postgresMigrationFiles, runPostgresMigrations,
 } from './migrate.js';
