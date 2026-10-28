@@ -1,0 +1,32 @@
+tests/policy-evidence-document-versions.test.mjs
+  s_692c874d7b8ff3::t_b38877b902cdc6 263
+  s_692c874d7b8ff3::t_fb89c281197d2d 74,257-261,265,267-271,273-288
+  s_692c874d7b8ff3::t_ffdd358b021251 262,264,266,272
+src/server/routes/v1-backend-routes.js
+  s_692c874d7b8ff3::t_a514732522827c 1,76-82,86-95,97-99,297,306-312,320,328-332
+  s_692c874d7b8ff3::t_8dc763a50cf559 83-85,96,313-318,321,323-324,326-327
+  s_692c874d7b8ff3::t_d683d0ffa0785c 319,322,325
+tests/consent-idempotency-api.test.mjs
+  s_692c874d7b8ff3::t_d683d0ffa0785c 123
+  s_692c874d7b8ff3::t_6fa201b155d0ca 1-40,42-99,128-148
+  s_692c874d7b8ff3::t_8dc763a50cf559 41,100-122,124-127
+src/backend/services/policy-evidence-service.js
+  s_692c874d7b8ff3::t_ebcd20be7567e5 118-130,132-153,157,159-167,169-191,193-225,227-241
+  s_692c874d7b8ff3::t_1225f6b9a62f3a 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b8cd53ae7be9172621f76ecc56b6bbbb96a3de7",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
