@@ -5,21 +5,23 @@ export const READ_FIELDS = Object.freeze({
   analysisSummary: Object.freeze({ purpose: 'coverage_reconstruction', dataCategory: 'analysis_summary' }),
 });
 
-function caseSubject(database, caseRecord) {
+async function caseSubject(database, caseRecord) {
   if (caseRecord.subject_member_id) {
-    const member = database.prepare(`SELECT adult_user_id FROM household_members
-      WHERE id = ? AND household_id = ?`).get(caseRecord.subject_member_id, caseRecord.household_id);
+    const member = await database.one(`SELECT adult_user_id FROM household_members
+      WHERE id = ? AND household_id = ?`, [caseRecord.subject_member_id, caseRecord.household_id]);
     if (member?.adult_user_id) return member.adult_user_id;
   }
   return caseRecord.opened_by_adult_id;
 }
 
+// requireCaseField is async: callers must await it, or a denial (a rejection) would
+// not stop the response.
 export function createReadResponsePolicy({ database, consents }) {
   return Object.freeze({
-    requireCaseField({ principal, caseRecord, field }) {
-      consents.requireResourceAccess({
+    async requireCaseField({ principal, caseRecord, field }) {
+      await consents.requireResourceAccess({
         householdId: caseRecord.household_id,
-        subjectAdultId: caseSubject(database, caseRecord),
+        subjectAdultId: await caseSubject(database, caseRecord),
         viewerAdultId: principal.adultId,
         purpose: field.purpose,
         resourceType: 'case',

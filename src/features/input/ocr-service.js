@@ -156,7 +156,7 @@ export function createOcrService({
           const cancellation = await provider.cancelJob({
             jobRef: returnedRef, requestId: job.id, authorization: safeAuthorization,
           });
-          return repository.completeCancellation(job.id, cancellation);
+          return await repository.completeCancellation(job.id, cancellation);
         }
         if (submission?.status === 'succeeded') return await persistSuccess(job, document, submission.result);
         if (!submission?.jobRef || !['submitted', 'processing'].includes(submission.status)) {
@@ -171,7 +171,7 @@ export function createOcrService({
         if (updated?.status === 'cancelled') {
           await repository.recordCancellationReference(job.id, submission.jobRef);
           const cancellation = await provider.cancelJob({ jobRef: submission.jobRef, requestId: job.id, authorization: safeAuthorization });
-          return repository.completeCancellation(job.id, cancellation);
+          return await repository.completeCancellation(job.id, cancellation);
         }
         return updated;
       } catch (error) {

@@ -216,8 +216,7 @@ export function createPersistentCoverageAnalysisService({
         fixtureVariant,
       };
       const requestDigest = digest(request);
-      const existing = await port.findIdempotency({ scope: 'analysis_run', key: idempotencyKey, at: clock().toISOString() });
-      if (existing) {
+      const replay = async existing => {
         if (existing.request_digest !== requestDigest) {
           const error = new Error('Idempotency key was reused with a different request.');
           error.code = 'IDEMPOTENCY_CONFLICT';
@@ -225,7 +224,11 @@ export function createPersistentCoverageAnalysisService({
         }
         const { runId } = JSON.parse(existing.response_json);
         return { created: false, job: await port.getJob(runId) };
-      }
+      };
+      // Fast path: a stored key answers without loading sources. The authoritative
+      // check runs again inside createRunWithParameters (decision 1).
+      const existing = await port.findIdempotency({ scope: 'analysis_run', key: idempotencyKey, at: clock().toISOString() });
+      if (existing) return replay(existing);
 
       // The household's own identifiers are loaded for this call only, used to
       // minimise stored excerpts, and never persisted. If they cannot be loaded no
@@ -254,7 +257,18 @@ export function createPersistentCoverageAnalysisService({
         throw error;
       }
       const runId = `coverage-run-${randomUUID()}`;
-      await port.createRunWithParameters({
+      const idempotency = {
+        scope: 'analysis_run',
+        key: idempotencyKey,
+        requestDigest,
+        responseStatus: 202,
+        response: { runId },
+        expiresAt: new Date(clock().getTime() + 24 * 60 * 60 * 1000).toISOString(),
+      };
+      // The port records the key in the run's transaction and returns { existing }
+      // when a concurrent request with the same key committed first.
+      const creation = await port.createRunWithParameters({
+        idempotency,
         parameters: {
           registryVersion: POLICY_PARAMETER_REGISTRY_VERSION,
           householdId: caseRecord.household_id,
@@ -286,14 +300,9 @@ export function createPersistentCoverageAnalysisService({
           },
         })),
       });
-      await port.recordIdempotency({
-        scope: 'analysis_run',
-        key: idempotencyKey,
-        requestDigest,
-        responseStatus: 202,
-        response: { runId },
-        expiresAt: new Date(clock().getTime() + 24 * 60 * 60 * 1000).toISOString(),
-      });
+      if (creation?.existing) return replay(creation.existing);
+      // A port without in-transaction idempotency records the key afterwards.
+      if (creation?.idempotencyRecorded !== true) await port.recordIdempotency({ ...idempotency });
       return { created: true, job: await port.getJob(runId) };
     },
     getJob: runId => port.getJob(runId),

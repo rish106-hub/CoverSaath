@@ -36,59 +36,65 @@ export class TenantAccessService {
     return true;
   }
 
-  authenticate(authorization) {
-    const principal = this.auth.authenticate(bearer(authorization));
+  // Every check below is async and awaited: an un-awaited check would return a
+  // pending Promise (truthy) and let the request through. A rejected query
+  // rejects the request (fail closed).
+  async authenticate(authorization) {
+    const principal = await this.auth.authenticate(bearer(authorization));
     if (!principal) fail('AUTHENTICATION_REQUIRED', 'Valid authentication is required.', 401);
     return principal;
   }
 
-  requireHousehold(principal, householdId, options) {
-    return this.households.requireAccess(householdId, principal.adultId, options);
+  async requireHousehold(principal, householdId, options) {
+    return await this.households.requireAccess(householdId, principal.adultId, options);
   }
 
-  requireCase(principal, caseId, options) {
-    const caseRecord = this.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId);
+  async requireCase(principal, caseId, options) {
+    const caseRecord = await this.database.one('SELECT * FROM service_cases WHERE id = ?', [caseId]);
     if (!caseRecord) fail('CASE_NOT_FOUND', 'Case not found.', 404);
-    this.requireHousehold(principal, caseRecord.household_id, options);
+    await this.requireHousehold(principal, caseRecord.household_id, options);
     return caseRecord;
   }
 
-  requireRun(principal, runId) {
-    const record = this.database.prepare(`SELECT workflow_runs.*, service_cases.household_id
+  async requireRun(principal, runId) {
+    const record = await this.database.one(`SELECT workflow_runs.*, service_cases.household_id
       FROM workflow_runs JOIN service_cases ON service_cases.id = workflow_runs.case_id
-      WHERE workflow_runs.id = ?`).get(runId);
+      WHERE workflow_runs.id = ?`, [runId]);
     if (!record) fail('JOB_NOT_FOUND', 'Job not found.', 404);
-    this.requireHousehold(principal, record.household_id);
+    await this.requireHousehold(principal, record.household_id);
     return record;
   }
 
-  requireTask(principal, taskId) {
-    const record = this.database.prepare(`SELECT workflow_tasks.*, service_cases.household_id
+  async requireTask(principal, taskId) {
+    const record = await this.database.one(`SELECT workflow_tasks.*, service_cases.household_id
       FROM workflow_tasks
       JOIN workflow_runs ON workflow_runs.id = workflow_tasks.workflow_run_id
       JOIN service_cases ON service_cases.id = workflow_runs.case_id
-      WHERE workflow_tasks.id = ?`).get(taskId);
+      WHERE workflow_tasks.id = ?`, [taskId]);
     if (!record) fail('TASK_NOT_FOUND', 'Task not found.', 404);
-    this.requireHousehold(principal, record.household_id);
+    await this.requireHousehold(principal, record.household_id);
     return record;
   }
 
-  householdMatrix(principal, householdId) {
-    const { household, role } = this.requireHousehold(principal, householdId);
-    const members = this.households.listMembers(householdId).map(member => {
-      const canReadBirthDate = member.adult_user_id && this.consents.canAccessField({
+  async householdMatrix(principal, householdId) {
+    const { household, role } = await this.requireHousehold(principal, householdId);
+    const members = [];
+    // Sequential: each member's checks are awaited before the next (no Promise
+    // inside a .map callback, where a missed await would read as granted).
+    for (const member of await this.households.listMembers(householdId)) {
+      const canReadBirthDate = Boolean(member.adult_user_id) && (await this.consents.canAccessField({
         householdId,
         subjectAdultId: member.adult_user_id,
         viewerAdultId: principal.adultId,
         fieldKey: 'date_of_birth',
-      });
-      const latestCase = this.database.prepare(`SELECT id, status, trigger_type, updated_at
+      })) === true;
+      const latestCase = (await this.database.one(`SELECT id, status, trigger_type, updated_at
         FROM service_cases WHERE household_id = ? AND subject_member_id = ?
-        ORDER BY updated_at DESC LIMIT 1`).get(householdId, member.id) ?? null;
+        ORDER BY updated_at DESC LIMIT 1`, [householdId, member.id])) ?? null;
       const caseSubjectAdultId = member.adult_user_id ?? (latestCase
-        ? this.database.prepare('SELECT opened_by_adult_id FROM service_cases WHERE id = ?').get(latestCase.id)?.opened_by_adult_id
+        ? (await this.database.one('SELECT opened_by_adult_id FROM service_cases WHERE id = ?', [latestCase.id]))?.opened_by_adult_id
         : null);
-      const canReadImmediateIssue = Boolean(latestCase && caseSubjectAdultId && this.consents.canAccessResource({
+      const canReadImmediateIssue = Boolean(latestCase && caseSubjectAdultId) && (await this.consents.canAccessResource({
         householdId,
         subjectAdultId: caseSubjectAdultId,
         viewerAdultId: principal.adultId,
@@ -97,11 +103,11 @@ export class TenantAccessService {
         resourceId: latestCase.id,
         action: 'read',
         dataCategory: 'case_summary',
-      }));
-      const policyCount = this.database.prepare(`SELECT count(*) AS count
+      })) === true;
+      const policyCount = (await this.database.one(`SELECT count(*) AS count
         FROM policy_members JOIN policies ON policies.id = policy_members.policy_id
-        WHERE household_member_id = ? AND policies.household_id = ?`).get(member.id, householdId).count;
-      return {
+        WHERE household_member_id = ? AND policies.household_id = ?`, [member.id, householdId])).count;
+      members.push({
         id: member.id,
         displayName: member.display_name,
         memberKind: member.member_kind,
@@ -115,8 +121,8 @@ export class TenantAccessService {
         immediateIssue: canReadImmediateIssue
           ? { caseId: latestCase.id, status: latestCase.status, triggerType: latestCase.trigger_type }
           : null,
-      };
-    });
+      });
+    }
     return { household, viewerRole: role.role, members };
   }
 }
