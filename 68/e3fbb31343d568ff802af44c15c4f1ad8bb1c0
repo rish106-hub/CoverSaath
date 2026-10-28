@@ -1,0 +1,28 @@
+docs/iterations/LATEST.md
+  s_7ad4d9cf37fd27::t_c2fb7b65c05871 14-17
+  s_692c874d7b8ff3::t_7c84acb6aeea87 3-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "68e3fbb31343d568ff802af44c15c4f1ad8bb1c0",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_7ad4d9cf37fd27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a16ddf-60f6-7933-a365-cd617a4caf0f",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
