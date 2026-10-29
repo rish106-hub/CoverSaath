@@ -19,6 +19,18 @@ The owner chose one PostgreSQL master database on Supabase for every CoverSaath 
 - **D7 Backend host.** The backend needs a container host: ClamAV daemon scanning, per-process in-flight claims and rate limits, and background OCR and structuring jobs do not fit pure serverless. Chosen default: Fly.io in Mumbai (`bom`) for the backend and `clamd`, Vercel for the website. This is an infrastructure decision awaiting owner approval before any deployment.
 - **D8 Region and residency.** Sydney is accepted only for synthetic data. Real user data waits for a decision between moving the project to Mumbai (`ap-south-1`) and legal advice that cross-border storage is acceptable. Marked for legal review.
 
+## Segment map
+
+One project, one master database (`coversaath`), one schema per segment. Cross-schema references are not allowed between segments; a segment talks to another through the backend API, so any segment can later move to its own database or service without changing the others.
+
+| Segment | Schema | Owner | State |
+|---|---|---|---|
+| Backend core (households, consent, documents, evidence, workflow, audit, catalogue) | `public` | CoverSaath backend, migrations `src/backend/database/postgres/migrations/` | Deployed, 15 migrations, validated |
+| Website (waitlist, voice notes) | `knowvia_web` | Website, migrations `db/migrations/` in the website repo | Deployed |
+| Future segments (for example analytics, ingestion) | one new schema each | their own service | Not started |
+
+The backend keeps `public` because its schema validator and migration runner assume it; moving it to a named schema is a separate, reversible change. Separate databases per segment are not used: PostgreSQL cannot join or enforce foreign keys across databases, and the C-collation workaround in D2 is needed only once.
+
 ## Consequences
 
 - Latency from India to Sydney is higher than to Mumbai. No measurement exists; do not claim a number.
