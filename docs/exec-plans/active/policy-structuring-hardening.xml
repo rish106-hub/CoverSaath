@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<implementation_prompt id="coversaath-policy-structuring-hardening" version="1.0" created="2026-10-20" status="planned">
+  <title>Policy structuring hardening: upgrade path, honest outcomes, typed eval, per-policy separation, run scoping, durable jobs</title>
+  <decision_record>docs/adr/0006-policy-document-structuring.md (addendum) and new docs/adr/0007-document-policy-association.md</decision_record>
+  <base_branch>codex/backend-first-layout</base_branch>
+  <risk_class>data-sensitive, migration-sensitive, AI-authority, cost-sensitive (paid Sarvam and Gemini calls)</risk_class>
+
+  <persona>
+    Implementation owner for a risk-sensitive insurance extraction backend. Skeptical of own output.
+    Short PLAN, BUILD, FEEDBACK loops. One vertical slice at a time, narrow checks after each, evidence before claims.
+    Models propose, deterministic code decides. Never spend money on a provider without an explicit, recorded request.
+    Never weaken a consent, tenant, audit, immutability or authority control to make a test pass.
+    Terse reports. Synthetic data only.
+  </persona>
+
+  <start_here>
+    <read>AGENTS.md, docs/iterations/LATEST.md, docs/adr/0003-ai-authority.md, docs/adr/0004-postgresql-runtime.md, docs/adr/0006-policy-document-structuring.md</read>
+    <read>docs/runbooks/policy-structuring.md</read>
+    <read>src/features/policy-structuring/index.js (orchestrator structurePolicyDocument)</read>
+    <read>src/features/policy-structuring/coverage-report.js (readingMatches, scoreCriticalFields, CRITICAL_FIELD_KEYS)</read>
+    <read>src/features/policy-structuring/validator.js (normalizeValue, inferValueType, comparisonKey: reuse for typed eval)</read>
+    <read>src/features/policy-structuring/extractor.js (chunkOutcomes, skip reasons, budgetStopped)</read>
+    <read>src/backend/services/policy-structuring-service.js (in-memory jobs Map, start, result)</read>
+    <read>src/backend/repositories/policy-structuring-repository.js (commitStructuring, listProposals, getStructuringRun, eraseDerived)</read>
+    <read>src/backend/repositories/ocr-repository.js (createOrGetJob, getDocumentBlockPages)</read>
+    <read>src/features/input/ocr-service.js (start: contractVersion is always OCR_OUTPUT_VERSION = knowvia.ocr.v1)</read>
+    <read>src/backend/repositories/coverage-parameter-repository.js (initializeRunParameters, listForRun, recordModelExtraction)</read>
+    <read>src/backend/services/coverage-analysis-port.js:320 (UNCLASSIFIED placeholder policy insert)</read>
+    <read>src/backend/database/migrations/005, 011, 012 and postgres/migrations/001, 007, 009</read>
+    <note>Run repomap impact before editing shared files. Check for closer AGENTS.md per directory.</note>
+  </start_here>
+
+  <confirmed_facts>
+    <fact id="F1">OCR jobs always record contract_version knowvia.ocr.v1 (ocr-service.js:94); createOrGetJob returns any queued/submitted/processing/succeeded job for (document, provider, contract_version). A succeeded v1 job blocks any new OCR job.</fact>
+    <fact id="F2">source_pages is UNIQUE(document_upload_id, source_version, page_number). Trigger source_pages_blocks_immutable forbids NULL to non-NULL blocks_json updates. In-place backfill is blocked by design.</fact>
+    <fact id="F3">service.start throws STRUCTURING_BLOCKS_UNAVAILABLE "Run OCR again" when any page lacks blocks; that instruction cannot succeed (F1).</fact>
+    <fact id="F4">extractor marks provider error, malformed response, call_cap, token_cap, budget_stop, privacy_truncated, privacy_gate_refused as skipped. Orchestrator commits regardless; result() returns status 'completed' for any stored run.</fact>
+    <fact id="F5">readingMatches uses compact(golden) substring of compact(reading): 5000 matches 50000; 1 matches 10. Existing tests do not cover this.</fact>
+    <fact id="F6">coverage_parameter_records is UNIQUE(workflow_run_id, parameter_key) in SQLite (005) and Postgres (001). Every run has one placeholder policy UNCLASSIFIED:&lt;opaque case&gt;. commitStructuring maps records by parameterKey only.</fact>
+    <fact id="F7">listProposals filters document_id + household_id only. Index proposed_parameters(structuring_run_id) exists.</fact>
+    <fact id="F8">Structuring jobs live in a Map in createPolicyStructuringService; policy_structuring_runs rows are written only at commit.</fact>
+    <fact id="F9">eraseDerived redacts observations by (document, run's workflow_run_id). Any new derived store must join that path.</fact>
+  </confirmed_facts>
+
+  <assumptions>
+    <item>No production data exists; local SQLite databases may be re-initialised, but migrations must still be forward-safe on a populated dev DB.</item>
+    <item>Outcome thresholds have no measured basis yet. They ship as named provisional constants, documented, never presented as accuracy claims.</item>
+  </assumptions>
+
+  <blocking_unknowns>
+    <unknown id="U1" slice="S5">Whether a Sarvam re-run on the same PDF reproduces each page's extracted_text exactly. Decides whether the upgrade can attach blocks to existing pages or must create a new source version. Resolve by reading the transport normaliser and one synthetic replay before writing S5 code. If unresolved: stop and report.</unknown>
+    <unknown id="U2" slice="S6">Whether the SQLite migration runner tolerates a table rebuild of coverage_parameter_records (FKs from acquisitions, observations, resolutions; foreign_keys ON at open). Resolve by reading src/backend/database/database.js migration loop. If rebuild unsafe: stop and re-plan.</unknown>
+  </blocking_unknowns>
+
+  <scope>
+    <in>
+      <path>src/features/policy-structuring/ (coverage-report.js, index.js, new outcome.js)</path>
+      <path>src/backend/services/policy-structuring-service.js</path>
+      <path>src/backend/repositories/policy-structuring-repository.js, ocr-repository.js, coverage-parameter-repository.js</path>
+      <path>src/features/input/ocr-service.js (explicit upgrade request only)</path>
+      <path>src/server/routes/v1-backend-routes.js (request fields, coded errors, status mapping)</path>
+      <path>SQLite migrations 013+ and Postgres migrations 010+ with parity tests</path>
+      <path>scripts/eval-structuring-accuracy.mjs (consume typed matcher)</path>
+      <path>tests/policy-structuring-*.test.mjs and new focused tests</path>
+      <path>docs/adr/0007, ADR 0006 addendum, docs/runbooks/policy-structuring.md, docs/iterations/LATEST.md</path>
+    </in>
+    <out>
+      Block 3 comparison logic. Promoting proposals into the registry. Redis, queues or workers. Automatic retries
+      of paid calls. Resuming a half-finished Gemini run chunk-by-chunk. UI. Deployment. Accuracy or cost claims.
+      Renaming knowvia identifiers. Final legal or consent wording.
+    </out>
+  </scope>
+
+  <approach>
+    Order by risk and dependency: cheap pure-function fixes first, then outcome semantics, then durable state,
+    then the two migration-sensitive slices. Each slice is independently shippable and reversible.
+  </approach>
+
+  <build_style>
+    <rule>One slice per PLAN/BUILD/FEEDBACK loop. Test first for each confirmed defect (red test reproducing it, then fix).</rule>
+    <rule>Expand-only migrations. Never edit an applied migration. SQLite and Postgres change together with a parity test.</rule>
+    <rule>Coded, client-safe errors (UPPER_SNAKE). No document text, values or quotes in logs, audits or counts_json.</rule>
+    <rule>Reuse validator.js normalisers; no new parsing library or dependency.</rule>
+    <rule>Paid provider calls only on an explicit request flag plus current consent; tests use fake callers, zero network.</rule>
+    <rule>Match surrounding code: small pure functions, Object.freeze results, terse comments, lowercase kebab-case files.</rule>
+    <rule>Optional per user memory: one worktree subagent per slice, each slice finished end to end before the next.</rule>
+  </build_style>
+
+  <slices>
+    <slice n="S1" issue="3" priority="high" risk="normal" migration="no">
+      <name>Typed accuracy evaluator</name>
+      <work>
+        Replace substring matching in readingMatches. Infer golden value type via validator inferValueType;
+        normalise both sides via normalizeValue. Money: equal amountMinor (and per when golden has it).
+        Percentage: equal percent. Date: equal iso. Duration: equal amount and unit, or equal days only when both
+        units are exact (days). Number: equal value. Text: token-boundary match on compact tokens, never raw
+        substring across digits. Typed golden with unparseable reading = no match. Arrays: every element matches.
+      </work>
+      <pass>5,000 vs 50,000 false; 1% vs 10% false; 60 days vs 160 days false; 01/04/2026 vs 01/04/2025 false;
+        Rs. 10,00,000 vs ₹10,00,000 true; 1 lakh vs ₹1,00,000 true; existing true cases still true; 3 years vs 36 months stays false.</pass>
+      <fail>Any digit-run substring match survives. Eval script output changes shape. A previous correct case regresses without a documented reason.</fail>
+    </slice>
+
+    <slice n="S2" issue="5" priority="medium" risk="data-sensitive" migration="no">
+      <name>Run-scoped proposals</name>
+      <work>
+        listProposals takes required structuringRunId (validated, household and document scope kept).
+        result() passes stored.id. Each proposal DTO and the run block carry structuringRunId, pipelineVersion,
+        registryVersion, sourceVersion for provenance. Audit callers of listProposals via repomap.
+      </work>
+      <pass>Two runs on same document (erase older, run again): result shows only newest run's proposals. Foreign household still DOCUMENT_NOT_FOUND. Missing run id = VALIDATION_ERROR.</pass>
+      <fail>Any proposal from another structuring_run_id returned. Ownership check removed or reordered after the query.</fail>
+    </slice>
+
+    <slice n="S3" issue="2" priority="high" risk="AI-authority" migration="no (counts_json)">
+      <name>Processing status separated from evidence completeness</name>
+      <work>
+        New pure decideOutcome(report, { criticalKeys, thresholds }) in src/features/policy-structuring/outcome.js.
+        processingStatus: running | finished | failed_processing | interrupted (S4). evidenceOutcome:
+        complete = zero skipped chunks AND every model-allowed critical key has a reading;
+        partial_review_required = some chunks skipped or a critical key missing, AND accepted items at least
+        MIN_ACCEPTED_ITEMS AND skipped share at most MAX_SKIPPED_SHARE;
+        failed = otherwise (zero accepted, budget_stop before half the chunks, or skipped share above max).
+        Constants provisional and exported (start: MIN_ACCEPTED_ITEMS 1, MAX_SKIPPED_SHARE 0.5), marked unmeasured.
+        Critical keys: CRITICAL_FIELD_KEYS values whose registry modelExtraction.allowed is true.
+        Orchestrator: failed outcome = no commit; return outcome plus counts. complete and partial commit and
+        store outcome, reasons (codes only) and missingCriticalKeys in counts_json (stay under 4096 bytes).
+        result(): never report bare 'completed'. Body gains processingStatus, evidenceOutcome, outcomeReasons,
+        missingCriticalKeys. partial_review_required sets requiresReview true.
+      </work>
+      <pass>Fake caller tests: all chunks ok = complete; one provider_error chunk with evidence = partial_review_required; all provider_error = failed and no rows written; budget_stop at chunk 1 = failed; missing critical key alone = partial_review_required; counts_json under limit; old stored runs without outcome map to partial_review_required (never complete).</pass>
+      <fail>Any run with skipped chunks shown as complete. Failed outcome writes observations. Outcome derived from model output instead of deterministic counts.</fail>
+    </slice>
+
+    <slice n="S4" issue="6" priority="medium" risk="migration-sensitive, cost" migration="yes">
+      <name>Durable minimal job state</name>
+      <work>
+        Migration SQLite 013 / Postgres 010: table policy_structuring_jobs (id, household_id, case_id,
+        workflow_run_id, document_id, source_version, pipeline_version, status queued|running|committed|failed|interrupted,
+        evidence_outcome NULL or code, error_code, attempt, consent_grant_id, started_at, updated_at, finished_at,
+        structuring_run_id NULL). Partial unique index: one running job per (workflow_run_id, document_id).
+        No document text, values or quotes. Counts only.
+        Service: start inserts running row (replaces Map as source of truth; Map keeps the promise only);
+        finish updates committed or failed with codes; failure path records error_code.
+        On service creation: running rows from a previous process become interrupted (one UPDATE, audited counts-only).
+        start on interrupted or failed job requires body restart: true (explicit, paid); else 409 STRUCTURING_RESTART_REQUIRED
+        with prior status. result() reads job row for running/failed/interrupted.
+        Erasure: eraseDerived and revocation also mark jobs for the document erased/cleared (status kept, ids only); add test.
+      </work>
+      <pass>Simulated restart (new service on same DB) turns running into interrupted; GET shows interrupted; POST without restart = 409, with restart = new attempt, attempt+1; committed run still replays with zero calls; concurrent start = one running row; revocation test covers jobs table; SQLite/Postgres parity test passes.</pass>
+      <fail>Any automatic re-dispatch of Gemini after restart. Two running rows for one key. Job row stores text or values. Migration not expand-only.</fail>
+    </slice>
+
+    <slice n="S5" issue="1" priority="high" risk="cost, migration-sensitive" migration="maybe" gate="U1">
+      <name>Explicit block upgrade for v1 OCR documents</name>
+      <work>
+        Fix contract recording: Sarvam jobs that store blocks record knowvia.ocr.v2 (output contract of the provider).
+        New explicit request: POST /api/v1/documents/:id/ocr-jobs with { mode: 'blocks_upgrade', acknowledgeProviderCharge: true, consentGrantId }.
+        Allowed only when current version's succeeded job stored pages without blocks; otherwise 409 OCR_UPGRADE_NOT_NEEDED.
+        Without acknowledgement: 409 OCR_UPGRADE_CHARGE_UNACKNOWLEDGED. Consent re-checked same as normal OCR.
+        createOrGetJob: upgrade job keyed by contract_version v2, so a v1 success no longer blocks it; duplicate upgrade
+        requests return the in-flight job (idempotent, no second charge).
+        Completion (decided by U1): (a) text identical per page: one-time NULL to blocks fill via a narrowed trigger that
+        allows it only when blocks_upgrade_job_id matches a succeeded v2 job for the same document version; or
+        (b) text differs: fail closed with OCR_UPGRADE_TEXT_CHANGED, keep v1 pages, document the re-upload path.
+        STRUCTURING_BLOCKS_UNAVAILABLE message points to the upgrade request, not "Run OCR again".
+        Audit: ocr.blocks_upgrade_requested/completed, counts only.
+      </work>
+      <pass>v1 document: structuring 409 names upgrade; upgrade without ack = 409, zero provider calls; with ack = one fake provider call; repeat request = same job, no second call; v2 document upgrade = 409 OCR_UPGRADE_NOT_NEEDED; after upgrade structuring starts; revocation during upgrade cancels and erases blocks; immutability trigger still rejects any other blocks change.</pass>
+      <fail>Any path that calls Sarvam without acknowledgeProviderCharge. Blocks attached to text they do not match. Immutability trigger dropped rather than narrowed. Existing observations' source_page_id changed.</fail>
+    </slice>
+
+    <slice n="S6" issue="4" priority="high (before Block 3)" risk="migration-sensitive, data-sensitive" migration="yes" gate="U2">
+      <name>Document-to-policy association and per-policy records</name>
+      <work>
+        ADR 0007: one policies row per structured policy document (source_document_id set, policy_kind unknown until
+        classified, verification_state unverified). Deterministic id DOCPOLICY:&lt;opaque(documentId)&gt;; household trigger
+        already enforces ownership. UNCLASSIFIED stays as the case-level placeholder for non-document analysis.
+        Migration SQLite 014 / Postgres 011: coverage_parameter_records uniqueness becomes
+        (workflow_run_id, policy_id, parameter_key) (SQLite table rebuild preserving ids, FKs, triggers; Postgres
+        drop/add constraint). Re-run all existing trigger and FK checks after rebuild.
+        Repository: initializeRunParameters idempotent per (run, policy); listForRun gains required-or-default policyId
+        (default placeholder keeps existing callers, e.g. recordModelExtraction, unchanged); new listForRunPolicy.
+        Structuring start: resolve-or-create document policy, initialise its record set in the run (same registry pin),
+        commit maps records by (policyId, key) only. Result groups by policy and includes policyId.
+        Erasure: observations redacted via run + document (unchanged join still correct); document erasure also
+        detaches nothing structural; test that a revoked document's policy records show no readings.
+        Conflict detection stays inside one policy; cross-policy differences are never conflicting.
+      </work>
+      <pass>Two synthetic documents (policy A room rent 1% of SI, policy B no limit) in one run: two policies, two record sets, each d.room_rent_limit extracted_unverified, zero conflicting. Single-document journey unchanged. Placeholder-path analysis tests unchanged. Migration on populated dev DB keeps every record id and observation link. Parity test passes. Foreign-household document cannot create a policy.</pass>
+      <fail>Readings from two documents land on one record. Existing record ids change. Any trigger or FK silently dropped by the rebuild. Comparison logic added (Block 3 scope).</fail>
+    </slice>
+  </slices>
+
+  <global_pass_criteria>
+    <item>npm run check, npm run eval:safety, npm run check:architecture, npm test (loopback permission), git diff --check all pass.</item>
+    <item>Each confirmed defect has a red-then-green test named after it.</item>
+    <item>Zero network calls in tests; fake callers count every provider call; paid paths asserted at zero without explicit flags.</item>
+    <item>Every new derived store (jobs table, document policies, per-policy records) has an erasure test.</item>
+    <item>Independent read-only review (cavecrew-reviewer or /review) of S3 to S6 before completion: migration, consent, AI authority.</item>
+    <item>ADR 0007 written, ADR 0006 addendum, runbook updated (upgrade path, restart flag, outcome meanings), LATEST.md updated.</item>
+  </global_pass_criteria>
+
+  <global_fail_criteria>
+    <item>Any silent paid rerun (Sarvam or Gemini) without an explicit request field.</item>
+    <item>Any consent, ownership, immutability or audit control weakened instead of narrowed.</item>
+    <item>Any model output stored above extracted_unverified or conflicting.</item>
+    <item>Personal data, document text or real policy content in code, fixtures, logs or commits.</item>
+    <item>Success claimed without command output.</item>
+    <item>Any git commit, push, PR or deploy. User forbids all four for this work; leave changes uncommitted in the working tree.</item>
+    <item>Scope creep into Block 3 comparison, queues, UI or new dependencies.</item>
+  </global_fail_criteria>
+
+  <rollback>
+    S1 to S3: revert code; counts_json outcome fields are additive and ignored by old code.
+    S4: drop-free rollback; old code ignores policy_structuring_jobs. S5/S6: migrations forward-only; rollback by code
+    revert plus local DB re-init (no production data). Document this in each migration header.
+  </rollback>
+
+  <report_format>
+    Per slice: changes, tests added, commands run with results, unverified items, security and data impact,
+    rollback, follow-ups. Final: production readiness stays FAIL unless measured otherwise.
+  </report_format>
+</implementation_prompt>

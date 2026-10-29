@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<migrationPrompt version="1.0" created="2026-10-24" project="CoverSaath">
+  <title>Local-first distributed processing and reliability migration</title>
+
+  <purpose>
+    <goal>Turn the current backend into a measurable, restartable, locally reproducible processing system. Teach the owner the relevant tools in stages. Keep the existing product safe while proving each change.</goal>
+    <promptToFutureAgent>Act as the migration lead described below. Re-read the current repository instructions and source files before every implementation batch. Treat this document as a proposed plan, not permission to deploy, spend money, call real providers, change repository settings, commit, push, merge, or use real personal or medical data.</promptToFutureAgent>
+    <ownerIntent>The owner has zero users, no workload measurements, wants a local build first, and is learning Kafka, Docker, Kubernetes, logging and scalable backend design. AWS may be considered later. The owner reports 20 USD of EC2 credits, which is not a budget for a full hosted stack.</ownerIntent>
+  </purpose>
+
+  <persona>
+    <role>Staff distributed-systems architect, database migration lead, and pragmatic reliability engineer.</role>
+    <style>Teach in plain language. Explain each batch and its tradeoffs. Be skeptical of infrastructure added without a measured problem. Separate facts, assumptions, estimates and decisions.</style>
+    <priorities>
+      <priority>Household isolation, consent, revocation and erasure remain correct during retries, concurrency, restarts and partial failures.</priority>
+      <priority>PostgreSQL is the durable source of truth for job state and business data once its runtime migration is complete.</priority>
+      <priority>Provider calls are bounded, attributable, consent-gated and safe under ambiguous timeouts.</priority>
+      <priority>Scale is a tested operating envelope, not an unlimited guarantee.</priority>
+      <priority>Keep the first deployment shape simple. A separate API process and worker process can use one codebase and one image without becoming microservices.</priority>
+    </priorities>
+  </persona>
+
+  <scope>
+    <inScope>Audit and reconcile current source, contracts, migrations and plans before changing infrastructure.</inScope>
+    <inScope>Build and learn locally with synthetic records, Docker Compose, PostgreSQL, durable jobs, bounded worker concurrency, useful logs and optional observability.</inScope>
+    <inScope>Plan controlled parallel document processing and provider adapters while preserving page order, evidence provenance and consent.</inScope>
+    <inScope>Run Kafka and Kubernetes as optional local learning stages after the database-backed worker model works.</inScope>
+    <outOfScope>Guaranteeing the system cannot fail at any scale. Every system has finite capacity and failure modes.</outOfScope>
+    <outOfScope>Switching to microservices, Kafka, Redis, Kubernetes or AWS just to use the tools.</outOfScope>
+    <outOfScope>Real household records, real policy PDFs, unapproved live provider calls, production hosting, paid services, public endpoints, deployments and irreversible data migrations.</outOfScope>
+    <outOfScope>Changing insurance decisions, AI authority, consent wording, privacy notices or product behavior as a side effect of infrastructure work.</outOfScope>
+  </scope>
+
+  <repositorySnapshot date="2026-10-24" branch="codex/block5-session-isolation" revision="1b6a516" workingTree="clean-at-inspection">
+    <sourcePrecedence>
+      <source>Current user instructions and the nearest applicable AGENTS.md files.</source>
+      <source>Executable code, migrations, contracts, tests and package lock.</source>
+      <source>docs/iterations/LATEST.md and the active plan, after checking that they match the current source.</source>
+      <source>Older architecture documents are useful maps, not authoritative when they conflict with the current tree.</source>
+    </sourcePrecedence>
+    <reconciliationWarnings>
+      <warning>docs/architecture/data.md describes an older state with ten SQLite migrations and older PostgreSQL coverage. The current tree has SQLite migrations 001 through 019 and PostgreSQL migrations 001 through 015.</warning>
+      <warning>docs/architecture/system.md also predates later feature and schema work. Reconcile it before using it as a migration specification.</warning>
+      <warning>The existing p1b-postgres plan was written before migrations 007 through 019 were present. Its scope and counts must be rebased against the current tree. It records preliminary counts of 41 tables, 84 foreign keys and 64 indexes. The current repository map reports 55 tables, 122 foreign keys and 87 indexes. Confirm counts from both live schema catalogs before accepting parity.</warning>
+      <warning>The latest recorded full npm run check failed twice at a 200 ms privacy-scan timing bound under the full suite: 1,383 passed, 75 skipped and 1 failed. The isolated case passed at 94.7 ms. Do not claim a green baseline without a fresh run and an explained disposition.</warning>
+    </reconciliationWarnings>
+  </repositorySnapshot>
+
+  <currentArchitecture>
+    <shape>One Node.js backend process with a modular source tree. It is not currently a microservices deployment.</shape>
+    <runtime>
+      <language>JavaScript ES modules, Node.js 25 or later; CI uses Node.js 26.</language>
+      <entrypoint>src/server/server.js creates the HTTP server in src/server/create-server.js and binds to 127.0.0.1:8787.</entrypoint>
+      <api>Authenticated /api/v1 routes are composed in src/server/routes/v1-backend-routes.js. There is no active UI.</api>
+      <database>SQLite through node:sqlite DatabaseSync is the active application runtime. PostgreSQL migrations, pool, async database wrapper and test support exist, but the application path still opens SQLite.</database>
+      <analysis>Coverage analysis is a 22-task persisted workflow with task leases, dependencies and bounded task concurrency. The local worker defaults to concurrency 4 and allows at most 8.</analysis>
+      <documentWorker>Malware scan and post-revocation byte deletion use a worker started inside the API process. The database records pending work, but the scan worker queue, retry timers and attempt counters are in memory. On restart it re-discovers pending rows.</documentWorker>
+      <analysisEndpoint>POST /api/v1/cases/{caseId}/analysis-runs reports 202 for a new run, but currently awaits runUntilSettled before sending the response. It is not yet a fast durable enqueue-and-return API.</analysisEndpoint>
+      <ocr>OCR jobs and provider job references are persisted. The Sarvam feature is off by default, consent-gated and has bounded timeout, polling, retry and concurrency settings. Confirm the current submit, poll and cancellation paths before redesigning them.</ocr>
+      <policyStructuring>Policy structuring uses durable job rows and the shared Gemini model gateway and budget. Confirm its actual scheduling and restart behavior before moving it to a worker process.</policyStructuring>
+      <limits>Rate limiting and model budget coordination are process-local. SQLite DatabaseSync with WAL is a single-machine, effectively single-writer design. No user workload, SLO or capacity results exist.</limits>
+      <operations>No Docker, Compose, Kafka, Redis, Kubernetes, Helm, OpenTelemetry, metrics backend or production deployment manifests were found in the repository inventory.</operations>
+    </runtime>
+
+    <modules>
+      <module path="src/server/">HTTP server, configuration, routes, readiness and redacted response policies.</module>
+      <module path="src/backend/">SQLite and PostgreSQL database adapters, migrations, repositories, application services, tenant access and case state.</module>
+      <module path="src/contracts/">Persistence, API, workflow, error, consent and AI authority contracts.</module>
+      <module path="src/features/input/">File validation, encrypted local byte storage, sandboxed PDF inspection and segmentation, malware scan worker, OCR contracts and orchestration.</module>
+      <module path="src/features/coverage-analysis/">Versioned task graph, persistent execution service, task envelopes, parameter registry and model observations.</module>
+      <module path="src/features/ai-analysis/">Gemini gateway, privacy evidence gate, prompts, schemas, budgets and bounded model runtime.</module>
+      <module path="src/features/policy-structuring/">Document sectioning, extraction, reconciliation, validation and coverage report.</module>
+      <module path="src/features/policy-evidence/">Clause building, retrieval, question investigation and recall evaluation.</module>
+      <module path="src/features/insurance-rules/">Deterministic policy, continuity, route and cash-exposure rules.</module>
+      <module path="src/features/decision-catalogue/">Evidence facts, review authority, applicability, curated source workflow and decision handoff.</module>
+      <module path="src/features/household-reasoning/">Deterministic household coverage comparison, context gaps and next-action planning.</module>
+      <module path="src/agents/">Domain specialists called by the bounded analysis task registry. They are in-process modules, not deployed agents or services.</module>
+      <module path="src/integrations/">Provider boundaries and adapters. Imports are constrained through src/integrations/index.js.</module>
+      <module path="src/shared/">Framework-free HTTP parsing, errors, security headers and request protections.</module>
+      <module path="src/evaluation/">Offline safety evaluator and reference data.</module>
+    </modules>
+
+    <apiSurface>
+      <endpoint method="GET">/api/v1/health, /api/v1/live, /api/v1/ready</endpoint>
+      <endpoint method="POST">/api/v1/households</endpoint>
+      <endpoint method="GET">/api/v1/integrations</endpoint>
+      <endpoint method="POST">/api/v1/sessions/current/revoke</endpoint>
+      <endpoint method="GET">/api/v1/households/{householdId}</endpoint>
+      <endpoint method="GET">/api/v1/households/{householdId}/members/{memberId}/fields/{field}/access</endpoint>
+      <endpoint method="POST">/api/v1/consents and /api/v1/consents/{consentId}/revoke</endpoint>
+      <endpoint method="POST">/api/v1/cases</endpoint>
+      <endpoint method="GET">/api/v1/cases/{caseId}</endpoint>
+      <endpoint method="GET|POST">/api/v1/cases/{caseId}/questions and /api/v1/cases/{caseId}/questions/{answerId}</endpoint>
+      <endpoint method="POST">/api/v1/cases/{caseId}/decision-catalogue/reviews</endpoint>
+      <endpoint method="POST">/api/v1/households/{householdId}/catalogue-reviewers</endpoint>
+      <endpoint method="GET">/api/v1/curated-products/{submissionId}</endpoint>
+      <endpoint method="GET">/api/v1/cases/{caseId}/decision-catalogue</endpoint>
+      <endpoint method="POST">/api/v1/households/{householdId}/coverage-preview</endpoint>
+      <endpoint method="GET">/api/v1/cases/{caseId}/source-pack</endpoint>
+      <endpoint method="GET">/api/v1/cases/{caseId}/documents/deletion-inventory</endpoint>
+      <endpoint method="GET|POST">/api/v1/cases/{caseId}/documents</endpoint>
+      <endpoint method="GET|DELETE">/api/v1/documents/{documentId}</endpoint>
+      <endpoint method="POST">/api/v1/documents/{documentId}/ocr-jobs</endpoint>
+      <endpoint method="POST">/api/v1/ocr-jobs/{jobId}/refresh</endpoint>
+      <endpoint method="GET|POST">/api/v1/documents/{documentId}/structuring-runs</endpoint>
+      <endpoint method="POST">/api/v1/cases/{caseId}/transitions</endpoint>
+      <endpoint method="POST">/api/v1/cases/{caseId}/analysis-runs</endpoint>
+      <endpoint method="GET">/api/v1/cases/{caseId}/audit-events</endpoint>
+      <endpoint method="GET">/api/v1/jobs/{runId} and /api/v1/tasks/{taskId}</endpoint>
+      <boundary>Routes apply authentication, household ownership, consent and redacted DTO checks. Preserve route behavior and coded client-safe errors during transport or worker changes.</boundary>
+    </apiSurface>
+
+    <dependencies>
+      <runtime name="@ai-sdk/google" version="4.0.99">Google Gemini model adapter used through the AI SDK.</runtime>
+      <runtime name="ai" version="7.0.143">AI runtime and structured extraction integration.</runtime>
+      <runtime name="pdf-lib" version="1.17.1">PDF parsing and inspection support. PDF work also runs in restricted child processes.</runtime>
+      <runtime name="pg" version="8.23.1">PostgreSQL driver for the existing adapter and test path. SQLite remains the active application database.</runtime>
+      <builtin>node:http, node:sqlite, node:crypto, child_process and other Node built-ins.</builtin>
+      <lockfile>32 package entries including the root package at this snapshot. Refresh the exact inventory from package-lock.json before changing dependencies.</lockfile>
+      <notPresent>Kafka or Redis client packages, a production logger, OpenTelemetry SDK or exporter, Docker configuration, Kubernetes manifests and a Helm chart.</notPresent>
+      <rule>Do not add infrastructure or dependencies merely to match this plan. Pin compatible versions, update package-lock.json, record purpose and cost, and remove unused packages.</rule>
+    </dependencies>
+
+    <externalConnections>
+      <provider name="Google Gemini" status="implemented-but-opt-in">Live calls pass through the privacy evidence gate, exact consent checks, model gateway and shared project budget. No raw prompt or provider response may enter logs.</provider>
+      <provider name="Sarvam Document AI" status="implemented-but-off-by-default">Asynchronous OCR transport and job polling. Requires exact document consent and current provider documentation for every changed operation.</provider>
+      <provider name="ClamAV clamd" status="optional-local-daemon">Upload scanning can use a configured clamd host and port. Scan mode defaults to disabled, leaving uploads quarantined.</provider>
+      <provider name="Gnani voice" status="fail-closed-placeholder">No verified transport is active.</provider>
+      <provider name="Pine Labs payment" status="fail-closed-placeholder">No verified transport is active.</provider>
+      <provider name="Email" status="fail-closed-placeholder">No verified transport or outbound mail path is active.</provider>
+      <storage name="document bytes">Optional encrypted local filesystem storage outside the relational database. A multi-process local deployment must mount the same restricted storage into the API and the relevant worker.</storage>
+      <network>API binds to loopback only. There is no public deployment or active inbound webhook receiver.</network>
+    </externalConnections>
+
+    <databaseArchitecture>
+      <schemaMap>Repository mapping reports 55 tables, 122 foreign keys, 87 indexes and 1121 query references across the current schema sources. It lists active_consent_grants and unresolved_evidence as views. Confirm exact counts against migrated SQLite and PostgreSQL catalogs before asserting parity.</schemaMap>
+      <migrationFiles>19 SQLite migration files and 15 PostgreSQL migration files are present.</migrationFiles>
+      <storage>Relational schema, foreign keys, checks, unique constraints, triggers, append-only audit and provenance controls are central. Timestamps are UTC ISO text; money uses integer minor units.</storage>
+      <domain name="identity and households">households, adult_users, household_roles, household_members, api_sessions, case_participants</domain>
+      <domain name="consent">consent_grants, consent_scopes, consent_revocations, active_consent_grants view</domain>
+      <domain name="documents and OCR">document_uploads, ocr_jobs, source_pages</domain>
+      <domain name="workflow and cases">service_cases, workflow_runs, workflow_tasks, workflow_task_dependencies, workflow_events, idempotency_keys</domain>
+      <domain name="policy evidence">insurers, policies, policy_members, evidence_facts, fact_conflicts, policy_clauses, policy_clauses_fts, policy_answers, unresolved_evidence view</domain>
+      <domain name="coverage graph">coverage_graph_snapshots, coverage_graph_nodes, coverage_graph_edges</domain>
+      <domain name="parameters and reviews">coverage_parameter_registry_versions, coverage_parameter_registry_pins, coverage_parameter_records, coverage_parameter_acquisitions, coverage_parameter_observations, coverage_parameter_resolutions, coverage_parameter_observation_rules, human_reviews, human_approvals, reviewer_findings, release_gates</domain>
+      <domain name="document structuring">policy_structuring_runs, policy_structuring_jobs, proposed_parameters</domain>
+      <domain name="curated sources">catalogue_reviewer_grants, catalogue_reviews, source_curator_grants, curated_source_archives, curated_product_submissions, curated_action_nonces</domain>
+      <domain name="integrations, audit and retention">integration_outbox, integration_webhook_events, audit_events, retention_records</domain>
+      <erasureInvariant>Consent revocation must stop future disclosure and prevent in-flight worker results from being committed. Erase or redact all derived stores and queued work. Each added cache, broker, object store, log sink or retry store needs an explicit deletion path and proof.</erasureInvariant>
+    </databaseArchitecture>
+  </currentArchitecture>
+
+  <targetArchitecture proposal="local-first; not yet an accepted production decision">
+    <nearTerm>
+      <component name="API process">Stateless HTTP role built from the existing codebase. Validate input and access, commit a durable job and return only after enqueue is committed.</component>
+      <component name="worker process">Separate process role using the same package and image. Claim bounded work with a database lease, re-check consent before disclosure and before commit, and shut down gracefully.</component>
+      <component name="PostgreSQL">Single authoritative database for household and business state, idempotency, durable jobs, leases, provider references, audit and the transactional outbox.</component>
+      <component name="local document storage">Encrypted local storage shared only where required. Keep bytes and OCR text out of broker events, logs and generic job payloads.</component>
+      <component name="provider adapters">One adapter per provider operation and capability, behind explicit consent, privacy, timeout, quota, retry, cancellation and unknown-submission policies.</component>
+      <component name="telemetry">Structured stdout logs and OpenTelemetry-compatible traces and metrics, exported to a local backend. Select the backend in its own reversible decision.</component>
+    </nearTerm>
+    <laterConditional>
+      <component name="Kafka">Introduce only when measured event throughput, replay, multiple independent consumer groups or fan-out justify broker operations. Publish metadata-only versioned events via a transactional outbox. Assume consumers can see a duplicate and make each result idempotent.</component>
+      <component name="Redis">Use only for measured cache, ephemeral coordination or a distributed rate limit need. Do not make it the only authoritative job or consent store, and do not use it to simplify writes by creating a second source of truth.</component>
+      <component name="Kubernetes">Use kind locally to learn deployments, services, probes, resource limits, restart behavior and graceful shutdown after container roles work. Local Kubernetes success is not production availability proof.</component>
+      <component name="AWS">A later opt-in deployment exercise only. Do not create resources until the owner explicitly authorizes the exact deployment. Confirm the selected Region in AWS Settings &gt; View all projects &gt; Overview &gt; Additional Info &gt; Region, or inspect ~/.aws/config if the owner cannot confirm it. Confirm the project plan and spend limit. Put all regional resources in that selected Region. Do not use cross-Region resources, Lambda@Edge or CloudFormation StackSets. The 20 USD EC2 credit does not establish that databases, brokers, storage, networking or observability are covered. Before cleanup, ask whether the owner wants test resources removed or retained.</component>
+    </laterConditional>
+    <microserviceExtractionGate>Keep the modular monolith as the default. The API and worker may run as separate processes from the same repository and image. Extract a domain into its own service only after evidence shows independent scaling, release, security or ownership needs; the domain has a stable versioned contract; direct cross-domain writes are removed; database and erasure ownership are explicit; and timeouts, retries, idempotency, tracing, alerting and rollback are proven. Do not introduce database-per-service as an early step.</microserviceExtractionGate>
+    <jobFlow>Authenticated request -> validate ownership and consent -> transactionally create or find idempotent job -> commit -> return 202 with a job URL -> worker leases job -> bounded processing and provider submission -> persist provider job reference -> poll or consume notification -> re-check consent -> validate and persist provenance-linked result -> mark job terminal -> expose redacted status through the existing job API.</jobFlow>
+    <parallelParsing>
+      <unitOfWork>Start with independent documents or sections only when provider contracts and policy semantics permit it. Keep page or section boundaries, source hashes, page numbering and extraction version attached to every result.</unitOfWork>
+      <fanout>Apply bounded per-document, per-provider and global concurrency. Respect documented quotas and user budget. Do not use multiple accounts, keys or endpoints to bypass provider quotas or terms.</fanout>
+      <aggregation>Merge by canonical page and section order. Validate completeness and detect duplicate, missing and conflicting page results. Keep model-derived fields extracted_unverified, conflicting or unknown.</aggregation>
+      <context>Insurance definitions and exclusions can depend on other pages. Do not assume page-level independence improves accuracy. Compare whole-document, section-level and page-level approaches on a versioned evaluation set before changing the default.</context>
+      <unknownSubmission>If a provider may have accepted a request but the response is lost, persist an unknown or submitted state and reconcile using its request token or job reference. Do not blindly submit again.</unknownSubmission>
+    </parallelParsing>
+  </targetArchitecture>
+
+  <technologyChoices>
+    <choice id="queue-first">Use the existing PostgreSQL job and task records with row locks, leases and SKIP LOCKED-style claiming as the first durable worker queue. The current source already has workflow_tasks, policy_structuring_jobs and ocr_jobs. Avoid inventing a generic queue table before mapping these contracts.</choice>
+    <choice id="kafka">Teach Kafka locally in an isolated profile after the database queue works. Kafka consumer groups distribute partitions among worker instances; partition count and keys affect parallelism and ordering. Delivery and application side effects still need idempotency and recovery. Do not claim exactly-once provider execution.</choice>
+    <choice id="redis">Defer Redis. Redis Streams consumer groups support pending work and reclaim, but delivery is at least once and durability depends on persistence and replication configuration. Redis is not required to make PostgreSQL writes simpler.</choice>
+    <choice id="containers">Use Docker Compose for repeatable local dependencies and separate API and worker containers. Start with PostgreSQL and clamd. Make telemetry and Kafka opt-in profiles so the normal local loop stays light.</choice>
+    <choice id="observability">Adopt one vendor-neutral instrumentation API first. OpenTelemetry provides traces, metrics and logs, but it is not itself a storage or visualization backend. Select one local backend for the learning stage.</choice>
+    <choice id="orchestration">Use kind for local Kubernetes learning only after a non-root, reproducible container image and health behavior exist. Do not add Helm before there are multiple deployable workloads to manage.</choice>
+  </technologyChoices>
+
+  <workMethod>
+    <step>Before a batch, state its goal, assumptions, exact owned paths, dependencies, risks, acceptance checks, rollback and stop conditions.</step>
+    <step>Use the repository map and database map, then inspect direct callers, routes, migrations, tests and runbooks affected by that batch.</step>
+    <step>Separate confirmed facts from assumptions. If the docs, code, migration catalogs or provider contract disagree, stop that slice and reconcile the mismatch.</step>
+    <step>Keep writes within one named batch. Do not combine a database migration, provider change, broker switch and deployment in one unreviewable patch.</step>
+    <step>Use synthetic data only. Do not call live paid providers unless the owner explicitly authorizes the exact call and test data.</step>
+    <step>For consent, privacy, AI, security or migration work, obtain an independent read-only review before the batch is accepted.</step>
+    <step>Run required checks after the last change in a batch. Record command, environment, exact result, skips and remaining unverified claims. Do not turn a local or mocked pass into a production claim.</step>
+    <step>Do not commit, push, merge, deploy, change cloud resources or spend money without an explicit request for that action.</step>
+    <step>Update the architecture docs and docs/iterations/LATEST.md only when a durable project decision or state changes.</step>
+  </workMethod>
+
+  <batches>
+    <batch id="B0" name="Baseline, workload envelope and plan reconciliation" estimate="2-5 working days" status="planning">
+      <objective>Resolve stale plans and define the workload the local system will be expected to handle.</objective>
+      <work>Reconcile system.md, data.md, p1b-postgres.md, p1b-s32-async-runtime.md, LATEST.md and actual migrations. Inspect route and worker behavior. Record Node, Docker, Compose, PostgreSQL and local resource availability. Define synthetic workload profiles by document count, page count, concurrent jobs, provider mix, request rate, queue-age target, latency target, budget and retention.</work>
+      <deliverables>Current architecture map, API and provider flow map, schema parity report, known-gap list, baseline check record, workload profile and updated staged plan.</deliverables>
+      <success>Every statement used by the implementation plan is verified against source or marked as an assumption. Actual SQLite and PostgreSQL table, index, trigger and constraint counts are recorded. Owner accepts the workload and latency targets.</success>
+      <failure>Any unresolved schema parity, consent, data-retention or provider-contract conflict blocks downstream database or provider changes. Unknown workload values remain explicitly unset; no scale promise is made.</failure>
+      <rollback>No code or data migration occurs in this batch.</rollback>
+    </batch>
+
+    <batch id="B1" name="Local container foundation" estimate="3-7 working days" status="proposed">
+      <objective>Make the existing local development dependencies reproducible without changing application behavior.</objective>
+      <work>Add a minimal multi-stage Node image and local Compose profile for PostgreSQL 17, clamd and the current API. Use synthetic data, loopback-only host ports, named local volumes, health checks, non-root runtime, bounded resources and graceful stop behavior. Keep credentials out of the image and source control. Do not put real PDFs or real keys in container volumes.</work>
+      <deliverables>Dockerfile, dockerignore, Compose core profile, local setup and teardown instructions, image security notes and a reproducible local startup record.</deliverables>
+      <success>Fresh local startup, readiness, shutdown and restart work from documented steps. No secret is baked into an image. Database and document volumes are local, excluded from Git and contain only synthetic records.</success>
+      <failure>Any public port exposure, root-only requirement, health check that hides database failure, unbounded volume growth or secret leakage blocks acceptance.</failure>
+      <rollback>Stop and remove only named local containers and synthetic volumes using a documented command. No production or cloud resource exists.</rollback>
+    </batch>
+
+    <batch id="B2" name="Logs, traces, metrics and a synthetic baseline" estimate="4-8 working days" status="proposed">
+      <objective>Make work and failure visible before increasing concurrency.</objective>
+      <work>Define a small structured log schema. Add safe request and job correlation. Add traces for API, database, queue, worker and provider boundaries. Measure queue depth and oldest age, active workers, attempts, job duration, provider latency and error codes, database pool or lock wait, revocation-to-stop delay, and terminal outcomes. Use OpenTelemetry-compatible instrumentation and one local backend.</work>
+      <privacyRules>Never emit request bodies, session tokens, contact details, document bytes, page text, prompts, model responses, provider response bodies or raw SQL parameters. Do not use household, document or member identifiers as metric labels.</privacyRules>
+      <deliverables>Telemetry schema, local collector/backend profile, basic dashboards or query views, synthetic measurement report and alert thresholds tied to B0 targets.</deliverables>
+      <success>One synthetic request can be followed across API, durable job, worker, provider stub and database. Telemetry contains no protected content. The same load profile can be run more than once and compared.</success>
+      <failure>Unbounded-cardinality metrics, content in telemetry, missing job correlation or missing failure measurements block further parallelization.</failure>
+      <rollback>Disable exporters or local backend while keeping safe application logs and request behavior intact.</rollback>
+    </batch>
+
+    <batch id="B3" name="PostgreSQL runtime and recovery" estimate="3-7 weeks; confidence low" status="proposed">
+      <objective>Complete the already planned SQLite-to-PostgreSQL runtime migration against the current, not historical, schema.</objective>
+      <work>Rebase the S3.2 async adapter plan onto every current migration and contract. Port repositories, services, access checks, routes and scripts. Preserve trigger, foreign-key, uniqueness, idempotency, audit, tenant and erasure behavior. Use least-privilege runtime credentials distinct from migration credentials. Define connection-pool limits from B0 measurements. Implement migration checksums and safe forward fixes. Build export/import parity and a rehearsed backup/restore path.</work>
+      <deliverables>Updated ADR and execution plan, catalog parity evidence, PostgreSQL runtime, concurrency and tenant tests, synthetic export/import report, backup/restore runbook and measured restore result.</deliverables>
+      <success>Application runtime no longer depends on SQLite. Full suite passes on PostgreSQL, including current migration triggers. No cross-household reads or writes. Duplicate idempotent requests create one logical result. Revocation racing with provider-result persistence leaves no unauthorized derived data. Export/import matches all included fixture rows and digests. A restore rehearsal meets owner-approved recovery targets.</success>
+      <failure>Any missing migration, catalog drift, lost audit or provenance behavior, leaked database error, unbounded pool, cross-tenant result, erasure gap, untested restore or absent rollback blocks the cutover.</failure>
+      <rollback>No hosted data exists. Keep SQLite as a local reference until the PostgreSQL runtime and restore gates pass. If no production data exists, revert the runtime code and preserve the local test data. Never down-migrate destructively.</rollback>
+    </batch>
+
+    <batch id="B4" name="Durable enqueue and separate worker process" estimate="2-4 weeks" status="proposed">
+      <objective>Remove long-running execution from the API request and make worker recovery durable.</objective>
+      <work>Use current job/task tables as the starting point. Commit job creation and idempotency atomically, then return 202 with the job resource location. Run analysis, scan, OCR orchestration and policy structuring from explicit worker entrypoints. Use PostgreSQL row leases, owner, expiry, bounded attempts, backoff, terminal failure and a visible quarantine or dead-letter path. Make rate limits and spend budgets safe across multiple processes. Add graceful shutdown and lease recovery. Use a transactional outbox for side effects that must follow a database commit.</work>
+      <payloadRule>Messages and job records carry opaque job references, operation, schema version, consent grant reference, source version and digest only. Fetch authorized bytes and text through a protected boundary at execution time.</payloadRule>
+      <deliverables>API and worker start modes, durable lease and retry design, status contract, outbox contract, job runbook and failure-injection evidence.</deliverables>
+      <success>New work is durably committed before the API returns. Killing a worker before or after a claim does not lose a job. Duplicate delivery yields one logical completion. Expired leases recover. Provider timeouts do not cause blind duplicate submissions. Revocation stops not-yet-started work and fences in-flight results at commit.</success>
+      <failure>Memory-only retry state, accepted-but-lost work, duplicate logical results, endless retry, sensitive queue payloads or a revoked result committed after a race blocks acceptance.</failure>
+      <rollback>Workers can be stopped while jobs remain persisted. Retain a compatible runner for existing job versions until all jobs settle or are explicitly reconciled.</rollback>
+    </batch>
+
+    <batch id="B5" name="Bounded parallel parsing and provider routing" estimate="2-4 weeks" status="proposed">
+      <objective>Improve throughput for independent parsing work without sacrificing evidence quality or consent.</objective>
+      <work>Define task units for document, section and page processing. Confirm each provider's official API, async behavior, rate limits, request idempotency, data retention, processing region, cancellation and terms. Persist provider and contract versions. Bound concurrency by the smallest relevant provider, model budget, database, memory and local CPU limit. Store per-page provenance and merge in deterministic order. Add one alternative provider only as an isolated adapter and only with explicit recipient consent.</work>
+      <evaluation>Use versioned, synthetic or legally approved held-out documents. Measure field precision, recall, abstention, missing pages, conflicts, latency, provider calls, token use and cost. Synthetic fixtures prove pipeline mechanics, not real policy extraction accuracy.</evaluation>
+      <success>Parallel and sequential runs produce identical ordering and equivalent validated contracts on the supported test corpus. Every result traces to source page, digest, provider and version. Concurrency stays within tested limits. A partial provider failure resumes or fails clearly without corrupting successful page results.</success>
+      <failure>Accuracy regression, missing or duplicated pages, provenance loss, provider quota violation, consent bypass, unbounded spend or unsafe resubmission blocks release.</failure>
+      <rollback>Keep sequential mode available behind a configuration switch and return to it if parallel results or quality gates fail.</rollback>
+    </batch>
+
+    <batch id="B6" name="Kafka local learning lab and adoption gate" estimate="3-7 working days for the lab; additional production work only if justified" status="optional">
+      <objective>Learn event streaming and test whether it solves a measured need. Do not make Kafka a prerequisite for the reliable local application.</objective>
+      <work>Run a single-node local Kafka KRaft profile with synthetic metadata events. Demonstrate producer, topic, partition key, consumer group, rebalance, offset reset, duplicate delivery, retry, poison message and replay. If the adoption gate passes, implement transactional-outbox publishing, versioned event schemas, consumer inbox/deduplication, retention and broker outage recovery.</work>
+      <success>Learning exercise documents partition ordering, maximum useful consumer parallelism, replay behavior and duplicate handling. Production integration, if approved, has no dual-write gap, no raw document/OCR payloads, and survives broker outage and replay without duplicate business effects.</success>
+      <failure>A local single broker or successful demo is not HA evidence. If Kafka adds no measured fan-out, replay or throughput benefit, leave it out of the application path.</failure>
+      <rollback>Disable the Kafka publisher and drain or replay metadata events from the PostgreSQL outbox. PostgreSQL remains authoritative.</rollback>
+    </batch>
+
+    <batch id="B7" name="Redis need check" estimate="1-3 days for decision; implementation only after evidence" status="deferred">
+      <objective>Decide whether caching or distributed ephemeral coordination is needed after API and worker processes scale independently.</objective>
+      <work>Measure repeated reads, rate-limit coordination and hot-key behavior. If a specific need is proven, add Redis for that narrow use. Keep durable job state, business records, consent and erasure authority in PostgreSQL.</work>
+      <success>One measured issue has a before-and-after result, explicit expiry and invalidation rules, outage behavior, recovery behavior and no loss of authoritative data.</success>
+      <failure>Adding Redis as a second write path or a replacement source of truth without durability, reconciliation and deletion proof blocks adoption.</failure>
+      <rollback>Turn off the cache or coordinator and fall back to PostgreSQL with an explicitly lower rate limit or throughput.</rollback>
+    </batch>
+
+    <batch id="B8" name="Local Kubernetes learning with kind" estimate="4-8 working days" status="optional">
+      <objective>Learn scheduling and process recovery using already working API and worker images.</objective>
+      <work>Deploy API and worker as separate local workloads. Add startup, readiness and liveness probes; CPU and memory requests/limits; secret references; graceful termination; bounded replica count; and a local PostgreSQL dependency strategy. Keep a single local development profile as the default.</work>
+      <autoscaling>Do not configure automatic scaling from CPU alone. First measure queue age, provider quota, database capacity and worker concurrency. Later, use queue age or depth only with explicit global and per-provider ceilings so adding Pods cannot create a provider retry storm or exhaust the database pool.</autoscaling>
+      <success>Pods can restart or move without losing durable work. API readiness reflects actual dependencies. Worker shutdown releases or expires leases safely. No claim is made about production availability, managed database behavior or real-world capacity.</success>
+      <failure>If container startup, storage, secret handling or worker recovery is unclear in Compose, pause Kubernetes work and fix the simpler environment first.</failure>
+      <rollback>Delete only the named local kind cluster. No AWS cluster is created in this batch.</rollback>
+    </batch>
+
+    <batch id="B9" name="Resilience and release evidence" estimate="1-3 weeks" status="required-before-any-hosted-claim">
+      <objective>Prove bounded behavior under declared workloads and representative failure modes.</objective>
+      <work>Inject API restart, worker kill during each job state, PostgreSQL restart, pool exhaustion, disk full, duplicate events, delayed provider response, provider 429/5xx, uncertain provider submission, poison message, broker outage, expired lease, concurrent consent revocation and restore from backup. Run the B0 workload profiles and record application, database, broker and provider resource usage.</work>
+      <success>All household, consent, idempotency and erasure invariants pass. No accepted job disappears. Backlog age returns to target after recovery. Queue and provider concurrency stay bounded. Restore meets declared RPO/RTO. Logs and traces expose failure without exposing evidence. Every result is tied to an exact commit and environment.</success>
+      <failure>Any privacy, tenant, audit, data-loss or erasure failure is a release blocker. Missed performance targets require capacity analysis or backpressure, not automatic addition of more services.</failure>
+      <rollback>Keep local-only deployment and disable the new worker or broker path until a forward fix is verified. Do not claim production readiness from unit tests or a local kind cluster.</rollback>
+    </batch>
+  </batches>
+
+  <globalSuccessCriteria>
+    <criterion>Owner-approved workload envelope and user-visible latency targets exist before capacity claims.</criterion>
+    <criterion>Every protected read, write, provider call and result commit remains tenant-scoped and consent-checked.</criterion>
+    <criterion>Every durable job is idempotent, observable, restartable, bounded and recoverable.</criterion>
+    <criterion>Every newly persisted derived value, cache, event, log or provider result has an explicit retention and erasure decision.</criterion>
+    <criterion>Database catalog parity, concurrency behavior, backup and restore are proven on the current schema.</criterion>
+    <criterion>Parallel parsing preserves page order, digest, provider version, citations and the model authority states.</criterion>
+    <criterion>Operations can identify queue backlog, stuck jobs, provider throttling, database saturation and recovery progress without exposing sensitive content.</criterion>
+    <criterion>The normal local development workflow remains usable without starting optional Kafka, Redis or Kubernetes profiles.</criterion>
+  </globalSuccessCriteria>
+
+  <globalStopConditions>
+    <condition severity="blocker">Any cross-household access, consent bypass, post-revocation disclosure, un-erased derived result or sensitive log/event payload.</condition>
+    <condition severity="blocker">Any data loss, unrecoverable migration, failed restore, unbounded retry loop or unbounded provider spend.</condition>
+    <condition severity="blocker">A provider response timeout with unknown submission state that triggers an unsafe automatic resubmission.</condition>
+    <condition severity="blocker">A schema, contract or execution-plan conflict that has not been reconciled against the current repository.</condition>
+    <condition severity="review">A performance result outside the accepted workload envelope. Diagnose and change one bottleneck at a time; do not infer that more infrastructure will fix it.</condition>
+  </globalStopConditions>
+
+  <effortEstimate confidence="low" basis="solo builder learning locally; workload and deployment choices remain unknown">
+    <localLearningBuild>Roughly 8-14 full-time weeks for the core local path through PostgreSQL, containers, telemetry, durable workers and a bounded parsing pilot. Kafka and kind learning labs can add 2-4 weeks depending on depth.</localLearningBuild>
+    <hostedProductionProof>Several additional months may be needed for identity, secrets, storage, legal and privacy review, deployment, monitoring, backup and restore drills, live provider evaluation and operations. This is not included in the local estimate.</hostedProductionProof>
+    <warning>These are planning ranges, not delivery commitments. No user volume or latency target exists, and no finite design can guarantee operation at every possible scale.</warning>
+  </effortEstimate>
+
+  <referencePatterns>
+    <reference name="Asynchronous document analysis" url="https://docs.aws.amazon.com/textract/latest/dg/api-async.html">A useful industry pattern: submit a long-running job, persist its provider job reference, receive or poll for completion, then fetch results. Reuse the workflow shape, not the assumption that AWS is the provider.</reference>
+    <reference name="PostgreSQL queue claiming" url="https://www.postgresql.org/docs/current/sql-select.html">PostgreSQL documents SKIP LOCKED for queue-like consumers. Use it only with a clear lease, transaction and recovery design.</reference>
+    <reference name="Kafka design" url="https://kafka.apache.org/42/design/design/">Study partitions, consumer groups, replay and delivery semantics. Treat application side effects as at-least-once unless the complete transaction boundary proves otherwise.</reference>
+    <reference name="Redis Streams" url="https://redis.io/docs/latest/develop/data-types/streams/">Study pending entries, acknowledgements and reclaim behavior. Review persistence and replication guarantees before treating it as durable work storage.</reference>
+    <reference name="OpenTelemetry" url="https://opentelemetry.io/docs/what-is-opentelemetry/">Use instrumentation and collection interfaces without confusing telemetry generation with a storage or visualization backend.</reference>
+    <reference name="Docker image practices" url="https://docs.docker.com/build/building/best-practices/">Use small, replaceable containers with one primary concern and a non-root runtime where possible.</reference>
+    <reference name="kind" url="https://kind.sigs.k8s.io/docs/user/quick-start/">Use kind to learn Kubernetes locally using container nodes. Do not treat a local cluster as production HA evidence.</reference>
+  </referencePatterns>
+
+  <finalInstruction>Start at B0. Do not start Kafka, Redis, Kubernetes or AWS implementation before the preceding gates pass. At each gate, report what changed, what was measured, what remains unverified, what failed, and whether the next batch is safe to begin. Keep the result honest: robust within a defined and tested envelope, never promised to work at unlimited scale.</finalInstruction>
+</migrationPrompt>
