@@ -69,9 +69,11 @@ test('a restart turns a running attempt into interrupted and never re-dispatches
   assert.deepEqual((await jobRows(database)).map(row => [row.status, row.attempt]), [['running', 1]]);
   assert.equal((await before.result({ document: owned, workflowRunId: run })).status, 'running');
 
-  // A new process on the same database. Every public method waits for start-up recovery first.
+  // A new process on the same database. Every public method waits for start-up recovery first. Recovery
+  // interrupts only attempts whose lease expired; this test's clock is fixed, so leaseMs: 0 stands for
+  // "the previous process died and its lease ran out". Lease behaviour is tested in caps-and-jobs.test.mjs.
   const model = fakeModel();
-  const after = service(services, model);
+  const after = createPolicyStructuringService({ services, loadKnownIdentifiers: async () => [], createModelCall: model.createModelCall, env: enabled, leaseMs: 0 });
   const shown = await after.result({ document: owned, workflowRunId: run });
   assert.deepEqual((await jobRows(database)).map(row => [row.status, row.error_code]), [['interrupted', 'STRUCTURING_INTERRUPTED']]);
   assert.equal(shown.status, 'interrupted');

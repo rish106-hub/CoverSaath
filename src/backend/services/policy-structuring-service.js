@@ -7,12 +7,16 @@ import {
 // Runs whole-document policy structuring (ADR 0006) for one stored, OCR'd document inside the application:
 // stored Sarvam blocks in, privacy gate, gateway-backed Gemini calls, deterministic validation, one commit.
 // The run executes in this process after the start request returns. Each attempt is a durable job row
-// (identifiers and codes only); the in-memory map keeps only the promise. After a restart a running row
-// becomes interrupted and is never re-dispatched: a new paid attempt needs an explicit restart request.
+// (identifiers and codes only); the in-memory map keeps only the promise. A running row carries a lease:
+// its owning process refreshes `updated_at` every heartbeat interval. Recovery interrupts only rows whose
+// lease expired (the owner died), never a live instance's row on a shared database. An interrupted row is
+// never re-dispatched: a new paid attempt needs an explicit restart request.
 // A committed run is durable and is never paid for twice (idempotent replay by pipeline version).
 
 const MAX_KNOWN_IDENTIFIERS = 200;
 const MAX_JOBS = 200;
+const DEFAULT_LEASE_MS = 120_000;
+const DEFAULT_HEARTBEAT_MS = 30_000;
 const RECORDED_BY = 'policy-structuring-service';
 
 function coded(code, message, statusCode) {
@@ -64,18 +68,39 @@ function jobBody(job) {
 
 const NEEDS_RESTART = new Set(['failed', 'interrupted']);
 
-export function createPolicyStructuringService({ services, loadKnownIdentifiers, createModelCall, env = process.env, onError = () => {} } = {}) {
+export function createPolicyStructuringService({
+  services, loadKnownIdentifiers, createModelCall, env = process.env, onError = () => {},
+  leaseMs = DEFAULT_LEASE_MS, heartbeatMs = DEFAULT_HEARTBEAT_MS,
+} = {}) {
   if (!services || typeof loadKnownIdentifiers !== 'function' || typeof createModelCall !== 'function') {
     throw new TypeError('services, loadKnownIdentifiers and createModelCall are required.');
   }
-  // Attempts left running by a previous process are interrupted, never resumed. Every public
-  // method waits for this first; a failure is not cached, so the next call tries again.
+  // leaseMs: how long an attempt may go without a heartbeat before it counts as abandoned. 0 treats every
+  // active attempt as abandoned (deliberate single-process takeover). heartbeatMs must be well below leaseMs.
+  if (!Number.isSafeInteger(leaseMs) || leaseMs < 0) throw new TypeError('leaseMs must be a non-negative integer.');
+  if (!Number.isSafeInteger(heartbeatMs) || heartbeatMs < 1) throw new TypeError('heartbeatMs must be a positive integer.');
+  // Attempts whose lease expired (abandoned by a dead process) are interrupted, never resumed. Every public
+  // method waits for this first; a failure is not cached, so the next call tries again. An attempt a live
+  // process still heartbeats is left alone.
+  let lastSweep = 0;
   let interrupted = null;
   const interruptOnce = () => {
     interrupted ??= Promise.resolve()
-      .then(() => services.policyStructuring.interruptRunningJobs())
+      .then(() => services.policyStructuring.interruptRunningJobs({ leaseMs }))
+      .then(() => { lastSweep = Date.now(); })
       .catch(error => { interrupted = null; throw error; });
     return interrupted;
+  };
+  // A process that died inside another instance's lease window is recovered by a later sweep, at most
+  // once per heartbeat interval, so an abandoned row cannot stay 'running' until the next restart.
+  let sweeping = null;
+  const sweepExpired = async () => {
+    await interruptOnce();
+    if (Date.now() - lastSweep < heartbeatMs) return;
+    sweeping ??= services.policyStructuring.interruptRunningJobs({ leaseMs })
+      .then(() => { lastSweep = Date.now(); })
+      .finally(() => { sweeping = null; });
+    await sweeping;
   };
   interruptOnce().catch(() => {});
   const jobs = new Map();
@@ -122,7 +147,7 @@ export function createPolicyStructuringService({ services, loadKnownIdentifiers,
       if (!structuringEnabled(env)) throw coded('STRUCTURING_DISABLED', 'Policy structuring is disabled.', 503);
       if (typeof consentGrantId !== 'string' || !consentGrantId) throw coded('VALIDATION_ERROR', 'consentGrantId is required.', 400);
       if (typeof restart !== 'boolean') throw coded('VALIDATION_ERROR', 'restart must be a boolean.', 400);
-      await interruptOnce();
+      await sweepExpired();
       const { stored: existing, registryVersion } = await scopeOf(document, workflowRunId);
       if (current(existing)) return statusBody('finished', { outcome: storedOutcome(existing.counts) });
       const scope = { householdId: document.householdId, workflowRunId, documentId: document.id };
@@ -154,6 +179,16 @@ export function createPolicyStructuringService({ services, loadKnownIdentifiers,
       };
       const entry = { running: true };
       jobs.set(key, entry);
+      // Lease heartbeat while this process owns the attempt; stops when the attempt settles.
+      let beating = false;
+      const heartbeat = setInterval(() => {
+        if (beating) return;
+        beating = true;
+        services.policyStructuring.heartbeatJob({ jobId: row.id })
+          .catch(error => onError({ code: clientCode(error) }))
+          .finally(() => { beating = false; });
+      }, heartbeatMs);
+      heartbeat.unref?.();
       entry.promise = execute({ document, workflowRunId, consentGrantId, subjectAdultId, registryVersion, stored })
         .then(async result => {
           if (result?.replayed) {
@@ -170,7 +205,7 @@ export function createPolicyStructuringService({ services, loadKnownIdentifiers,
           await finish({ status: 'failed', errorCode: code });
           onError({ code });
         })
-        .finally(() => { jobs.delete(key); });
+        .finally(() => { clearInterval(heartbeat); jobs.delete(key); });
       return statusBody('running');
     },
 
@@ -185,7 +220,7 @@ export function createPolicyStructuringService({ services, loadKnownIdentifiers,
      * skipped chunks. Readings are what the document printed (already stored); nothing here is proven.
      */
     async result({ document, workflowRunId }) {
-      await interruptOnce();
+      await sweepExpired();
       const { stored, registryVersion } = await scopeOf(document, workflowRunId);
       const job = await services.policyStructuring.latestJob({ householdId: document.householdId, workflowRunId, documentId: document.id });
       if (job?.status === 'running' || job?.status === 'queued') return statusBody('running');

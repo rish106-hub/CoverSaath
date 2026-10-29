@@ -588,15 +588,36 @@ export class PolicyStructuringRepository {
   }
 
   /**
-   * Startup recovery: attempts left running by a previous process become interrupted. Nothing is
-   * re-dispatched; a new paid attempt needs an explicit restart request. One counts-only audit event.
+   * Lease heartbeat: the owning process refreshes `updated_at` of its active attempt. An attempt whose
+   * `updated_at` is older than the lease is treated as abandoned by interruptRunningJobs. Returns false
+   * when the attempt is no longer active (finished, interrupted).
    */
-  async interruptRunningJobs({ at = this.clock().toISOString() } = {}) {
+  async heartbeatJob({ jobId, at = this.clock().toISOString() } = {}) {
+    requireBounded(jobId, 'jobId');
     requireTimestamp(at, 'at');
+    const { changes } = await this.database.run(`UPDATE policy_structuring_jobs SET updated_at = ?
+      WHERE id = ? AND status IN ('queued', 'running')`, [at, jobId]);
+    return changes === 1;
+  }
+
+  /**
+   * Recovery: active attempts become interrupted. Nothing is re-dispatched; a new paid attempt needs an
+   * explicit restart request. One counts-only audit event.
+   *
+   * With `leaseMs` (a non-negative integer) only attempts whose lease expired are interrupted: those with
+   * `updated_at` at or before `at - leaseMs`. A live process on a shared database refreshes `updated_at`
+   * through heartbeatJob, so its attempts survive another instance's recovery. Without `leaseMs`, every
+   * active attempt is interrupted (single-process takeover; the old behaviour).
+   */
+  async interruptRunningJobs({ at = this.clock().toISOString(), leaseMs = null } = {}) {
+    requireTimestamp(at, 'at');
+    if (leaseMs !== null && (!Number.isSafeInteger(leaseMs) || leaseMs < 0)) throw invalid('leaseMs is invalid.');
+    // Timestamps are fixed-width UTC ISO text, so text comparison is time order.
+    const cutoff = leaseMs === null ? '9999-12-31T23:59:59.999Z' : new Date(Date.parse(at) - leaseMs).toISOString();
     return this.#atomic(null, async () => {
       const jobs = (await this.database.run(`UPDATE policy_structuring_jobs
         SET status = 'interrupted', error_code = 'STRUCTURING_INTERRUPTED', finished_at = ?, updated_at = ?
-        WHERE status IN ('queued', 'running')`, [at, at])).changes;
+        WHERE status IN ('queued', 'running') AND updated_at <= ?`, [at, at, cutoff])).changes;
       if (jobs > 0) {
         await this.audit.append({
           action: 'policy_structuring.jobs_interrupted', resourceType: 'policy_structuring_jobs', resourceId: 'process_start',
