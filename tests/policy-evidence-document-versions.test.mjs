@@ -56,8 +56,9 @@ function harness({ documents, granted, others = [] }) {
       saveClauses: ({ documentId, clauses }) => { saved.set(documentId, clauses); },
       listClauses: ({ documentIds }) => documentIds.flatMap(id => saved.get(id) ?? []),
       searchClauses: () => [],
-      saveAnswer: ({ idempotencyKey, requestDigest, answer, access, consentCheck }) => {
-        consentCheck();
+      // Like ClauseRepository.saveAnswer: the (async) consent check is awaited before anything is written.
+      saveAnswer: async ({ idempotencyKey, requestDigest, answer, access, consentCheck }) => {
+        await consentCheck();
         const record = { answerId: `answer-${answers.size + 1}`, caseId: 'c', answer, access };
         answers.set(idempotencyKey, { requestDigest, record });
         return { replayed: false, ...record };
@@ -196,11 +197,11 @@ test('D2: the same idempotency key with a different document set is a different 
 test('D3: replay and GET after consent expiry are refused without a model call', async () => {
   const { ask, get, state } = harness({ documents: [doc('wording', 'wording', 1)], granted: ['wording'] });
   const first = await ask();
-  assert.equal(get(first.answerId).answerId, first.answerId);
+  assert.equal((await get(first.answerId)).answerId, first.answerId);
   const calls = state.calls;
   state.expired = true;
   await assert.rejects(ask(), { code: 'CONSENT_REQUIRED' });
-  assert.throws(() => get(first.answerId), { code: 'CONSENT_REQUIRED' });
+  await assert.rejects(get(first.answerId), { code: 'CONSENT_REQUIRED' });
   assert.equal(state.calls, calls);
 });
 
@@ -210,7 +211,7 @@ test('D3: an answer stored without access metadata is never served', async () =>
   assert.equal(Object.hasOwn(first, 'access'), false, 'access metadata is never returned');
   // Dropping access from the stored record simulates a row written before access was recorded.
   answers.get('idem-key-0001').record.access = null;
-  assert.throws(() => get(first.answerId), { code: 'CONSENT_REQUIRED' });
+  await assert.rejects(get(first.answerId), { code: 'CONSENT_REQUIRED' });
   await assert.rejects(ask(), { code: 'CONSENT_REQUIRED' });
 });
 
@@ -221,12 +222,12 @@ test('D1b: replay after a newer version arrives is refused; GET returns the answ
   const others = [];
   const { ask, get, state } = harness({ documents, granted: ['wording-v1', 'wording-v2'], others });
   const first = await ask();
-  assert.equal(get(first.answerId).current, true);
+  assert.equal((await get(first.answerId)).current, true);
   others.push(doc('wording-v2', 'wording', 2, 'active', 'other-case'));
   const calls = state.calls;
   await assert.rejects(ask(), { code: 'POLICY_EVIDENCE_ANSWER_STALE', statusCode: 409 });
   assert.equal(state.calls, calls);
-  assert.equal(get(first.answerId).current, false);
+  assert.equal((await get(first.answerId)).current, false);
 });
 
 test('D1b: an answer whose document left the active state is not current', async () => {
@@ -235,7 +236,7 @@ test('D1b: an answer whose document left the active state is not current', async
   const first = await ask();
   documents[0].lifecycleState = 'deletion_requested';
   await assert.rejects(ask(), { code: 'POLICY_EVIDENCE_ANSWER_STALE' });
-  assert.equal(get(first.answerId).current, false);
+  assert.equal((await get(first.answerId)).current, false);
 });
 
 test('D1b: a newer version arriving during the model call stops the answer from being stored', async () => {
@@ -252,7 +253,7 @@ test('D1b: an answer is not current when a read document now belongs to another 
   const { ask, get } = harness({ documents, granted: ['wording'] });
   const first = await ask();
   documents[0].caseId = 'other-case';
-  assert.equal(get(first.answerId).current, false);
+  assert.equal((await get(first.answerId)).current, false);
 });
 
 // D5: one in-flight question per idempotency key.

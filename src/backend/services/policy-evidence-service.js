@@ -210,16 +210,8 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
       result = await investigate({
         question, clauses, knownIdentifiers, call, consentCheck,
         documentScope: { authorised, excluded: [...excluded].map(([reason, count]) => ({ reason, count })) },
-        // investigate() reads search results synchronously. A repository whose search returns a
-        // Promise would otherwise read as "no hits" and silently degrade retrieval, so it fails loudly.
-        search: ({ query, kinds, limit }) => {
-          const hits = services.clauses.searchClauses({ householdId, caseId, documentIds, query, kinds, limit });
-          if (typeof hits?.then === 'function') {
-            hits.then(() => {}, () => {});
-            throw coded('POLICY_EVIDENCE_SEARCH_UNAVAILABLE', 'Clause search is unavailable.', 503);
-          }
-          return hits;
-        },
+        // investigate() awaits each search (household, case and document scoped) before ranking its hits.
+        search: ({ query, kinds, limit }) => services.clauses.searchClauses({ householdId, caseId, documentIds, query, kinds, limit }),
       });
     } finally { inFlight -= 1; }
     const access = { consentGrantId, subjectAdultId, documentIds };

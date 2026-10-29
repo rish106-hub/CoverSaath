@@ -67,7 +67,7 @@ export function clauseBudget(skeleton, { maxInputBytes, payloadMarginBytes = INV
  * and schedule clauses, then FTS hits interleaved by rank (`search` is household-scoped): a search over every clause
  * first, then one per checklist kind as a boost, then 'other'. Kind ranks; it never decides what can be found.
  */
-export function selectContext({ gated, checklist, question, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall, tuning = RETRIEVAL_TUNING }) {
+export async function selectContext({ gated, checklist, question, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall, tuning = RETRIEVAL_TUNING }) {
   const total = gated.reduce((sum, clause) => sum + clauseBytes(clause), 0);
   if (total <= budgetBytes && gated.length <= maxClauses) return { clauses: gated, path: 'whole_policy', truncated: false };
   const byId = new Map(gated.map((clause, index) => [clause.clauseId, { clause, index }]));
@@ -81,10 +81,11 @@ export function selectContext({ gated, checklist, question, search, budgetBytes,
   // `searchFirst`: the number of search ranks read ahead of the always-read endorsement and schedule clauses (true: all).
   const ranksFirst = tuning.searchFirst === true ? INVESTIGATION_LIMITS.ftsPerKind : Math.max(0, Number(tuning.searchFirst) || 0);
   const query = shapeQuery(question, tuning);
-  const lists = [
-    search({ query, kinds: null, limit: INVESTIGATION_LIMITS.ftsPerKind }),
-    ...[...new Set([...checklist, 'other'])].map(kind => search({ query, kinds: [kind], limit: INVESTIGATION_LIMITS.ftsPerKind })),
-  ];
+  // `search` may be sync or async; searches run one at a time, in the order they are ranked.
+  const lists = [];
+  for (const kinds of [null, ...[...new Set([...checklist, 'other'])].map(kind => [kind])]) {
+    lists.push(await search({ query, kinds, limit: INVESTIGATION_LIMITS.ftsPerKind }));
+  }
   const takeRanks = (from, to) => { for (let rank = from; rank < to; rank += 1) for (const hits of lists) if (hits[rank]) take(hits[rank]); };
   takeRanks(0, ranksFirst);
   fixed.forEach(take);
@@ -172,7 +173,7 @@ const SWEEP_TERMS = 'exclusion excluded waiver waived override notwithstanding l
  * next (the cross-page exclusion a first retrieval missed), then sweep-relevant kinds, then the rest of the first-pass
  * context. `dropped` counts first-pass clauses left out; `truncated` is true when any candidate did not fit.
  */
-export function selectSweepContext({ context, gated, findings, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall, tuning = RETRIEVAL_TUNING }) {
+export async function selectSweepContext({ context, gated, findings, search, budgetBytes, maxClauses = INVESTIGATION_LIMITS.maxClausesPerCall, tuning = RETRIEVAL_TUNING }) {
   const gatedById = new Map(gated.map(clause => [clause.clauseId, clause]));
   const inContext = new Set(context.clauses.map(clause => clause.clauseId));
   const cited = new Set(findings.flatMap(finding => finding.clauseIds ?? []));
@@ -186,7 +187,7 @@ export function selectSweepContext({ context, gated, findings, search, budgetByt
       const query = shapeQuery(raw, tuning);
       // Sweep kinds are a boost; the unfiltered search then reaches a clause of any kind.
       for (const kinds of [SWEEP_KINDS, null]) {
-        for (const hit of search({ query, kinds, limit: INVESTIGATION_LIMITS.ftsPerKind })) take(gatedById.get(hit.clauseId));
+        for (const hit of await search({ query, kinds, limit: INVESTIGATION_LIMITS.ftsPerKind })) take(gatedById.get(hit.clauseId));
       }
     }
   }
@@ -418,7 +419,7 @@ export async function investigate({ question, clauses, search = () => [], call, 
   const questions = [{ text: gatedQuestion }];
   const firstBudget = clauseBudget({ questions, checklist, clauses: [] }, caps);
   if (firstBudget <= 0) fail('INVESTIGATION_BUDGET_EXCEEDED', 'The question leaves no room for policy text within the model input limit.');
-  const context = selectContext({ gated: sent, checklist, question: gatedQuestion, search, budgetBytes: firstBudget, maxClauses: caps.maxClausesPerCall });
+  const context = await selectContext({ gated: sent, checklist, question: gatedQuestion, search, budgetBytes: firstBudget, maxClauses: caps.maxClausesPerCall });
   const clauseText = new Map(context.clauses.map(clause => [clause.clauseId, clause.text]));
   const wire = context.clauses.map(toWire);
   const usage = { inputTokens: 0, outputTokens: 0, calls: 0 };
@@ -458,7 +459,7 @@ export async function investigate({ question, clauses, search = () => [], call, 
     try {
       const sweepFindings = parsed.findings.map(finding => ({ finding_id: finding.findingId, subject: finding.subject, quote: finding.quote, clause_ids: finding.clauseIds }));
       const sweepBudget = clauseBudget({ questions, findings: sweepFindings, clauses: [] }, caps);
-      sweepContext = selectSweepContext({ context, gated: sent, findings: parsed.findings, search, budgetBytes: sweepBudget, maxClauses: caps.maxClausesPerCall });
+      sweepContext = await selectSweepContext({ context, gated: sent, findings: parsed.findings, search, budgetBytes: sweepBudget, maxClauses: caps.maxClausesPerCall });
       const sweepText = new Map(sweepContext.clauses.map(clause => [clause.clauseId, clause.text]));
       const sweepPayload = { questions, findings: sweepFindings, clauses: sweepContext.clauses.map(toWire) };
       // Cited clauses are never dropped, so findings that cite more than fits make the sweep impossible: it is skipped
