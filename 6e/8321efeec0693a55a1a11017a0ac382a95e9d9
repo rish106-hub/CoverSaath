@@ -1,0 +1,48 @@
+.dockerignore
+  s_692c874d7b8ff3::t_7ecc2647ab9d0a 1-14
+docker/entrypoint.sh
+  s_692c874d7b8ff3::t_7ecc2647ab9d0a 1-19
+docker/supabase-ca.crt
+  s_692c874d7b8ff3::t_f65e3c40d9d901 1-23
+docker/clamd.conf
+  s_692c874d7b8ff3::t_7ecc2647ab9d0a 1-8
+Dockerfile
+  s_692c874d7b8ff3::t_7ecc2647ab9d0a 1-27
+src/shared/http/security.js
+  s_692c874d7b8ff3::t_487b96fce8a7cb 1,7-9,12,52-60
+  s_692c874d7b8ff3::t_99ace0ba76366c 61
+src/server/server.js
+  s_692c874d7b8ff3::t_14c6a2ccbd47b6 7-12
+src/server/config.js
+  s_692c874d7b8ff3::t_dfc1fb832bc28d 45-55,68
+src/server/create-server.js
+  s_692c874d7b8ff3::t_dfc1fb832bc28d 4,198-199
+fly.toml
+  s_692c874d7b8ff3::t_7ecc2647ab9d0a 3-14,17-27,34-39,42-51
+  s_692c874d7b8ff3::t_e42bf9afe124e4 1-2,15-16,28-33,40-41
+src/server/http/security.js
+  s_692c874d7b8ff3::t_dfc1fb832bc28d 2
+src/shared/http/index.js
+  s_692c874d7b8ff3::t_487b96fce8a7cb 3
+tests/http-security.test.mjs
+  s_692c874d7b8ff3::t_e42bf9afe124e4 20-35
+tests/server-config.test.mjs
+  s_692c874d7b8ff3::t_e42bf9afe124e4 45-53
+  s_692c874d7b8ff3::t_321a92adba2a88 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6e8321efeec0693a55a1a11017a0ac382a95e9d9",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
