@@ -1,0 +1,52 @@
+src/backend/database/postgres/schema-expectations.js
+  s_692c874d7b8ff3::t_f97b7fed292ccd 1-101
+tests/postgres-catalog-parity.test.mjs
+  s_692c874d7b8ff3::t_6e5adabbec9520 150,199
+  s_692c874d7b8ff3::t_f6c78b474a955f 3-5
+tests/audit-chain-concurrency.test.mjs
+  s_692c874d7b8ff3::t_6e5adabbec9520 7
+src/backend/database/postgres/db.js
+  s_692c874d7b8ff3::t_f6c78b474a955f 9,288
+tests/postgres-triggers.test.mjs
+  s_692c874d7b8ff3::t_6e5adabbec9520 3
+README.md
+  s_692c874d7b8ff3::t_1fef655b94803b 12,100
+scripts/check-architecture.mjs
+  s_692c874d7b8ff3::t_e471922a1d3957 5-9,37-40
+tests/check-architecture.test.mjs
+  s_692c874d7b8ff3::t_ee6249997cf244 7,9
+  s_692c874d7b8ff3::t_e471922a1d3957 1-6,8,10-41
+src/backend/repositories/audit-repository.js
+  s_692c874d7b8ff3::t_6e5adabbec9520 23
+  s_692c874d7b8ff3::t_f6c78b474a955f 28-29
+src/backend/database/postgres/validate-schema.js
+  s_692c874d7b8ff3::t_6e5adabbec9520 3,68
+tests/support/sqlite-reference.mjs
+  s_692c874d7b8ff3::t_f97b7fed292ccd 1-74
+AGENTS.md
+  s_692c874d7b8ff3::t_f6c78b474a955f 47
+docs/architecture/data.md
+  s_692c874d7b8ff3::t_a92237bca4137e 7-10,14,19,43
+docs/architecture/pipeline-blocks.md
+  s_692c874d7b8ff3::t_cb3637c9e340cd 76,78
+docs/architecture/security.md
+  s_692c874d7b8ff3::t_7352618bf3a2cb 20
+docs/architecture/system.md
+  s_692c874d7b8ff3::t_e1a403e01c7218 21,23,75,77,79
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b462d60c9f90f18f0ae161901378984140d2ed4f",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
