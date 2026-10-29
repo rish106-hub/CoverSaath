@@ -137,6 +137,8 @@ async function job(database, runId) {
 }
 
 async function createAnalysisRun({ req, database, services, caseId, body, config, liveRegistryFactory }) {
+  // Fast fail only. The authoritative count runs again inside the run-creation
+  // transaction under the household lock (maxActiveRunsPerCase below).
   const activeRuns = (await database.one(`SELECT count(*) AS count FROM workflow_runs
     WHERE case_id = ? AND status IN ('queued', 'running')`, [caseId])).count;
   if (activeRuns >= config.maxRunsPerCase) {
@@ -154,7 +156,7 @@ async function createAnalysisRun({ req, database, services, caseId, body, config
     throw error;
   }
   const analysis = createPersistentCoverageAnalysisService({
-    port: createCoverageAnalysisPort({ database, services }),
+    port: createCoverageAnalysisPort({ database, services, maxActiveRunsPerCase: config.maxRunsPerCase }),
     ...(executionMode === 'live' ? { liveRegistry: liveRegistryFactory?.() } : {}),
   });
   const { created, notFound, job: run } = await analysis.createAnalysisRun({
