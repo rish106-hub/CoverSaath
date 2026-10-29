@@ -5,13 +5,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 
 // W4 journey through the real application: upload, Sarvam OCR (mocked HTTP), stored blocks, Gemini through
 // the model gateway (mocked SDK driver), deterministic validation, registry store, review result, revocation.
 // Synthetic data only.
 
+const pgOptions = postgresTestOptions();
 const bootstrapToken = 'coversaath-test-bootstrap-token-0001';
 const OWNER_NAME = 'Ishaan Synthetic';
 const PAGES = [
@@ -109,7 +110,7 @@ async function eventually(check, { timeoutMs = 3000 } = {}) {
 
 async function startApp(t, { env: extraEnv = {}, onGenerate } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-structuring-'));
-  const database = openDatabase({ path: join(directory, 'app.sqlite') });
+  const { db: database } = await freshDatabase(t);
   const requests = [];
   const env = {
     KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken,
@@ -129,7 +130,6 @@ async function startApp(t, { env: extraEnv = {}, onGenerate } = {}) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
-    database.close();
     rmSync(directory, { recursive: true, force: true });
   });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -221,7 +221,7 @@ const startStructuring = (app, s, grantId = s.geminiGrantId) => app.call(structu
 });
 const readResult = (app, s, token = s.token) => app.call(`${structuringPath(s)}?workflowRunId=${encodeURIComponent(s.workflowRunId)}`, { token });
 
-test('W4: an uploaded policy is structured through the app and returns a human-reviewable result', async t => {
+test('W4: an uploaded policy is structured through the app and returns a human-reviewable result', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app);
   const started = await startStructuring(app, s);
@@ -260,7 +260,7 @@ test('W4: an uploaded policy is structured through the app and returns a human-r
   assert.ok(app.requests.every(request => request.instructions.includes('untrusted')));
   assert.equal(app.requests.some(request => request.prompt.includes('Ishaan') || request.prompt.includes('Synthetic')), false);
   // Model call usage is stored counts-only with the run; audit carries no document text.
-  const audit = JSON.stringify(app.database.prepare(`SELECT event_payload_json FROM audit_events WHERE action LIKE 'policy_structuring%'`).all());
+  const audit = JSON.stringify(await app.database.prepare(`SELECT event_payload_json FROM audit_events WHERE action LIKE 'policy_structuring%'`).all());
   assert.ok(audit.includes('observations'));
   assert.equal(audit.includes('5,000 per day'), false);
 
@@ -285,12 +285,12 @@ test('W4: an uploaded policy is structured through the app and returns a human-r
   const afterRevoke = await readResult(app, s);
   assert.equal(afterRevoke.status, 200);
   assert.equal(afterRevoke.data.structuring.status, 'erased', 'structured readings are not served after revocation');
-  const remaining = app.database.prepare(`SELECT COUNT(*) AS n FROM coverage_parameter_observations
-    WHERE document_id = ? AND extraction_method = 'document_extraction' AND redacted_at IS NULL`).get(s.documentId).n;
+  const remaining = (await app.database.prepare(`SELECT COUNT(*) AS n FROM coverage_parameter_observations
+    WHERE document_id = ? AND extraction_method = 'document_extraction' AND redacted_at IS NULL`).get(s.documentId)).n;
   assert.equal(remaining, 0);
   // Only the Gemini-derived output went: the document and its OCR pages rest on other grants and stay.
-  assert.equal(app.database.prepare(`SELECT lifecycle_state FROM document_uploads WHERE id = ?`).get(s.documentId).lifecycle_state, 'active');
-  assert.equal(app.database.prepare(`SELECT COUNT(*) AS n FROM source_pages WHERE document_upload_id = ? AND extracted_text IS NOT NULL AND blocks_json IS NOT NULL`).get(s.documentId).n, 2);
+  assert.equal((await app.database.prepare(`SELECT lifecycle_state FROM document_uploads WHERE id = ?`).get(s.documentId)).lifecycle_state, 'active');
+  assert.equal((await app.database.prepare(`SELECT COUNT(*) AS n FROM source_pages WHERE document_upload_id = ? AND extracted_text IS NOT NULL AND blocks_json IS NOT NULL`).get(s.documentId)).n, 2);
 
   // A grant cannot name another household's document, so it can never authorise or erase across households.
   const foreignGrant = await app.call('/api/v1/consents', {
@@ -315,16 +315,16 @@ test('W4: an uploaded policy is structured through the app and returns a human-r
   assert.ok(again.data.structuring.parameters.some(parameter => parameter.key === 'd.room_rent_limit'));
 });
 
-test('W4: without a document-specific Gemini grant nothing is sent', async t => {
+test('W4: without a document-specific Gemini grant nothing is sent', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app);
-  const sarvamOnly = app.database.prepare(`SELECT consent_grant_id AS id FROM consent_scopes WHERE recipient = 'sarvam' AND resource_id = ?`).get(s.documentId).id;
+  const sarvamOnly = (await app.database.prepare(`SELECT consent_grant_id AS id FROM consent_scopes WHERE recipient = 'sarvam' AND resource_id = ?`).get(s.documentId)).id;
   const refused = await startStructuring(app, s, sarvamOnly);
   assert.ok([403, 409, 422].includes(refused.status), JSON.stringify(refused.data));
   assert.equal(app.requests.length, 0);
 });
 
-test('W4: with the feature flag off the route refuses and no provider call happens', async t => {
+test('W4: with the feature flag off the route refuses and no provider call happens', pgOptions, async t => {
   const app = await startApp(t, { env: { POLICY_STRUCTURING_ENABLED: 'false' } });
   const s = await scenario(app);
   const refused = await startStructuring(app, s);
@@ -333,7 +333,7 @@ test('W4: with the feature flag off the route refuses and no provider call happe
   assert.equal(app.requests.length, 0);
 });
 
-test('W4: consent revoked during the run stops further calls and stores nothing', async t => {
+test('W4: consent revoked during the run stops further calls and stores nothing', pgOptions, async t => {
   let app;
   let s;
   app = await startApp(t, {
@@ -352,15 +352,15 @@ test('W4: consent revoked during the run stops further calls and stores nothing'
   const result = await readResult(app, s);
   assert.equal(result.data.structuring.status, 'erased', 'the revoked attempt is erased, never shown as a result');
   assert.match(result.data.structuring.errorCode, /^[A-Z][A-Z0-9_]+$/);
-  assert.equal(app.database.prepare('SELECT COUNT(*) AS n FROM policy_structuring_runs WHERE document_id = ?').get(s.documentId).n, 0);
+  assert.equal((await app.database.prepare('SELECT COUNT(*) AS n FROM policy_structuring_runs WHERE document_id = ?').get(s.documentId)).n, 0);
 });
 
-test('W4: a restart turns a running attempt interrupted; a new attempt and a blocks upgrade need explicit flags', async t => {
+test('W4: a restart turns a running attempt interrupted; a new attempt and a blocks upgrade need explicit flags', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app);
-  const ocrJobs = () => app.database.prepare('SELECT count(*) AS n FROM ocr_jobs WHERE document_upload_id = ?').get(s.documentId).n;
-  const sarvamGrantId = app.database.prepare(`SELECT consent_grant_id AS id FROM consent_scopes WHERE recipient = 'sarvam' AND resource_id = ?`).get(s.documentId).id;
-  const jobsBefore = ocrJobs();
+  const ocrJobs = async () => (await app.database.prepare('SELECT count(*) AS n FROM ocr_jobs WHERE document_upload_id = ?').get(s.documentId)).n;
+  const sarvamGrantId = (await app.database.prepare(`SELECT consent_grant_id AS id FROM consent_scopes WHERE recipient = 'sarvam' AND resource_id = ?`).get(s.documentId)).id;
+  const jobsBefore = await ocrJobs();
 
   // OCR: a repeat normal request reuses the stored success; an upgrade of a document with blocks is refused.
   const ocrPath = `/api/v1/documents/${s.documentId}/ocr-jobs`;
@@ -371,11 +371,11 @@ test('W4: a restart turns a running attempt interrupted; a new attempt and a blo
   assert.deepEqual([notNeeded.status, notNeeded.data.error.code], [409, 'OCR_UPGRADE_NOT_NEEDED']);
   const badMode = await app.call(ocrPath, { method: 'POST', token: s.token, body: { consentGrantId: sarvamGrantId, mode: 'rerun' } });
   assert.deepEqual([badMode.status, badMode.data.error.code], [400, 'OCR_MODE_INVALID']);
-  assert.equal(ocrJobs(), jobsBefore, 'no new OCR job, so no provider charge');
+  assert.equal(await ocrJobs(), jobsBefore, 'no new OCR job, so no provider charge');
 
   // A running attempt left by a previous process (the structuring service starts on first use).
-  const sourceVersion = app.database.prepare('SELECT source_version FROM document_uploads WHERE id = ?').get(s.documentId).source_version;
-  app.database.prepare(`INSERT INTO policy_structuring_jobs (id, household_id, case_id, workflow_run_id, document_id, source_version,
+  const sourceVersion = (await app.database.prepare('SELECT source_version FROM document_uploads WHERE id = ?').get(s.documentId)).source_version;
+  await app.database.prepare(`INSERT INTO policy_structuring_jobs (id, household_id, case_id, workflow_run_id, document_id, source_version,
     pipeline_version, status, attempt, consent_grant_id, started_at, updated_at)
     VALUES ('job-previous-process', ?, ?, ?, ?, ?, 'policy-structuring/v2', 'running', 1, ?, '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z')`)
     .run(s.householdId, s.caseId, s.workflowRunId, s.documentId, sourceVersion, s.geminiGrantId);
@@ -391,6 +391,6 @@ test('W4: a restart turns a running attempt interrupted; a new attempt and a blo
   await app.server.structuring.settle(s.documentId, s.workflowRunId);
   const finished = await readResult(app, s);
   assert.equal(finished.data.structuring.processingStatus, 'finished');
-  assert.deepEqual(app.database.prepare('SELECT status, attempt FROM policy_structuring_jobs WHERE document_id = ? ORDER BY attempt').all(s.documentId)
+  assert.deepEqual((await app.database.prepare('SELECT status, attempt FROM policy_structuring_jobs WHERE document_id = ? ORDER BY attempt').all(s.documentId))
     .map(row => [row.status, row.attempt]), [['interrupted', 1], ['committed', 2]]);
 });

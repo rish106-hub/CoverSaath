@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
-import { createBackendServices } from '../src/backend/services/backend-services.js';
 import { POLICY_STRUCTURING_VERSION, documentGrantCheck, structurePolicyDocument } from '../src/features/policy-structuring/index.js';
 import { parameterAt as at, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 
 // Fake-caller journey (plan acceptance 2): block pages in, real sectioner, privacy gate, extractor,
 // reconciler and decisions, stored through the repository. Synthetic insurer and values only.
+const pgOptions = postgresTestOptions();
 const run = 'run-parameters';
 const document = 'document-parameters';
 const enabled = { POLICY_STRUCTURING_ENABLED: 'true' };
@@ -46,18 +46,16 @@ function fakeGemini() {
   return { call, calls };
 }
 
-function open(t) {
-  const database = openDatabase({ path: ':memory:' });
-  t.after(() => database.close());
-  seedParameterWorld(database);
-  const services = createBackendServices(database, { clock: () => new Date(at) });
-  services.coverageParameters.initializeRunParameters({ workflowRunId: run, registryVersion: 'policy-parameters/v1', ...parameterScope(), updatedBy: 'test' });
-  addScope(database, { id: 'scope-gemini', documentId: document });
+async function open(t) {
+  const { db: database, services } = await freshDatabase(t, { clock: () => new Date(at) });
+  await seedParameterWorld(database);
+  await services.coverageParameters.initializeRunParameters({ workflowRunId: run, registryVersion: 'policy-parameters/v1', ...parameterScope(), updatedBy: 'test' });
+  await addScope(database, { id: 'scope-gemini', documentId: document });
   return { database, services };
 }
 
 function addScope(database, { id, documentId = null, recipient = 'google-gemini' }) {
-  database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
+  return database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
     VALUES (?, 'consent-parameters', 'document', ?, 'derive', 'insurance_document', ?, ?)`).run(id, documentId, recipient, at);
 }
 
@@ -67,10 +65,10 @@ const commitWith = (services, consentCheck) => async ({ decisions, proposals }) 
   pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion: 'policy-parameters/v1', recordedBy: 'policy-structuring',
   decisions, proposals, consentCheck, at,
 });
-const resolution = (services, key) => services.coverageParameters.listForRun(run).find(record => record.parameterKey === key);
+const resolution = async (services, key) => (await services.coverageParameters.listForRun(run)).find(record => record.parameterKey === key);
 
-test('fake-caller journey stores observations and proposals and accounts for every chunk', async t => {
-  const { database, services } = open(t);
+test('fake-caller journey stores observations and proposals and accounts for every chunk', pgOptions, async t => {
+  const { database, services } = await open(t);
   const gemini = fakeGemini();
   const check = grantCheck(services);
   const result = await structurePolicyDocument({ pages, call: gemini.call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled });
@@ -83,23 +81,23 @@ test('fake-caller journey stores observations and proposals and accounts for eve
   assert.deepEqual({ ...result.commit, structuringRunId: undefined }, {
     replayed: false, structuringRunId: undefined, observations: 3, parameters: 2, conflicting: 1, skippedKeys: 0, proposals: 1,
   });
-  assert.equal(resolution(services, 'a.policy_type').resolutionState, 'extracted_unverified');
-  assert.equal(resolution(services, 'f.ped_waiting_period').resolutionState, 'conflicting', '3 Years vs 36 months is surfaced, no winner');
-  assert.deepEqual(services.policyStructuring.listProposals({ householdId: 'household-parameters', documentId: document, structuringRunId: result.commit.structuringRunId })
+  assert.equal((await resolution(services, 'a.policy_type')).resolutionState, 'extracted_unverified');
+  assert.equal((await resolution(services, 'f.ped_waiting_period')).resolutionState, 'conflicting', '3 Years vs 36 months is surfaced, no winner');
+  assert.deepEqual((await services.policyStructuring.listProposals({ householdId: 'household-parameters', documentId: document, structuringRunId: result.commit.structuringRunId }))
     .map(item => [item.proposedKey, item.status]), [['synthetic_daily_cash', 'pending_review']]);
   assert.equal(JSON.stringify(result.report).includes('Individual'), false, 'the coverage report carries counts, not text');
 
-  const stored = JSON.parse(database.prepare(`SELECT value_json FROM coverage_parameter_observations
-    WHERE recorded_by = 'policy-structuring' AND value_json LIKE '%Individual%'`).get().value_json);
+  const stored = JSON.parse((await database.prepare(`SELECT value_json FROM coverage_parameter_observations
+    WHERE recorded_by = 'policy-structuring' AND value_json LIKE '%Individual%'`).get()).value_json);
   assert.deepEqual([stored.evidenceQuote, Number.isInteger(stored.blockIndex)], ['Policy type | Individual', true], 'quote and block kept for review');
 
   const again = await structurePolicyDocument({ pages, call: fakeGemini().call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled });
   assert.equal(again.commit.replayed, true);
-  assert.equal(database.prepare('SELECT count(*) AS count FROM proposed_parameters').get().count, 1);
+  assert.equal((await database.prepare('SELECT count(*) AS count FROM proposed_parameters').get()).count, 1);
 
   const unpaid = fakeGemini();
   const skipped = await structurePolicyDocument({ pages, call: unpaid.call, consentCheck: check, knownIdentifiers: [], env: enabled,
-    alreadyStored: () => services.policyStructuring.getStructuringRun({ householdId: 'household-parameters', workflowRunId: run, documentId: document }) !== null });
+    alreadyStored: async () => (await services.policyStructuring.getStructuringRun({ householdId: 'household-parameters', workflowRunId: run, documentId: document })) !== null });
   assert.equal(skipped.replayed, true);
   assert.equal(unpaid.calls.length, 0, 'an already structured document makes no provider call');
 });
@@ -119,24 +117,24 @@ test('section titles are privacy-gated like chunk text before any call', async (
   }
 });
 
-test('the Gemini grant must name this document and the google-gemini recipient', t => {
-  const { database, services } = open(t);
+test('the Gemini grant must name this document and the google-gemini recipient', pgOptions, async t => {
+  const { database, services } = await open(t);
   const check = documentId => documentGrantCheck({ consents: services.consents, grantId: 'consent-parameters', subjectAdultId: 'adult-parameters', documentId, householdId: 'household-parameters' });
-  assert.doesNotThrow(check(document));
-  addScope(database, { id: 'scope-any-document' });
-  assert.throws(check('document-unnamed'), { code: 'CONSENT_SCOPE_REQUIRED' }, 'a scope without a document id is not document-specific');
-  database.prepare("UPDATE consent_scopes SET recipient = 'openai-gpt' WHERE id = 'scope-gemini'").run();
-  assert.throws(check(document), { code: 'CONSENT_SCOPE_REQUIRED' });
+  await assert.doesNotReject(check(document));
+  await addScope(database, { id: 'scope-any-document' });
+  await assert.rejects(check('document-unnamed'), { code: 'CONSENT_SCOPE_REQUIRED' }, 'a scope without a document id is not document-specific');
+  await database.prepare("UPDATE consent_scopes SET recipient = 'openai-gpt' WHERE id = 'scope-gemini'").run();
+  await assert.rejects(check(document), { code: 'CONSENT_SCOPE_REQUIRED' });
 });
 
-test('consent withdrawn between extraction and commit stores nothing', async t => {
-  const { database, services } = open(t);
+test('consent withdrawn between extraction and commit stores nothing', pgOptions, async t => {
+  const { database, services } = await open(t);
   let allowed = true;
   const check = () => { if (!allowed) throw Object.assign(new Error('revoked'), { code: 'CONSENT_REQUIRED' }); return grantCheck(services)(); };
   const call = async args => { const answer = await fakeGemini().call(args); if (!args.payload.chunks) allowed = false; return answer; };
   await assert.rejects(structurePolicyDocument({ pages, call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled }), { code: 'CONSENT_REQUIRED' });
-  assert.equal(database.prepare("SELECT count(*) AS count FROM coverage_parameter_observations WHERE recorded_by = 'policy-structuring'").get().count, 0);
-  assert.equal(database.prepare('SELECT count(*) AS count FROM proposed_parameters').get().count, 0);
+  assert.equal((await database.prepare("SELECT count(*) AS count FROM coverage_parameter_observations WHERE recorded_by = 'policy-structuring'").get()).count, 0);
+  assert.equal((await database.prepare('SELECT count(*) AS count FROM proposed_parameters').get()).count, 0);
 });
 
 test('the pipeline is off unless POLICY_STRUCTURING_ENABLED is true, before any call', async () => {

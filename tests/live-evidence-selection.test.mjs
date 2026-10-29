@@ -204,16 +204,16 @@ test('multi-document attribution: a citation resolves to the page and version of
   });
   const scenario = await setupLiveCase(app, { pageText: 'Room rent limit is 5000 (Document A marker).', suffix: 'doca' });
   // Document A's page is 3 of version "va"; document B's is 7 of version "vb".
-  app.database.prepare("UPDATE source_pages SET page_number = 3, source_version = 'va' WHERE id = ?").run(scenario.pageId);
-  app.database.prepare("UPDATE document_uploads SET source_version = 'va' WHERE id = ?").run(scenario.documentId);
-  const documentB = scenario.addDocument({ suffix: 'docb', text: 'Room rent limit is 7000 (Document B marker).', pageNumber: 7, sourceVersion: 'vb' });
+  await app.database.prepare("UPDATE source_pages SET page_number = 3, source_version = 'va' WHERE id = ?").run(scenario.pageId);
+  await app.database.prepare("UPDATE document_uploads SET source_version = 'va' WHERE id = ?").run(scenario.documentId);
+  const documentB = await scenario.addDocument({ suffix: 'docb', text: 'Room rent limit is 7000 (Document B marker).', pageNumber: 7, sourceVersion: 'vb' });
 
   const run = await scenario.startLiveRun('multi-document');
   assert.equal(run.status, 202, run.raw);
   assert.equal(run.data.tasks.filter(task => task.status === 'completed').length, 22);
   assert.equal(run.data.modelUsage.calls, 5);
 
-  const input = JSON.parse(app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id).input_json);
+  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id)).input_json);
   assert.deepEqual(input.sourcePages.map(item => [item.sourceId, item.documentId, item.page, item.version]).sort(), [
     [scenario.pageId, scenario.documentId, 3, 'va'],
     [documentB.pageId, documentB.documentId, 7, 'vb'],
@@ -234,7 +234,7 @@ test('multi-document attribution: a citation resolves to the page and version of
   }
 
   // The model cited document B's page; the fact is attributed to B (page 7, vb), not A.
-  const outputs = Object.fromEntries(app.database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(run.data.id)
+  const outputs = Object.fromEntries((await app.database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(run.data.id))
     .map(row => [row.task_kind, JSON.parse(row.output_json).payload]));
   const expected = { sourceId: opaqueSourceId(documentB.pageId), page: 7, version: 'vb' };
   assert.deepEqual(outputs.group_cover_analysis[0].coverageGraph.nodes[0].citations, [expected]);
@@ -252,8 +252,8 @@ test('a case with more than 30 realistic 4 KB pages completes the live workflow 
   const app = await startLiveServer(t, { modelRequests });
   const scenario = await setupLiveCase(app, { pageText: densePageText(0), suffix: 'big' });
   const document = { documentId: scenario.documentId, pageId: scenario.pageId, sourceVersion: '1' };
-  for (let index = 1; index <= 40; index += 1) scenario.addPage(document, { pageNumber: index + 1, text: densePageText(index) });
-  assert.equal(app.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 41);
+  for (let index = 1; index <= 40; index += 1) await scenario.addPage(document, { pageNumber: index + 1, text: densePageText(index) });
+  assert.equal((await app.database.prepare('SELECT count(*) AS count FROM source_pages').get()).count, 41);
 
   const run = await scenario.startLiveRun('many-pages');
   assert.equal(run.status, 202, run.raw);
@@ -262,7 +262,7 @@ test('a case with more than 30 realistic 4 KB pages completes the live workflow 
   assert.equal(run.data.modelUsage.calls, 5);
   assert.equal(modelRequests.length, 5);
 
-  const input = JSON.parse(app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id).input_json);
+  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id)).input_json);
   assert.ok(input.sourcePages.length > 0 && input.sourcePages.length <= 30);
   assert.equal(input.sourcePages.length + input.sourceSelection.notSent.length, 41, 'sent plus reported-unsent covers every page');
   assert.ok(input.sourceSelection.notSent.length > 0, 'the scenario must exceed the request budget');
@@ -272,12 +272,12 @@ test('a case with more than 30 realistic 4 KB pages completes the live workflow 
     assert.ok(Buffer.byteLength(JSON.stringify(evidence)) <= 48_000);
   }
   // Pages that were not sent are visible in the persisted blockers and the evidence review.
-  const reviews = Object.fromEntries(app.database.prepare("SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ? AND task_kind = 'evidence_review'").all(run.data.id)
+  const reviews = Object.fromEntries((await app.database.prepare("SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ? AND task_kind = 'evidence_review'").all(run.data.id))
     .map(row => [row.task_kind, JSON.parse(row.output_json).payload]));
   assert.ok(reviews.evidence_review.findings.some(finding => finding.code === 'SOURCE_NOT_SENT' && finding.reasonCode === 'REQUEST_BUDGET_EXCEEDED'));
   // Authorisation is limited to the pages that were sent.
   assert.deepEqual(input.authorizedSourceIds.sort(), input.sourcePages.map(item => item.sourceId).sort());
-  const authorized = app.database.prepare("SELECT event_payload_json FROM audit_events WHERE action = 'analysis.model_dispatch_authorized'").all();
+  const authorized = await app.database.prepare("SELECT event_payload_json FROM audit_events WHERE action = 'analysis.model_dispatch_authorized'").all();
   assert.equal(authorized.length, 5);
   assert.ok(authorized.every(event => JSON.parse(event.event_payload_json).sourceCount === input.sourcePages.length));
 });
@@ -286,14 +286,14 @@ test('a restricted page in one document is excluded with a blocker while the oth
   const modelRequests = [];
   const app = await startLiveServer(t, { modelRequests });
   const scenario = await setupLiveCase(app, { suffix: 'good' });
-  const restricted = scenario.addDocument({ suffix: 'restricted', text: 'Schedule. card 4111 1111 1111 1111 on file. Room rent limit is RESTRICTEDMARKER98765.' });
+  const restricted = await scenario.addDocument({ suffix: 'restricted', text: 'Schedule. card 4111 1111 1111 1111 on file. Room rent limit is RESTRICTEDMARKER98765.' });
 
   const run = await scenario.startLiveRun('mixed-restricted');
   assert.equal(run.status, 202, run.raw);
   assert.equal(run.data.tasks.filter(task => task.status === 'completed').length, 22);
   assert.equal(run.data.modelUsage.calls, 5);
 
-  const input = JSON.parse(app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id).input_json);
+  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id)).input_json);
   assert.deepEqual(input.authorizedSourceIds, [scenario.pageId]);
   assert.deepEqual(input.sourceBlockers, [{ code: 'SOURCE_EXCLUDED', reasonCode: 'RESTRICTED_EVIDENCE', documentId: opaqueDocumentId(restricted.documentId), pageCount: 1 }]);
 
@@ -301,14 +301,14 @@ test('a restricted page in one document is excluded with a blocker while the oth
     provider: modelRequests,
     http: run.raw,
     persisted: [
-      app.database.prepare('SELECT input_json FROM workflow_runs').all(),
-      app.database.prepare('SELECT input_json, output_json, last_error_message FROM workflow_tasks').all(),
-      app.database.prepare('SELECT event_payload_json FROM audit_events').all(),
+      await app.database.prepare('SELECT input_json FROM workflow_runs').all(),
+      await app.database.prepare('SELECT input_json, output_json, last_error_message FROM workflow_tasks').all(),
+      await app.database.prepare('SELECT event_payload_json FROM audit_events').all(),
     ],
   });
   for (const forbidden of ['4111 1111 1111 1111', 'RESTRICTEDMARKER98765', restricted.pageId, restricted.documentId]) assert.ok(!everything.includes(forbidden), `${forbidden} must not appear anywhere`);
 
-  const review = JSON.parse(app.database.prepare("SELECT output_json FROM workflow_tasks WHERE workflow_run_id = ? AND task_kind = 'evidence_review'").get(run.data.id).output_json).payload;
+  const review = JSON.parse((await app.database.prepare("SELECT output_json FROM workflow_tasks WHERE workflow_run_id = ? AND task_kind = 'evidence_review'").get(run.data.id)).output_json).payload;
   assert.ok(review.findings.some(finding => finding.code === 'SOURCE_EXCLUDED' && finding.reasonCode === 'RESTRICTED_EVIDENCE' && finding.documentId === opaqueDocumentId(restricted.documentId)));
 });
 
@@ -321,5 +321,5 @@ test('a case whose only page is restricted is refused with the source-pack error
   assert.match(response.raw, /at least one authorised, protected OCR source page/);
   assert.ok(!response.raw.includes('4111 1111'));
   assert.equal(modelRequests.length, 0);
-  assert.equal(app.database.prepare("SELECT count(*) AS count FROM workflow_runs WHERE execution_mode = 'live'").get().count, 0);
+  assert.equal((await app.database.prepare("SELECT count(*) AS count FROM workflow_runs WHERE execution_mode = 'live'").get()).count, 0);
 });

@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
-import { createBackendServices } from '../src/backend/services/backend-services.js';
 import { POLICY_STRUCTURING_VERSION, documentGrantCheck, structurePolicyDocument } from '../src/features/policy-structuring/index.js';
 import { parameterAt as at, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 
 // W2 close-out: authority ceiling at the repository and database for every structuring observation,
 // including a model-selected value, and the Gemini consent path through the whole pipeline.
 // Synthetic insurer, values and people only; the fake provider never touches a network.
+const pgOptions = postgresTestOptions();
 const run = 'run-parameters';
 const document = 'document-parameters';
 const household = 'household-parameters';
@@ -37,13 +37,11 @@ function selectingGemini(events = []) {
   return call;
 }
 
-function open(t) {
-  const database = openDatabase({ path: ':memory:' });
-  t.after(() => database.close());
-  seedParameterWorld(database);
-  const services = createBackendServices(database, { clock: () => new Date(at) });
-  services.coverageParameters.initializeRunParameters({ workflowRunId: run, registryVersion: 'policy-parameters/v1', ...parameterScope(), updatedBy: 'test' });
-  database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
+async function open(t) {
+  const { db: database, services } = await freshDatabase(t, { clock: () => new Date(at) });
+  await seedParameterWorld(database);
+  await services.coverageParameters.initializeRunParameters({ workflowRunId: run, registryVersion: 'policy-parameters/v1', ...parameterScope(), updatedBy: 'test' });
+  await database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
     VALUES ('scope-gemini', 'consent-parameters', 'document', ?, 'derive', 'insurance_document', 'google-gemini', ?)`).run(document, at);
   return { database, services };
 }
@@ -54,23 +52,23 @@ const commitWith = (services, consentCheck) => async ({ decisions, proposals }) 
   pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion: 'policy-parameters/v1', recordedBy: 'policy-structuring',
   decisions, proposals, consentCheck, at,
 });
-const resolution = (services, key) => services.coverageParameters.listForRun(run).find(record => record.parameterKey === key);
+const resolution = async (services, key) => (await services.coverageParameters.listForRun(run)).find(record => record.parameterKey === key);
 const structuringObservations = database => database.prepare(`SELECT observation.*, record.parameter_key FROM coverage_parameter_observations observation
   JOIN coverage_parameter_records record ON record.id = observation.parameter_record_id WHERE observation.recorded_by = 'policy-structuring'`).all();
-const storedCount = database => database.prepare("SELECT count(*) AS count FROM coverage_parameter_observations WHERE recorded_by = 'policy-structuring'").get().count
-  + database.prepare('SELECT count(*) AS count FROM proposed_parameters').get().count
-  + database.prepare('SELECT count(*) AS count FROM policy_structuring_runs').get().count;
+const storedCount = async database => (await database.prepare("SELECT count(*) AS count FROM coverage_parameter_observations WHERE recorded_by = 'policy-structuring'").get()).count
+  + (await database.prepare('SELECT count(*) AS count FROM proposed_parameters').get()).count
+  + (await database.prepare('SELECT count(*) AS count FROM policy_structuring_runs').get()).count;
 
-test('a model-selected value is stored extracted_unverified with every reading, and nothing can lift it higher', async t => {
-  const { database, services } = open(t);
+test('a model-selected value is stored extracted_unverified with every reading, and nothing can lift it higher', pgOptions, async t => {
+  const { database, services } = await open(t);
   const check = grantCheck(services);
   const result = await structurePolicyDocument({ pages, call: selectingGemini(), consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled });
   const ped = result.decisions.find(decision => decision.parameterKey === 'f.ped_waiting_period');
   assert.deepEqual([ped.state, ped.reasonCode, ped.observations.length], ['extracted_unverified', 'model_selected_from_conflict', 2]);
 
-  const record = resolution(services, 'f.ped_waiting_period');
+  const record = await resolution(services, 'f.ped_waiting_period');
   assert.deepEqual([record.resolutionState, record.authority, record.resolutionReasonCode], ['extracted_unverified', 'model', 'model_selected_from_conflict']);
-  const rows = structuringObservations(database);
+  const rows = await structuringObservations(database);
   assert.equal(rows.filter(row => row.parameter_key === 'f.ped_waiting_period').length, 2, 'both readings are stored beside the selection');
   assert.ok(rows.every(row => row.extraction_method === 'document_extraction' && row.review_status === 'not_reviewed'));
 
@@ -82,29 +80,31 @@ test('a model-selected value is stored extracted_unverified with every reading, 
   for (const row of rows) {
     for (const state of ['proven', 'calculated', 'dynamic', 'verified', 'reported']) {
       for (const authority of ['model', 'deterministic', 'human_reviewer', 'official_source']) {
-        assert.throws(() => lift(row.parameter_record_id, row.id, state, authority), /not supported by the observation|CHECK constraint failed/, `${state} by ${authority}`);
+        await assert.rejects(() => lift(row.parameter_record_id, row.id, state, authority), /not supported by the observation|violates check constraint/, `${state} by ${authority}`);
       }
     }
     // The observation cannot be marked accepted (the precondition for proven) or re-typed in place.
-    assert.throws(() => database.prepare("UPDATE coverage_parameter_observations SET review_status = 'accepted' WHERE id = ?").run(row.id), /append only/);
-    assert.throws(() => database.prepare("UPDATE coverage_parameter_observations SET extraction_method = 'human_review' WHERE id = ?").run(row.id), /append only/);
+    await assert.rejects(() => database.prepare("UPDATE coverage_parameter_observations SET review_status = 'accepted' WHERE id = ?").run(row.id), /append only/);
+    await assert.rejects(() => database.prepare("UPDATE coverage_parameter_observations SET extraction_method = 'human_review' WHERE id = ?").run(row.id), /append only/);
   }
   // Repository: the same through setResolution, citing the model-selected observation.
-  const selected = rows.find(row => row.parameter_key === 'f.ped_waiting_period' && row.id === database.prepare(
-    'SELECT resolved_observation_id AS id FROM coverage_parameter_resolutions WHERE parameter_record_id = ?').get(row.parameter_record_id).id);
+  const pedRecordId = rows.find(row => row.parameter_key === 'f.ped_waiting_period').parameter_record_id;
+  const { id: selectedId } = await database.prepare(
+    'SELECT resolved_observation_id AS id FROM coverage_parameter_resolutions WHERE parameter_record_id = ?').get(pedRecordId);
+  const selected = rows.find(row => row.parameter_key === 'f.ped_waiting_period' && row.id === selectedId);
   assert.ok(selected, 'the resolution cites the selected observation');
   for (const state of ['proven', 'calculated', 'dynamic']) {
     for (const authority of [null, 'model', 'deterministic', 'human_reviewer', 'official_source']) {
-      assert.throws(() => services.coverageParameters.setResolution({
+      await assert.rejects(() => services.coverageParameters.setResolution({
         parameterRecordId: selected.parameter_record_id, state, observationId: selected.id, resolvedValue: { text: '3 Years' }, authority, updatedBy: 'test', at,
       }), `${state} by ${authority}`);
     }
   }
-  assert.equal(resolution(services, 'f.ped_waiting_period').resolutionState, 'extracted_unverified');
+  assert.equal((await resolution(services, 'f.ped_waiting_period')).resolutionState, 'extracted_unverified');
 });
 
-test('the repository refuses a model-selected decision above extracted_unverified', t => {
-  const { database, services } = open(t);
+test('the repository refuses a model-selected decision above extracted_unverified', pgOptions, async t => {
+  const { database, services } = await open(t);
   const observations = [
     { value: { text: '3 Years', normalized: null, subject: 'policy' }, page: 2, blockIndex: 0, evidenceQuote: 'after 3 Years' },
     { value: { text: '36 months', normalized: null, subject: 'policy' }, page: 2, blockIndex: 2, evidenceQuote: 'waiting period: 36 months' },
@@ -115,17 +115,17 @@ test('the repository refuses a model-selected decision above extracted_unverifie
     decisions: [{ parameterKey: 'f.ped_waiting_period', state, reasonCode: 'model_selected_from_conflict', selectedQuote: 'after 3 Years', observations }],
   });
   for (const state of ['proven', 'calculated', 'dynamic', 'verified', 'reported', 'conflicting', 'unknown']) {
-    assert.throws(() => attempt(state), { code: 'STRUCTURING_DECISION_INVALID' }, state);
+    await assert.rejects(() => attempt(state), { code: 'STRUCTURING_DECISION_INVALID' }, state);
   }
-  assert.equal(storedCount(database), 0);
-  assert.equal(attempt('extracted_unverified').replayed, false, 'the ceiling state itself is accepted');
+  assert.equal(await storedCount(database), 0);
+  assert.equal((await attempt('extracted_unverified')).replayed, false, 'the ceiling state itself is accepted');
 });
 
-test('consent is checked before every provider call, before commit and again inside the commit transaction', async t => {
-  const { database, services } = open(t);
+test('consent is checked before every provider call, before commit and again inside the commit transaction', pgOptions, async t => {
+  const { database, services } = await open(t);
   const events = [];
   const grant = grantCheck(services);
-  const check = () => { events.push(database.isTransaction ? 'consent-in-transaction' : 'consent'); return grant(); };
+  const check = () => { events.push(database.inTransaction ? 'consent-in-transaction' : 'consent'); return grant(); };
   await structurePolicyDocument({ pages, call: selectingGemini(events), consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled, limits: { maxChunksPerCall: 1 } });
   const calls = events.filter(event => event === 'extract' || event === 'reconcile').length;
   assert.ok(calls >= 3, 'several extraction calls and one reconcile call');
@@ -135,39 +135,39 @@ test('consent is checked before every provider call, before commit and again ins
   assert.deepEqual(events.slice(-2), ['consent', 'consent-in-transaction']);
 });
 
-test('the grant must be document-specific for google-gemini; another document or recipient does not count', t => {
-  const { database, services } = open(t);
-  assert.doesNotThrow(grantCheck(services));
-  database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
+test('the grant must be document-specific for google-gemini; another document or recipient does not count', pgOptions, async t => {
+  const { database, services } = await open(t);
+  await assert.doesNotReject(grantCheck(services));
+  await database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
     VALUES ('scope-other-model', 'consent-parameters', 'document', 'document-other', 'derive', 'insurance_document', 'openai-gpt', ?)`).run(at);
-  assert.throws(grantCheck(services, 'document-other'), { code: 'CONSENT_SCOPE_REQUIRED' }, 'another recipient for that document');
-  assert.throws(grantCheck(services, 'document-unknown'), error => ['CONSENT_SCOPE_REQUIRED', 'CONSENT_REQUIRED'].includes(error.code));
+  await assert.rejects(grantCheck(services, 'document-other'), { code: 'CONSENT_SCOPE_REQUIRED' }, 'another recipient for that document');
+  await assert.rejects(grantCheck(services, 'document-unknown'), error => ['CONSENT_SCOPE_REQUIRED', 'CONSENT_REQUIRED'].includes(error.code));
 });
 
-test('consent withdrawn mid-run stops further calls and stores nothing', async t => {
-  const { database, services } = open(t);
+test('consent withdrawn mid-run stops further calls and stores nothing', pgOptions, async t => {
+  const { database, services } = await open(t);
   const events = [];
   const base = selectingGemini(events);
   const call = async request => {
     const answer = await base(request);
-    if (events.length === 1) services.consents.revoke({ grantId: 'consent-parameters', revokedByAdultId: 'adult-parameters' });
+    if (events.length === 1) await services.consents.revoke({ grantId: 'consent-parameters', revokedByAdultId: 'adult-parameters' });
     return answer;
   };
   const check = grantCheck(services);
   await assert.rejects(structurePolicyDocument({ pages, call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled, limits: { maxChunksPerCall: 1 } }),
     error => ['CONSENT_REQUIRED', 'CONSENT_SCOPE_REQUIRED'].includes(error.code));
   assert.deepEqual(events, ['extract'], 'no provider call after the withdrawal');
-  assert.equal(storedCount(database), 0);
+  assert.equal(await storedCount(database), 0);
 });
 
-test('consent lost only inside the commit transaction stores nothing', async t => {
-  const { database, services } = open(t);
+test('consent lost only inside the commit transaction stores nothing', pgOptions, async t => {
+  const { database, services } = await open(t);
   const grant = grantCheck(services);
   const check = () => {
-    if (database.isTransaction) throw Object.assign(new Error('Active subject-scoped consent is required.'), { code: 'CONSENT_REQUIRED' });
+    if (database.inTransaction) throw Object.assign(new Error('Active subject-scoped consent is required.'), { code: 'CONSENT_REQUIRED' });
     return grant();
   };
   await assert.rejects(structurePolicyDocument({ pages, call: selectingGemini(), consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled }), { code: 'CONSENT_REQUIRED' });
-  assert.equal(storedCount(database), 0);
-  assert.equal(resolution(services, 'f.ped_waiting_period').resolutionState, 'unknown');
+  assert.equal(await storedCount(database), 0);
+  assert.equal((await resolution(services, 'f.ped_waiting_period')).resolutionState, 'unknown');
 });

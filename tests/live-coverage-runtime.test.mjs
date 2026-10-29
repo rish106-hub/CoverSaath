@@ -60,16 +60,16 @@ test('persistent HTTP workflow executes only model-eligible roles with explicit 
     }
   }
   // No duplicate task executions: one persisted task per workflow key, each attempted exactly once.
-  const persistedTasks = database.prepare('SELECT agent_name, attempt_count, status FROM workflow_tasks WHERE workflow_run_id = ?').all(analysis.data.id);
+  const persistedTasks = await database.prepare('SELECT agent_name, attempt_count, status FROM workflow_tasks WHERE workflow_run_id = ?').all(analysis.data.id);
   assert.equal(persistedTasks.length, 22);
   assert.equal(new Set(persistedTasks.map(task => task.agent_name)).size, 22);
   assert.ok(persistedTasks.every(task => task.attempt_count === 1 && task.status === 'completed'));
 
   // The production pre-dispatch validator ran from the default server path
   // exactly once per provider call, for this run, and allowed every one.
-  const authorized = auditActions(database, 'analysis.model_dispatch_authorized').filter(event => event.resourceId === analysis.data.id);
+  const authorized = (await auditActions(database, 'analysis.model_dispatch_authorized')).filter(event => event.resourceId === analysis.data.id);
   assert.equal(authorized.length, modelRequests.length);
-  assert.equal(auditActions(database, 'analysis.model_dispatch_denied').length, 0);
+  assert.equal((await auditActions(database, 'analysis.model_dispatch_denied')).length, 0);
   assert.deepEqual(authorized.map(event => event.payload.task).sort(), [
     'evidence_synthesis', 'group_cover_extraction', 'personal_cover_extraction', 'profile_extraction', 'question_drafting',
   ]);
@@ -81,11 +81,11 @@ test('persistent HTTP workflow executes only model-eligible roles with explicit 
     assert.ok(!providerBody.includes(raw), 'raw identifier must not reach the provider');
   }
 
-  const persisted = JSON.parse(database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(analysis.data.id).input_json);
+  const persisted = JSON.parse((await database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(analysis.data.id)).input_json);
   assert.equal(persisted.modelPermission, true);
   assert.deepEqual(persisted.authorizedSourceIds, [scenario.pageId]);
   assert.deepEqual(persisted.authorizedSources, [{ sourceId: scenario.pageId, documentId: scenario.documentId }]);
-  const outputs = database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(analysis.data.id).map(row => ({ taskKind: row.task_kind, output: JSON.parse(row.output_json) }));
+  const outputs = (await database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(analysis.data.id)).map(row => ({ taskKind: row.task_kind, output: JSON.parse(row.output_json) }));
   const modelOutputs = outputs.filter(item => item.output.producer.execution);
   assert.equal(modelOutputs.length, 5);
   assert.ok(modelOutputs.every(item => item.output.producer.owner === 'model_assist'));
@@ -197,8 +197,8 @@ const opaqueSourceId = rawId => sanitizeEvidenceForModel({
   upstream: [],
 }).input.sources[0].id;
 
-function reviewOutputs(database, runId) {
-  return Object.fromEntries(database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(runId)
+async function reviewOutputs(database, runId) {
+  return Object.fromEntries((await database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(runId))
     .map(row => [row.task_kind, JSON.parse(row.output_json ?? "null")?.payload ?? null]));
 }
 
@@ -219,7 +219,7 @@ test('live happy path: opaque model citations map back to authorised pages; mode
   assert.ok(modelRequests.every(request => !request.prompt.includes(scenario.pageId)));
   assert.ok(modelRequests.some(request => request.prompt.includes(opaque)));
 
-  const outputs = reviewOutputs(app.database, run.data.id);
+  const outputs = await reviewOutputs(app.database, run.data.id);
   // Citation mapping works: no source is unauthorised. The only evidence finding is
   // the review requirement for model-extracted (unverified) facts.
   assert.equal(outputs.privacy_review.status, 'passed');
@@ -233,7 +233,7 @@ test('live happy path: opaque model citations map back to authorised pages; mode
   assert.equal(outputs.deterministic_release_gate.status, 'blocked');
   assert.equal(outputs.deterministic_release_gate.externalActionsAuthorized, false);
   assert.equal(outputs.bounded_synthesis.householdAction.recommendation.externalActionsAuthorized, false);
-  assert.equal(app.database.prepare('SELECT status, terminal_reason FROM workflow_runs WHERE id = ?').get(run.data.id).terminal_reason, 'RELEASE_BLOCKED');
+  assert.equal((await app.database.prepare('SELECT status, terminal_reason FROM workflow_runs WHERE id = ?').get(run.data.id)).terminal_reason, 'RELEASE_BLOCKED');
 });
 
 test('live run never releases when a model cites an opaque id of a page outside the run', async t => {
@@ -250,16 +250,16 @@ test('live run never releases when a model cites an opaque id of a page outside 
   // The model boundary rejects the citation first; review is the second, independent defence.
   assert.notEqual(run.data.status, 'completed');
   assert.equal(run.data.tasks.filter(task => task.status === 'completed').length < 22, true);
-  const outputs = reviewOutputs(app.database, run.data.id);
+  const outputs = await reviewOutputs(app.database, run.data.id);
   assert.notEqual(outputs.deterministic_release_gate?.status, 'released');
 });
 
 test('a denied document stays out of the authorised mapping so its opaque id is never accepted', async t => {
   const app = await startLiveServer(t);
   const scenario = await setupLiveCase(app);
-  const denied = scenario.addDocument({ suffix: 'denied', scopeRecipient: 'someone-else' });
+  const denied = await scenario.addDocument({ suffix: 'denied', scopeRecipient: 'someone-else' });
   const run = await scenario.startLiveRun('live-denied-doc');
-  const input = JSON.parse(app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id).input_json);
+  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id)).input_json);
   assert.ok(!input.authorizedSourceIds.includes(denied.pageId), 'denied document page must not be authorised');
   assert.ok(!input.authorizedSources.some(source => source.documentId === denied.documentId));
   assert.ok(!run.raw.includes(denied.pageId));
