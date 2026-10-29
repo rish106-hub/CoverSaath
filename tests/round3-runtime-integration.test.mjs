@@ -158,8 +158,14 @@ test('T1: an unknown registry version or a failed initialisation leaves no run b
   await seedParameterWorld(database);
   const services = createBackendServices(database);
   const port = createCoverageAnalysisPort({ database, services });
+  // Run creation re-checks the run's own coverage grant under the household lock, so the runs
+  // below carry an active coverage_reconstruction grant from the case subject with a case derive scope.
+  const coverageGrant = await services.consents.grant({
+    id: 'consent-coverage-atomic', householdId: 'household-parameters', subjectAdultId: 'adult-parameters', purpose: 'coverage_reconstruction',
+    scopes: [{ resourceType: 'case', resourceId: 'case-parameters', action: 'derive', dataCategory: 'insurance_document' }],
+  });
   const create = parameters => port.createRunWithParameters({
-    id: 'run-atomic', caseId: 'case-parameters', workflowName: COVERAGE_ANALYSIS_WORKFLOW.name,
+    id: 'run-atomic', caseId: 'case-parameters', consentGrantId: coverageGrant.id, workflowName: COVERAGE_ANALYSIS_WORKFLOW.name,
     workflowVersion: COVERAGE_ANALYSIS_WORKFLOW.version, executionMode: 'fixture', input: {},
     tasks: [{ key: 'profile', agentName: 'coverage-analysis/profile', taskKind: 'profile_intake', dependsOn: [], input: { key: 'profile' } }],
     parameters,

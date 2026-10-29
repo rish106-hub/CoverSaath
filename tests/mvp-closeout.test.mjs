@@ -244,10 +244,10 @@ test('live run: a document grant revoked during the model call records no observ
 // Independent review findings F1, F2, F4, F5, F6, F7 and F8.
 // ---------------------------------------------------------------------------
 
-async function runningTask(database, { id = 'task-parameters', owner = 'worker-a', status = 'running' } = {}) {
+async function runningTask(database, { id = 'task-parameters', owner = 'worker-a', status = 'running', runId = 'run-parameters' } = {}) {
   await database.prepare(`INSERT INTO workflow_tasks (id, workflow_run_id, agent_name, task_kind, status, lease_owner, created_at)
-    VALUES (?, 'run-parameters', 'coverage-analysis/profile', 'profile_intake', ?, ?, ?)`).run(id, status, owner, at);
-  await database.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = 'run-parameters'").run();
+    VALUES (?, ?, 'coverage-analysis/profile', 'profile_intake', ?, ?, ?)`).run(id, runId, status, owner, at);
+  await database.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = ?").run(runId);
 }
 
 test('F1: a stale worker whose lease moved records nothing; the holder records once with an in-transaction audit', pg, async t => {
@@ -326,19 +326,40 @@ test('F5: a state set by a human reviewer is not replaced by model output', pg, 
 test('F6 and F1: the port records a citation only for a page selected for that parameter, under the task lease', pg, async t => {
   const { createBackendServices: services } = await import('../src/backend/services/index.js');
   const { createCoverageAnalysisPort } = await import('../src/backend/services/index.js');
+  const { GEMINI_MODEL_RECIPIENT } = await import('../src/features/ai-analysis/privacy-evidence-gate.js');
   const { database } = await open(t);
   const backend = services(database);
-  await backend.coverageParameters.initializeRunParameters({ workflowRunId: 'run-parameters', registryVersion: v1, ...parameterScope(), updatedBy: 'test' });
-  await database.prepare('UPDATE workflow_runs SET input_json = ? WHERE id = ?').run(JSON.stringify({ sourcePages: [{
-    sourceId: 'page-parameters', documentId: 'document-parameters', version: 'version-1', page: 2, text: 'Deductible is 10000.', parameterKeys: ['d.deductible'],
-  }] }), 'run-parameters');
-  await runningTask(database);
+  // Observation recording re-checks source eligibility under the household lock, so the run is
+  // live exactly as run creation persists it: a coverage grant it carries, the page's document
+  // covered by a document grant that names the model recipient, and the page in its authorised
+  // sources. The seeded run has no immutable consent reference, so this run is created with one.
+  await backend.consents.grant({
+    id: 'consent-coverage-live', householdId: 'household-parameters', subjectAdultId: 'adult-parameters', purpose: 'coverage_reconstruction',
+    scopes: [{ resourceType: 'case', resourceId: 'case-parameters', action: 'derive', dataCategory: 'insurance_document' }],
+  });
+  await backend.consents.grant({
+    id: 'consent-document-live', householdId: 'household-parameters', subjectAdultId: 'adult-parameters', purpose: 'document_processing',
+    scopes: [{ resourceType: 'document', resourceId: 'document-parameters', action: 'derive', dataCategory: 'insurance_document', recipient: GEMINI_MODEL_RECIPIENT }],
+  });
+  await backend.workflows.createRun({
+    id: 'run-live', caseId: 'case-parameters', workflowName: 'coverage-reconstruction', workflowVersion: 'v2', executionMode: 'live',
+    consentGrantId: 'consent-coverage-live',
+    input: {
+      authorizedSourceIds: ['page-parameters'],
+      authorizedSources: [{ sourceId: 'page-parameters', documentId: 'document-parameters' }],
+      sourcePages: [{
+        sourceId: 'page-parameters', documentId: 'document-parameters', version: 'version-1', page: 2, text: 'Deductible is 10000.', parameterKeys: ['d.deductible'],
+      }],
+    },
+  });
+  await backend.coverageParameters.initializeRunParameters({ workflowRunId: 'run-live', registryVersion: v1, ...parameterScope({ workflowRunId: 'run-live' }), updatedBy: 'test' });
+  await runningTask(database, { runId: 'run-live' });
   const port = createCoverageAnalysisPort({ database, services: backend });
   const cite = key => ({ profile: { [key]: { value: 'cited', status: MODEL_EXTRACTED_UNVERIFIED, sources: [{ id: opaqueSourceId('page-parameters') }] } } });
   const lease = { taskId: 'task-parameters', workerId: 'worker-a' };
-  assert.equal((await port.recordModelObservations({ runId: 'run-parameters', taskKey: 'profile', payload: cite('d.room_rent_limit'), ...lease })).observations, 0);
-  assert.equal((await port.recordModelObservations({ runId: 'run-parameters', taskKey: 'profile', payload: cite('d.deductible'), ...lease })).observations, 1);
-  await assert.rejects(port.recordModelObservations({ runId: 'run-parameters', taskKey: 'profile', payload: cite('d.deductible'), taskId: 'task-parameters', workerId: 'worker-b' }), { code: 'TASK_LEASE_LOST' });
+  assert.equal((await port.recordModelObservations({ runId: 'run-live', taskKey: 'profile', payload: cite('d.room_rent_limit'), ...lease })).observations, 0);
+  assert.equal((await port.recordModelObservations({ runId: 'run-live', taskKey: 'profile', payload: cite('d.deductible'), ...lease })).observations, 1);
+  await assert.rejects(port.recordModelObservations({ runId: 'run-live', taskKey: 'profile', payload: cite('d.deductible'), taskId: 'task-parameters', workerId: 'worker-b' }), { code: 'TASK_LEASE_LOST' });
 });
 
 test('F4: erasing run data without a parameter repository fails closed when observations exist', pg, async t => {
