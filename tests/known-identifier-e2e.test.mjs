@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
 import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis/index.js';
 import { createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
+import { postgresTestOptions } from './support/pg.mjs';
 import { liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
 const KNOWN_NAME = 'Zorblax Quimby';
@@ -20,29 +21,29 @@ const KNOWN_PHONE = '5550100';
 const KNOWN_DOB = '2001-03-17';
 const FRAGMENTS = ['Zorblax', 'Quimby', 'Fenwick', 'Tolliver', KNOWN_PHONE, KNOWN_DOB];
 
-function seedHouseholdIdentity(app, scenario) {
+async function seedHouseholdIdentity(app, scenario) {
   const at = new Date().toISOString();
-  app.database.prepare('UPDATE adult_users SET display_name = ?, contact_phone = ? WHERE id = ?').run(KNOWN_NAME, KNOWN_PHONE, scenario.ownerId);
-  app.database.prepare('UPDATE household_members SET display_name = ? WHERE id = ?').run(KNOWN_NAME, scenario.ownerMemberId);
-  app.database.prepare(`INSERT INTO household_members (id, household_id, display_name, member_kind, date_of_birth, created_at, updated_at)
+  await app.database.prepare('UPDATE adult_users SET display_name = ?, contact_phone = ? WHERE id = ?').run(KNOWN_NAME, KNOWN_PHONE, scenario.ownerId);
+  await app.database.prepare('UPDATE household_members SET display_name = ? WHERE id = ?').run(KNOWN_NAME, scenario.ownerMemberId);
+  await app.database.prepare(`INSERT INTO household_members (id, household_id, display_name, member_kind, date_of_birth, created_at, updated_at)
     VALUES ('member-known-dependent', ?, ?, 'dependent', ?, ?, ?)`).run(scenario.householdId, KNOWN_DEPENDENT, KNOWN_DOB, at, at);
 }
 
-function everythingPersisted(database) {
+async function everythingPersisted(database) {
   return JSON.stringify({
-    runs: database.prepare('SELECT input_json FROM workflow_runs').all(),
-    tasks: database.prepare('SELECT input_json, output_json, last_error_message FROM workflow_tasks').all(),
-    audit: database.prepare('SELECT event_payload_json FROM audit_events').all(),
+    runs: await database.prepare('SELECT input_json FROM workflow_runs').all(),
+    tasks: await database.prepare('SELECT input_json, output_json, last_error_message FROM workflow_tasks').all(),
+    audit: await database.prepare('SELECT event_payload_json FROM audit_events').all(),
   });
 }
 
-test('K1 [awaits P0-C rebase]: known household names, phone and date of birth never reach the provider, run input, task output or audit', async t => {
+test('K1 [awaits P0-C rebase]: known household names, phone and date of birth never reach the provider, run input, task output or audit', postgresTestOptions(), async t => {
   const modelRequests = [];
   const app = await startLiveServer(t, { modelRequests });
   const scenario = await setupLiveCase(app, { suffix: 'k1-e2e' });
-  seedHouseholdIdentity(app, scenario);
+  await seedHouseholdIdentity(app, scenario);
   // Unlabelled mentions the generic detectors cannot recognise on their own.
-  app.database.prepare('UPDATE source_pages SET extracted_text = ? WHERE id = ?').run(
+  await app.database.prepare('UPDATE source_pages SET extracted_text = ? WHERE id = ?').run(
     `Room rent limit is 5000 per day, as agreed with ${KNOWN_NAME} (${KNOWN_DEPENDENT}, ${KNOWN_DOB}, ref ${KNOWN_PHONE}).`, scenario.pageId);
 
   const response = await scenario.startLiveRun('k1-known-values');
@@ -50,7 +51,7 @@ test('K1 [awaits P0-C rebase]: known household names, phone and date of birth ne
   assert.equal(modelRequests.length, 5, 'the live happy path is unchanged');
   assert.equal(response.data.tasks.filter(task => task.status === 'completed').length, 22);
 
-  const surfaces = { prompt: JSON.stringify(modelRequests.map(request => request.prompt)), persisted: everythingPersisted(app.database), response: response.raw };
+  const surfaces = { prompt: JSON.stringify(modelRequests.map(request => request.prompt)), persisted: await everythingPersisted(app.database), response: response.raw };
   // Digit-only probes must not match inside random uuids / sha256 digests: stand-alone tokens only.
   const leaks = (body, fragment) => (/^[0-9]+$/.test(fragment)
     ? new RegExp(`(?<![0-9a-fA-F])${fragment}(?![0-9a-fA-F])`).test(body)
@@ -64,11 +65,11 @@ test('K1 [awaits P0-C rebase]: known household names, phone and date of birth ne
   assert.match(surfaces.prompt, /room rent limit/i);
 });
 
-test('K1 [awaits P0-C rebase]: the model boundary redacts known values even when storage missed them', async t => {
+test('K1 [awaits P0-C rebase]: the model boundary redacts known values even when storage missed them', postgresTestOptions(), async t => {
   const modelRequests = [];
   const app = await startLiveServer(t);
   const scenario = await setupLiveCase(app, { suffix: 'k1-boundary' });
-  seedHouseholdIdentity(app, scenario);
+  await seedHouseholdIdentity(app, scenario);
   const services = createBackendServices(app.database);
   const basePort = createCoverageAnalysisPort({ database: app.database, services });
   const registry = createGeminiCoverageRegistryFactory({
@@ -81,9 +82,9 @@ test('K1 [awaits P0-C rebase]: the model boundary redacts known values even when
   const { job } = await service.createAnalysisRun({ caseId: scenario.caseId, consentGrantId: scenario.coverageConsentId, executionMode: 'live', modelPermission: true, idempotencyKey: 'k1-boundary' });
 
   // Simulate a stored excerpt that still names a household member (for example text stored before this fix).
-  const input = JSON.parse(app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(job.id).input_json);
+  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(job.id)).input_json);
   input.sourcePages[0].text = `Room rent limit is 5000 for ${KNOWN_NAME} and ${KNOWN_DEPENDENT}, born ${KNOWN_DOB}.`;
-  app.database.prepare('UPDATE workflow_runs SET input_json = ? WHERE id = ?').run(JSON.stringify(input), job.id);
+  await app.database.prepare('UPDATE workflow_runs SET input_json = ? WHERE id = ?').run(JSON.stringify(input), job.id);
 
   const settled = await service.runUntilSettled(job.id);
   assert.equal(settled.tasks.filter(task => task.status === 'completed').length, 22);

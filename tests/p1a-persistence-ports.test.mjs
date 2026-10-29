@@ -1,11 +1,10 @@
-// P1-A: persistence port interfaces. The SQLite implementation satisfies them, the
+// P1-A: persistence port interfaces. The PostgreSQL implementation satisfies them, the
 // persistent service requires exactly the listed methods, and the runtime works against an
-// adapter whose every method is asynchronous (as a PostgreSQL adapter will be).
-// In-memory SQLite and synthetic data only; no network, no pg dependency.
+// adapter whose every method resolves on a later macrotask. Synthetic data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createBackendServices, createCoverageAnalysisPort } from '../src/backend/services/index.js';
 import { createCoverageAnalysisRuntime, createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import {
@@ -29,25 +28,24 @@ import {
 const portCode = { code: 'PORT_CONTRACT_INVALID' };
 const stubPort = methods => Object.fromEntries(methods.map(method => [method, async () => null]));
 
-function world(t) {
-  const database = openDatabase({ path: ':memory:' });
-  t.after(() => database.close());
+async function world(t) {
+  const { db: database } = await freshDatabase(t);
   const services = createBackendServices(database);
-  const adult = services.households.createAdult({ id: 'adult-port', displayName: 'Synthetic adult' });
-  const household = services.households.createHousehold({ id: 'household-port', displayName: 'Synthetic household', ownerAdultId: adult.id });
-  const member = services.households.addMember({ id: 'member-port', householdId: household.id, adultUserId: adult.id, displayName: 'Synthetic adult' });
-  const created = services.cases.create({ id: 'case-port', householdId: household.id, subjectMemberId: member.id, openedByAdultId: adult.id, triggerType: 'renewal' });
-  const collecting = services.cases.transition(created.id, 'collecting', { expectedRevision: created.revision });
-  services.cases.transition(created.id, 'processing', { expectedRevision: collecting.revision });
-  const grant = services.consents.grant({
+  const adult = await services.households.createAdult({ id: 'adult-port', displayName: 'Synthetic adult' });
+  const household = await services.households.createHousehold({ id: 'household-port', displayName: 'Synthetic household', ownerAdultId: adult.id });
+  const member = await services.households.addMember({ id: 'member-port', householdId: household.id, adultUserId: adult.id, displayName: 'Synthetic adult' });
+  const created = await services.cases.create({ id: 'case-port', householdId: household.id, subjectMemberId: member.id, openedByAdultId: adult.id, triggerType: 'renewal' });
+  const collecting = await services.cases.transition(created.id, 'collecting', { expectedRevision: created.revision });
+  await services.cases.transition(created.id, 'processing', { expectedRevision: collecting.revision });
+  const grant = await services.consents.grant({
     id: 'consent-port', householdId: household.id, subjectAdultId: adult.id, purpose: 'coverage_reconstruction',
     scopes: [{ resourceType: 'case', resourceId: created.id, action: 'derive', dataCategory: 'insurance_document' }],
   });
   return { database, services, caseId: created.id, grantId: grant.id };
 }
 
-test('P1-A ports: the SQLite implementations satisfy every port', t => {
-  const { database, services } = world(t);
+test('P1-A ports: the PostgreSQL implementations satisfy every port', postgresTestOptions(), async t => {
+  const { database, services } = await world(t);
   const port = createCoverageAnalysisPort({ database, services });
   assert.equal(assertCoverageAnalysisPort(port, { modelDispatch: true }), port);
   assert.equal(assertWorkflowRepositoryPort(services.workflows), services.workflows);
@@ -87,7 +85,7 @@ test('P1-A ports: the persistent service requires exactly the coverage-analysis 
   }
 });
 
-test('P1-A ports: every SQLite port method the runtime calls is listed', () => {
+test('P1-A ports: every port method the runtime calls is listed', () => {
   // Methods the port reaches on services.workflows / services.coverageParameters / services.consents.
   const portSource = readFileSync(new URL('../src/backend/services/coverage-analysis-port.js', import.meta.url), 'utf8');
   const used = (pattern) => new Set([...portSource.matchAll(pattern)].map(match => match[1]));
@@ -104,14 +102,14 @@ test('P1-A ports: every SQLite port method the runtime calls is listed', () => {
   }
 });
 
-test('P1-A ports: a fully asynchronous adapter runs a fixture analysis end to end', async t => {
-  const { database, services, caseId, grantId } = world(t);
-  const sqlite = createCoverageAnalysisPort({ database, services });
+test('P1-A ports: a fully asynchronous adapter runs a fixture analysis end to end', postgresTestOptions(), async t => {
+  const { database, services, caseId, grantId } = await world(t);
+  const base = createCoverageAnalysisPort({ database, services });
   let asyncCalls = 0;
   // Every method returns a Promise resolved on a later macrotask, as a network database would.
   const asyncPort = Object.fromEntries(COVERAGE_ANALYSIS_PORT_METHODS.map(method => [method, (...args) => new Promise((resolve, reject) => {
     asyncCalls += 1;
-    setImmediate(() => { try { resolve(sqlite[method](...args)); } catch (error) { reject(error); } });
+    setImmediate(() => { try { resolve(base[method](...args)); } catch (error) { reject(error); } });
   })]));
   const service = createPersistentCoverageAnalysisService({ port: asyncPort });
   const created = await service.createAnalysisRun({ caseId, consentGrantId: grantId, executionMode: 'fixture', idempotencyKey: 'p1a-async-port-1' });

@@ -1,0 +1,14 @@
+.git
+.claude
+.local
+.env
+.env.*
+node_modules
+tests
+docs
+working
+building
+private
+*.md
+fly.toml
+Dockerfile

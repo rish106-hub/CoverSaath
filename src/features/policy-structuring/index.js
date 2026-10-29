@@ -28,15 +28,17 @@ export const structuringEnabled = (env = process.env) => env.POLICY_STRUCTURING_
 
 // Document-specific Gemini grant (ADR 0006): an active grant whose scope names this exact document for
 // `derive` by the Gemini recipient. A scope without a document id does not count. `consents` is the
-// ConsentRepository (requireActive and get); the check is synchronous so it can run inside a commit.
+// ConsentRepository (requireActive and get). The check is async (S3.2): every caller awaits it,
+// including the commit, which runs it inside its transaction.
 export function documentGrantCheck({ consents, grantId, subjectAdultId, documentId, householdId }) {
   const scope = { resourceType: 'document', action: 'derive', dataCategory: 'insurance_document', recipient: GEMINI_MODEL_RECIPIENT };
   if (typeof householdId !== 'string' || !householdId) fail('STRUCTURING_CONFIG', 'The document household is required.');
-  return () => {
-    consents.requireActive(grantId, { subjectAdultId, resourceId: documentId, ...scope });
+  return async () => {
+    await consents.requireActive(grantId, { subjectAdultId, resourceId: documentId, ...scope });
+    const grant = await consents.get(grantId);
     // The grant must belong to the document's household, so its revocation erases this document's output.
-    if (consents.get(grantId)?.household_id !== householdId) fail('CONSENT_SCOPE_REQUIRED', 'A document-specific Gemini grant is required.');
-    const named = consents.get(grantId)?.scopes.some(entry => entry.resource_type === scope.resourceType && entry.resource_id === documentId
+    if (grant?.household_id !== householdId) fail('CONSENT_SCOPE_REQUIRED', 'A document-specific Gemini grant is required.');
+    const named = grant?.scopes.some(entry => entry.resource_type === scope.resourceType && entry.resource_id === documentId
       && entry.action === scope.action && entry.data_category === scope.dataCategory && entry.recipient === scope.recipient);
     if (!named) fail('CONSENT_SCOPE_REQUIRED', 'A document-specific Gemini grant is required.');
   };

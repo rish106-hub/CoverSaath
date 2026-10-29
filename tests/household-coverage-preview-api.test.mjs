@@ -7,6 +7,7 @@ import { assertHouseholdPreviewContract } from '../src/features/household-reason
 import { CatalogueReviewRepository } from '../src/backend/repositories/index.js';
 import { createBackendServices, createHouseholdPreviewService } from '../src/backend/services/index.js';
 import { makeBuilt, enrolled, sublimit, MEMBER_A } from './support/household-fixtures.mjs';
+import { postgresTestOptions } from './support/pg.mjs';
 import { NUMBERS, ask, household, preview, scenarioBody, startApp, tableCounts } from './support/household-api-harness.mjs';
 
 const attest = { decision: 'accepted', reasonCode: 'matches_clause', attestedSourceType: 'issued_schedule', attestsPolicyAssociation: true };
@@ -20,11 +21,11 @@ async function answerWith(app, s, documentIds) {
   return res.data.answerId;
 }
 
-test('journey: authorised unreviewed evidence -> bounded preview -> follow-up answer -> updated preview, and nothing is written', async t => {
+test('journey: authorised unreviewed evidence -> bounded preview -> follow-up answer -> updated preview, and nothing is written', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Mine' });
   const answerId = await answerWith(app, s, s.documentIds);
-  const before = tableCounts(app.database);
+  const before = await tableCounts(app.database);
 
   const first = await preview(app, s.householdId, scenarioBody([sourceOf(s, answerId)], {
     scenarioType: 'planned_procedure', procedureText: 'My father needs cataract surgery next month at Healtworld Hospital.', topic: undefined, reportedMemberRelation: 'father',
@@ -47,7 +48,7 @@ test('journey: authorised unreviewed evidence -> bounded preview -> follow-up an
     assert.ok(!text.includes(s.questionGrantId) && !text.includes(s.token) && !text.includes(s.adultId), 'no consent, session or adult identifier');
     assert.ok(!text.includes('500000') && !text.includes('Rs 5,000'), 'the unreviewed room rent value is not exposed');
   }
-  assert.deepEqual(tableCounts(app.database), before, 'a preview writes no row anywhere');
+  assert.deepEqual(await tableCounts(app.database), before, 'a preview writes no row anywhere');
 
   // Follow-up: the member is chosen and the schedule question is answered. A fresh request, no stored conversation.
   const second = await preview(app, s.householdId, scenarioBody([sourceOf(s, answerId)], {
@@ -59,14 +60,14 @@ test('journey: authorised unreviewed evidence -> bounded preview -> follow-up an
   assert.equal(second.data.scenario.memberId, s.memberId);
   assert.equal(second.data.scenario.answers.policy_schedule_available.provenance, 'user_reported');
   assert.equal(second.data.assessmentState, 'insufficient_evidence', 'a user answer upgrades nothing');
-  assert.deepEqual(tableCounts(app.database), before);
+  assert.deepEqual(await tableCounts(app.database), before);
 });
 
-test('reviewed evidence flows through to a cited documented term, never as a total, and revocation removes it', async t => {
+test('reviewed evidence flows through to a cited documented term, never as a total, and revocation removes it', postgresTestOptions(), async t => {
   const app = await startApp(t, { env: { CATALOGUE_INDEPENDENT_REVIEW_ENABLED: 'true' } });
   const s = await household(app, { name: 'Mine' });
   const reviewer = await household(app, { name: 'Reviewer' });
-  new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  await new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
   const answerId = await answerWith(app, s, s.documentIds);
   const built = await catalogueOf(app, s, answerId);
   const fact = built.data.catalogue.facts.find(f => f.factType === 'room_rent_limit');
@@ -92,11 +93,11 @@ test('reviewed evidence flows through to a cited documented term, never as a tot
   assert.ok(!JSON.stringify(after.data).includes('500000'));
 });
 
-test('two distinct authorised answers: separate policies, separate limits, no sum, no invented coordination', async t => {
+test('two distinct authorised answers: separate policies, separate limits, no sum, no invented coordination', postgresTestOptions(), async t => {
   const app = await startApp(t, { env: { CATALOGUE_INDEPENDENT_REVIEW_ENABLED: 'true' } });
   const s = await household(app, { name: 'Mine', documents: 2 });
   const reviewer = await household(app, { name: 'Reviewer' });
-  new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  await new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
   const answers = [await answerWith(app, s, [s.documentIds[0]]), await answerWith(app, s, [s.documentIds[1]])];
   for (const answerId of answers) {
     const built = await catalogueOf(app, s, answerId);
@@ -116,7 +117,7 @@ test('two distinct authorised answers: separate policies, separate limits, no su
   assert.equal(assertHouseholdPreviewContract(res.data), true);
 });
 
-test('protected failures: unauthenticated, foreign household, foreign case, foreign answer, foreign member, mixed sources', async t => {
+test('protected failures: unauthenticated, foreign household, foreign case, foreign answer, foreign member, mixed sources', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const mine = await household(app, { name: 'Mine' });
   const other = await household(app, { name: 'Other' });
@@ -156,7 +157,7 @@ test('protected failures: unauthenticated, foreign household, foreign case, fore
   assert.ok(!JSON.stringify([foreignHousehold.data, foreignCase.data, foreignAnswer.data, mixed.data, foreignMember.data]).includes(other.householdId));
 });
 
-test('malformed, oversized and forged bodies are refused with coded errors', async t => {
+test('malformed, oversized and forged bodies are refused with coded errors', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Mine' });
   const answerId = await answerWith(app, s, s.documentIds);
@@ -180,21 +181,21 @@ test('malformed, oversized and forged bodies are refused with coded errors', asy
   for (const res of [await post({ ...scenarioBody(src), contractVersion: 'bad' })]) assert.ok(!JSON.stringify(res.data).includes('stack'));
 });
 
-test('consent expiry and document deletion: no stale conclusion is served', async t => {
+test('consent expiry and document deletion: no stale conclusion is served', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Mine' });
   const answerId = await answerWith(app, s, s.documentIds);
   const ok = () => preview(app, s.householdId, scenarioBody([sourceOf(s, answerId)], { memberId: s.memberId }), { token: s.token });
   assert.equal((await ok()).status, 200);
 
-  app.database.prepare("UPDATE consent_grants SET expires_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(s.questionGrantId);
+  await app.database.prepare("UPDATE consent_grants SET expires_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(s.questionGrantId);
   const expired = await ok();
   assert.equal(expired.status, 403);
   assert.equal(expired.data.error.code, 'CONSENT_REQUIRED');
   assert.ok(!JSON.stringify(expired.data).includes('policies'));
 });
 
-test('a deleted document removes the evidence behind the answer', async t => {
+test('a deleted document removes the evidence behind the answer', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Mine' });
   const answerId = await answerWith(app, s, s.documentIds);
@@ -206,7 +207,7 @@ test('a deleted document removes the evidence behind the answer', async t => {
   assert.ok(!JSON.stringify(res.data).includes('500000'));
 });
 
-test('a user with no role on the household cannot preview', async t => {
+test('a user with no role on the household cannot preview', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const mine = await household(app, { name: 'Mine' });
   const outsider = await household(app, { name: 'Outsider' });
@@ -216,7 +217,7 @@ test('a user with no role on the household cannot preview', async t => {
   assert.equal(res.data.error.code, 'HOUSEHOLD_NOT_FOUND');
 });
 
-test('the model never sees the scenario: no provider request is made by a preview', async t => {
+test('the model never sees the scenario: no provider request is made by a preview', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Mine' });
   const answerId = await answerWith(app, s, s.documentIds);
@@ -238,30 +239,30 @@ function adapter(app, s, build, { authorize = () => {} } = {}) {
   return { call, services };
 }
 
-test('adapter: the consent gate runs for every case before any source is read', async t => {
+test('adapter: the consent gate runs for every case before any source is read', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Mine' });
   const order = [];
   const { call } = adapter(app, s, () => { order.push('build'); throw new Error('must not be reached'); }, {});
   const refuse = () => { order.push('authorize'); throw Object.assign(new Error('Consent required.'), { code: 'CONSENT_REQUIRED', statusCode: 403 }); };
-  assert.throws(() => call(scenarioBody([sourceOf(s, 'answer-1')], { memberId: s.memberId }), refuse), error => error.code === 'CONSENT_REQUIRED');
+  await assert.rejects(() => call(scenarioBody([sourceOf(s, 'answer-1')], { memberId: s.memberId }), refuse), error => error.code === 'CONSENT_REQUIRED');
   assert.deepEqual(order, ['authorize'], 'a refused source is never built');
 });
 
-test('adapter: a stale answer becomes a revalidation request; other failures propagate unchanged', async t => {
+test('adapter: a stale answer becomes a revalidation request; other failures propagate unchanged', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Mine' });
   const stale = adapter(app, s, () => { throw Object.assign(new Error('changed'), { code: 'POLICY_EVIDENCE_ANSWER_STALE', statusCode: 409 }); });
-  const result = stale.call(scenarioBody([sourceOf(s, 'answer-1')], { memberId: s.memberId }));
+  const result = await stale.call(scenarioBody([sourceOf(s, 'answer-1')], { memberId: s.memberId }));
   assert.equal(result.assessmentState, 'source_revalidation_required');
   assert.equal(result.sourceSummary.sources[0].reasonCode, 'answer_stale');
   assert.ok(result.nextActions.some(a => a.actionType === 'upload_document'));
   assert.deepEqual(result.policies, []);
   const broken = adapter(app, s, () => { throw Object.assign(new Error('provider down'), { code: 'EVIDENCE_DISABLED', statusCode: 503 }); });
-  assert.throws(() => broken.call(scenarioBody([sourceOf(s, 'answer-1')])), error => error.code === 'EVIDENCE_DISABLED');
+  await assert.rejects(() => broken.call(scenarioBody([sourceOf(s, 'answer-1')])), error => error.code === 'EVIDENCE_DISABLED');
 });
 
-test('adapter: the member and date reach the catalogue exactly as supplied; a month is never turned into a day', async t => {
+test('adapter: the member and date reach the catalogue exactly as supplied; a month is never turned into a day', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Mine' });
   const seen = [];
@@ -269,19 +270,19 @@ test('adapter: the member and date reach the catalogue exactly as supplied; a mo
     seen.push({ asOf: query.asOf, memberId: query.memberId, independent: query.documentsUntil });
     return (makeBuilt({ memberId: query.memberId, asOf: query.asOf, policies: [{ id: 'P1', facts: [enrolled(query.memberId), sublimit('cataract', 3000000)] }] }));
   });
-  call(scenarioBody([sourceOf(s, 'a1')], { scenarioType: 'planned_procedure', procedureText: 'cataract surgery', memberId: s.memberId, plannedMonth: '2026-11' }));
-  call(scenarioBody([sourceOf(s, 'a1')], { scenarioType: 'planned_procedure', procedureText: 'cataract surgery', memberId: s.memberId, plannedMonth: '2026-11', answers: { exact_date: '2026-11-14' } }));
+  await call(scenarioBody([sourceOf(s, 'a1')], { scenarioType: 'planned_procedure', procedureText: 'cataract surgery', memberId: s.memberId, plannedMonth: '2026-11' }));
+  await call(scenarioBody([sourceOf(s, 'a1')], { scenarioType: 'planned_procedure', procedureText: 'cataract surgery', memberId: s.memberId, plannedMonth: '2026-11', answers: { exact_date: '2026-11-14' } }));
   assert.deepEqual(seen, [{ asOf: null, memberId: s.memberId, independent: undefined }, { asOf: '2026-11-14', memberId: s.memberId, independent: undefined }], 'the independent-reviewer exemption is never requested');
 });
 
-test('adapter: a handoff built for another scope or version is not used as evidence', async t => {
+test('adapter: a handoff built for another scope or version is not used as evidence', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app, { name: 'Mine' });
   const forged = adapter(app, s, () => (makeBuilt({ memberId: MEMBER_A, policies: [{ id: 'P1', facts: [enrolled(MEMBER_A), sublimit('cataract', 3000000)] }] })));
-  const result = forged.call(scenarioBody([sourceOf(s, 'a1')], { scenarioType: 'planned_procedure', procedureText: 'cataract surgery', memberId: s.memberId }));
+  const result = await forged.call(scenarioBody([sourceOf(s, 'a1')], { scenarioType: 'planned_procedure', procedureText: 'cataract surgery', memberId: s.memberId }));
   assert.equal(result.assessmentState, 'source_revalidation_required');
   assert.equal(result.sourceSummary.sources[0].reasonCode, 'scope_mismatch');
   assert.ok(!JSON.stringify(result).includes('3000000'));
   const stale = adapter(app, s, query => (makeBuilt({ memberId: query.memberId, pipelineCurrent: false, policies: [{ id: 'P1', facts: [enrolled(query.memberId)] }] })));
-  assert.equal(stale.call(scenarioBody([sourceOf(s, 'a1')], { memberId: s.memberId })).sourceSummary.sources[0].reasonCode, 'processing_version_not_current');
+  assert.equal((await stale.call(scenarioBody([sourceOf(s, 'a1')], { memberId: s.memberId }))).sourceSummary.sources[0].reasonCode, 'processing_version_not_current');
 });

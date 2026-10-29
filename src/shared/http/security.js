@@ -1,12 +1,15 @@
+import { isIP } from 'node:net';
 import { failure } from './errors.js';
 
 const allowedOrigins = new Set(['http://127.0.0.1:5173', 'http://localhost:5173']);
 const allowedHosts = new Set(['127.0.0.1:8787', 'localhost:8787', '127.0.0.1:5173', 'localhost:5173']);
 
-export function assertLocalRequest(req) {
+// `publicHosts` is the exact set of hostnames a hosted deployment answers to (config PUBLIC_HOSTS).
+// Empty by default, which keeps the server local-only. The origin and cross-site checks still apply.
+export function assertLocalRequest(req, { publicHosts = [] } = {}) {
   const boundPort = req.socket.localPort;
   const localBoundHosts = [`127.0.0.1:${boundPort}`, `localhost:${boundPort}`];
-  if (!allowedHosts.has(req.headers.host) && !localBoundHosts.includes(req.headers.host)) throw failure(403, 'Local access only.');
+  if (!allowedHosts.has(req.headers.host) && !localBoundHosts.includes(req.headers.host) && !publicHosts.includes(req.headers.host)) throw failure(403, 'Local access only.');
   if (req.headers.origin && !allowedOrigins.has(req.headers.origin)) throw failure(403, 'Origin not permitted.');
   if (req.headers['sec-fetch-site'] === 'cross-site') throw failure(403, 'Cross-site access is blocked.');
 }
@@ -45,4 +48,14 @@ export function createRateLimiter({ limit = 600, windowMs = 60_000, clock = () =
       return { limit, remaining: Math.max(0, limit - entry.count), resetAt: entry.resetAt };
     },
   });
+}
+
+// Rate-limit key. Behind Fly's proxy every socket peer is the proxy, so with `trustFlyClientIp` the
+// key is the Fly-Client-IP header, which Fly's edge sets and overwrites on every request. Anything
+// that is not an IP address falls back to the socket peer, so a bad header can never mint new keys.
+export function clientRateKey(req, { trustFlyClientIp = false } = {}) {
+  const peer = req.socket?.remoteAddress ?? 'local-unknown';
+  if (!trustFlyClientIp) return peer;
+  const header = req.headers['fly-client-ip'];
+  return typeof header === 'string' && isIP(header.trim()) !== 0 ? header.trim() : peer;
 }

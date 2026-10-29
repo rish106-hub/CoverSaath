@@ -21,6 +21,7 @@ test('server configuration has explicit bounded defaults', () => {
       maxPendingPerHousehold: 20,
       workerSweepMs: 30_000,
     },
+    network: { publicHosts: [], trustFlyClientIp: false },
   });
 });
 
@@ -40,4 +41,13 @@ test('server capacity and rate settings are bounded before listening', () => {
   ]) {
     assert.throws(() => createApiServer({ env: { [name]: value } }), new RegExp(`Invalid ${name}`));
   }
+});
+
+test('network settings are off by default and validated when set', () => {
+  assert.deepEqual(readServerConfig({}).network, { publicHosts: [], trustFlyClientIp: false });
+  const hosted = readServerConfig({ PUBLIC_HOSTS: 'Knowvia-API.fly.dev, api.example.com:443', TRUST_FLY_CLIENT_IP: 'true' }).network;
+  assert.deepEqual(hosted.publicHosts, ['knowvia-api.fly.dev', 'api.example.com:443']);
+  assert.equal(hosted.trustFlyClientIp, true);
+  for (const bad of ['*.fly.dev', 'host/path', 'http://x.dev', 'a b']) assert.throws(() => readServerConfig({ PUBLIC_HOSTS: bad }), /PUBLIC_HOSTS/);
+  assert.throws(() => readServerConfig({ TRUST_FLY_CLIENT_IP: 'yes' }), /TRUST_FLY_CLIENT_IP/);
 });

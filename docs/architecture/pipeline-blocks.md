@@ -73,9 +73,9 @@ Consent, privacy and household ownership cross every block. They are not a block
 ## Block 6: Data and knowledge
 
 - Purpose: durable, tenant-scoped storage and erasure.
-- Owning paths: `src/backend/database/` (SQLite migrations 001-006; PostgreSQL migrations in `postgres/migrations/`), `src/backend/repositories/`.
+- Owning paths: `src/backend/database/` (frozen SQLite migrations, test reference only; PostgreSQL migrations in `postgres/migrations/`), `src/backend/repositories/`.
 - Seam: the persistence port (ADR 0002, `src/contracts/persistence-ports.js`). PostgreSQL runtime plan in ADR 0004.
-- Status: SQLite is the runtime. The PostgreSQL schema and tests exist (S3.1). S3.2 (async runtime) and S3.3 (backup and restore) are open. No vector store.
+- Status: PostgreSQL is the runtime (S3.2 async runtime; SQLite removed from `src/`). S3.3 (backup and restore, deleting the SQLite migration files) is open. No vector store.
 - Stub to real: S3.2 moves the runtime to PostgreSQL behind the port.
 - Owning phase: P1-B. A vector store is not planned (see decisions).
 

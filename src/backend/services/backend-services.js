@@ -26,8 +26,9 @@ export function createBackendServices(database, options = {}) {
   return {
     access, audit, auth, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     emergencyInstruction,
-    requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {
-      return consents.requireActive(consentGrantId, {
+    // Async: callers await it, so a denial (a rejection) stops the request.
+    async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {
+      return await consents.requireActive(consentGrantId, {
         subjectAdultId,
         purpose: 'document_processing',
         resourceType: 'document',

@@ -2,7 +2,11 @@ import { readdir, readFile } from 'node:fs/promises';
 import { dirname, extname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// `--root <dir>` checks another tree (used by tests/check-architecture.test.mjs to prove each rule fires).
+const rootFlag = process.argv.indexOf('--root');
+const projectRoot = rootFlag > 0 && process.argv[rootFlag + 1]
+  ? resolve(process.argv[rootFlag + 1])
+  : resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sourceRoot = resolve(projectRoot, 'src');
 const violations = [];
 const sourceFiles = [];
@@ -30,6 +34,10 @@ await walk(sourceRoot);
 
 for (const file of sourceFiles) {
   const text = await readFile(file, 'utf8');
+  // The SQLite runtime is gone (S3.2 WP4). tests/ and scripts/ may still use node:sqlite; src/ may not.
+  if (/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:node:)?sqlite['"]/.test(text)) {
+    violations.push(`${relative(projectRoot, file)}: node:sqlite is not allowed under src/; PostgreSQL is the runtime.`);
+  }
   const imports = [...text.matchAll(/(?:from\s+|import\s*\(\s*)['"]([^'"]+)['"]/g)].map(match => match[1]);
   for (const specifier of imports) {
     if (!specifier.startsWith('.')) continue;

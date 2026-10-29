@@ -17,7 +17,7 @@ Status: describes controls present in the repository at the commit that added th
 ## Trust boundaries and entry points
 
 - Client to API: `127.0.0.1:8787`. Every `/api/v1` route except `/health`, `/live`, `/ready` and household bootstrap requires a bearer session. `/ready` returns only `{ status, checks }` (booleans) unless the caller is loopback (see below). Local port 5173 remains an allowlisted future development origin, but no UI is shipped.
-- API to database: in-process SQLite; no database network surface. PostgreSQL is test-only until S3.2.
+- API to database: PostgreSQL over a network connection through the `pg` pool (TLS and role policy: ADR 0011).
 - API to model provider: Google Gemini only, through the model gateway. This is the one outbound path with household-derived content.
 - Integrations: Sarvam has a feature-flagged modern Document AI transport. It requires an exact provider
   consent grant and defaults off. Gnani, Pine Labs and email remain fail-closed without verified transports.

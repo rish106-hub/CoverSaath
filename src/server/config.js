@@ -42,6 +42,17 @@ function readDocumentConfig(env) {
   });
 }
 
+const HOSTNAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:\d{1,5})?$/;
+
+// A hosted deployment opts in to its public hostnames (exact match, no wildcards) and to reading the
+// client address from Fly's edge header. Both are off by default, so the server stays local-only.
+function readNetworkConfig(env) {
+  const publicHosts = String(env.PUBLIC_HOSTS ?? '').split(',').map(host => host.trim().toLowerCase()).filter(Boolean);
+  if (publicHosts.length > 10 || publicHosts.some(host => !HOSTNAME.test(host))) throw new Error('Invalid PUBLIC_HOSTS.');
+  if (env.TRUST_FLY_CLIENT_IP !== undefined && !['true', 'false'].includes(env.TRUST_FLY_CLIENT_IP)) throw new Error('Invalid TRUST_FLY_CLIENT_IP.');
+  return Object.freeze({ publicHosts: Object.freeze(publicHosts), trustFlyClientIp: env.TRUST_FLY_CLIENT_IP === 'true' });
+}
+
 export function readServerConfig(env = process.env) {
   return Object.freeze({
     sessionTtlMs: boundedInteger(env.SESSION_TTL_SECONDS, 3600, 'SESSION_TTL_SECONDS', 86_400) * 1000,
@@ -54,5 +65,6 @@ export function readServerConfig(env = process.env) {
     budgetUsd: positiveAmount(env.ORCHESTRATION_RUN_BUDGET_USD, 'ORCHESTRATION_RUN_BUDGET_USD', 1),
     projectBudgetUsd: positiveAmount(env.ORCHESTRATION_PROJECT_BUDGET_USD, 'ORCHESTRATION_PROJECT_BUDGET_USD'),
     documents: readDocumentConfig(env),
+    network: readNetworkConfig(env),
   });
 }

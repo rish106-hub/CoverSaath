@@ -1,9 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { testTempRoot as tmpdir } from './support/temp-root.mjs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 
 // A consent grant can be repeated safely: a client that timed out after the backend committed re-sends the same
@@ -11,14 +8,11 @@ import { createApiServer } from '../src/server/server.js';
 const bootstrapToken = 'knowvia-test-bootstrap-token-00001';
 
 async function start(t) {
-  const directory = mkdtempSync(join(tmpdir(), 'knowvia-consent-idem-'));
-  const database = openDatabase({ path: join(directory, 'knowvia.sqlite') });
+  const { db: database } = await freshDatabase(t);
   const server = createApiServer({ database, env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken } });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
-    try { database.close(); } catch {}
-    rmSync(directory, { recursive: true, force: true });
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (path, { method = 'GET', body, idempotencyKey, token } = {}) => {
@@ -54,7 +48,7 @@ async function withCase(app, who) {
   return created.data.id;
 }
 
-test('the same Idempotency-Key returns the same grant and writes no second one', async t => {
+test('the same Idempotency-Key returns the same grant and writes no second one', postgresTestOptions(), async t => {
   const app = await start(t);
   const who = await app.household('Synthetic A');
   const caseId = await withCase(app, who);
@@ -66,7 +60,7 @@ test('the same Idempotency-Key returns the same grant and writes no second one',
   assert.equal(second.data.idempotentReplay, true);
 });
 
-test('without a key every request still creates its own grant', async t => {
+test('without a key every request still creates its own grant', postgresTestOptions(), async t => {
   const app = await start(t);
   const who = await app.household('Synthetic B');
   const caseId = await withCase(app, who);
@@ -77,7 +71,7 @@ test('without a key every request still creates its own grant', async t => {
   assert.notEqual(one.data.id, two.data.id);
 });
 
-test('the same key with a different request is a conflict, not a silent reuse', async t => {
+test('the same key with a different request is a conflict, not a silent reuse', postgresTestOptions(), async t => {
   const app = await start(t);
   const who = await app.household('Synthetic C');
   const caseId = await withCase(app, who);
@@ -88,7 +82,7 @@ test('the same key with a different request is a conflict, not a silent reuse', 
   assert.equal(other.data.error.code, 'IDEMPOTENCY_CONFLICT');
 });
 
-test('a revoked grant is not handed back to a replay', async t => {
+test('a revoked grant is not handed back to a replay', postgresTestOptions(), async t => {
   const app = await start(t);
   const who = await app.household('Synthetic D');
   const caseId = await withCase(app, who);
@@ -100,7 +94,7 @@ test('a revoked grant is not handed back to a replay', async t => {
   assert.equal(replay.data.error.code, 'CONSENT_REVOKED');
 });
 
-test('an expired grant is not handed back to a replay as if it were live', async t => {
+test('an expired grant is not handed back to a replay as if it were live', postgresTestOptions(), async t => {
   const app = await start(t);
   const who = await app.household('Synthetic D2');
   const caseId = await withCase(app, who);
@@ -113,19 +107,19 @@ test('an expired grant is not handed back to a replay as if it were live', async
   assert.equal(replay.data.error.code, 'CONSENT_EXPIRED');
 });
 
-test('replays and refusals are audited with counts only', async t => {
+test('replays and refusals are audited with counts only', postgresTestOptions(), async t => {
   const app = await start(t);
   const who = await app.household('Synthetic D3');
   const caseId = await withCase(app, who);
   await app.call('/api/v1/consents', { method: 'POST', token: who.token, idempotencyKey: 'consent-key-00000005', body: grantBody(who, caseId) });
   await app.call('/api/v1/consents', { method: 'POST', token: who.token, idempotencyKey: 'consent-key-00000005', body: grantBody(who, caseId) });
   await app.call('/api/v1/consents', { method: 'POST', token: who.token, idempotencyKey: 'consent-key-00000005', body: grantBody(who, caseId, 'read') });
-  const events = app.database.prepare("SELECT action, event_payload_json AS payload_json FROM audit_events WHERE action LIKE 'consent.idempotent_%' ORDER BY id").all();
+  const events = await app.database.prepare("SELECT action, event_payload_json AS payload_json FROM audit_events WHERE action LIKE 'consent.idempotent_%' ORDER BY id").all();
   assert.deepEqual(events.map(event => event.action), ['consent.idempotent_replay', 'consent.idempotent_rejected']);
   assert.ok(events.every(event => !/derive|insurance_document|coverage_reconstruction|case-/.test(event.payload_json)), 'no scope, purpose or case id in the payload');
 });
 
-test('two households using the same key never share a grant', async t => {
+test('two households using the same key never share a grant', postgresTestOptions(), async t => {
   const app = await start(t);
   const a = await app.household('Synthetic E1');
   const b = await app.household('Synthetic E2');
@@ -138,7 +132,7 @@ test('two households using the same key never share a grant', async t => {
   assert.notEqual(grantA.data.id, grantB.data.id);
 });
 
-test('a malformed Idempotency-Key is refused', async t => {
+test('a malformed Idempotency-Key is refused', postgresTestOptions(), async t => {
   const app = await start(t);
   const who = await app.household('Synthetic F');
   const caseId = await withCase(app, who);

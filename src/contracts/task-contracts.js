@@ -1,5 +1,5 @@
 // Frozen shapes of the three task contracts shared by every workflow runtime
-// (fixture, persistent SQLite, and the planned PostgreSQL adapter). Pure: no I/O,
+// (fixture and persistent PostgreSQL). Pure: no I/O,
 // no imports. Validators reject unknown and missing fields; deeper semantic rules
 // (owners, model tasks, payload schemas) live with the workflow that owns them.
 //

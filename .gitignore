@@ -13,7 +13,6 @@ dist/
 coverage/
 .local/
 .claude/prompts/block-1-input-slice.xml
-/docs
 docs/exec-plans/active/handoff-codex.md
 docs/exec-plans/active/production-hardening.xml
 
@@ -25,3 +24,16 @@ docs/exec-plans/active/production-hardening.xml
 *.sqlite-wal
 # PostgreSQL runner tests write scratch migration sets here (tests/support/postgres.mjs).
 src/backend/database/postgres/migrations/test-scratch/
+
+# Local agent and editor state. Launch configs and MCP configs can carry tokens, keys and project URLs.
+.claude/launch.json
+.claude/settings.local.json
+.claude/worktrees/
+.mcp.json
+.vscode/
+.idea/
+
+# Logs and scratch output.
+*.log
+npm-debug.log*
+.tmp/

@@ -106,12 +106,12 @@ export function createDocumentUploadService({
   }
 
   // A replay answers with the document's current state, not the state at first upload.
-  function replay(stored, requestDigest) {
+  async function replay(stored, requestDigest) {
     if (stored.request_digest !== requestDigest) {
       fail('IDEMPOTENCY_CONFLICT', 'This Idempotency-Key was already used for a different upload.', 409);
     }
     const original = JSON.parse(stored.response_json).document;
-    const current = original?.id ? repository.getDocument(original.id) : null;
+    const current = original?.id ? await repository.getDocument(original.id) : null;
     return { status: 200, body: { document: current ? documentDto(current) : original, idempotentReplay: true } };
   }
 
@@ -140,12 +140,12 @@ export function createDocumentUploadService({
         : Number(headerText(headers['x-document-version'], 'X-Document-Version', { max: 6, pattern: /^[1-9][0-9]{0,5}$/ }));
 
       // Uploader consent: current, from the uploader, for this household, with document collect scope.
-      const grant = services.requireDocumentProcessingConsent({ consentGrantId, subjectAdultId: principal.adultId });
+      const grant = await services.requireDocumentProcessingConsent({ consentGrantId, subjectAdultId: principal.adultId });
       if (grant.household_id !== caseRecord.household_id) {
         fail('CONSENT_SCOPE_REQUIRED', 'Consent does not cover this resource and action.', 403);
       }
       // A grant scoped to one existing document does not permit collecting new documents.
-      const householdWideCollect = repository.getConsent(consentGrantId)?.scopes.some(scope =>
+      const householdWideCollect = (await repository.getConsent(consentGrantId))?.scopes.some(scope =>
         scope.resourceType === 'document' && scope.action === 'collect'
         && scope.dataCategory === 'insurance_document' && scope.resourceId === null);
       if (!householdWideCollect) fail('CONSENT_SCOPE_REQUIRED', 'Consent does not cover this resource and action.', 403);
@@ -155,11 +155,11 @@ export function createDocumentUploadService({
         caseId: caseRecord.id, documentKind, consentGrantId, filename, logicalDocumentId, version, contentSha256,
       })).digest('hex');
       const scope = `document-upload:${principal.adultId}:${caseRecord.id}`;
-      const existing = repository.findIdempotency(scope, idempotencyKey, clock().toISOString());
+      const existing = await repository.findIdempotency(scope, idempotencyKey, clock().toISOString());
       if (existing) return replay(existing, requestDigest);
 
-      if (repository.countActiveForCase(caseRecord.id) >= limits.maxDocumentsPerCase
-        || repository.countPendingForHousehold(caseRecord.household_id) >= limits.maxPendingPerHousehold) {
+      if (await repository.countActiveForCase(caseRecord.id) >= limits.maxDocumentsPerCase
+        || await repository.countPendingForHousehold(caseRecord.household_id) >= limits.maxPendingPerHousehold) {
         fail('UPLOAD_CAPACITY_REACHED', 'Upload capacity reached. Wait for pending documents to be checked.', 429);
       }
 
@@ -190,7 +190,7 @@ export function createDocumentUploadService({
       } catch (error) {
         // A concurrent request with the same key committed first (seen as a duplicate, a unique
         // violation or an idempotency-key conflict): answer as a replay of that request.
-        const raced = repository.findIdempotency(scope, idempotencyKey);
+        const raced = await repository.findIdempotency(scope, idempotencyKey);
         if (raced) return replay(raced, requestDigest);
         // The unique indexes are the final word on concurrent duplicates and versions.
         const message = String(error?.message);
@@ -206,34 +206,34 @@ export function createDocumentUploadService({
         throw error;
       }
       onStored(record.id);
-      return { status: 201, body: { document: documentDto(repository.getDocument(record.id)) } };
+      return { status: 201, body: { document: documentDto(await repository.getDocument(record.id)) } };
     },
 
-    listForCase(caseRecord) {
-      return { caseId: caseRecord.id, documents: repository.listForCase(caseRecord.id, caseRecord.household_id).map(documentDto) };
+    async listForCase(caseRecord) {
+      return { caseId: caseRecord.id, documents: (await repository.listForCase(caseRecord.id, caseRecord.household_id)).map(documentDto) };
     },
 
-    listForDeletion(caseRecord, { actorAdultId, roles = [] }) {
+    async listForDeletion(caseRecord, { actorAdultId, roles = [] }) {
       const managesHousehold = roles.some(role => ['owner', 'operator', 'backup_operator'].includes(role));
       return {
         caseId: caseRecord.id,
-        documents: repository.listForCase(caseRecord.id, caseRecord.household_id)
+        documents: (await repository.listForCase(caseRecord.id, caseRecord.household_id))
           .filter(document => managesHousehold || document.uploadedByAdultId === actorAdultId)
           .map(documentDto),
       };
     },
 
-    getDocument(documentId) {
+    async getDocument(documentId) {
       return repository.getDocument(documentId);
     },
 
-    requestDeletion({ documentId, actorAdultId }) {
-      const result = repository.requestDeletion(documentId, { actorAdultId });
+    async requestDeletion({ documentId, actorAdultId }) {
+      const result = await repository.requestDeletion(documentId, { actorAdultId });
       if (result?.state === 'pending') onStored(documentId);
       return result;
     },
 
-    listWorkDocumentIds(limit) {
+    async listWorkDocumentIds(limit) {
       return repository.listWorkDocumentIds({ includePendingScans: Boolean(scanner), limit, at: clock().toISOString() });
     },
 
@@ -241,7 +241,7 @@ export function createDocumentUploadService({
     // Scanner and transient storage failures defer the scan on the row (durable backoff, capped at
     // an hour, retried indefinitely) instead of throwing, so an outage never strands a document.
     async processDocument(documentId) {
-      const record = repository.getDocument(documentId);
+      const record = await repository.getDocument(documentId);
       if (!record || !storage) return 'skipped';
       const nextDue = () => {
         const exponent = Math.min(record.scanAttempts ?? 0, 10);
@@ -249,10 +249,10 @@ export function createDocumentUploadService({
         return new Date(clock().getTime() + delay).toISOString();
       };
       if (record.lifecycleState === 'deletion_requested') {
-        const cancellations = repository.listPendingOcrCancellations(documentId);
+        const cancellations = await repository.listPendingOcrCancellations(documentId);
         if (cancellations.length > 0) {
           if (typeof cancelOcrJob !== 'function') {
-            repository.deferDeletion(documentId, { nextScanAt: nextDue() });
+            await repository.deferDeletion(documentId, { nextScanAt: nextDue() });
             return 'deferred';
           }
           for (const cancellation of cancellations) {
@@ -265,13 +265,13 @@ export function createDocumentUploadService({
               });
               cancellation.remoteCancellation = outcome?.remoteCancellation !== false;
             } catch {
-              repository.deferDeletion(documentId, { nextScanAt: nextDue() });
+              await repository.deferDeletion(documentId, { nextScanAt: nextDue() });
               return 'deferred';
             }
-            if (!repository.completeOcrCancellation(cancellation.id, {
+            if (!(await repository.completeOcrCancellation(cancellation.id, {
               remoteCancellation: cancellation.remoteCancellation,
-            })) {
-              repository.deferDeletion(documentId, { nextScanAt: nextDue() });
+            }))) {
+              await repository.deferDeletion(documentId, { nextScanAt: nextDue() });
               return 'deferred';
             }
           }
@@ -281,22 +281,22 @@ export function createDocumentUploadService({
           try {
             await storage.remove({ storageKey: record.storageKey });
           } catch {
-            repository.deferDeletion(documentId, { nextScanAt: nextDue() });
+            await repository.deferDeletion(documentId, { nextScanAt: nextDue() });
             return 'deferred';
           }
         }
-        return repository.completeDeletion(documentId) ? 'deleted' : 'skipped';
+        return (await repository.completeDeletion(documentId)) ? 'deleted' : 'skipped';
       }
       if (!scanner || record.lifecycleState !== 'quarantined' || record.malwareStatus !== 'pending') return 'skipped';
       const reject = async reasonCode => {
-        if (repository.markScanBlocked(documentId, { reasonCode })) {
+        if (await repository.markScanBlocked(documentId, { reasonCode })) {
           await storage.remove({ storageKey: record.storageKey });
-          repository.completeDeletion(documentId);
+          await repository.completeDeletion(documentId);
         }
         return 'blocked';
       };
-      const defer = () => {
-        repository.deferScan(documentId, { nextScanAt: nextDue() });
+      const defer = async () => {
+        await repository.deferScan(documentId, { nextScanAt: nextDue() });
         return 'deferred';
       };
       const attemptsSoFar = record.scanAttempts ?? 0;
@@ -316,11 +316,11 @@ export function createDocumentUploadService({
         return defer();
       }
       if (result.status === 'clean') {
-        return repository.markScanClean(documentId, { engine: 'clamd' }) ? 'clean' : 'skipped';
+        return (await repository.markScanClean(documentId, { engine: 'clamd' })) ? 'clean' : 'skipped';
       }
-      if (repository.markScanBlocked(documentId, { reasonCode: 'MALWARE_DETECTED', signature: result.signature ?? null })) {
+      if (await repository.markScanBlocked(documentId, { reasonCode: 'MALWARE_DETECTED', signature: result.signature ?? null })) {
         await storage.remove({ storageKey: record.storageKey });
-        repository.completeDeletion(documentId);
+        await repository.completeDeletion(documentId);
       }
       return 'blocked';
     },
@@ -328,9 +328,9 @@ export function createDocumentUploadService({
     // Removes ciphertext with no live row (a crash between storing bytes and committing the row)
     // and abandoned temporary files, once they are older than an hour. Returns counts only.
     async sweepOrphans() {
-      repository.purgeExpiredIdempotency(clock().toISOString());
+      await repository.purgeExpiredIdempotency(clock().toISOString());
       if (!storage?.list) return { removed: 0 };
-      const live = repository.liveStorageKeys();
+      const live = await repository.liveStorageKeys();
       const cutoff = clock().getTime() - ORPHAN_MIN_AGE_MS;
       let removed = 0;
       for (const entry of await storage.list()) {

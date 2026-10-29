@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 
 // Block 3 decision catalogue API on top of the ADR 0008 answer API through the real application: upload, Sarvam OCR (mocked HTTP), stored blocks, clauses,
@@ -99,7 +99,7 @@ async function eventually(check, { timeoutMs = 3000 } = {}) {
 
 async function startApp(t, { env: extraEnv = {} } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-structuring-'));
-  const database = openDatabase({ path: join(directory, 'app.sqlite') });
+  const { db: database } = await freshDatabase(t);
   const requests = [];
   const env = {
     KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken,
@@ -119,7 +119,6 @@ async function startApp(t, { env: extraEnv = {} } = {}) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
-    database.close();
     rmSync(directory, { recursive: true, force: true });
   });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -195,7 +194,7 @@ async function scenario(app, name = 'Structuring') {
 const ask = (app, s, { grantId = s.questionGrantId, key = randomUUID(), question = 'What is the room rent limit?', token = s.token, caseId = s.caseId } = {}) => app.call(`/api/v1/cases/${caseId}/questions`, {
   method: 'POST', token, headers: { 'Idempotency-Key': key }, body: { question, consentGrantId: grantId },
 });
-const rows = (app, table) => app.database.prepare(`SELECT count(*) AS count FROM ${table}`).get().count;
+const rows = async (app, table) => (await app.database.prepare(`SELECT count(*) AS count FROM ${table}`).get()).count;
 
 
 const catalogue = (app, s, answerId, query = '', { token = s.token, caseId = s.caseId } = {}) =>
@@ -219,7 +218,7 @@ const roomRule = res => res.data.catalogue.policies[0].rules.find(rule => rule.r
 const soon = (ms = 3_600_000) => new Date(Date.now() + ms).toISOString();
 const makeConfirmer = (app, s) => app.call(`/api/v1/households/${s.householdId}/catalogue-reviewers`, { method: 'POST', token: s.token, body: { adultUserId: s.adultId } });
 
-test('Phase 4: no grant means no review, and a foreign household cannot see the case', async t => {
+test('Phase 4: no grant means no review, and a foreign household cannot see the case', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app, 'Mine');
   const other = await scenario(app, 'Other');
@@ -228,10 +227,10 @@ test('Phase 4: no grant means no review, and a foreign household cannot see the 
   assert.equal((await review(app, s, body)).status, 404, 'an owner without a reviewer grant cannot review');
   assert.equal((await review(app, s, body, { token: other.token })).status, 404);
   assert.equal((await review(app, s, body, { token: null })).status, 401);
-  assert.equal(rows(app, 'catalogue_reviews'), 0);
+  assert.equal((await rows(app, 'catalogue_reviews')), 0);
 });
 
-test('Phase 4: a household confirmer reaches reported at most; a claimed authority in the body is ignored', async t => {
+test('Phase 4: a household confirmer reaches reported at most; a claimed authority in the body is ignored', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app, 'Mine');
   const { answerId, factId } = await answered(app, s);
@@ -252,11 +251,11 @@ test('Phase 4: a household confirmer reaches reported at most; a claimed authori
   assert.equal(c.data.catalogue.reviewRequired, true);
 });
 
-test('Phase 4: an independent reviewer can make a fact known; model proposal and original stay visible', async t => {
+test('Phase 4: an independent reviewer can make a fact known; model proposal and original stay visible', postgresTestOptions(), async t => {
   const app = await startApp(t, { env: { CATALOGUE_INDEPENDENT_REVIEW_ENABLED: 'true' } });
   const s = await scenario(app, 'Mine');
   const reviewer = await scenario(app, 'Reviewer');
-  new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  await new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
   const { answerId, factId } = await answered(app, s);
   // The reviewer reads the catalogue of a case they have no household role in.
   assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 200);
@@ -275,11 +274,11 @@ test('Phase 4: an independent reviewer can make a fact known; model proposal and
   assert.deepEqual(c.data.catalogue.reviews.map(r => r.state).sort(), ['accepted', 'superseded']);
 });
 
-test('Phase 4: rejection removes the proposal from rules; disputes keep review required; later review wins', async t => {
+test('Phase 4: rejection removes the proposal from rules; disputes keep review required; later review wins', postgresTestOptions(), async t => {
   const app = await startApp(t, { env: { CATALOGUE_INDEPENDENT_REVIEW_ENABLED: 'true' } });
   const s = await scenario(app, 'Mine');
   const reviewer = await scenario(app, 'Reviewer');
-  new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  await new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
   const { answerId, factId } = await answered(app, s);
   const as = (decision, reasonCode = 'does_not_match_clause') => review(app, s, { answerId, factId, decision, reasonCode }, { token: reviewer.token });
   assert.equal((await as('rejected')).status, 201);
@@ -293,7 +292,7 @@ test('Phase 4: rejection removes the proposal from rules; disputes keep review r
   assert.ok(c.data.catalogue.conflicts.some(x => x.rule.startsWith('review_disputed/')));
 });
 
-test('Phase 4: idempotent writes, bad input and a forged fact id', async t => {
+test('Phase 4: idempotent writes, bad input and a forged fact id', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app, 'Mine');
   const { answerId, factId } = await answered(app, s);
@@ -306,18 +305,18 @@ test('Phase 4: idempotent writes, bad input and a forged fact id', async t => {
   assert.equal(replay.status, 200);
   assert.equal(replay.data.reviewId, first.data.reviewId);
   assert.equal((await review(app, s, { ...body, decision: 'rejected' }, { key })).status, 409);
-  assert.equal(rows(app, 'catalogue_reviews'), 1);
+  assert.equal((await rows(app, 'catalogue_reviews')), 1);
   assert.equal((await review(app, s, { ...body, factId: 'fact-forged' })).status, 404);
   assert.equal((await review(app, s, { ...body, decision: 'proven' })).status, 400);
   assert.equal((await review(app, s, { ...body, reasonCode: 'because' })).status, 400);
   assert.equal((await review(app, s, { ...body, attestedSourceType: 'marketing_material' })).status, 400);
-  assert.equal(rows(app, 'catalogue_reviews'), 1);
-  const audit = app.database.prepare("SELECT event_payload_json FROM audit_events WHERE action = 'catalogue_review.recorded'").all();
+  assert.equal((await rows(app, 'catalogue_reviews')), 1);
+  const audit = await app.database.prepare("SELECT event_payload_json FROM audit_events WHERE action = 'catalogue_review.recorded'").all();
   assert.equal(audit.length, 1);
   assert.ok(!audit[0].event_payload_json.includes('500000') && !audit[0].event_payload_json.includes('Rs'), 'audit holds no fact content');
 });
 
-test('Phase 4: only the household owner designates a confirmer, and only an adult of that household', async t => {
+test('Phase 4: only the household owner designates a confirmer, and only an adult of that household', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app, 'Mine');
   const other = await scenario(app, 'Other');
@@ -327,27 +326,27 @@ test('Phase 4: only the household owner designates a confirmer, and only an adul
   assert.equal((await app.call(path, { method: 'POST', token: s.token, body: { adultUserId: s.adultId } })).status, 201);
 });
 
-test('Phase 4: erasure and revocation remove reviews and what they supported', async t => {
+test('Phase 4: erasure and revocation remove reviews and what they supported', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app, 'Mine');
   const { answerId, factId } = await answered(app, s);
   await makeConfirmer(app, s);
   assert.equal((await review(app, s, { answerId, factId, decision: 'accepted', reasonCode: 'matches_clause' })).status, 201);
-  assert.equal(rows(app, 'catalogue_reviews'), 1);
+  assert.equal((await rows(app, 'catalogue_reviews')), 1);
   // Document erasure (trigger safety net and repository path).
-  app.database.prepare("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = ?").run(s.documentId);
-  assert.equal(rows(app, 'catalogue_reviews'), 0);
-  assert.equal(rows(app, 'policy_clauses'), 0);
+  await app.database.prepare("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = ?").run(s.documentId);
+  assert.equal((await rows(app, 'catalogue_reviews')), 0);
+  assert.equal((await rows(app, 'policy_clauses')), 0);
   assert.notEqual((await catalogue(app, s, answerId)).status, 200, 'the stale answer no longer builds a catalogue');
 });
 
-test('Phase 4: reviews are immutable', async t => {
+test('Phase 4: reviews are immutable', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app, 'Mine');
   const { answerId, factId } = await answered(app, s);
   await makeConfirmer(app, s);
   await review(app, s, { answerId, factId, decision: 'accepted', reasonCode: 'matches_clause' });
-  assert.throws(() => app.database.prepare("UPDATE catalogue_reviews SET decision = 'rejected'").run(), /immutable/);
+  await assert.rejects(async () => app.database.prepare("UPDATE catalogue_reviews SET decision = 'rejected'").run(), /immutable/);
 });
 
 const independent = async (t, extra = {}) => {
@@ -355,34 +354,34 @@ const independent = async (t, extra = {}) => {
   const s = await scenario(app, 'Mine');
   const reviewer = await scenario(app, 'Reviewer');
   const repo = new CatalogueReviewRepository(app.database);
-  const grant = repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  const grant = await repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
   return { app, s, reviewer, repo, grant };
 };
 const attest = { decision: 'accepted', reasonCode: 'matches_clause', attestedSourceType: 'issued_schedule', attestsPolicyAssociation: true };
 
-test('review fix P1-5: the independent path is off unless explicitly enabled', async t => {
+test('review fix P1-5: the independent path is off unless explicitly enabled', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app, 'Mine');
   const reviewer = await scenario(app, 'Reviewer');
-  new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  await new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
   const { answerId, factId } = await answered(app, s);
   assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 404);
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 404);
 });
 
-test('review fix P1-1: revoking an independent reviewer withdraws what their reviews supported', async t => {
+test('review fix P1-1: revoking an independent reviewer withdraws what their reviews supported', postgresTestOptions(), async t => {
   const { app, s, reviewer, repo, grant } = await independent(t);
   const { answerId, factId } = await answered(app, s);
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 201);
   assert.equal(roomRule(await catalogue(app, s, answerId)).result.status, 'known');
-  assert.equal(repo.revokeGrant({ householdId: s.householdId, grantId: grant.id }), true);
+  assert.equal(await repo.revokeGrant({ householdId: s.householdId, grantId: grant.id }), true);
   const c = await catalogue(app, s, answerId);
   assert.notEqual(roomRule(c).result.status, 'known');
   assert.equal(c.data.catalogue.reviews[0].state, 'reviewer_revoked');
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 404, 'a revoked reviewer cannot write');
 });
 
-test('review fix P1-2: a household confirmation never overrides an independent review', async t => {
+test('review fix P1-2: a household confirmation never overrides an independent review', postgresTestOptions(), async t => {
   const { app, s, reviewer } = await independent(t);
   const { answerId, factId } = await answered(app, s);
   await makeConfirmer(app, s);
@@ -393,26 +392,26 @@ test('review fix P1-2: a household confirmation never overrides an independent r
   assert.deepEqual(c.data.catalogue.reviews.map(r => [r.authority, r.state]).sort(), [['household', 'superseded'], ['independent', 'accepted']]);
 });
 
-test('review fix P1-3: a closed household blocks the independent reviewer', async t => {
+test('review fix P1-3: a closed household blocks the independent reviewer', postgresTestOptions(), async t => {
   const { app, s, reviewer } = await independent(t);
   const { answerId, factId } = await answered(app, s);
-  app.database.prepare("UPDATE households SET status = 'closed' WHERE id = ?").run(s.householdId);
+  await app.database.prepare("UPDATE households SET status = 'closed' WHERE id = ?").run(s.householdId);
   assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 404);
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 404);
 });
 
-test('review fix P2: bad asOf is a 400, an array source type is a 400, a household member cannot be independent', async t => {
+test('review fix P2: bad asOf is a 400, an array source type is a 400, a household member cannot be independent', postgresTestOptions(), async t => {
   const { app, s, reviewer, repo } = await independent(t);
   const { answerId, factId } = await answered(app, s);
   assert.equal((await review(app, s, { answerId, factId, ...attest, asOf: 'nope' }, { token: reviewer.token })).status, 400);
   assert.equal((await review(app, s, { answerId, factId, ...attest, attestedSourceType: ['issued_schedule'] }, { token: reviewer.token })).status, 400);
-  assert.throws(() => repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: s.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() }), /independent reviewer/);
-  const events = app.database.prepare("SELECT actor_type, action FROM audit_events WHERE action LIKE 'catalogue_reviewer.%'").all();
+  await assert.rejects(async () => repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: s.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() }), /independent reviewer/);
+  const events = await app.database.prepare("SELECT actor_type, action FROM audit_events WHERE action LIKE 'catalogue_reviewer.%'").all();
   assert.ok(events.every(e => ['system', 'adult_user'].includes(e.actor_type)));
-  assert.equal(rows(app, 'catalogue_reviews'), 0);
+  assert.equal((await rows(app, 'catalogue_reviews')), 0);
 });
 
-test('Phase 7 journey: upload, OCR, question, typed candidate, independent review, handoff, then revocation withdraws everything', async t => {
+test('Phase 7 journey: upload, OCR, question, typed candidate, independent review, handoff, then revocation withdraws everything', postgresTestOptions(), async t => {
   const { app, s, reviewer } = await independent(t);
   const { answerId, factId } = await answered(app, s);
   const handoffOf = (token = s.token) => app.call(`/api/v1/cases/${s.caseId}/decision-catalogue?answerId=${encodeURIComponent(answerId)}&format=handoff`, { token });
@@ -442,48 +441,48 @@ test('Phase 7 journey: upload, OCR, question, typed candidate, independent revie
   assert.ok([200, 201].includes(revoked.status), JSON.stringify(revoked.data));
   assert.notEqual((await handoffOf()).status, 200);
   assert.notEqual((await handoffOf(reviewer.token)).status, 200);
-  assert.equal(rows(app, 'catalogue_reviews'), 0, 'revocation erased the reviews that cited the document');
-  assert.equal(rows(app, 'policy_clauses'), 0);
+  assert.equal((await rows(app, 'catalogue_reviews')), 0, 'revocation erased the reviews that cited the document');
+  assert.equal((await rows(app, 'policy_clauses')), 0);
 });
 
-test('reviewer controls: every independent read is audited with no case content, and a denied read leaves no view event', async t => {
+test('reviewer controls: every independent read is audited with no case content, and a denied read leaves no view event', postgresTestOptions(), async t => {
   const { app, s, reviewer } = await independent(t);
   const { answerId } = await answered(app, s);
-  const views = () => app.database.prepare("SELECT actor_type, actor_id, event_payload_json FROM audit_events WHERE action = 'catalogue_reviewer.viewed'").all();
-  assert.equal(views().length, 0);
+  const views = async () => app.database.prepare("SELECT actor_type, actor_id, event_payload_json FROM audit_events WHERE action = 'catalogue_reviewer.viewed'").all();
+  assert.equal((await views()).length, 0);
   assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 200);
-  assert.equal(views().length, 1);
-  assert.equal(views()[0].actor_type, 'human_reviewer');
-  assert.ok(!JSON.stringify(views()[0]).includes('Rs'), 'view audit holds no fact content');
-  app.database.prepare("UPDATE households SET status = 'closed' WHERE id = ?").run(s.householdId);
+  assert.equal((await views()).length, 1);
+  assert.equal((await views())[0].actor_type, 'human_reviewer');
+  assert.ok(!JSON.stringify((await views())[0]).includes('Rs'), 'view audit holds no fact content');
+  await app.database.prepare("UPDATE households SET status = 'closed' WHERE id = ?").run(s.householdId);
   assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 404);
-  assert.equal(views().length, 1, 'a denied read is not logged as a view');
+  assert.equal((await views()).length, 1, 'a denied read is not logged as a view');
 });
 
-test('reviewer scope: an independent grant is bound to one case and one short window, and expiry withdraws what it supported', async t => {
+test('reviewer scope: an independent grant is bound to one case and one short window, and expiry withdraws what it supported', postgresTestOptions(), async t => {
   const { app, s, reviewer, repo } = await independent(t);
   const { answerId, factId } = await answered(app, s);
   const grantFor = (over = {}) => repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon(), ...over });
-  assert.throws(() => grantFor({ caseId: undefined }), /caseId/);
-  assert.throws(() => grantFor({ caseId: 'case-of-another-household' }), /not a case of this household/);
-  assert.throws(() => grantFor({ expiresAt: soon(-1000) }), /future UTC instant/);
-  assert.throws(() => grantFor({ expiresAt: soon(31 * 86_400_000) }), /within 30 days/);
-  assert.throws(() => grantFor({ expiresAt: 'tomorrow' }), /future UTC instant/);
-  assert.throws(() => repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: reviewer.adultId, caseId: s.caseId, expiresAt: soon() }), /cannot grant themselves/);
+  await assert.rejects(async () => grantFor({ caseId: undefined }), /caseId/);
+  await assert.rejects(async () => grantFor({ caseId: 'case-of-another-household' }), /not a case of this household/);
+  await assert.rejects(async () => grantFor({ expiresAt: soon(-1000) }), /future UTC instant/);
+  await assert.rejects(async () => grantFor({ expiresAt: soon(31 * 86_400_000) }), /within 30 days/);
+  await assert.rejects(async () => grantFor({ expiresAt: 'tomorrow' }), /future UTC instant/);
+  await assert.rejects(async () => repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: reviewer.adultId, caseId: s.caseId, expiresAt: soon() }), /cannot grant themselves/);
 
   // Another case of the same household is out of scope: no read, no review, no activeGrant.
   const second = await app.call('/api/v1/cases', { method: 'POST', token: s.token, body: { householdId: s.householdId, subjectMemberId: s.ownerMemberId, triggerType: 'planned_care' } });
   assert.equal(second.status, 201);
   assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token, caseId: second.data.id })).status, 404, 'cross-task read');
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token, caseId: second.data.id })).status, 404, 'cross-task review');
-  assert.equal(repo.activeGrant(s.householdId, reviewer.adultId), null, 'an independent grant answers only for its case');
-  assert.equal(repo.activeGrant(s.householdId, reviewer.adultId, second.data.id), null);
+  assert.equal(await repo.activeGrant(s.householdId, reviewer.adultId), null, 'an independent grant answers only for its case');
+  assert.equal(await repo.activeGrant(s.householdId, reviewer.adultId, second.data.id), null);
 
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 201);
   assert.equal(roomRule(await catalogue(app, s, answerId)).result.status, 'known');
   // Move the window into the past (the repository clock decides what "future" means when granting).
   const past = new CatalogueReviewRepository(app.database, { clock: () => new Date(Date.now() - 7_200_000) });
-  past.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: new Date(Date.now() - 3_600_000).toISOString() });
+  await past.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: new Date(Date.now() - 3_600_000).toISOString() });
   const expired = await catalogue(app, s, answerId);
   assert.notEqual(roomRule(expired).result.status, 'known', 'an expired reviewer supports nothing');
   assert.equal(expired.data.catalogue.reviews[0].state, 'reviewer_revoked');
@@ -491,7 +490,7 @@ test('reviewer scope: an independent grant is bound to one case and one short wi
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 404, 'expired write');
 });
 
-test('reviewer scope: a legacy independent grant with no expiry or case is inactive, and a replay after revocation is refused', async t => {
+test('reviewer scope: a legacy independent grant with no expiry or case is inactive, and a replay after revocation is refused', postgresTestOptions(), async t => {
   const { app, s, reviewer, repo, grant } = await independent(t);
   const { answerId, factId } = await answered(app, s);
   const key = randomUUID();
@@ -499,28 +498,28 @@ test('reviewer scope: a legacy independent grant with no expiry or case is inact
   assert.equal(first.status, 201);
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token, key })).status, 200, 'an honest replay is idempotent while the grant lives');
   // Review recorded, then revocation lands: the review stays immutable but counts for nothing.
-  assert.equal(repo.revokeGrant({ householdId: s.householdId, grantId: grant.id }), true);
+  assert.equal(await repo.revokeGrant({ householdId: s.householdId, grantId: grant.id }), true);
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token, key })).status, 404, 'replay of a previously authorised request after revocation');
-  assert.equal(app.database.prepare('SELECT count(*) AS n FROM catalogue_reviews').get().n, 1, 'history is preserved');
-  assert.equal(app.database.prepare("SELECT decision FROM catalogue_reviews").get().decision, 'accepted');
+  assert.equal((await app.database.prepare('SELECT count(*) AS n FROM catalogue_reviews').get()).n, 1, 'history is preserved');
+  assert.equal((await app.database.prepare("SELECT decision FROM catalogue_reviews").get()).decision, 'accepted');
   // Revocation first, then a review attempt: nothing is written.
   assert.equal((await review(app, s, { answerId, factId, ...attest }, { token: reviewer.token })).status, 404);
-  assert.equal(app.database.prepare('SELECT count(*) AS n FROM catalogue_reviews').get().n, 1);
+  assert.equal((await app.database.prepare('SELECT count(*) AS n FROM catalogue_reviews').get()).n, 1);
   // A row from before the expiry column existed (no expiry, no case) never serves an independent reviewer.
   // The database refuses to reactivate a legacy independent row that has no expiry or case.
-  assert.throws(() => app.database.prepare("UPDATE catalogue_reviewer_grants SET status = 'active', revoked_at = NULL, expires_at = NULL, case_id = NULL WHERE id = ?").run(grant.id), /needs an expiry and a case/);
-  assert.equal(repo.activeGrant(s.householdId, reviewer.adultId, s.caseId), null);
+  await assert.rejects(async () => app.database.prepare("UPDATE catalogue_reviewer_grants SET status = 'active', revoked_at = NULL, expires_at = NULL, case_id = NULL WHERE id = ?").run(grant.id), /needs an expiry and a case/);
+  assert.equal(await repo.activeGrant(s.householdId, reviewer.adultId, s.caseId), null);
   assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 404);
   // A regrant starts a new window: the earlier review does not come back to life.
   await new Promise(resolve => setTimeout(resolve, 5));
-  repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  await repo.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
   const revived = await catalogue(app, s, answerId);
   assert.notEqual(roomRule(revived).result.status, 'known', 'a regrant does not revive earlier reviews');
   assert.equal(revived.data.catalogue.reviews[0].state, 'reviewer_revoked');
-  assert.throws(() => app.database.prepare("INSERT INTO catalogue_reviewer_grants (id, household_id, adult_user_id, kind, status, granted_by, created_at) VALUES ('x', ?, ?, 'independent_reviewer', 'active', 'operator:t', 'now')").run(s.householdId, s.adultId), /needs an expiry and a case/);
+  await assert.rejects(async () => app.database.prepare("INSERT INTO catalogue_reviewer_grants (id, household_id, adult_user_id, kind, status, granted_by, created_at) VALUES ('x', ?, ?, 'independent_reviewer', 'active', 'operator:t', 'now')").run(s.householdId, s.adultId), /needs an expiry and a case/);
 });
 
-test('reviewer scope: no body can mint an independent grant, and the audit history cannot be rewritten', async t => {
+test('reviewer scope: no body can mint an independent grant, and the audit history cannot be rewritten', postgresTestOptions(), async t => {
   const { app, s, reviewer } = await independent(t);
   const outsider = await scenario(app, 'Outsider');
   const attempt = await app.call(`/api/v1/households/${s.householdId}/catalogue-reviewers`, { method: 'POST', token: s.token, body: { adultUserId: outsider.adultId, kind: 'independent_reviewer', authority: 'independent', caseId: s.caseId } });
@@ -528,22 +527,22 @@ test('reviewer scope: no body can mint an independent grant, and the audit histo
   const own = await app.call(`/api/v1/households/${s.householdId}/catalogue-reviewers`, { method: 'POST', token: s.token, body: { adultUserId: s.adultId, kind: 'independent_reviewer' } });
   assert.equal(own.data.kind, 'household_confirmer', 'the requested kind is ignored');
   assert.equal((await app.call(`/api/v1/households/${s.householdId}/catalogue-reviewers`, { method: 'POST', token: reviewer.token, body: { adultUserId: reviewer.adultId } })).status, 404, 'a reviewer cannot grant themselves');
-  assert.throws(() => app.database.prepare("UPDATE audit_events SET action = 'tampered'").run());
-  assert.throws(() => app.database.prepare('DELETE FROM audit_events').run());
+  await assert.rejects(async () => app.database.prepare("UPDATE audit_events SET action = 'tampered'").run());
+  await assert.rejects(async () => app.database.prepare('DELETE FROM audit_events').run());
 });
 
-test('an independent grant covers only documents the case held when it was issued; a regrant is needed for later uploads', async t => {
+test('an independent grant covers only documents the case held when it was issued; a regrant is needed for later uploads', postgresTestOptions(), async t => {
   const app = await startApp(t, { env: { CATALOGUE_INDEPENDENT_REVIEW_ENABLED: 'true' } });
   const s = await scenario(app, 'Mine');
   const reviewer = await scenario(app, 'Reviewer');
   // Issued an hour before the document was uploaded: the upload is newer than the grant.
   const earlier = new CatalogueReviewRepository(app.database, { clock: () => new Date(Date.now() - 3_600_000) });
-  earlier.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  await earlier.grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
   const { answerId, factId } = await answered(app, s);
   assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 404, 'a later document is not covered');
   assert.equal((await review(app, s, { answerId, factId, decision: 'accepted', reasonCode: 'matches_clause' }, { token: reviewer.token })).status, 404);
-  assert.equal(app.database.prepare("SELECT count(*) AS n FROM catalogue_reviews").get().n, 0);
-  new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
+  assert.equal((await app.database.prepare("SELECT count(*) AS n FROM catalogue_reviews").get()).n, 0);
+  await new CatalogueReviewRepository(app.database).grantIndependentReviewer({ householdId: s.householdId, adultUserId: reviewer.adultId, operatorId: 'test-operator', caseId: s.caseId, expiresAt: soon() });
   assert.equal((await catalogue(app, s, answerId, '', { token: reviewer.token })).status, 200, 'an operator regrant covers it');
   assert.equal((await review(app, s, { answerId, factId, decision: 'accepted', reasonCode: 'matches_clause' }, { token: reviewer.token })).status, 201);
 });

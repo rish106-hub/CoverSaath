@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { PostgresDatabaseError } from './errors.js';
 
@@ -35,7 +36,18 @@ function sanitizedConnectionString(connectionString) {
   url.searchParams.delete('lock_timeout');
   url.searchParams.delete('idle_in_transaction_session_timeout');
   url.searchParams.delete('replication');
+  // TLS comes from the `sslCa` option only. pg would let these URL parameters override it.
+  for (const name of ['ssl', 'sslmode', 'sslcert', 'sslkey', 'sslrootcert', 'sslcompat', 'uselibpqcompat']) url.searchParams.delete(name);
   return url.toString();
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+// A URL with no host (a Unix socket) or a loopback host is a local development database. Every other
+// host is remote and always gets verified TLS.
+function isLocalHost(connectionString) {
+  const { hostname } = new URL(connectionString);
+  return hostname === '' || LOOPBACK_HOSTS.has(hostname);
 }
 
 // Builds the pool. It does not connect, never logs the URL and is not yet wired into the runtime.
@@ -49,6 +61,7 @@ export function createPostgresPool({
   idleInTransactionTimeoutMs = DEFAULTS.idleInTransactionTimeoutMs,
   connectionTimeoutMs = DEFAULTS.connectionTimeoutMs,
   applicationName = DEFAULTS.applicationName,
+  sslCa,
   onError = () => {},
 } = {}) {
   if (typeof connectionString !== 'string' || connectionString.trim() === '') {
@@ -59,6 +72,9 @@ export function createPostgresPool({
   requireInteger('lockTimeoutMs', lockTimeoutMs, { min: 1 });
   requireInteger('idleInTransactionTimeoutMs', idleInTransactionTimeoutMs, { min: 1 });
   requireInteger('connectionTimeoutMs', connectionTimeoutMs, { min: 1 });
+  if (sslCa !== undefined && (typeof sslCa !== 'string' || !sslCa.includes('BEGIN CERTIFICATE'))) {
+    throw new PostgresDatabaseError('DATABASE_POOL_OPTION_INVALID', 'Pool option sslCa must be a PEM certificate.');
+  }
   const name = String(applicationName).replace(/[^\x20-\x7e]/g, '?').slice(0, 63);
   if (name === '') {
     throw new PostgresDatabaseError('DATABASE_POOL_OPTION_INVALID', 'Pool option applicationName must not be empty.');
@@ -67,6 +83,12 @@ export function createPostgresPool({
     connectionString: sanitizedConnectionString(connectionString.trim()),
     max,
     application_name: name,
+    // TLS is always set explicitly so neither the URL nor pg's PGSSLMODE fallback can change it. A
+    // supplied CA, or any non-local host, gets full certificate and host verification, which is never
+    // relaxed. Only a loopback or Unix-socket database may run without TLS.
+    ssl: sslCa !== undefined
+      ? { ca: sslCa, rejectUnauthorized: true }
+      : isLocalHost(connectionString.trim()) ? false : { rejectUnauthorized: true },
     connectionTimeoutMillis: connectionTimeoutMs,
     options: [
       `-c statement_timeout=${statementTimeoutMs}`,
@@ -76,4 +98,22 @@ export function createPostgresPool({
   });
   pool.on('error', onError);
   return pool;
+}
+
+// Reads DATABASE_URL and the optional DATABASE_SSL_CA_PATH (a PEM file for a hosted database such as
+// Supabase). Errors name the variable, never its value.
+export function postgresPoolOptionsFromEnv(env = process.env) {
+  const connectionString = env.DATABASE_URL;
+  if (typeof connectionString !== 'string' || connectionString.trim() === '') {
+    throw new PostgresDatabaseError('DATABASE_URL_REQUIRED', 'DATABASE_URL is required.');
+  }
+  const caPath = env.DATABASE_SSL_CA_PATH?.trim();
+  if (!caPath) return { connectionString };
+  let sslCa;
+  try {
+    sslCa = readFileSync(caPath, 'utf8');
+  } catch {
+    throw new PostgresDatabaseError('DATABASE_POOL_OPTION_INVALID', 'DATABASE_SSL_CA_PATH could not be read.');
+  }
+  return { connectionString, sslCa };
 }

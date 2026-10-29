@@ -1,5 +1,5 @@
-// Persistence port interfaces the coverage-analysis runtime needs. A PostgreSQL adapter
-// must satisfy these with the same semantics as the SQLite implementation
+// Persistence port interfaces the coverage-analysis runtime needs. An adapter must satisfy
+// these with the same semantics as the PostgreSQL implementation
 // (src/backend/services/coverage-analysis-port.js and src/backend/repositories/*).
 // No database code here: method lists, JSDoc signatures and runtime shape checks only.
 //
@@ -22,9 +22,13 @@ export const PORT_CONTRACT_ERROR_CODE = 'PORT_CONTRACT_INVALID';
  * @property {(input: { scope: string, key: string, at: string }) => Awaitable<IdempotencyRow|null>} findIdempotency
  *   Deletes the key first if expired at `at`; returns { request_digest, response_json, ... } or null.
  * @property {(input: { scope: string, key: string, requestDigest: string, responseStatus: number, response: object, expiresAt: string }) => Awaitable<void>} recordIdempotency
- * @property {(input: RunCreation) => Awaitable<RunRow & { tasks: TaskRow[] }>} createRunWithParameters
+ * @property {(input: RunCreation & { idempotency?: IdempotencyRecord|null }) => Awaitable<(RunRow & { tasks: TaskRow[], idempotencyRecorded?: true })|{ existing: IdempotencyRow }>} createRunWithParameters
  *   Run, tasks (in declaration order), registry pin and one parameter record per registry
- *   key, created atomically. Any failure leaves nothing behind.
+ *   key, created atomically. Any failure leaves nothing behind. With `idempotency` (S3.2
+ *   decision 1) the key is re-read inside the transaction under its lock: a live key returns
+ *   { existing } and creates nothing; otherwise the key is stored with the run and the result
+ *   carries idempotencyRecorded: true. Without that flag the caller records the key itself
+ *   with recordIdempotency. A live run re-checks its sources inside the transaction (decision 4).
  * @property {(runId: string) => Awaitable<{ allowed: boolean, reasonCode?: string }>} verifyRunSourcesCurrent
  *   Commit-time consent re-check of every source the run was built from. Errors deny.
  * @property {(caseId: string) => Awaitable<object[]>} getCoverageSourcePages
@@ -126,6 +130,7 @@ export const FIXTURE_RUN_STORE_PORT_METHODS = Object.freeze(['createRun', 'loadR
 /** @typedef {Record<string, unknown>} TaskRow */
 /** @typedef {Record<string, unknown>} IdempotencyRow */
 /** @typedef {Record<string, unknown>} RunCreation */
+/** @typedef {{ scope: string, key: string, requestDigest: string, responseStatus: number, response: object, expiresAt: string }} IdempotencyRecord */
 
 function assertPort(port, methods, label) {
   const missing = !port || (typeof port !== 'object' && typeof port !== 'function')

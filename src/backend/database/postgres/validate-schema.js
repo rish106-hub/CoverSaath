@@ -1,6 +1,6 @@
 import {
   criticalIndexes, criticalTriggers, expectedTables, expectedViews, requiredColumns,
-} from '../database.js';
+} from './schema-expectations.js';
 
 const REQUIRED_COLLATION = 'C';
 const SAFE_LOCALE_PROVIDERS = new Set(['b', 'c']);
@@ -65,7 +65,7 @@ async function foreignKeyErrors(pool) {
   return errors;
 }
 
-// Same shape as SQLite validateSchema (missing*, foreignKeyErrors, migrationCount, valid) plus the
+// Same shape as the retired SQLite validateSchema (missing*, foreignKeyErrors, migrationCount, valid) plus the
 // PostgreSQL checks: database collation must be C (ADR 0004, D4) and every critical trigger must be
 // enabled (a disabled trigger would silently stop enforcing its invariant).
 export async function validatePostgresSchema(pool) {
@@ -106,6 +106,20 @@ export async function validatePostgresSchema(pool) {
   const unsafeFunctionSearchPaths = functionRows
     .filter(row => !Array.isArray(row.settings) || !row.settings.includes(REQUIRED_FUNCTION_SEARCH_PATH))
     .map(row => row.name);
+  // Supabase exposes the schema through its Data API: every table needs row level security (deny by
+  // default) and the API roles `anon` and `authenticated` must hold no privilege on it (migration 016).
+  const tablesWithoutRls = (await pool.query(`
+    SELECT c.relname AS name FROM pg_class c
+    WHERE c.relnamespace = current_schema()::regnamespace AND c.relkind IN ('r', 'p') AND NOT c.relrowsecurity
+    ORDER BY c.relname`)).rows.map(row => row.name);
+  const apiRoleGrants = (await pool.query(`
+    SELECT DISTINCT c.relname || ' -> ' || r.rolname AS name
+    FROM pg_class c
+    JOIN pg_roles r ON r.rolname IN ('anon', 'authenticated')
+    WHERE c.relnamespace = current_schema()::regnamespace AND c.relkind IN ('r', 'p', 'v')
+      AND (has_any_column_privilege(r.oid, c.oid, 'SELECT, INSERT, UPDATE, REFERENCES')
+        OR has_table_privilege(r.oid, c.oid, 'DELETE, TRUNCATE, TRIGGER'))
+    ORDER BY 1`)).rows.map(row => row.name);
   const collation = databaseLocale.datcollate;
   const localeProvider = databaseLocale.locale_provider;
   const orderingValid = databaseLocale.uppercase_before_lowercase === true;
@@ -116,7 +130,7 @@ export async function validatePostgresSchema(pool) {
   const collationValid = collation === REQUIRED_COLLATION && SAFE_LOCALE_PROVIDERS.has(localeProvider) && orderingValid;
   const valid = [
     missingTables, missingViews, missingTriggers, missingIndexes, missingColumns, disabledTriggers, foreignKeyProblems,
-    unsafeFunctionSearchPaths,
+    unsafeFunctionSearchPaths, tablesWithoutRls, apiRoleGrants,
   ]
     .every(items => items.length === 0) && collationValid;
   return {
@@ -133,6 +147,8 @@ export async function validatePostgresSchema(pool) {
     orderingValid,
     collationValid,
     unsafeFunctionSearchPaths,
+    tablesWithoutRls,
+    apiRoleGrants,
     migrationCount,
   };
 }

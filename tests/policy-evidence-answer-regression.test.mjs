@@ -2,10 +2,10 @@
 // labelled as an exclusion, opt-out rows in the schedule, a described-but-not-selected benefit). Synthetic only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
 import { INVESTIGATION_VERSION, buildClauses, investigate } from '../src/features/policy-evidence/index.js';
 import { parameterAt as at, seedParameterWorld } from './support/parameter-fixtures.mjs';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 
 const row = (...cells) => `<tr>${cells.map(cell => `<td>${cell}</td>`).join('')}</tr>`;
 const table = (...rows) => `<table>${rows.join('')}</table>`;
@@ -137,10 +137,9 @@ test('answers are stamped with the v2 pipeline version', async () => {
 
 // Stored answers from the v1 pipeline carry no effect-based buckets. They must stay readable, keep their own version
 // stamp, and replay without a model call; they are never restamped or re-bucketed as v2 evidence.
-test('a stored v1 answer replays unchanged and is not restamped as v2', t => {
-  const database = openDatabase({ path: ':memory:' });
-  t.after(() => database.close());
-  seedParameterWorld(database);
+test('a stored v1 answer replays unchanged and is not restamped as v2', postgresTestOptions(), async t => {
+  const { db: database } = await freshDatabase(t);
+  await seedParameterWorld(database);
   const services = createBackendServices(database, { clock: () => new Date(at) });
   const v1 = {
     question: 'Is room rent limited?', state: 'conditional', covered: [], legalReview: 'required', calculations: [], unknowns: ['x'], overrides_checked: [],
@@ -151,8 +150,8 @@ test('a stored v1 answer replays unchanged and is not restamped as v2', t => {
     householdId: 'household-parameters', caseId: 'case-parameters', requestedByAdultId: 'adult-parameters', idempotencyKey: 'idem-key-v1-0001', requestDigest: 'a'.repeat(64),
     question: v1.question, answer: v1, access: { consentGrantId: 'grant-question', subjectAdultId: 'adult-parameters', documentIds: ['document-parameters'] },
   });
-  const first = save();
-  const replay = save();
+  const first = await save();
+  const replay = await save();
   assert.equal(replay.replayed, true);
   assert.equal(replay.answer.pipelineVersion, 'policy-evidence-investigation/v1');
   assert.deepEqual(replay.answer.limited_or_excluded, v1.limited_or_excluded);

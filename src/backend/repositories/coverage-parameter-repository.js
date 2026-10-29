@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { AuditRepository } from './audit-repository.js';
+import { householdLock } from '../database/postgres/locks.js';
 import {
   POLICY_PARAMETER_REGISTRY_VERSION,
   getPolicyParameterDefinition,
@@ -150,48 +151,20 @@ const parameterSelect = `SELECT parameter.*,
   JOIN coverage_parameter_acquisitions acquisition ON acquisition.parameter_record_id = parameter.id
   JOIN coverage_parameter_resolutions resolution ON resolution.parameter_record_id = parameter.id`;
 
+// Async PostgreSQL interface (S3.2). Multi-step methods run in database.transaction(), which
+// joins an open transaction as a savepoint. Writers that touch a run's observations take the
+// household advisory lock first (lock order: household -> workflow_runs -> workflow_tasks -> the
+// rest), so they serialise with consent revocation and derived-data erasure.
 export class CoverageParameterRepository {
   constructor(database, { clock = () => new Date(), audit = null } = {}) {
-    if (!database?.prepare || !database?.exec) throw new TypeError('A database is required.');
+    if (typeof database?.transaction !== 'function' || typeof database?.one !== 'function') throw new TypeError('A database is required.');
     this.database = database;
     this.clock = clock;
     this.audit = audit ?? new AuditRepository(database, { clock });
   }
 
-  // Runs `work` atomically. Joins an open transaction through a savepoint so the
-  // multi-step methods compose with callers that already hold a transaction.
-  //
-  // Whether a transaction is already open is read from DatabaseSync.isTransaction where the
-  // runtime provides it. Some supported runtimes (engines >= 22.12.0) may not have that
-  // property, and a manual BEGIN held by a caller cannot be seen by in-process depth tracking, so
-  // there the outer transaction is probed by attempting it: SQLite refuses BEGIN inside an open
-  // transaction with a "within a transaction" error, which selects the savepoint path. Any other
-  // BEGIN failure (for example a busy database) is rethrown unchanged.
   #atomic(work) {
-    const savepoint = `coverage_parameter_${randomUUID().replaceAll('-', '')}`;
-    let nested;
-    if (typeof this.database.isTransaction === 'boolean') {
-      nested = this.database.isTransaction;
-      if (!nested) this.database.exec('BEGIN IMMEDIATE');
-    } else {
-      try {
-        this.database.exec('BEGIN IMMEDIATE');
-        nested = false;
-      } catch (error) {
-        if (!/within a transaction/i.test(String(error?.message))) throw error;
-        nested = true;
-      }
-    }
-    if (nested) this.database.exec(`SAVEPOINT ${savepoint}`);
-    try {
-      const result = work();
-      this.database.exec(nested ? `RELEASE ${savepoint}` : 'COMMIT');
-      return result;
-    } catch (error) {
-      this.database.exec(nested ? `ROLLBACK TO ${savepoint}` : 'ROLLBACK');
-      if (nested) this.database.exec(`RELEASE ${savepoint}`);
-      throw error;
-    }
+    return this.database.transaction(work);
   }
 
   // Fails closed on a registry version that the application does not know. The database
@@ -210,53 +183,53 @@ export class CoverageParameterRepository {
    * Pins a run to one registry version. Idempotent for the same version; a run can never be
    * re-pinned to a different version.
    */
-  pinRegistry({ workflowRunId, registryVersion, pinnedAt = this.clock().toISOString() }) {
+  async pinRegistry({ workflowRunId, registryVersion, pinnedAt = this.clock().toISOString() }) {
     requireBounded(workflowRunId, 'workflowRunId');
     this.#requireRegistryVersion(registryVersion);
     requireTimestamp(pinnedAt, 'pinnedAt');
-    const existing = this.getRegistryPin(workflowRunId);
-    if (existing) {
-      if (existing.registryVersion !== registryVersion) throw new Error('The run is already pinned to a different registry version.');
-      return existing;
-    }
-    this.database.prepare(`INSERT INTO coverage_parameter_registry_pins
-      (workflow_run_id, registry_version, pinned_at, created_at) VALUES (?, ?, ?, ?)`)
-      .run(workflowRunId, registryVersion, pinnedAt, pinnedAt);
-    return this.getRegistryPin(workflowRunId);
+    // Insert-if-absent then compare: a concurrent or repeated pin never raises a unique violation.
+    await this.database.run(`INSERT INTO coverage_parameter_registry_pins
+      (workflow_run_id, registry_version, pinned_at, created_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT (workflow_run_id) DO NOTHING`, [workflowRunId, registryVersion, pinnedAt, pinnedAt]);
+    const pin = await this.getRegistryPin(workflowRunId);
+    if (!pin) throw new Error('The registry pin was not stored.');
+    if (pin.registryVersion !== registryVersion) throw new Error('The run is already pinned to a different registry version.');
+    return pin;
   }
 
-  getRegistryPin(workflowRunId) {
+  async getRegistryPin(workflowRunId) {
     requireBounded(workflowRunId, 'workflowRunId');
-    return this.database.prepare(`SELECT workflow_run_id AS workflowRunId,
-      registry_version AS registryVersion, pinned_at AS pinnedAt, created_at AS createdAt
-      FROM coverage_parameter_registry_pins WHERE workflow_run_id = ?`).get(workflowRunId) ?? null;
+    // Quoted aliases: PostgreSQL folds unquoted identifiers to lower case.
+    return (await this.database.one(`SELECT workflow_run_id AS "workflowRunId",
+      registry_version AS "registryVersion", pinned_at AS "pinnedAt", created_at AS "createdAt"
+      FROM coverage_parameter_registry_pins WHERE workflow_run_id = ?`, [workflowRunId])) ?? null;
   }
 
-  #insertParameter({
+  async #insertParameter({
     id: parameterRecordId, workflowRunId, registryVersion, parameterKey, householdId, caseId,
     subjectId, policyId, applicable, acquisitionState, resolutionState, reasonCode, updatedBy,
   }) {
     const at = this.clock().toISOString();
-    this.database.prepare(`INSERT INTO coverage_parameter_records
+    await this.database.run(`INSERT INTO coverage_parameter_records
       (id, workflow_run_id, registry_version, parameter_key, household_id, case_id,
        subject_id, policy_id, applicable, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       parameterRecordId, workflowRunId, registryVersion, parameterKey, householdId, caseId,
       subjectId, policyId, applicable ? 1 : 0, at, at,
-    );
-    this.database.prepare(`INSERT INTO coverage_parameter_acquisitions
+    ]);
+    await this.database.run(`INSERT INTO coverage_parameter_acquisitions
       (parameter_record_id, acquisition_state, reason_code, requested_at, received_at,
-       updated_by, updated_at) VALUES (?, ?, ?, NULL, NULL, ?, ?)`)
-      .run(parameterRecordId, acquisitionState, reasonCode, updatedBy, at);
-    this.database.prepare(`INSERT INTO coverage_parameter_resolutions
+       updated_by, updated_at) VALUES (?, ?, ?, NULL, NULL, ?, ?)`,
+    [parameterRecordId, acquisitionState, reasonCode, updatedBy, at]);
+    await this.database.run(`INSERT INTO coverage_parameter_resolutions
       (parameter_record_id, resolution_state, resolved_value_json, resolved_observation_id,
        reason_code, transition_authority, updated_by, updated_at)
-      VALUES (?, ?, NULL, NULL, ?, 'deterministic', ?, ?)`).run(
+      VALUES (?, ?, NULL, NULL, ?, 'deterministic', ?, ?)`, [
       parameterRecordId, resolutionState, reasonCode, updatedBy, at,
-    );
+    ]);
   }
 
-  createParameter({
+  async createParameter({
     id: parameterRecordId = id('parameter'), workflowRunId, registryVersion, parameterKey,
     householdId, caseId, subjectId, policyId, applicable = true,
     acquisitionState = applicable ? 'not_requested' : 'not_permitted',
@@ -289,7 +262,7 @@ export class CoverageParameterRepository {
     if ((acquisitionState === 'not_permitted') !== (resolutionState === 'not_permitted')) {
       throw new TypeError('Not-permitted acquisition and resolution states must be set together.');
     }
-    this.#atomic(() => this.#insertParameter({
+    await this.#atomic(() => this.#insertParameter({
       id: parameterRecordId, workflowRunId, registryVersion, parameterKey, householdId, caseId,
       subjectId, policyId, applicable, acquisitionState, resolutionState, reasonCode, updatedBy,
     }));
@@ -305,7 +278,7 @@ export class CoverageParameterRepository {
    * Intended for run creation (round 3); nothing calls it yet.
    * Returns { pin, registryVersion, created, existing, total }.
    */
-  initializeRunParameters({
+  async initializeRunParameters({
     workflowRunId, registryVersion = POLICY_PARAMETER_REGISTRY_VERSION, householdId, caseId,
     subjectId, policyId, notApplicableKeys = [], updatedBy = 'coverage-parameter-repository',
   }) {
@@ -323,11 +296,11 @@ export class CoverageParameterRepository {
     for (const key of notApplicable) {
       if (!known.has(key)) throw new TypeError(`Unknown policy parameter key: ${key}.`);
     }
-    return this.#atomic(() => {
-      const pin = this.pinRegistry({ workflowRunId, registryVersion });
-      const present = new Map(this.database.prepare(`SELECT parameter_key, household_id, case_id,
-        subject_id, policy_id FROM coverage_parameter_records WHERE workflow_run_id = ?`)
-        .all(workflowRunId).map(row => [row.parameter_key, row]));
+    return this.#atomic(async () => {
+      const pin = await this.pinRegistry({ workflowRunId, registryVersion });
+      const present = new Map((await this.database.many(`SELECT parameter_key, household_id, case_id,
+        subject_id, policy_id FROM coverage_parameter_records WHERE workflow_run_id = ?`, [workflowRunId]))
+        .map(row => [row.parameter_key, row]));
       let created = 0;
       let existing = 0;
       for (const definition of registry.parameters) {
@@ -341,7 +314,7 @@ export class CoverageParameterRepository {
           continue;
         }
         const applicable = !notApplicable.has(definition.key);
-        this.#insertParameter({
+        await this.#insertParameter({
           id: id('parameter'), workflowRunId, registryVersion, parameterKey: definition.key,
           householdId, caseId, subjectId, policyId, applicable,
           acquisitionState: applicable ? 'not_requested' : 'not_permitted',
@@ -354,17 +327,17 @@ export class CoverageParameterRepository {
     });
   }
 
-  getParameter(parameterRecordId) {
+  async getParameter(parameterRecordId) {
     requireBounded(parameterRecordId, 'parameterRecordId');
-    return mapParameter(this.database.prepare(`${parameterSelect} WHERE parameter.id = ?`).get(parameterRecordId));
+    return mapParameter(await this.database.one(`${parameterSelect} WHERE parameter.id = ?`, [parameterRecordId]));
   }
 
-  listForRun(workflowRunId, { limit } = {}) {
+  async listForRun(workflowRunId, { limit } = {}) {
     requireBounded(workflowRunId, 'workflowRunId');
     const bound = requireLimit(limit, 'limit', defaultRunLimit, maximumRunLimit);
-    return this.database.prepare(`${parameterSelect}
-      WHERE parameter.workflow_run_id = ? ORDER BY parameter.parameter_key LIMIT ?`)
-      .all(workflowRunId, bound).map(mapParameter);
+    return (await this.database.many(`${parameterSelect}
+      WHERE parameter.workflow_run_id = ? ORDER BY parameter.parameter_key LIMIT ?`, [workflowRunId, bound]))
+      .map(mapParameter);
   }
 
   /**
@@ -372,18 +345,18 @@ export class CoverageParameterRepository {
    * `received` only follows `requested` (see ACQUISITION_TRANSITIONS). Setting the current
    * state again is a no-op, so retries never rewrite timestamps.
    */
-  setAcquisitionState({ parameterRecordId, state, reasonCode = null, updatedBy, at = this.clock().toISOString() }) {
+  async setAcquisitionState({ parameterRecordId, state, reasonCode = null, updatedBy, at = this.clock().toISOString() }) {
     requireBounded(parameterRecordId, 'parameterRecordId');
     requireEnum(state, 'state', acquisitionStates);
     optionalBounded(reasonCode, 'reasonCode');
     requireBounded(updatedBy, 'updatedBy');
     requireTimestamp(at, 'at');
-    this.#atomic(() => this.#applyAcquisition({ parameterRecordId, state, reasonCode, updatedBy, at }));
+    await this.#atomic(() => this.#applyAcquisition({ parameterRecordId, state, reasonCode, updatedBy, at }));
     return this.getParameter(parameterRecordId);
   }
 
   /** Atomically moves several parameters of one run (for example the keys actually sent). */
-  setAcquisitionStateForRun({ workflowRunId, parameterKeys, state, reasonCode = null, updatedBy, at = this.clock().toISOString() }) {
+  async setAcquisitionStateForRun({ workflowRunId, parameterKeys, state, reasonCode = null, updatedBy, at = this.clock().toISOString() }) {
     requireBounded(workflowRunId, 'workflowRunId');
     requireEnum(state, 'state', acquisitionStates);
     optionalBounded(reasonCode, 'reasonCode');
@@ -393,32 +366,39 @@ export class CoverageParameterRepository {
       throw new TypeError(`parameterKeys must list between 1 and ${maximumRunLimit} keys.`);
     }
     const keys = [...new Set(parameterKeys.map(key => requireBounded(key, 'parameterKey', { max: 128, pattern: parameterKeyPattern })))];
-    return this.#atomic(() => keys.map(parameterKey => {
-      const row = this.database.prepare(`SELECT id FROM coverage_parameter_records
-        WHERE workflow_run_id = ? AND parameter_key = ?`).get(workflowRunId, parameterKey);
-      if (!row) throw new Error(`Coverage parameter was not found for the run: ${parameterKey}.`);
-      this.#applyAcquisition({ parameterRecordId: row.id, state, reasonCode, updatedBy, at });
-      return this.getParameter(row.id);
-    }));
+    // Sequential: one transaction runs one query at a time.
+    return this.#atomic(async () => {
+      const results = [];
+      for (const parameterKey of keys) {
+        const row = await this.database.one(`SELECT id FROM coverage_parameter_records
+          WHERE workflow_run_id = ? AND parameter_key = ?`, [workflowRunId, parameterKey]);
+        if (!row) throw new Error(`Coverage parameter was not found for the run: ${parameterKey}.`);
+        await this.#applyAcquisition({ parameterRecordId: row.id, state, reasonCode, updatedBy, at });
+        results.push(await this.getParameter(row.id));
+      }
+      return results;
+    });
   }
 
-  #applyAcquisition({ parameterRecordId, state, reasonCode, updatedBy, at }) {
-    const current = this.database.prepare(`SELECT acquisition_state FROM coverage_parameter_acquisitions
-      WHERE parameter_record_id = ?`).get(parameterRecordId);
+  // Runs inside a transaction: the row is locked before the transition is checked, so two
+  // concurrent moves cannot both pass the check against the same old state.
+  async #applyAcquisition({ parameterRecordId, state, reasonCode, updatedBy, at }) {
+    const current = await this.database.one(`SELECT acquisition_state FROM coverage_parameter_acquisitions
+      WHERE parameter_record_id = ? FOR UPDATE`, [parameterRecordId]);
     if (!current) throw new Error('Coverage parameter acquisition was not found.');
     if (current.acquisition_state === state) return;
     assertAcquisitionTransition(current.acquisition_state, state);
     // A new request clears the previous receipt; a receipt keeps the request time.
-    this.database.prepare(`UPDATE coverage_parameter_acquisitions SET
+    await this.database.run(`UPDATE coverage_parameter_acquisitions SET
       acquisition_state = ?, reason_code = ?,
-      requested_at = CASE WHEN ? = 'requested' THEN ? ELSE requested_at END,
-      received_at = CASE WHEN ? = 'received' THEN ? WHEN ? = 'requested' THEN NULL ELSE received_at END,
-      updated_by = ?, updated_at = ? WHERE parameter_record_id = ?`)
-      .run(state, reasonCode, state, at, state, at, state, updatedBy, at, parameterRecordId);
-    this.database.prepare('UPDATE coverage_parameter_records SET updated_at = ? WHERE id = ?').run(at, parameterRecordId);
+      requested_at = CASE WHEN CAST(? AS text) = 'requested' THEN CAST(? AS text) ELSE requested_at END,
+      received_at = CASE WHEN CAST(? AS text) = 'received' THEN CAST(? AS text) WHEN CAST(? AS text) = 'requested' THEN NULL ELSE received_at END,
+      updated_by = ?, updated_at = ? WHERE parameter_record_id = ?`,
+    [state, reasonCode, state, at, state, at, state, updatedBy, at, parameterRecordId]);
+    await this.database.run('UPDATE coverage_parameter_records SET updated_at = ? WHERE id = ?', [at, parameterRecordId]);
   }
 
-  appendObservation({
+  async appendObservation({
     id: observationId = id('observation'), parameterRecordId, sourceId, documentId,
     version, page, extractionMethod, reviewStatus = 'not_reviewed', value,
     sourceDigest, observedAt = this.clock().toISOString(), recordedBy,
@@ -441,50 +421,49 @@ export class CoverageParameterRepository {
     const valueJson = serialize(value, 'value');
     if (extractionMethod === 'document_extraction') {
       // Model-derived values are only stored for parameters the registry allows a model to extract.
-      const parameter = this.database.prepare(`SELECT registry_version, parameter_key
-        FROM coverage_parameter_records WHERE id = ?`).get(parameterRecordId);
+      const parameter = await this.database.one(`SELECT registry_version, parameter_key
+        FROM coverage_parameter_records WHERE id = ?`, [parameterRecordId]);
       if (parameter && !getPolicyParameterDefinition(parameter.registry_version, parameter.parameter_key).modelExtraction.allowed) {
         throw new Error('Model extraction is not permitted for this parameter.');
       }
     }
     // Migration 006 enforces both rules in the database; these checks give a stable error first.
-    const document = this.database.prepare('SELECT lifecycle_state FROM document_uploads WHERE id = ?').get(documentId);
+    const document = await this.database.one('SELECT lifecycle_state FROM document_uploads WHERE id = ?', [documentId]);
     if (document?.lifecycle_state !== 'active') {
       throw Object.assign(new Error('Parameter observations require an active document.'), { code: 'OBSERVATION_DOCUMENT_NOT_ACTIVE' });
     }
     if (extractionMethod === 'human_review') {
-      const review = this.database.prepare(`SELECT 1 FROM coverage_parameter_records parameter
+      const review = await this.database.one(`SELECT 1 AS present FROM coverage_parameter_records parameter
         JOIN human_reviews review ON review.case_id = parameter.case_id
         WHERE parameter.id = ?
           AND (review.workflow_run_id IS NULL OR review.workflow_run_id = parameter.workflow_run_id)
           AND review.status IN ('in_progress', 'completed') AND review.reviewer_adult_id = ?
-        LIMIT 1`).get(parameterRecordId, recordedBy);
+        LIMIT 1`, [parameterRecordId, recordedBy]);
       if (!review) {
         throw Object.assign(new Error('Human review observations must be recorded by the assigned reviewer.'), { code: 'OBSERVATION_REVIEWER_REQUIRED' });
       }
     }
     const createdAt = this.clock().toISOString();
-    this.database.prepare(`INSERT INTO coverage_parameter_observations
+    await this.database.run(`INSERT INTO coverage_parameter_observations
       (id, parameter_record_id, source_id, document_id, version, page,
        extraction_method, review_status, value_json, source_digest, observed_at,
-       recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(
-        observationId, parameterRecordId, sourceId, documentId, version, normalizedPage,
-        extractionMethod, reviewStatus, valueJson, sourceDigest, observedAt, recordedBy, createdAt,
-      );
+       recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      observationId, parameterRecordId, sourceId, documentId, version, normalizedPage,
+      extractionMethod, reviewStatus, valueJson, sourceDigest, observedAt, recordedBy, createdAt,
+    ]);
     return this.getObservation(observationId);
   }
 
-  getObservation(observationId) {
+  async getObservation(observationId) {
     requireBounded(observationId, 'observationId');
-    return mapObservation(this.database.prepare('SELECT * FROM coverage_parameter_observations WHERE id = ?').get(observationId));
+    return mapObservation(await this.database.one('SELECT * FROM coverage_parameter_observations WHERE id = ?', [observationId]));
   }
 
-  listObservations(parameterRecordId, { limit } = {}) {
+  async listObservations(parameterRecordId, { limit } = {}) {
     requireBounded(parameterRecordId, 'parameterRecordId');
     const bound = requireLimit(limit, 'limit', defaultObservationLimit, maximumObservationLimit);
-    return this.database.prepare(`SELECT * FROM coverage_parameter_observations
-      WHERE parameter_record_id = ? ORDER BY observed_at, id LIMIT ?`).all(parameterRecordId, bound).map(mapObservation);
+    return (await this.database.many(`SELECT * FROM coverage_parameter_observations
+      WHERE parameter_record_id = ? ORDER BY observed_at, id LIMIT ?`, [parameterRecordId, bound])).map(mapObservation);
   }
 
   /**
@@ -499,7 +478,7 @@ export class CoverageParameterRepository {
    * default deterministic, and a model actor is limited to unknown and conflicting there.
    * The resolved value is the observation's value; a different `resolvedValue` is rejected.
    */
-  setResolution({
+  async setResolution({
     parameterRecordId, state, resolvedValue, observationId = null, reasonCode = null,
     authority = null, updatedBy, at = this.clock().toISOString(),
   }) {
@@ -510,11 +489,12 @@ export class CoverageParameterRepository {
     optionalBounded(observationId, 'observationId');
     optionalBounded(reasonCode, 'reasonCode');
     if (authority !== null) requireBounded(authority, 'authority', { max: 32, pattern: /^[a-z_]+$/ });
-    return this.#atomic(() => {
-      const parameter = this.database.prepare(`SELECT parameter.registry_version, parameter.parameter_key,
+    return this.#atomic(async () => {
+      // The resolution row is locked before its current state is checked.
+      const parameter = await this.database.one(`SELECT parameter.registry_version, parameter.parameter_key,
           resolution.resolution_state FROM coverage_parameter_records parameter
         JOIN coverage_parameter_resolutions resolution ON resolution.parameter_record_id = parameter.id
-        WHERE parameter.id = ?`).get(parameterRecordId);
+        WHERE parameter.id = ? FOR UPDATE OF resolution`, [parameterRecordId]);
       if (!parameter) throw new Error('Coverage parameter resolution was not found.');
       const definition = getPolicyParameterDefinition(parameter.registry_version, parameter.parameter_key);
       if (!definition.permittedResolutionStates.includes(state)) {
@@ -524,7 +504,7 @@ export class CoverageParameterRepository {
       if (carriesValue !== (observationId !== null)) {
         throw new TypeError('Resolved values require an observation; unknown, conflicting and not_permitted states cannot select one.');
       }
-      const observation = carriesValue ? this.getObservation(observationId) : null;
+      const observation = carriesValue ? await this.getObservation(observationId) : null;
       if (carriesValue && observation?.parameterRecordId !== parameterRecordId) {
         throw new Error('The resolved observation must belong to the parameter.');
       }
@@ -535,21 +515,21 @@ export class CoverageParameterRepository {
       assertModelMayReplaceResolution(parameter.resolution_state, derivedAuthority);
       assertResolutionTransition(parameter.resolution_state, state, { authority: derivedAuthority });
       if (state === 'conflicting') {
-        const observationCount = this.database.prepare(`SELECT count(*) AS count
+        const observationCount = (await this.database.one(`SELECT count(*) AS count
           FROM coverage_parameter_observations
-          WHERE parameter_record_id = ? AND redacted_at IS NULL`).get(parameterRecordId).count;
+          WHERE parameter_record_id = ? AND redacted_at IS NULL`, [parameterRecordId])).count;
         if (observationCount < 2) throw new Error('Conflicting resolution requires at least two observations.');
       }
       if (carriesValue && resolvedValue !== undefined && resolvedValue !== null && !sameJson(resolvedValue, observation.value)) {
         throw new TypeError('The resolved value must equal the selected observation value.');
       }
       const valueJson = carriesValue ? serialize(observation.value, 'resolvedValue') : null;
-      this.database.prepare(`UPDATE coverage_parameter_resolutions SET resolution_state = ?,
+      await this.database.run(`UPDATE coverage_parameter_resolutions SET resolution_state = ?,
         resolved_value_json = ?, resolved_observation_id = ?, reason_code = ?, transition_authority = ?,
-        updated_by = ?, updated_at = ? WHERE parameter_record_id = ?`).run(
+        updated_by = ?, updated_at = ? WHERE parameter_record_id = ?`, [
         state, valueJson, observationId, reasonCode, derivedAuthority, updatedBy, at, parameterRecordId,
-      );
-      this.database.prepare('UPDATE coverage_parameter_records SET updated_at = ? WHERE id = ?').run(at, parameterRecordId);
+      ]);
+      await this.database.run('UPDATE coverage_parameter_records SET updated_at = ? WHERE id = ?', [at, parameterRecordId]);
       return this.getParameter(parameterRecordId);
     });
   }
@@ -562,7 +542,7 @@ export class CoverageParameterRepository {
    * event records counts only, never values. Idempotent; the database also redacts on any
    * document deletion request (including consent revocation) as a safety net.
    */
-  redactObservationsForDocument({
+  async redactObservationsForDocument({
     documentId, reasonCode, actorType = 'system', actorId = 'coverage-parameter-repository',
     at = this.clock().toISOString(),
   }) {
@@ -570,26 +550,28 @@ export class CoverageParameterRepository {
     requireEnum(reasonCode, 'reasonCode', redactionReasons);
     requireTimestamp(at, 'at');
     requireBounded(actorId, 'actorId');
-    return this.#atomic(() => {
-      const document = this.database.prepare('SELECT household_id, case_id FROM document_uploads WHERE id = ?').get(documentId);
+    return this.#atomic(async () => {
+      const document = await this.database.one('SELECT household_id, case_id FROM document_uploads WHERE id = ?', [documentId]);
       if (!document) throw new Error('Document was not found.');
-      const pending = this.database.prepare(`SELECT count(*) AS observations,
+      // Serialises with model observation writers and revocation of the same household.
+      await this.database.lock(...householdLock(document.household_id));
+      const pending = await this.database.one(`SELECT count(*) AS observations,
           count(DISTINCT parameter_record_id) AS parameters
-        FROM coverage_parameter_observations WHERE document_id = ? AND redacted_at IS NULL`).get(documentId);
+        FROM coverage_parameter_observations WHERE document_id = ? AND redacted_at IS NULL`, [documentId]);
       if (pending.observations === 0) return Object.freeze({ documentId, redactedObservations: 0, affectedParameters: 0, resetResolutions: 0 });
-      const resetResolutions = this.database.prepare(`SELECT count(*) AS count
+      const resetResolutions = (await this.database.one(`SELECT count(*) AS count
         FROM coverage_parameter_resolutions resolution
         WHERE resolution.resolution_state NOT IN ('unknown', 'not_permitted')
           AND resolution.parameter_record_id IN (
             SELECT parameter_record_id FROM coverage_parameter_observations
             WHERE document_id = ? AND redacted_at IS NULL)
           AND (resolution.resolution_state = 'conflicting' OR resolution.resolved_observation_id IN (
-            SELECT id FROM coverage_parameter_observations WHERE document_id = ? AND redacted_at IS NULL))`)
-        .get(documentId, documentId).count;
-      this.database.prepare(`UPDATE coverage_parameter_observations
+            SELECT id FROM coverage_parameter_observations WHERE document_id = ? AND redacted_at IS NULL))`,
+      [documentId, documentId])).count;
+      await this.database.run(`UPDATE coverage_parameter_observations
         SET value_json = NULL, redacted_at = ?, redaction_reason_code = ?
-        WHERE document_id = ? AND redacted_at IS NULL`).run(at, reasonCode, documentId);
-      this.audit.append({
+        WHERE document_id = ? AND redacted_at IS NULL`, [at, reasonCode, documentId]);
+      await this.audit.append({
         householdId: document.household_id,
         caseId: document.case_id,
         actorType,
@@ -627,7 +609,7 @@ export class CoverageParameterRepository {
    * queued or running, otherwise TASK_LEASE_LOST is thrown and nothing is written. One
    * counts-only audit event (with `taskKey`) is appended in the same transaction.
    */
-  recordModelExtraction({ workflowRunId, entries, recordedBy, lease = null, taskKey = null, at = this.clock().toISOString() }) {
+  async recordModelExtraction({ workflowRunId, entries, recordedBy, lease = null, taskKey = null, at = this.clock().toISOString() }) {
     requireBounded(workflowRunId, 'workflowRunId');
     requireBounded(recordedBy, 'recordedBy');
     requireTimestamp(at, 'at');
@@ -639,17 +621,26 @@ export class CoverageParameterRepository {
       requireBounded(lease?.taskId, 'lease.taskId');
       requireBounded(lease?.workerId, 'lease.workerId', { max: 200, pattern: null });
     }
-    return this.#atomic(() => {
-      const scope = this.database.prepare(`SELECT run.status, run.case_id, service_case.household_id FROM workflow_runs run
-        JOIN service_cases service_case ON service_case.id = run.case_id WHERE run.id = ?`).get(workflowRunId);
+    return this.#atomic(async () => {
+      // Lock order: household advisory lock, then the run, then the task. Revocation and erasure
+      // take the same household lock, so they either finish first (and the checks below refuse)
+      // or wait until these observations are committed (and then erase them).
+      const owner = await this.database.one(`SELECT service_case.household_id FROM workflow_runs run
+        JOIN service_cases service_case ON service_case.id = run.case_id WHERE run.id = ?`, [workflowRunId]);
+      await this.database.lock(...householdLock(owner?.household_id ?? null));
+      const scope = await this.database.one(`SELECT run.status, run.case_id, service_case.household_id FROM workflow_runs run
+        JOIN service_cases service_case ON service_case.id = run.case_id WHERE run.id = ? FOR UPDATE OF run`, [workflowRunId]);
       if (lease !== null) {
-        const task = this.database.prepare('SELECT status, lease_owner, workflow_run_id FROM workflow_tasks WHERE id = ?').get(lease.taskId);
+        const task = await this.database.one('SELECT status, lease_owner, workflow_run_id FROM workflow_tasks WHERE id = ? FOR UPDATE', [lease.taskId]);
         if (!scope || !['queued', 'running'].includes(scope.status) || task?.workflow_run_id !== workflowRunId
           || task.status !== 'running' || task.lease_owner !== lease.workerId) {
           throw Object.assign(new Error('The task lease is no longer held; model values were not recorded.'), { code: 'TASK_LEASE_LOST' });
         }
+      } else if (scope?.status === 'revoked') {
+        // Without a lease a revoked run still never receives new model values.
+        throw Object.assign(new Error('The run was revoked; model values were not recorded.'), { code: 'RUN_REVOKED' });
       }
-      const records = new Map(this.listForRun(workflowRunId, { limit: maximumRunLimit }).map(record => [record.parameterKey, record]));
+      const records = new Map((await this.listForRun(workflowRunId, { limit: maximumRunLimit })).map(record => [record.parameterKey, record]));
       const touched = new Map();
       const skipped = new Set();
       let observations = 0;
@@ -662,7 +653,7 @@ export class CoverageParameterRepository {
           skipped.add(record.parameterKey);
           continue;
         }
-        const observation = this.appendObservation({
+        const observation = await this.appendObservation({
           parameterRecordId: record.id,
           sourceId: entry.sourceId,
           documentId: entry.documentId,
@@ -680,19 +671,19 @@ export class CoverageParameterRepository {
       }
       let conflicting = 0;
       for (const [parameterRecordId, latestObservationId] of touched) {
-        const usable = this.listObservations(parameterRecordId, { limit: maximumObservationLimit })
+        const usable = (await this.listObservations(parameterRecordId, { limit: maximumObservationLimit }))
           .filter(observation => !observation.redactedAt && USABLE_REVIEW_STATUSES.has(observation.reviewStatus));
         const values = new Set(usable.map(observation => JSON.stringify(canonical(observation.value))));
         if (values.size > 1) {
           conflicting += 1;
-          this.setResolution({ parameterRecordId, state: 'conflicting', authority: 'model', reasonCode: 'model_observations_conflict', updatedBy: recordedBy, at });
+          await this.setResolution({ parameterRecordId, state: 'conflicting', authority: 'model', reasonCode: 'model_observations_conflict', updatedBy: recordedBy, at });
         } else {
-          this.setResolution({ parameterRecordId, state: 'extracted_unverified', observationId: latestObservationId, reasonCode: 'model_extracted_unverified', updatedBy: recordedBy, at });
+          await this.setResolution({ parameterRecordId, state: 'extracted_unverified', observationId: latestObservationId, reasonCode: 'model_extracted_unverified', updatedBy: recordedBy, at });
         }
       }
       const counts = Object.freeze({ observations, parameters: touched.size, conflicting, skipped: skipped.size });
       if (observations > 0 && scope) {
-        this.audit.append({
+        await this.audit.append({
           householdId: scope.household_id,
           caseId: scope.case_id,
           action: 'coverage_parameter.model_observations_recorded',
@@ -711,7 +702,7 @@ export class CoverageParameterRepository {
    * is gone. Resolutions built on them fall back to `unknown` through the database trigger.
    * Must run inside the caller's transaction or opens its own. Counts-only audit event.
    */
-  redactObservationsForRun({
+  async redactObservationsForRun({
     workflowRunId, reasonCode, actorType = 'system', actorId = 'coverage-parameter-repository',
     at = this.clock().toISOString(),
   }) {
@@ -719,20 +710,22 @@ export class CoverageParameterRepository {
     requireEnum(reasonCode, 'reasonCode', redactionReasons);
     requireTimestamp(at, 'at');
     requireBounded(actorId, 'actorId');
-    return this.#atomic(() => {
-      const scope = this.database.prepare(`SELECT run.case_id, service_case.household_id FROM workflow_runs run
-        JOIN service_cases service_case ON service_case.id = run.case_id WHERE run.id = ?`).get(workflowRunId);
+    return this.#atomic(async () => {
+      const scope = await this.database.one(`SELECT run.case_id, service_case.household_id FROM workflow_runs run
+        JOIN service_cases service_case ON service_case.id = run.case_id WHERE run.id = ?`, [workflowRunId]);
       if (!scope) return Object.freeze({ workflowRunId, redactedObservations: 0, affectedParameters: 0 });
-      const pending = this.database.prepare(`SELECT count(*) AS observations, count(DISTINCT observation.parameter_record_id) AS parameters
+      // Serialises with model observation writers of the same household.
+      await this.database.lock(...householdLock(scope.household_id));
+      const pending = await this.database.one(`SELECT count(*) AS observations, count(DISTINCT observation.parameter_record_id) AS parameters
         FROM coverage_parameter_observations observation
         JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id
-        WHERE parameter.workflow_run_id = ? AND observation.redacted_at IS NULL`).get(workflowRunId);
+        WHERE parameter.workflow_run_id = ? AND observation.redacted_at IS NULL`, [workflowRunId]);
       if (pending.observations === 0) return Object.freeze({ workflowRunId, redactedObservations: 0, affectedParameters: 0 });
-      this.database.prepare(`UPDATE coverage_parameter_observations
+      await this.database.run(`UPDATE coverage_parameter_observations
         SET value_json = NULL, redacted_at = ?, redaction_reason_code = ?
         WHERE redacted_at IS NULL AND parameter_record_id IN (
-          SELECT id FROM coverage_parameter_records WHERE workflow_run_id = ?)`).run(at, reasonCode, workflowRunId);
-      this.audit.append({
+          SELECT id FROM coverage_parameter_records WHERE workflow_run_id = ?)`, [at, reasonCode, workflowRunId]);
+      await this.audit.append({
         householdId: scope.household_id,
         caseId: scope.case_id,
         actorType,

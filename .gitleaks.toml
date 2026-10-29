@@ -1,0 +1,18 @@
+# Used by `gitleaks git .` and `gitleaks dir .`. Extends the default ruleset.
+# Only synthetic test fixtures are allowlisted. Never add a path that holds a real credential.
+title = "CoverSaath gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic privacy-probe and consent fixtures that look like keys on purpose (tests prove the privacy gate catches them)."
+paths = [
+  '''tests/support/privacy-probes\.mjs''',
+  '''tests/privacy-gate-v9-final-review\.test\.mjs''',
+  '''tests/privacy-gate-v9-rereview\.test\.mjs''',
+  '''tests/ui-document-upload\.test\.mjs''',
+  '''tests/p1a-execution-policy\.test\.mjs''',
+  '''tests/postgres-triggers\.test\.mjs''',
+  '''tests/fakes/fake-gemini-server\.mjs''',  # removed from HEAD, still in history
+]

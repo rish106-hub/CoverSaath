@@ -4,23 +4,21 @@ Status: describes the repository at the commit that added this file. Companion d
 
 ## Storage
 
-- Engine: `node:sqlite` (`DatabaseSync`), one local file. Default path `.local/knowvia.sqlite` (legacy name), overridden by `DATABASE_PATH`. `.local/` is git-ignored (`.gitignore`).
-- `openDatabase` (`src/backend/database/database.js:171`) creates the directory with mode `0700`, sets `foreign_keys = ON`, `busy_timeout = 5000` and, for file databases, `journal_mode = WAL`; `:memory:` is used by tests.
-- All tables are `STRICT`. Timestamps are ISO-8601 UTC text. Money is integer minor units (`service_cases.stated_estimate_minor` with `currency`).
-- The database stores controlled paths, hashes, derived facts, permissions and audit records. Document bytes live outside SQLite (`001_initial_schema.sql:1-3`).
-- PostgreSQL is in progress (Section 3; ADR 0004, `docs/exec-plans/active/p1b-postgres.md`, local setup in [local-postgres](../runbooks/local-postgres.md)). Six PostgreSQL migrations now provide the SQLite-equivalent baseline plus hardening for `TRUNCATE`, function `search_path`, collation validation and pool or runner error boundaries, document intake scheduling (004), evidence fact redaction (005) and its forward fix (006). The runtime still uses SQLite: `pg` is a dependency, but no runtime code imports it yet. The port contract in `src/contracts/persistence-ports.js` is the only preparation; routes and `TenantAccessService` still read `workflow_*` tables with direct SQL and are outside that port (ADR 0002, "Consequences and gaps").
+- Engine: PostgreSQL (Supabase, ADR 0011) through the async interface in `src/backend/database/postgres/` (`createDatabase` over a `pg` pool). The SQLite runtime and its migration files are removed.
+- Timestamps are ISO-8601 UTC text. Money is integer minor units (`service_cases.stated_estimate_minor` with `currency`).
+- The database stores controlled paths, hashes, derived facts, permissions and audit records. Document bytes live outside the database (`postgres/migrations/001_baseline_schema.sql`).
+- PostgreSQL is in progress (Section 3; ADR 0004, `docs/exec-plans/active/p1b-postgres.md`, local setup in [local-postgres](../runbooks/local-postgres.md)). Six PostgreSQL migrations now provide the SQLite-equivalent baseline plus hardening for `TRUNCATE`, function `search_path`, collation validation and pool or runner error boundaries, document intake scheduling (004), evidence fact redaction (005) and its forward fix (006). The runtime now uses PostgreSQL. The port contract in `src/contracts/persistence-ports.js` is the only preparation; routes and `TenantAccessService` still read `workflow_*` tables with direct SQL and are outside that port (ADR 0002, "Consequences and gaps").
 
 ## Migrations
 
-Mechanism (`runMigrations`, `database.js:22`):
+Mechanism (`runPostgresMigrations`):
 
-- Files `src/backend/database/migrations/NNN_snake_case.sql`, applied in sorted order, each inside `BEGIN IMMEDIATE`. Ten exist: 001 initial schema, 002 integrity and provenance, 003 tenant auth and permissions, 004 OCR contract and provenance, 005 evidence-completion parameters, 006 parameter observation guards, 007 append-only delete guards, 008 document intake scheduling, 009 evidence fact redaction, 010 evidence fact redaction hardening.
-- `schema_migrations(version, checksum, applied_at)` stores a sha256 of each applied file.
-- A changed applied file throws `Migration failed: <file>: Applied migration changed: <file>` and rolls back. One exception is hard-coded: a known older checksum of `002_integrity_and_provenance.sql` is refreshed instead (`legacyMigrationChecksums`).
-- `validateSchema` (`database.js:133`) checks expected tables (42, including `schema_migrations`), views, `criticalTriggers` (53), critical indexes, required columns, `PRAGMA foreign_key_check` and `PRAGMA quick_check`. It is not called when a database is opened. It runs in `npm run db:init` (prints the result; the exit code stays 0 even when `valid` is false) and in `GET /api/v1/ready` (503 when invalid; the detail is returned to loopback callers only).
-- Rules for authors are in `src/backend/database/AGENTS.md`: new numbered migration only, expand-only by default, invariant triggers go into `criticalTriggers` with a test.
+- Files `src/backend/database/postgres/migrations/NNN_snake_case.sql`, applied in sorted order, each in its own transaction. `schema_migrations(version, checksum, applied_at)` stores a sha256 of each applied file.
+- A changed applied file is refused and nothing later is applied. Applied migrations are immutable; fix forward with a new numbered file.
+- `validatePostgresSchema` checks expected tables, views, critical triggers (enabled), indexes, required columns, foreign-key integrity, `C` collation, a fixed `search_path` on guard functions, row level security on every table and no `anon`/`authenticated` grants. It runs in `npm run db:init` (exit code 1 when `valid` is false) and in `GET /api/v1/ready` (503 when invalid; the detail is returned to loopback callers only).
+- Rules for authors are in `src/backend/database/AGENTS.md`: new numbered migration only, expand-only by default, invariant triggers go into `criticalTriggers` with a test, every new table enables row level security.
 
-PostgreSQL migrations live in `src/backend/database/postgres/migrations/`. Migrations 001 and 002 are the merged baseline. Migration 003 adds missing `DELETE` and statement-level `TRUNCATE` guards, fixes project-function `search_path`, revokes the default database `TEMPORARY` privilege from `PUBLIC` and removes `PUBLIC` `TRUNCATE` rights on protected tables. Migrations 004, 005 and 006 mirror SQLite 008, 009 and 010. A dedicated least-privilege runtime role is still S3.2 work.
+PostgreSQL migrations live in `src/backend/database/postgres/migrations/`. Migrations 001 and 002 are the merged baseline. Migration 003 adds missing `DELETE` and statement-level `TRUNCATE` guards, fixes project-function `search_path`, revokes the default database `TEMPORARY` privilege from `PUBLIC` and removes `PUBLIC` `TRUNCATE` rights on protected tables. Migrations 004 to 015 add document intake, evidence redaction, policy structuring, stored OCR blocks, evidence-first reasoning, catalogue reviews and signed curated actions. Migration 016 enables row level security on every table and revokes all `anon` and `authenticated` privileges so the Supabase Data API cannot reach the schema (ADR 0011 D10). A dedicated least-privilege runtime role is still open work.
 
 ## Tables by domain
 
@@ -41,7 +39,7 @@ Notes:
 
 - No code verifies the audit hash chain; it is written only.
 - `retention_records` is created and listed in `expectedTables`, but no source file reads or writes it.
-- Expired `api_sessions` rows are rejected at authentication; no code deletes them. Expired `idempotency_keys` are purged on every `openDatabase` (`purgeExpiredIdempotencyKeys`).
+- Expired `api_sessions` rows are rejected at authentication; no code deletes them. Expired `idempotency_keys` are purged by `DocumentRepository.purgeExpiredIdempotency` (called by the document upload service); nothing purges them when the server starts.
 
 ## Erasure and revocation
 
@@ -74,4 +72,4 @@ Gaps:
 
 ## Backup and restore
 
-Nothing exists beyond copying the SQLite file. There is no backup job, restore test, point-in-time recovery, replica or encryption of the database file (`README.md`: backups are not implemented). Document bytes are not stored by any wired path. Local procedure: [local-database runbook](../runbooks/local-database.md). Recovery targets (RPO/RTO): Not decided.
+Backups and point-in-time recovery follow the Supabase plan; no restore drill has run (ADR 0011, Consequences). Local PostgreSQL: [local-postgres runbook](../runbooks/local-postgres.md). Recovery targets (RPO/RTO): Not decided.

@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './temp-root.mjs';
-import { openDatabase } from '../../src/backend/database/index.js';
+import { freshDatabase } from './pg.mjs';
 import { createApiServer } from '../../src/server/server.js';
 
 export const bootstrapToken = 'coversaath-household-api-bootstrap-token-01';
@@ -79,7 +79,7 @@ export async function eventually(check, { timeoutMs = 3000 } = {}) {
 
 export async function startApp(t, { env: extraEnv = {} } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-household-'));
-  const database = openDatabase({ path: join(directory, 'app.sqlite') });
+  const { db: database } = await freshDatabase(t);
   const requests = [];
   const env = {
     KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, DOCUMENT_STORAGE_PATH: join(directory, 'documents'), DOCUMENT_ENCRYPTION_KEY_BASE64: randomBytes(32).toString('base64'),
@@ -93,7 +93,7 @@ export async function startApp(t, { env: extraEnv = {} } = {}) {
     documentScanner: { mode: 'clamd', async scan() { return { status: 'clean' }; }, async ping() { return true; } },
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(async () => { await new Promise(resolve => server.close(resolve)); database.close(); rmSync(directory, { recursive: true, force: true }); });
+  t.after(async () => { await new Promise(resolve => server.close(resolve)); rmSync(directory, { recursive: true, force: true }); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const call = async (path, { method = 'GET', body, rawBody, token, headers = {} } = {}) => {
     const response = await fetch(base + path, {
@@ -152,9 +152,10 @@ export const preview = (app, householdId, body, { token, rawBody } = {}) => app.
 export const scenarioBody = (sources, scenario = {}) => ({ contractVersion: 'household-scenario/v1', sources, scenario: { scenarioType: 'general_benefit', topic: 'room rent', ...scenario } });
 
 /** Row counts of every application table: a read-only route must leave all of them unchanged. */
-export function tableCounts(database) {
-  // Every application table is counted, full-text indexes included; a table that cannot be counted fails loudly instead of
-  // silently comparing equal. Only SQLite's own internal tables are skipped.
-  const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map(row => row.name);
-  return Object.fromEntries(tables.map(name => [name, database.prepare(`SELECT count(*) AS n FROM "${name}"`).get().n]));
+export async function tableCounts(database) {
+  // Every application table is counted; a table that cannot be counted fails loudly instead of silently comparing equal.
+  const tables = (await database.many("SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")).map(row => row.name);
+  const counts = {};
+  for (const name of tables) counts[name] = (await database.one(`SELECT count(*) AS n FROM "${name}"`)).n;
+  return counts;
 }

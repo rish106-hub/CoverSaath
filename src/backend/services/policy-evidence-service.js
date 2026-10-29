@@ -23,9 +23,9 @@ function coded(code, message, statusCode) { return Object.assign(new Error(messa
 // document for question-time Gemini use. A structuring grant (`insurance_document`) does not authorise questions.
 export function questionGrantCheck({ consents, grantId, subjectAdultId, documentId, householdId }) {
   const scope = { resourceType: QUESTION_CONSENT_SCOPE.resourceType, action: QUESTION_CONSENT_SCOPE.action, dataCategory: QUESTION_CONSENT_SCOPE.dataCategory, recipient: QUESTION_CONSENT_SCOPE.recipient };
-  return () => {
-    consents.requireActive(grantId, { subjectAdultId, resourceId: documentId, ...scope });
-    const grant = consents.get(grantId);
+  return async () => {
+    await consents.requireActive(grantId, { subjectAdultId, resourceId: documentId, ...scope });
+    const grant = await consents.get(grantId);
     const named = grant?.household_id === householdId && grant.scopes.some(entry => entry.resource_type === scope.resourceType
       && entry.resource_id === documentId && entry.action === scope.action && entry.data_category === scope.dataCategory && entry.recipient === scope.recipient);
     if (!named) throw coded('CONSENT_SCOPE_REQUIRED', 'A document-specific question grant is required.', 403);
@@ -55,12 +55,12 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
   const claims = new Set();
 
   // Clauses are derived deterministically on first use; a document without complete stored blocks is skipped.
-  function ensureClauses({ householdId, caseId, documentId }) {
-    const stored = services.ocr.getDocumentBlockPages({ documentId, householdId });
+  async function ensureClauses({ householdId, caseId, documentId }) {
+    const stored = await services.ocr.getDocumentBlockPages({ documentId, householdId });
     if (!stored.complete) return null;
-    if (!services.clauses.clauseDocumentIds({ householdId, caseId }).includes(documentId)) {
+    if (!(await services.clauses.clauseDocumentIds({ householdId, caseId })).includes(documentId)) {
       const { clauses } = buildClauses(stored, { documentId, sourceVersion: stored.sourceVersion });
-      if (clauses.length) services.clauses.saveClauses({ householdId, caseId, documentId, clauses });
+      if (clauses.length) await services.clauses.saveClauses({ householdId, caseId, documentId, clauses });
     }
     return stored;
   }
@@ -70,10 +70,10 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
 
   // An older version is never read as the current policy. Versions are household-wide: a newer version uploaded to
   // another case still supersedes. An unreadable version fails closed rather than letting comparison order decide.
-  function currentVersionCheck(householdId, documents) {
+  async function currentVersionCheck(householdId, documents) {
     const logical = documents.filter(document => document.logicalDocumentId != null);
     if (logical.some(document => !validVersion(document.version))) throw versionInvalid();
-    const latest = logical.length ? services.documents.latestActiveVersions(householdId, logical.map(document => document.logicalDocumentId)) : new Map();
+    const latest = logical.length ? await services.documents.latestActiveVersions(householdId, logical.map(document => document.logicalDocumentId)) : new Map();
     if ([...latest.values()].some(version => !validVersion(version))) throw versionInvalid();
     return document => {
       if (document.logicalDocumentId == null) return true;
@@ -93,22 +93,23 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
 
   // A stored answer is served only while the question grant still covers every document it read (consent expiry
   // blocks it; revocation has already erased it). An answer without recorded access is never served.
-  function requireAnswerAccess({ householdId, stored }) {
+  async function requireAnswerAccess({ householdId, stored }) {
     const access = stored.access;
     if (!access?.consentGrantId || !access.subjectAdultId || !Array.isArray(access.documentIds) || !access.documentIds.length) {
       throw coded('CONSENT_REQUIRED', 'Active consent for this answer could not be confirmed.', 403);
     }
     for (const documentId of access.documentIds) {
-      questionGrantCheck({ consents: services.consents, grantId: access.consentGrantId, subjectAdultId: access.subjectAdultId, documentId, householdId })();
+      await questionGrantCheck({ consents: services.consents, grantId: access.consentGrantId, subjectAdultId: access.subjectAdultId, documentId, householdId })();
     }
     return access;
   }
 
   // Current while every document it read is still active, in the case and household, and the latest version.
-  function answerIsCurrent({ householdId, caseId, access }) {
-    const documents = access.documentIds.map(id => services.documents.getDocument(id));
+  async function answerIsCurrent({ householdId, caseId, access }) {
+    const documents = [];
+    for (const id of access.documentIds) documents.push(await services.documents.getDocument(id));
     if (documents.some(document => !document || document.householdId !== householdId || document.caseId !== caseId || document.lifecycleState !== 'active')) return false;
-    const isCurrent = currentVersionCheck(householdId, documents);
+    const isCurrent = await currentVersionCheck(householdId, documents);
     return documents.every(isCurrent);
   }
 
@@ -123,10 +124,10 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     const named = namedDocuments(requestedDocumentIds);
     const requestDigest = createHmac('sha256', digestKey).update(JSON.stringify([caseId, question.trim(), consentGrantId, named])).digest('hex');
     // A replay does no paid work, but it is served only while consent is active and the evidence is still current.
-    const replay = services.clauses.findAnswerByKey({ householdId, caseId, idempotencyKey, requestDigest });
+    const replay = await services.clauses.findAnswerByKey({ householdId, caseId, idempotencyKey, requestDigest });
     if (replay) {
-      const access = requireAnswerAccess({ householdId, stored: replay });
-      if (!answerIsCurrent({ householdId, caseId, access })) {
+      const access = await requireAnswerAccess({ householdId, stored: replay });
+      if (!(await answerIsCurrent({ householdId, caseId, access }))) {
         throw coded('POLICY_EVIDENCE_ANSWER_STALE', 'The documents behind this answer have changed. Ask again with a new idempotency key.', 409);
       }
       return publicAnswer(replay);
@@ -134,7 +135,7 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     if (inFlight >= MAX_IN_FLIGHT) throw coded('EVIDENCE_BUSY', 'Too many questions are in progress.', 503);
 
     // A truncated list could hide a document, so an over-long case fails closed.
-    const listed = services.documents.listForCase(caseId, householdId, MAX_CASE_DOCUMENTS + 1);
+    const listed = await services.documents.listForCase(caseId, householdId, MAX_CASE_DOCUMENTS + 1);
     if (listed.length > MAX_CASE_DOCUMENTS) throw coded('POLICY_EVIDENCE_CASE_TOO_LARGE', 'The case has too many documents to question.', 409);
     const active = listed.filter(document => document.lifecycleState === 'active');
     const excluded = new Map();
@@ -148,20 +149,20 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
       pool = named.map(id => byId.get(id));
       // Granted, current documents the request left out are counted, so the answer says they were not read.
       const others = active.filter(document => !named.includes(document.id));
-      const othersCurrent = currentVersionCheck(householdId, others);
+      const othersCurrent = await currentVersionCheck(householdId, others);
       for (const document of others) {
-        try { questionGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId })(); } catch (error) {
+        try { await questionGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId })(); } catch (error) {
           if (!/^CONSENT_/.test(String(error?.code))) throw error;
           continue;
         }
         if (othersCurrent(document)) exclude('not_named');
       }
     }
-    const isCurrent = currentVersionCheck(householdId, pool);
+    const isCurrent = await currentVersionCheck(householdId, pool);
     const checks = new Map();
     for (const document of pool) {
       const check = questionGrantCheck({ consents: services.consents, grantId: consentGrantId, subjectAdultId, documentId: document.id, householdId });
-      try { check(); } catch (error) {
+      try { await check(); } catch (error) {
         if (!/^CONSENT_/.test(String(error?.code))) throw error;
         if (named) throw coded('CONSENT_SCOPE_REQUIRED', 'A document-specific question grant is required for every named document.', 403);
         continue;
@@ -186,7 +187,7 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     const names = [];
     for (const documentId of checks.keys()) {
       let stored;
-      try { stored = ensureClauses({ householdId, caseId, documentId }); } catch (error) {
+      try { stored = await ensureClauses({ householdId, caseId, documentId }); } catch (error) {
         if (Object.hasOwn(SKIP_REASONS, String(error?.code))) { exclude(SKIP_REASONS[error.code]); continue; }
         throw error;
       }
@@ -196,8 +197,8 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     }
     if (!documentIds.length) throw coded('POLICY_EVIDENCE_UNAVAILABLE', 'No stored policy text is available for this case. Process the document first.', 409);
 
-    const consentCheck = () => { for (const documentId of documentIds) checks.get(documentId)(); };
-    const clauses = services.clauses.listClauses({ householdId, caseId, documentIds });
+    const consentCheck = async () => { for (const documentId of documentIds) await checks.get(documentId)(); };
+    const clauses = await services.clauses.listClauses({ householdId, caseId, documentIds });
     const withClauses = new Set(clauses.map(clause => clause.documentId));
     const empty = documentIds.filter(documentId => !withClauses.has(documentId)).length;
     if (empty) exclude('no_clauses', empty);
@@ -209,19 +210,20 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
       result = await investigate({
         question, clauses, knownIdentifiers, call, consentCheck,
         documentScope: { authorised, excluded: [...excluded].map(([reason, count]) => ({ reason, count })) },
+        // investigate() awaits each search (household, case and document scoped) before ranking its hits.
         search: ({ query, kinds, limit }) => services.clauses.searchClauses({ householdId, caseId, documentIds, query, kinds, limit }),
       });
     } finally { inFlight -= 1; }
     const access = { consentGrantId, subjectAdultId, documentIds };
     const answer = named && named.length > 1 ? { ...result.answer, documentAssociation: { basis: 'requester_named', verified: false } } : result.answer;
-    return publicAnswer(services.clauses.saveAnswer({
+    return publicAnswer(await services.clauses.saveAnswer({
       householdId, caseId, requestedByAdultId: subjectAdultId, idempotencyKey, requestDigest, question: result.answer.question,
       answer, access,
       // Consent and currency are both re-checked immediately before the answer is written: a newer version that
       // arrived during the model call means this answer is not stored or returned as current.
-      consentCheck: () => {
-        consentCheck();
-        if (!answerIsCurrent({ householdId, caseId, access })) {
+      consentCheck: async () => {
+        await consentCheck();
+        if (!(await answerIsCurrent({ householdId, caseId, access }))) {
           throw coded('POLICY_EVIDENCE_ANSWER_STALE', 'The documents changed while the question was answered. Ask again with a new idempotency key.', 409);
         }
       },
@@ -230,8 +232,8 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
 
   return Object.freeze({
     // One question per idempotency key runs at a time. A stored answer is written only after the paid model call, so a
-    // duplicate that arrives meanwhile would miss the replay and bill the model twice. The claim is per process (the
-    // SQLite runtime is one process); a multi-instance PostgreSQL deployment needs a database-level claim instead.
+    // duplicate that arrives meanwhile would miss the replay and bill the model twice. The claim is per process, so a
+    // multi-instance deployment needs a database-level claim instead.
     async ask(input) {
       const { caseRecord, idempotencyKey } = input;
       if (typeof idempotencyKey !== 'string' || !idempotencyKey || !caseRecord) return askOnce(input);
@@ -245,22 +247,22 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
      * A stored answer for the decision catalogue: same consent re-check as `get`, and only while every document it read
      * is still active and current. No model call, no write.
      */
-    readForCatalogue({ caseRecord, answerId }) {
+    async readForCatalogue({ caseRecord, answerId }) {
       if (!evidenceEnabled(env)) throw coded('EVIDENCE_DISABLED', 'Policy questions are disabled.', 503);
       const householdId = caseRecord.household_id;
-      const stored = services.clauses.getAnswer({ householdId, caseId: caseRecord.id, answerId });
-      const access = requireAnswerAccess({ householdId, stored });
-      if (!answerIsCurrent({ householdId, caseId: caseRecord.id, access })) {
+      const stored = await services.clauses.getAnswer({ householdId, caseId: caseRecord.id, answerId });
+      const access = await requireAnswerAccess({ householdId, stored });
+      if (!(await answerIsCurrent({ householdId, caseId: caseRecord.id, access }))) {
         throw coded('POLICY_EVIDENCE_ANSWER_STALE', 'The documents behind this answer have changed. Ask again.', 409);
       }
       return { answerId: stored.answerId, answer: stored.answer, documentIds: access.documentIds, pipelineCurrent: stored.answer?.pipelineVersion === INVESTIGATION_VERSION };
     },
 
-    get({ caseRecord, answerId }) {
+    async get({ caseRecord, answerId }) {
       const householdId = caseRecord.household_id;
-      const stored = services.clauses.getAnswer({ householdId, caseId: caseRecord.id, answerId });
-      const access = requireAnswerAccess({ householdId, stored });
-      return { ...publicAnswer(stored), current: answerIsCurrent({ householdId, caseId: caseRecord.id, access }) };
+      const stored = await services.clauses.getAnswer({ householdId, caseId: caseRecord.id, answerId });
+      const access = await requireAnswerAccess({ householdId, stored });
+      return { ...publicAnswer(stored), current: await answerIsCurrent({ householdId, caseId: caseRecord.id, access }) };
     },
   });
 }

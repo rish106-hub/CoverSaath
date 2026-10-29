@@ -8,7 +8,7 @@
 - CoverSaath is canonical. Rename legacy `knowvia` identifiers only with a compatibility plan.
 
 ## Start here
-- Read this file, `docs/iterations/LATEST.md`, and the active task brief.
+- Read `AI.md` first (60-second orientation: commands, map, gotchas), then this file, `docs/iterations/LATEST.md`, and the active task brief.
 - Inspect only affected files, callers, data, contracts and tests before widening scope.
 - Map impact before editing. Use repository mapping tools when available and report gaps.
 - Check for a closer `AGENTS.md` in the directory being changed.
@@ -44,7 +44,7 @@ npm run db:init
 npm run dev
 git diff --check
 ```
-Runtime: Node 25 or later and npm. CI uses Node 26. SQLite is still the application runtime. PostgreSQL schema and tests exist under ADR 0004. No deployment target exists.
+Runtime: Node 25 or later and npm. CI uses Node 26. PostgreSQL is the application runtime (Supabase, ADR 0011). Tests need `TEST_DATABASE_URL` (a local PostgreSQL 17); set `REQUIRE_POSTGRES=1` to fail instead of skip. Deployment target: Fly.io app `knowvia-api` in Sydney (ADR 0011 D9, `docs/runbooks/fly-deploy.md`); not yet running.
 
 ## Working loop
 1. Restate the user outcome, scope, non-goals and acceptance criteria.

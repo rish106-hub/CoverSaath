@@ -12,7 +12,7 @@ import {
 } from './support/postgres.mjs';
 import { insert, one } from './support/postgres-fixtures.mjs';
 
-const baseline = ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql', '013_catalogue_reviews.sql', '014_curated_product_workflow.sql', '015_curated_signed_actions.sql'];
+const baseline = ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql', '013_catalogue_reviews.sql', '014_curated_product_workflow.sql', '015_curated_signed_actions.sql', '016_data_api_lockdown.sql'];
 
 
 test('a fresh database migrates, records checksums, validates, and a repeat run is a no-op', postgresTestOptions(), async t => {
@@ -34,7 +34,7 @@ test('a fresh database migrates, records checksums, validates, and a repeat run 
     {
       valid: true, missingTables: [], missingViews: [], missingTriggers: [], missingIndexes: [], missingColumns: [],
       disabledTriggers: [], foreignKeyErrors: 0, collation: 'C', localeProvider: 'c', orderingValid: true,
-      collationValid: true, unsafeFunctionSearchPaths: [], migrationCount: 15,
+      collationValid: true, unsafeFunctionSearchPaths: [], tablesWithoutRls: [], apiRoleGrants: [], migrationCount: 16,
     },
   );
   const publicTemporary = await one(pool, `SELECT count(*)::int AS n
@@ -252,4 +252,30 @@ test('parallel clones of one template are all valid', postgresTestOptions(), asy
   for (const handle of handles) {
     assert.equal((await validatePostgresSchema(handle.pool)).valid, true);
   }
+});
+
+// Migration 016: the Supabase Data API roles must not reach the backend schema. `anon` and
+// `authenticated` exist only on Supabase, so the test creates them (cluster-wide, left in place) and
+// re-runs the idempotent migration to show it strips a grant and that the validator notices one.
+test('the Data API roles get no access: RLS is on everywhere and a grant is stripped and detected', postgresTestOptions(), async t => {
+  const { pool } = await useTestDatabase(t);
+  await pool.query(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+  END $$`);
+  assert.deepEqual((await validatePostgresSchema(pool)).tablesWithoutRls, []);
+
+  await pool.query('ALTER TABLE households DISABLE ROW LEVEL SECURITY');
+  assert.deepEqual((await validatePostgresSchema(pool)).tablesWithoutRls, ['households']);
+
+  await pool.query('GRANT SELECT ON households TO anon');
+  await pool.query('GRANT INSERT ON audit_events TO authenticated');
+  const leaked = await validatePostgresSchema(pool);
+  assert.equal(leaked.valid, false);
+  assert.deepEqual(leaked.apiRoleGrants, ['audit_events -> authenticated', 'households -> anon']);
+
+  await pool.query(readFileSync(join(postgresMigrationDirectory, '016_data_api_lockdown.sql'), 'utf8'));
+  const fixed = await validatePostgresSchema(pool);
+  assert.equal(fixed.valid, true);
+  assert.deepEqual([fixed.tablesWithoutRls, fixed.apiRoleGrants], [[], []]);
 });

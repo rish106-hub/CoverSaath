@@ -39,13 +39,16 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
 
   // `documentsUntil` (independent reviewers only): the grant covers the documents the case held when it was issued. An answer
   // that reads a document uploaded later is not found until an operator regrants, so a grant never widens by itself.
-  function load({ caseRecord, answerId, documentsUntil = null }) {
+  async function load({ caseRecord, answerId, documentsUntil = null }) {
     if (typeof answerId !== 'string' || !answerId || answerId.length > 256) throw coded('VALIDATION_ERROR', 'answerId is required.', 400);
     const householdId = caseRecord.household_id;
-    const stored = evidence.readForCatalogue({ caseRecord, answerId });
-    if (documentsUntil !== null && stored.documentIds.some(id => !(services.documents.getDocument(id)?.createdAt <= documentsUntil))) throw notFound();
-    const clauseRows = services.clauses.listClauses({ householdId, caseId: caseRecord.id, documentIds: stored.documentIds });
-    const documentKinds = new Map(stored.documentIds.map(id => [id, services.documents.getDocument(id)?.documentKind]));
+    const stored = await evidence.readForCatalogue({ caseRecord, answerId });
+    // One document at a time (no array callback around a database call): every lookup is awaited before it is judged.
+    const documents = new Map();
+    for (const id of stored.documentIds) documents.set(id, await services.documents.getDocument(id));
+    if (documentsUntil !== null && stored.documentIds.some(id => !(documents.get(id)?.createdAt <= documentsUntil))) throw notFound();
+    const clauseRows = await services.clauses.listClauses({ householdId, caseId: caseRecord.id, documentIds: stored.documentIds });
+    const documentKinds = new Map(stored.documentIds.map(id => [id, documents.get(id)?.documentKind]));
     // Which policy a document belongs to is a CANDIDATE finding only (printed policy number, see association.js) and is
     // never verified by this path. A document with no single printed number stays on one unresolved policy per answer.
     const unresolvedId = `unresolved-${stored.answerId}`;
@@ -63,16 +66,20 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
 
   const evidenceRows = rows => rows.map(row => ({ id: row.clauseId, documentId: row.documentId, sourceVersion: row.sourceVersion, page: row.page, digest: row.digest }));
   // Curated products are read once per request: listVerified re-hashes every published archive, so it is not repeated per probe.
-  const curatedFor = (ctx, today) => {
-    if (ctx.curated?.today !== today) ctx.curated = { today, products: [...loadCuratedProducts(CURATED_PRODUCT_RECORDS, { today }), ...(services.curatedProducts?.listVerified({ today }) ?? [])] };
+  const curatedFor = async (ctx, today) => {
+    if (ctx.curated?.today !== today) {
+      const verified = services.curatedProducts ? await services.curatedProducts.listVerified({ today }) : [];
+      ctx.curated = { today, products: [...loadCuratedProducts(CURATED_PRODUCT_RECORDS, { today }), ...verified] };
+    }
     return ctx.curated.products;
   };
-  const compose = (ctx, batches, { asOf, memberId }) => {
+  const compose = async (ctx, batches, { asOf, memberId }) => {
     const today = new Date().toISOString().slice(0, 10);
+    const curatedProducts = await curatedFor(ctx, today);
     return buildDecisionCatalogue({
-    householdId: ctx.householdId, clauseRows: evidenceRows(ctx.clauseRows), batches,
-    policies: ctx.policyIds.map(policyId => ({ policyId, kind: 'unresolved', coverBasis: 'unknown' })), asOf, memberId,
-    officialSources: CURATED_OFFICIAL_SOURCES, curatedProducts: curatedFor(ctx, today), today,
+      householdId: ctx.householdId, clauseRows: evidenceRows(ctx.clauseRows), batches,
+      policies: ctx.policyIds.map(policyId => ({ policyId, kind: 'unresolved', coverBasis: 'unknown' })), asOf, memberId,
+      officialSources: CURATED_OFFICIAL_SOURCES, curatedProducts, today,
     });
   };
   const modelBatch = candidates => ({ origin: 'model', reviewStatus: 'not_reviewed', verifiedPolicyIds: [], candidates });
@@ -93,14 +100,14 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
 
   // `curatedCache` is an optional caller-owned `{}` shared by several builds of one request, so the published archives are
   // verified once per request rather than once per source. It changes no result: the cache is keyed by the same date.
-  function build({ caseRecord, answerId, asOf = null, memberId = null, documentsUntil = null, curatedCache = null }) {
+  async function build({ caseRecord, answerId, asOf = null, memberId = null, documentsUntil = null, curatedCache = null }) {
     checkQuery({ asOf, memberId });
-    const ctx = load({ caseRecord, answerId, documentsUntil });
+    const ctx = await load({ caseRecord, answerId, documentsUntil });
     if (curatedCache?.value) ctx.curated = curatedCache.value;
-    const first = compose(ctx, [modelBatch(ctx.candidates)], { asOf, memberId });
+    const first = await compose(ctx, [modelBatch(ctx.candidates)], { asOf, memberId });
     if (curatedCache) curatedCache.value = ctx.curated;
     const factByKey = new Map(first.facts.map(fact => [factKeyOf(fact.factId), fact]));
-    const all = reviews ? reviews.list({ householdId: ctx.householdId, caseId: caseRecord.id }) : [];
+    const all = reviews ? await reviews.list({ householdId: ctx.householdId, caseId: caseRecord.id }) : [];
     const reviewSummary = [];
     const rejectedKeys = new Set();
     const reviewedBatches = [];
@@ -121,12 +128,12 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
         candidates: [candidateFromFact(fact, { sourceType: attestedType ?? 'user_statement', supersedes: [] })],
       });
     }
-    const keptModel = ctx.candidates.filter((candidate) => {
-      if (!rejectedKeys.size) return true;
-      const probe = compose(ctx, [modelBatch([candidate])], { asOf, memberId }).facts[0];
-      return !(probe && rejectedKeys.has(factKeyOf(probe.factId)));
-    });
-    const catalogue = reviewedBatches.length || rejectedKeys.size ? compose(ctx, [modelBatch(keptModel), ...reviewedBatches], { asOf, memberId }) : first;
+    const keptModel = [];
+    for (const candidate of ctx.candidates) {
+      const probe = rejectedKeys.size ? (await compose(ctx, [modelBatch([candidate])], { asOf, memberId })).facts[0] : null;
+      if (!(probe && rejectedKeys.has(factKeyOf(probe.factId)))) keptModel.push(candidate);
+    }
+    const catalogue = reviewedBatches.length || rejectedKeys.size ? await compose(ctx, [modelBatch(keptModel), ...reviewedBatches], { asOf, memberId }) : first;
     const disputed = reviewSummary.filter(item => item.state === 'disputed');
     const withAssociation = { ...catalogue, documentAssociations: ctx.association.documents };
     const out = reviewSummary.length ? Object.freeze({
@@ -138,35 +145,37 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
     return { sourceAnswerId: ctx.stored.answerId, pipelineCurrent: ctx.stored.pipelineCurrent, catalogue: out, skipped: ctx.skipped };
   }
 
-  const activeHousehold = householdId => services.households?.getHousehold(householdId)?.status === 'active';
+  const activeHousehold = async householdId => (await services.households?.getHousehold(householdId))?.status === 'active';
+  const readCase = async caseId => (typeof caseId === 'string' ? services.access.database.one('SELECT * FROM service_cases WHERE id = ?', [caseId]) : null);
 
   /** Who may review: a household confirmer who still holds a household role, or (when enabled) an independent reviewer. */
-  function reviewerCase(principal, caseId) {
-    const caseRecord = typeof caseId === 'string' ? services.access.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId) : null;
-    const grant = caseRecord && reviews?.activeGrant(caseRecord.household_id, principal.adultId, caseRecord.id);
-    if (!grant || !activeHousehold(caseRecord.household_id)) throw notFound();
+  async function reviewerCase(principal, caseId) {
+    const caseRecord = await readCase(caseId);
+    const grant = caseRecord && reviews ? await reviews.activeGrant(caseRecord.household_id, principal.adultId, caseRecord.id) : null;
+    if (!grant || !(await activeHousehold(caseRecord.household_id))) throw notFound();
     if (grant.kind === 'independent_reviewer') {
       if (!independentEnabled) throw notFound();
     } else {
-      try { services.access.requireHousehold(principal, caseRecord.household_id, { write: false }); } catch { throw notFound(); }
+      // Awaited inside the try: a rejected household check denies (fail closed), it never escapes as a pass.
+      try { await services.access.requireHousehold(principal, caseRecord.household_id, { write: false }); } catch { throw notFound(); }
     }
     // A grant row without granted_at predates the column: '' admits no document (fail closed).
     return { caseRecord, kind: grant.kind, documentsUntil: grant.kind === 'independent_reviewer' ? grant.granted_at ?? '' : null };
   }
 
-  function record({ principal, caseId, answerId, factId, decision, reasonCode, attestedSourceType = null, attestsPolicyAssociation = false, idempotencyKey, asOf = null, memberId = null }) {
+  async function record({ principal, caseId, answerId, factId, decision, reasonCode, attestedSourceType = null, attestsPolicyAssociation = false, idempotencyKey, asOf = null, memberId = null }) {
     if (!reviews) throw coded('REVIEWS_UNAVAILABLE', 'Reviews are unavailable.', 503);
     checkQuery({ asOf, memberId });
-    const { caseRecord, documentsUntil } = reviewerCase(principal, caseId);
+    const { caseRecord, documentsUntil } = await reviewerCase(principal, caseId);
     if (typeof factId !== 'string' || !factId || factId.length > 128) throw coded('VALIDATION_ERROR', 'factId is required.', 400);
     if (attestedSourceType !== null && (typeof attestedSourceType !== 'string' || !Object.hasOwn(CONTRACTUAL_SOURCES, attestedSourceType))) throw coded('VALIDATION_ERROR', 'attestedSourceType is not a contractual source type.', 400);
     if (typeof attestsPolicyAssociation !== 'boolean') throw coded('VALIDATION_ERROR', 'attestsPolicyAssociation must be a boolean.', 400);
     // The reviewed fact is rebuilt on the server from live clauses after the consent and currency re-check. The caller
     // names a factId and never supplies a value, a clause or a digest.
-    const ctx = load({ caseRecord, answerId, documentsUntil });
-    const fact = compose(ctx, [modelBatch(ctx.candidates)], { asOf, memberId }).facts.find(item => item.factId === factId);
+    const ctx = await load({ caseRecord, answerId, documentsUntil });
+    const fact = (await compose(ctx, [modelBatch(ctx.candidates)], { asOf, memberId })).facts.find(item => item.factId === factId);
     if (!fact) throw notFound();
-    const stored = reviews.record({
+    const stored = await reviews.record({
       householdId: ctx.householdId, caseId: caseRecord.id, reviewerAdultId: principal.adultId, idempotencyKey, decision, reasonCode,
       documentId: fact.documentId, sourceVersion: fact.sourceVersion, clauseIds: fact.clauseIds, sourceDigests: fact.sourceDigests,
       factKey: factKeyOf(fact.factId), fact: { ...candidateFromFact(fact), attestedSourceType, attestsPolicyAssociation },
@@ -176,13 +185,13 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
 
   // Only an enabled, active independent grant on an active household opens a case without a household role.
   // Returns { caseRecord, documentsUntil } or null.
-  function independentReviewerCase(principal, caseId) {
+  async function independentReviewerCase(principal, caseId) {
     if (!independentEnabled || !reviews || typeof caseId !== 'string') return null;
-    const caseRecord = services.access.database.prepare('SELECT * FROM service_cases WHERE id = ?').get(caseId);
-    const grant = caseRecord && activeHousehold(caseRecord.household_id) && reviews.activeGrant(caseRecord.household_id, principal.adultId, caseRecord.id);
+    const caseRecord = await readCase(caseId);
+    const grant = caseRecord && (await activeHousehold(caseRecord.household_id)) ? await reviews.activeGrant(caseRecord.household_id, principal.adultId, caseRecord.id) : null;
     if (grant?.kind !== 'independent_reviewer') return null;
     // Every independent read is audited before it is served. If the audit write fails the read fails: no unaudited view.
-    services.audit.append({
+    await services.audit.append({
       householdId: caseRecord.household_id, caseId: caseRecord.id, actorType: 'human_reviewer', actorId: principal.adultId,
       action: 'catalogue_reviewer.viewed', resourceType: 'service_case', resourceId: caseRecord.id,
     });
@@ -190,7 +199,7 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   }
 
   /** The household source-pack field gate for a household confirmer's write, matching the read route. Returns the case. */
-  function confirmerCase(principal, caseId) { return reviewerCase(principal, caseId); }
+  async function confirmerCase(principal, caseId) { return reviewerCase(principal, caseId); }
 
   return Object.freeze({ build, record, independentReviewerCase, confirmerCase });
 }

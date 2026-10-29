@@ -2,7 +2,8 @@
 //
 // Lock order for every transaction: household advisory lock -> consent_grants row FOR UPDATE ->
 // workflow_runs rows FOR UPDATE by id -> workflow_tasks rows -> the rest. Take the household lock
-// first, before any row lock; advisory locks are re-entrant inside one transaction, so a nested
+// first, before any row lock (the one exception is case creation, which takes the global case-capacity
+// lock before its household lock; nothing takes them in the other order); advisory locks are re-entrant inside one transaction, so a nested
 // call (for example AuditRepository.append) that takes the same lock again does not block.
 //
 // A key is the first 64 bits of SHA-256(namespace NUL key), as a signed bigint in decimal text,
@@ -18,8 +19,12 @@ export const LOCK_NAMESPACES = Object.freeze({
   HOUSEHOLD_NONE: 'household_none',
   // Serialises one idempotency key (scope + key) across concurrent requests.
   IDEMPOTENCY: 'idempotency',
-  // Serialises session issuance for one adult so the capacity check holds.
+  // Serialises session issuance so the capacity check holds. The capacity is global (one
+  // count of all active sessions), so callers take this lock with one fixed key, not per adult.
   SESSION_CAPACITY: 'session_capacity',
+  // Serialises case creation so the global active-case cap holds. One fixed key, like session capacity.
+  // Taken before the household lock when both are needed (see caseCapacityLock).
+  CASE_CAPACITY: 'case_capacity',
 });
 
 const namespaces = new Set(Object.values(LOCK_NAMESPACES));
@@ -49,6 +54,10 @@ export function idempotencyLock(scope, key) {
   return [LOCK_NAMESPACES.IDEMPOTENCY, `${scope}\0${key}`];
 }
 
-export function sessionCapacityLock(adultUserId) {
-  return [LOCK_NAMESPACES.SESSION_CAPACITY, adultUserId];
+export function sessionCapacityLock(key) {
+  return [LOCK_NAMESPACES.SESSION_CAPACITY, key];
+}
+
+export function caseCapacityLock(key) {
+  return [LOCK_NAMESPACES.CASE_CAPACITY, key];
 }

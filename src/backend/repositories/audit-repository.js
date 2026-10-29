@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { isDatabaseInterface } from '../database/postgres/db.js';
 import { householdLock } from '../database/postgres/locks.js';
 
 function stable(value) {
@@ -20,11 +19,9 @@ const INSERT_EVENT = `
      event_payload_json, previous_event_hash, event_hash, occurred_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-// Appends to a per-household hash chain. On the node:sqlite runtime the single writer serialises
-// appends and append() returns the event. On the PostgreSQL interface (S3.2) append() returns a
-// Promise: it runs in a transaction (a savepoint inside a caller's transaction) that holds the
-// household advisory lock while it reads the previous hash and inserts, so concurrent appends
-// cannot fork the chain. Callers that also lock rows must take the household lock first (lock
+// Appends to a per-household hash chain. append() returns a Promise: it runs in a transaction
+// (a savepoint inside a caller's transaction) that holds the household advisory lock while it reads
+// the previous hash and inserts, so concurrent appends cannot fork the chain. Callers that also lock rows must take the household lock first (lock
 // order, design section 3); the advisory lock is re-entrant within one transaction.
 export class AuditRepository {
   constructor(database, { clock = () => new Date() } = {}) {
@@ -41,21 +38,8 @@ export class AuditRepository {
     return { occurredAt, eventHash, params };
   }
 
-  append({ householdId = null, caseId = null, actorType = 'system', actorId = 'local-backend', action, resourceType, resourceId, payload = {} }) {
+  async append({ householdId = null, caseId = null, actorType = 'system', actorId = 'local-backend', action, resourceType, resourceId, payload = {} }) {
     const input = { householdId, caseId, actorType, actorId, action, resourceType, resourceId, payload };
-    if (isDatabaseInterface(this.database)) return this.#appendPostgres(input);
-    requireFields(input);
-    const previous = this.database.prepare(`
-      SELECT event_hash FROM audit_events
-      WHERE (household_id = ? OR (? IS NULL AND household_id IS NULL))
-      ORDER BY id DESC LIMIT 1
-    `).get(householdId, householdId)?.event_hash ?? null;
-    const { occurredAt, eventHash, params } = this.#event(input, previous);
-    const result = this.database.prepare(INSERT_EVENT).run(...params);
-    return { id: Number(result.lastInsertRowid), eventHash, previousEventHash: previous, occurredAt };
-  }
-
-  async #appendPostgres(input) {
     requireFields(input);
     const db = this.database;
     return db.transaction(async () => {
@@ -71,9 +55,6 @@ export class AuditRepository {
   }
 
   listForCase(caseId) {
-    if (isDatabaseInterface(this.database)) {
-      return this.database.many('SELECT * FROM audit_events WHERE case_id = ? ORDER BY id', [caseId]);
-    }
-    return this.database.prepare('SELECT * FROM audit_events WHERE case_id = ? ORDER BY id').all(caseId);
+    return this.database.many('SELECT * FROM audit_events WHERE case_id = ? ORDER BY id', [caseId]);
   }
 }

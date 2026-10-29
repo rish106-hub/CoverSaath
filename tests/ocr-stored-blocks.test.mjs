@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
 import {
   AuditRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, OcrRepository,
 } from '../src/backend/repositories/index.js';
@@ -12,26 +11,29 @@ import { STRUCTURING_DROPPED_TAGS, sectionDocument, sectionStoredDocument } from
 import {
   BLOCKS_DOCUMENT, IMAGE_DESCRIPTION, inMemoryBlockPages, rawSarvamResult, sarvamShapedFixtureProvider, sarvamTransport,
 } from './support/sarvam-blocks-fixture.mjs';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+
+const pgOptions = postgresTestOptions();
 
 const AT = '2026-09-18T12:00:00.000Z';
 const authorization = Object.freeze({
   authorized: true, consentGrantId: 'consent-ocr', requestedByAdultId: 'adult-ocr', purpose: 'document_processing',
 });
 
-function harness() {
-  const database = openDatabase({ path: ':memory:' });
+async function harness(t) {
+  const { db: database } = await freshDatabase(t);
   for (const household of ['household-ocr', 'household-other']) {
-    database.prepare('INSERT INTO households (id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)')
+    await database.prepare('INSERT INTO households (id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)')
       .run(household, 'Synthetic household', AT, AT);
   }
-  database.prepare('INSERT INTO adult_users (id, display_name, account_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+  await database.prepare('INSERT INTO adult_users (id, display_name, account_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
     .run('adult-ocr', 'Synthetic adult', 'active', AT, AT);
-  database.prepare(`INSERT INTO household_roles (id, household_id, adult_user_id, role, status, created_at)
+  await database.prepare(`INSERT INTO household_roles (id, household_id, adult_user_id, role, status, created_at)
     VALUES ('role-ocr', 'household-ocr', 'adult-ocr', 'owner', 'active', ?)`).run(AT);
-  database.prepare(`INSERT INTO consent_grants
+  await database.prepare(`INSERT INTO consent_grants
     (id, household_id, subject_adult_id, granted_to_actor, purpose, notice_version, evidence_method, granted_at, created_at)
     VALUES ('consent-ocr', 'household-ocr', 'adult-ocr', 'knowvia', 'document_processing', 'v1', 'fixture', ?, ?)`).run(AT, AT);
-  database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, action, data_category, created_at)
+  await database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, action, data_category, created_at)
     VALUES ('scope-ocr', 'consent-ocr', 'document', 'collect', 'insurance_document', ?)`).run(AT);
   const insertDocument = database.prepare(`INSERT INTO document_uploads
     (id, household_id, uploaded_by_adult_id, consent_grant_id, document_kind, original_filename, storage_path,
@@ -39,9 +41,9 @@ function harness() {
      logical_document_id, source_version)
     VALUES (?, 'household-ocr', 'adult-ocr', 'consent-ocr', 'policy_schedule', 'synthetic.pdf', ?, ?, 'application/pdf', 128,
       'not_scanned_fixture', 'fixture_only', 'quarantined', ?, ?, '3')`);
-  insertDocument.run('document-ocr', 'fixture/document-ocr', BLOCKS_DOCUMENT.contentSha256, AT, 'policy-synthetic');
-  insertDocument.run('document-v1', 'fixture/document-v1', 'c'.repeat(64), AT, 'policy-synthetic-v1');
-  database.prepare("UPDATE document_uploads SET lifecycle_state = 'active'").run();
+  await insertDocument.run('document-ocr', 'fixture/document-ocr', BLOCKS_DOCUMENT.contentSha256, AT, 'policy-synthetic');
+  await insertDocument.run('document-v1', 'fixture/document-v1', 'c'.repeat(64), AT, 'policy-synthetic-v1');
+  await database.prepare("UPDATE document_uploads SET lifecycle_state = 'active'").run();
   const repository = new OcrRepository(database);
   return { database, repository };
 }
@@ -57,12 +59,11 @@ const blocksJson = (database, documentId = 'document-ocr') => database.prepare(
   'SELECT page_number, blocks_json FROM source_pages WHERE document_upload_id = ? ORDER BY page_number',
 ).all(documentId);
 
-test('round trip: synthetic Sarvam blocks persist, read back and section exactly like the in-memory output', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('round trip: synthetic Sarvam blocks persist, read back and section exactly like the in-memory output', pgOptions, async t => {
+  const context = await harness(t);
   await persistSarvamShaped(context);
 
-  const stored = context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId: 'household-ocr' });
+  const stored = await context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId: 'household-ocr' });
   assert.equal(stored.complete, true);
   assert.equal(stored.sourceVersion, '3');
   assert.deepEqual(stored.pages.map(page => [page.page, page.status, page.providerPageRef]),
@@ -85,28 +86,26 @@ test('round trip: synthetic Sarvam blocks persist, read back and section exactly
   assert.ok(expected.dropped.some(item => item.reason === 'model_description'), 'the fixture exercises an image block');
 
   // No provider payload, coordinates or model-written image text is stored in the blocks.
-  for (const { blocks_json: json } of blocksJson(context.database)) {
+  for (const { blocks_json: json } of await blocksJson(context.database)) {
     for (const forbidden of [IMAGE_DESCRIPTION, 'Synthetic model caption', 'coordinates', 'bbox', 'block_id', 'confidence', 'p1-b']) {
       assert.equal(json.includes(forbidden), false, `blocks_json must not contain ${forbidden}`);
     }
     assert.equal(JSON.parse(json).version, OCR_BLOCKS_VERSION);
   }
-  const page = context.database.prepare('SELECT output_contract_version FROM source_pages WHERE page_number = 1').get();
+  const page = await context.database.prepare('SELECT output_contract_version FROM source_pages WHERE page_number = 1').get();
   assert.equal(page.output_contract_version, 'knowvia.ocr.v1', 'the page text contract is unchanged');
 });
 
-test('the default fixture OCR path stores blocks too', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('the default fixture OCR path stores blocks too', pgOptions, async t => {
+  const context = await harness(t);
   await persistSarvamShaped(context, createFixtureOcrProvider({ pages: [{ pageNumber: 1, text: 'Synthetic fixture page.' }] }));
-  const stored = context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId: 'household-ocr' });
+  const stored = await context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId: 'household-ocr' });
   assert.equal(stored.complete, true);
   assert.deepEqual(stored.pages[0].blocks, [{ index: 0, tag: 'paragraph', readingOrder: 1, text: 'Synthetic fixture page.' }]);
 });
 
-test('a v1 page without blocks reads as blocks_unavailable and is never sectioned as complete', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('a v1 page without blocks reads as blocks_unavailable and is never sectioned as complete', pgOptions, async t => {
+  const context = await harness(t);
   const v1Provider = {
     ...sarvamShapedFixtureProvider(),
     async createJob({ document }) {
@@ -120,8 +119,8 @@ test('a v1 page without blocks reads as blocks_unavailable and is never sectione
     normalizeResult: (result, expected) => validateOcrOutput(result, expected),
   };
   await persistSarvamShaped(context, v1Provider);
-  assert.deepEqual(blocksJson(context.database).map(row => [row.page_number, row.blocks_json]), [[1, null]]);
-  const stored = context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId: 'household-ocr' });
+  assert.deepEqual((await blocksJson(context.database)).map(row => [row.page_number, row.blocks_json]), [[1, null]]);
+  const stored = await context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId: 'household-ocr' });
   assert.equal(stored.complete, false);
   assert.deepEqual(stored.pages.map(page => [page.page, page.status, page.blocks]), [[1, 'blocks_unavailable', null]]);
   assert.throws(() => sectionStoredDocument(stored), error => error.code === 'STRUCTURING_BLOCKS_UNAVAILABLE'
@@ -134,36 +133,33 @@ test('a v1 page without blocks reads as blocks_unavailable and is never sectione
   }), error => error.code === 'OCR_SCHEMA_INVALID');
 });
 
-test('a cross-household or erased-document read fails without revealing the document', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('a cross-household or erased-document read fails without revealing the document', pgOptions, async t => {
+  const context = await harness(t);
   await persistSarvamShaped(context);
   for (const householdId of ['household-other', 'household-missing', undefined]) {
-    assert.throws(() => context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId }),
+    await assert.rejects(context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId }),
       error => error.code === 'DOCUMENT_NOT_FOUND' && error.statusCode === 404);
   }
-  assert.throws(() => context.repository.getDocumentBlockPages({ documentId: 'document-v1', householdId: 'household-ocr' }),
+  await assert.rejects(context.repository.getDocumentBlockPages({ documentId: 'document-v1', householdId: 'household-ocr' }),
     error => error.code === 'OCR_PAGES_UNAVAILABLE');
 });
 
-test('revocation erases stored blocks through the repository step, without the trigger safety net', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('revocation erases stored blocks through the repository step, without the trigger safety net', pgOptions, async t => {
+  const context = await harness(t);
   await persistSarvamShaped(context);
-  assert.ok(blocksJson(context.database).every(row => row.blocks_json !== null));
+  assert.ok((await blocksJson(context.database)).every(row => row.blocks_json !== null));
   // Prove the repository erasure step on its own.
-  context.database.exec('DROP TRIGGER source_pages_blocks_erase_with_text');
-  context.database.exec('DROP TRIGGER source_pages_blocks_erase_on_document_erasure');
-  new ConsentRepository(context.database, { clock: () => new Date(AT) })
+  await context.database.run('DROP TRIGGER source_pages_blocks_erase_with_text ON source_pages');
+  await context.database.run('DROP TRIGGER source_pages_blocks_erase_on_document_erasure ON document_uploads');
+  await new ConsentRepository(context.database, { clock: () => new Date(AT) })
     .revoke({ grantId: 'consent-ocr', revokedByAdultId: 'adult-ocr' });
-  assert.deepEqual(blocksJson(context.database).map(row => row.blocks_json), [null, null]);
-  assert.throws(() => context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId: 'household-ocr' }),
+  assert.deepEqual((await blocksJson(context.database)).map(row => row.blocks_json), [null, null]);
+  await assert.rejects(context.repository.getDocumentBlockPages({ documentId: 'document-ocr', householdId: 'household-ocr' }),
     error => error.code === 'DOCUMENT_NOT_FOUND');
 });
 
-test('document erasure through the document repository erases stored blocks', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('document erasure through the document repository erases stored blocks', pgOptions, async t => {
+  const context = await harness(t);
   await persistSarvamShaped(context);
   const clock = () => new Date(AT);
   const audit = new AuditRepository(context.database, { clock });
@@ -172,53 +168,51 @@ test('document erasure through the document repository erases stored blocks', as
     coverageParameters: new CoverageParameterRepository(context.database, { clock, audit }),
     consents: new ConsentRepository(context.database, { clock, audit }),
   });
-  documents.requestDeletion('document-ocr', { actorAdultId: 'adult-ocr' });
-  assert.deepEqual(blocksJson(context.database).map(row => row.blocks_json), [null, null]);
-  assert.equal(context.database.prepare("SELECT count(*) AS count FROM source_pages WHERE blocks_json IS NOT NULL").get().count, 0);
+  await documents.requestDeletion('document-ocr', { actorAdultId: 'adult-ocr' });
+  assert.deepEqual((await blocksJson(context.database)).map(row => row.blocks_json), [null, null]);
+  assert.equal((await context.database.prepare("SELECT count(*) AS count FROM source_pages WHERE blocks_json IS NOT NULL").get()).count, 0);
 });
 
-test('trigger safety nets erase blocks with page text and on document erasure; blocks are otherwise immutable', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('trigger safety nets erase blocks with page text and on document erasure; blocks are otherwise immutable', pgOptions, async t => {
+  const context = await harness(t);
   await persistSarvamShaped(context);
   const { database } = context;
-  const [first, second] = database.prepare("SELECT id, blocks_json FROM source_pages WHERE document_upload_id = 'document-ocr' ORDER BY page_number").all();
+  const [first, second] = await database.prepare("SELECT id, blocks_json FROM source_pages WHERE document_upload_id = 'document-ocr' ORDER BY page_number").all();
 
   // Immutable: blocks cannot be replaced or re-added, only cleared.
-  assert.throws(() => database.prepare('UPDATE source_pages SET blocks_json = ? WHERE id = ?').run(second.blocks_json, first.id),
+  await assert.rejects(database.prepare('UPDATE source_pages SET blocks_json = ? WHERE id = ?').run(second.blocks_json, first.id),
     /source page blocks are immutable/);
-  database.prepare('UPDATE source_pages SET blocks_json = blocks_json WHERE id = ?').run(first.id);
+  await database.prepare('UPDATE source_pages SET blocks_json = blocks_json WHERE id = ?').run(first.id);
 
   // Redacting page text clears the blocks in the same statement.
-  database.prepare('UPDATE source_pages SET extracted_text = NULL WHERE id = ?').run(first.id);
-  assert.equal(database.prepare('SELECT blocks_json FROM source_pages WHERE id = ?').get(first.id).blocks_json, null);
-  assert.throws(() => database.prepare('UPDATE source_pages SET blocks_json = ? WHERE id = ?').run(first.blocks_json, first.id),
+  await database.prepare('UPDATE source_pages SET extracted_text = NULL WHERE id = ?').run(first.id);
+  assert.equal((await database.prepare('SELECT blocks_json FROM source_pages WHERE id = ?').get(first.id)).blocks_json, null);
+  await assert.rejects(database.prepare('UPDATE source_pages SET blocks_json = ? WHERE id = ?').run(first.blocks_json, first.id),
     /source page blocks are immutable/);
-  assert.notEqual(database.prepare('SELECT blocks_json FROM source_pages WHERE id = ?').get(second.id).blocks_json, null);
+  assert.notEqual((await database.prepare('SELECT blocks_json FROM source_pages WHERE id = ?').get(second.id)).blocks_json, null);
 
   // A document erasure request clears every remaining block of that document.
-  database.prepare("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-ocr'").run();
-  assert.equal(database.prepare('SELECT blocks_json FROM source_pages WHERE id = ?').get(second.id).blocks_json, null);
+  await database.prepare("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-ocr'").run();
+  assert.equal((await database.prepare('SELECT blocks_json FROM source_pages WHERE id = ?').get(second.id)).blocks_json, null);
 
   // Blocks cannot be inserted for an erased document or without page text.
   const insert = (id, documentId, text) => database.prepare(`INSERT INTO source_pages
     (id, document_upload_id, page_number, source_version, page_sha256, extracted_text, extraction_status, created_at, blocks_json)
     VALUES (?, ?, 9, ?, ?, ?, 'extracted', ?, ?)`).run(id, documentId, `v-${id}`, 'd'.repeat(64), text, AT,
     serializeStoredBlocks(9, buildStoredBlocks([{ text: 'x', tag: null, readingOrder: 1 }], 'x')));
-  assert.throws(() => insert('page-erased', 'document-ocr', 'x'), /require page text and a live document/);
-  assert.throws(() => insert('page-no-text', 'document-v1', null), /require page text and a live document/);
-  insert('page-live', 'document-v1', 'x');
+  await assert.rejects(insert('page-erased', 'document-ocr', 'x'), /require page text and a live document/);
+  await assert.rejects(insert('page-no-text', 'document-v1', null), /require page text and a live document/);
+  await insert('page-live', 'document-v1', 'x');
 });
 
-test('the database CHECK rejects invalid, non-object and oversize blocks', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('the database CHECK rejects invalid, non-object and oversize blocks', pgOptions, async t => {
+  const context = await harness(t);
   const insert = (id, json) => context.database.prepare(`INSERT INTO source_pages
     (id, document_upload_id, page_number, source_version, page_sha256, extracted_text, extraction_status, created_at, blocks_json)
     VALUES (?, 'document-v1', 1, ?, ?, 'x', 'extracted', ?, ?)`).run(id, `v-${id}`, 'd'.repeat(64), AT, json);
-  assert.throws(() => insert('bad-json', '{not json'));
-  assert.throws(() => insert('bad-array', '[]'), /CHECK constraint failed/);
-  assert.throws(() => insert('bad-size', JSON.stringify({ pad: 'x'.repeat(OCR_BLOCK_LIMITS.maxStoredCharacters) })), /CHECK constraint failed/);
+  await assert.rejects(insert('bad-json', '{not json'));
+  await assert.rejects(insert('bad-array', '[]'), /violates check constraint/);
+  await assert.rejects(insert('bad-size', JSON.stringify({ pad: 'x'.repeat(OCR_BLOCK_LIMITS.maxStoredCharacters) })), /violates check constraint/);
 });
 
 test('the block validator fails closed on missing, duplicate, reordered, unknown, oversize and tampered blocks', () => {
@@ -261,10 +255,9 @@ test('the block validator fails closed on missing, duplicate, reordered, unknown
   rejects(() => serializeStoredBlocks(4, stored.map((block, index) => (index === 0 ? { ...block, index: 1 } : block))), 'serialize validates');
 });
 
-test('the repository refuses to persist a page whose blocks fail validation', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
-  const job = context.repository.createJob({
+test('the repository refuses to persist a page whose blocks fail validation', pgOptions, async t => {
+  const context = await harness(t);
+  const job = await context.repository.createJob({
     id: 'ocr-invalid-blocks', documentUploadId: 'document-ocr', provider: 'fixture', status: 'processing',
     contractVersion: 'knowvia.ocr.v1', authorization, requestedAt: AT, updatedAt: AT,
   });
@@ -273,11 +266,11 @@ test('the repository refuses to persist a page whose blocks fail validation', as
     ...page, documentUploadId: 'document-ocr', sourceVersion: '3', outputContractVersion: 'knowvia.ocr.v1', createdAt: AT,
   }));
   const forged = pages.map((page, index) => (index === 1 ? { ...page, blocks: [...page.blocks].reverse() } : page));
-  assert.throws(() => context.repository.completeJob(job.id, forged, { status: 'succeeded', completedAt: AT, updatedAt: AT }),
+  await assert.rejects(context.repository.completeJob(job.id, forged, { status: 'succeeded', completedAt: AT, updatedAt: AT }),
     error => error.code === 'OCR_BLOCKS_INVALID');
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 0, 'nothing partial is stored');
-  context.repository.completeJob(job.id, pages, { status: 'succeeded', completedAt: AT, updatedAt: AT });
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages WHERE blocks_json IS NOT NULL').get().count, 2);
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM source_pages').get()).count, 0, 'nothing partial is stored');
+  await context.repository.completeJob(job.id, pages, { status: 'succeeded', completedAt: AT, updatedAt: AT });
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM source_pages WHERE blocks_json IS NOT NULL').get()).count, 2);
 });
 
 test('stored blocks drop exactly the tags the sectioner treats as model descriptions', () => {

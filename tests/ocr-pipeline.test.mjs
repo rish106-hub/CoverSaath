@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
 import { ConsentRepository, OcrRepository } from '../src/backend/repositories/index.js';
 import {
   createFixtureOcrProvider,
@@ -8,6 +7,9 @@ import {
   validateOcrOutput,
 } from '../src/features/input/index.js';
 import { createSarvamOcrProvider } from '../src/integrations/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+
+const pgOptions = postgresTestOptions();
 
 const AT = '2026-09-18T12:00:00.000Z';
 const SHA = 'a'.repeat(64);
@@ -26,27 +28,27 @@ const liveAuthorization = Object.freeze({
   settings: Object.freeze({ language: 'en-IN', contentType: 'mixed' }),
 });
 
-function harness({ active = true, expiresAt = '2026-09-19T12:00:00.000Z' } = {}) {
-  const database = openDatabase({ path: ':memory:' });
-  database.prepare('INSERT INTO households (id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)')
+async function harness(t, { active = true, expiresAt = '2026-09-19T12:00:00.000Z' } = {}) {
+  const { db: database } = await freshDatabase(t);
+  await database.prepare('INSERT INTO households (id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)')
     .run('household-ocr', 'Synthetic OCR household', AT, AT);
-  database.prepare('INSERT INTO adult_users (id, display_name, account_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+  await database.prepare('INSERT INTO adult_users (id, display_name, account_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
     .run('adult-ocr', 'Synthetic adult', 'active', AT, AT);
-  database.prepare(`INSERT INTO household_roles
+  await database.prepare(`INSERT INTO household_roles
     (id, household_id, adult_user_id, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(
     'role-ocr', 'household-ocr', 'adult-ocr', 'owner', 'active', AT,
   );
-  database.prepare(`INSERT INTO consent_grants
+  await database.prepare(`INSERT INTO consent_grants
     (id, household_id, subject_adult_id, granted_to_actor, purpose, notice_version,
      evidence_method, granted_at, expires_at, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     'consent-ocr', 'household-ocr', 'adult-ocr', 'knowvia', 'document_processing',
     'v1', 'fixture', AT, expiresAt, AT,
   );
-  database.prepare(`INSERT INTO consent_scopes
+  await database.prepare(`INSERT INTO consent_scopes
     (id, consent_grant_id, resource_type, action, data_category, created_at)
     VALUES (?, ?, 'document', 'collect', 'insurance_document', ?)`).run('scope-ocr', 'consent-ocr', AT);
-  database.prepare(`INSERT INTO document_uploads
+  await database.prepare(`INSERT INTO document_uploads
     (id, household_id, uploaded_by_adult_id, consent_grant_id, document_kind,
      original_filename, storage_path, content_sha256, mime_type, byte_size,
      malware_status, encryption_status, lifecycle_state, uploaded_at, logical_document_id, source_version)
@@ -55,25 +57,24 @@ function harness({ active = true, expiresAt = '2026-09-19T12:00:00.000Z' } = {})
     'synthetic.pdf', 'fixture/document-ocr', SHA, 'application/pdf', 128,
     'not_scanned_fixture', 'fixture_only', 'quarantined', AT, 'policy-synthetic', '3',
   );
-  database.prepare(`INSERT INTO consent_grants
+  await database.prepare(`INSERT INTO consent_grants
     (id, household_id, subject_adult_id, granted_to_actor, purpose, notice_version,
      evidence_method, granted_at, expires_at, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     'consent-sarvam', 'household-ocr', 'adult-ocr', 'sarvam', 'document_processing',
     'v1', 'fixture', AT, expiresAt, AT,
   );
-  database.prepare(`INSERT INTO consent_scopes
+  await database.prepare(`INSERT INTO consent_scopes
     (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
     VALUES (?, ?, 'document', ?, 'derive', 'insurance_document', 'sarvam', ?)`).run(
     'scope-sarvam', 'consent-sarvam', 'document-ocr', AT,
   );
-  if (active) database.prepare("UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = 'document-ocr'").run();
+  if (active) await database.prepare("UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = 'document-ocr'").run();
   return { database, repository: new OcrRepository(database) };
 }
 
-test('fixture OCR persists versioned structured output and page provenance with zero provider calls', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('fixture OCR persists versioned structured output and page provenance with zero provider calls', pgOptions, async t => {
+  const context = await harness(t);
   const provider = createFixtureOcrProvider({ pages: [
     { pageNumber: 2, text: 'Page two synthetic clause.', confidenceBasisPoints: 8000 },
     { pageNumber: 1, text: 'Page one synthetic schedule.', confidenceBasisPoints: null },
@@ -95,29 +96,28 @@ test('fixture OCR persists versioned structured output and page provenance with 
   assert.equal(provider.health().calls, 0);
   assert.equal(provider.health().accuracyMeasured, false);
 
-  const stored = context.database.prepare('SELECT * FROM source_pages ORDER BY page_number').all();
+  const stored = await context.database.prepare('SELECT * FROM source_pages ORDER BY page_number').all();
   assert.equal(stored.length, 2);
   assert.equal(stored[0].output_contract_version, 'knowvia.ocr.v1');
   assert.equal(JSON.parse(stored[0].provenance_json).contentSha256, SHA);
   assert.equal(stored[0].text_sha256.length, 64);
 });
 
-test('authorization, consent and quarantine checks fail closed before OCR work', async t => {
-  const context = harness({ active: false });
-  t.after(() => context.database.close());
+test('authorization, consent and quarantine checks fail closed before OCR work', pgOptions, async t => {
+  const context = await harness(t, { active: false });
   const service = createOcrService({ repository: context.repository, provider: createFixtureOcrProvider(), mode: 'fixture', now: () => new Date(AT) });
   await assert.rejects(
     service.start({ documentId: 'document-ocr', authorization }),
     error => error.code === 'DOCUMENT_NOT_OCR_READY',
   );
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get().count, 0);
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get()).count, 0);
 
-  context.database.prepare("UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = 'document-ocr'").run();
+  await context.database.prepare("UPDATE document_uploads SET lifecycle_state = 'active' WHERE id = 'document-ocr'").run();
   await assert.rejects(
     service.start({ documentId: 'document-ocr', authorization: { ...authorization, requestedByAdultId: 'other' } }),
     error => error.code === 'OCR_AUTHORIZATION_REQUIRED',
   );
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get().count, 0);
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get()).count, 0);
 });
 
 test('structured OCR validation rejects source mismatch, duplicate pages and unbounded text', () => {
@@ -141,9 +141,8 @@ test('structured OCR validation rejects source mismatch, duplicate pages and unb
   );
 });
 
-test('live Sarvam path refuses incomplete configuration and records a durable failed job', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('live Sarvam path refuses incomplete configuration and records a durable failed job', pgOptions, async t => {
+  const context = await harness(t);
   const service = createOcrService({
     repository: context.repository,
     provider: createSarvamOcrProvider({ env: { SARVAM_OCR_ENABLED: 'true' } }),
@@ -155,15 +154,14 @@ test('live Sarvam path refuses incomplete configuration and records a durable fa
     service.start({ documentId: 'document-ocr', authorization: liveAuthorization }),
     error => error.code === 'PROVIDER_NOT_CONFIGURED',
   );
-  const failed = context.database.prepare('SELECT status, error_code FROM ocr_jobs').get();
+  const failed = await context.database.prepare('SELECT status, error_code FROM ocr_jobs').get();
   assert.equal(failed.status, 'failed');
   assert.equal(failed.error_code, 'PROVIDER_NOT_CONFIGURED');
 });
 
-test('live OCR refuses non-PDF documents before reading bytes or calling the provider', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
-  context.database.prepare("UPDATE document_uploads SET mime_type = 'image/png' WHERE id = 'document-ocr'").run();
+test('live OCR refuses non-PDF documents before reading bytes or calling the provider', pgOptions, async t => {
+  const context = await harness(t);
+  await context.database.prepare("UPDATE document_uploads SET mime_type = 'image/png' WHERE id = 'document-ocr'").run();
   let reads = 0;
   let calls = 0;
   const provider = {
@@ -181,12 +179,11 @@ test('live OCR refuses non-PDF documents before reading bytes or calling the pro
     error => error.code === 'OCR_UNSUPPORTED_MEDIA_TYPE');
   assert.equal(reads, 0);
   assert.equal(calls, 0);
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get().count, 0);
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get()).count, 0);
 });
 
-test('verified live transport normalizes provider data and never persists its raw payload', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('verified live transport normalizes provider data and never persists its raw payload', pgOptions, async t => {
+  const context = await harness(t);
   const raw = { secretDiagnostic: 'must-not-persist', blocks: ['Synthetic provider text.'] };
   const transport = {
     async createJob() { return { status: 'submitted', jobRef: 'provider-job-1' }; },
@@ -213,12 +210,11 @@ test('verified live transport normalizes provider data and never persists its ra
   const completed = await service.refresh(submitted.id, { authorization: liveAuthorization });
   assert.equal(completed.status, 'succeeded');
   assert.equal(JSON.stringify(completed).includes('must-not-persist'), false);
-  assert.equal(context.database.prepare('SELECT result_json FROM ocr_jobs WHERE id = ?').get(submitted.id).result_json.includes('must-not-persist'), false);
+  assert.equal((await context.database.prepare('SELECT result_json FROM ocr_jobs WHERE id = ?').get(submitted.id)).result_json.includes('must-not-persist'), false);
 });
 
-test('revocation between Sarvam batches stops every later provider submission', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('revocation between Sarvam batches stops every later provider submission', pgOptions, async t => {
+  const context = await harness(t);
   const consents = new ConsentRepository(context.database, { clock: () => new Date(AT) });
   let submissions = 0;
   const segmenter = { async segment() { return {
@@ -230,7 +226,7 @@ test('revocation between Sarvam batches stops every later provider submission', 
   }; } };
   const fetchImpl = async () => {
     submissions += 1;
-    if (submissions === 1) consents.revoke({ grantId: 'consent-sarvam', revokedByAdultId: 'adult-ocr' });
+    if (submissions === 1) await consents.revoke({ grantId: 'consent-sarvam', revokedByAdultId: 'adult-ocr' });
     return {
       ok: true, status: 201, headers: { get: () => null },
       async text() { return JSON.stringify({ job_id: `revoked-job-${submissions}`, status: 'pending' }); },
@@ -247,22 +243,21 @@ test('revocation between Sarvam batches stops every later provider submission', 
   await assert.rejects(service.start({ documentId: 'document-ocr', authorization: liveAuthorization }),
     error => error.code === 'OCR_AUTHORIZATION_REQUIRED');
   assert.equal(submissions, 1);
-  const job = context.database.prepare('SELECT status, error_code, provider_job_ref FROM ocr_jobs').get();
+  const job = await context.database.prepare('SELECT status, error_code, provider_job_ref FROM ocr_jobs').get();
   assert.equal(job.status, 'cancelled');
   assert.equal(job.error_code, 'CONSENT_REVOKED');
   assert.match(job.provider_job_ref, /^sarvam-v1\./);
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 0);
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM source_pages').get()).count, 0);
 });
 
-test('revocation after segmentation but before the first Sarvam POST prevents all disclosure', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('revocation after segmentation but before the first Sarvam POST prevents all disclosure', pgOptions, async t => {
+  const context = await harness(t);
   const consents = new ConsentRepository(context.database, { clock: () => new Date(AT) });
   let submissions = 0;
   const provider = createSarvamOcrProvider({
     env: { SARVAM_OCR_ENABLED: 'true', SARVAM_API_KEY: 'test-only' },
     segmenter: { async segment() {
-      consents.revoke({ grantId: 'consent-sarvam', revokedByAdultId: 'adult-ocr' });
+      await consents.revoke({ grantId: 'consent-sarvam', revokedByAdultId: 'adult-ocr' });
       return { pageCount: 1, segments: [{
         index: 0, originalPages: [1], bytes: Buffer.from('%PDF- one'), contentSha256: 'a'.repeat(64),
       }] };
@@ -276,14 +271,13 @@ test('revocation after segmentation but before the first Sarvam POST prevents al
   await assert.rejects(service.start({ documentId: 'document-ocr', authorization: liveAuthorization }),
     error => error.code === 'OCR_AUTHORIZATION_REQUIRED');
   assert.equal(submissions, 0);
-  assert.deepEqual({ ...context.database.prepare('SELECT status, error_code, provider_job_ref FROM ocr_jobs').get() }, {
+  assert.deepEqual({ ...await context.database.prepare('SELECT status, error_code, provider_job_ref FROM ocr_jobs').get() }, {
     status: 'cancelled', error_code: 'CONSENT_REVOKED', provider_job_ref: null,
   });
 });
 
-test('an uncertain Sarvam submission cannot be resubmitted by replay or explicit retry', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('an uncertain Sarvam submission cannot be resubmitted by replay or explicit retry', pgOptions, async t => {
+  const context = await harness(t);
   let calls = 0;
   const provider = createSarvamOcrProvider({
     env: { SARVAM_OCR_ENABLED: 'true', SARVAM_API_KEY: 'test-only' },
@@ -306,12 +300,11 @@ test('an uncertain Sarvam submission cannot be resubmitted by replay or explicit
     error => error.code === 'OCR_RECONCILIATION_REQUIRED',
   );
   assert.equal(calls, 1);
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get().count, 1);
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM ocr_jobs').get()).count, 1);
 });
 
-test('a dispatched invalid Sarvam response cannot be explicitly retried', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('a dispatched invalid Sarvam response cannot be explicitly retried', pgOptions, async t => {
+  const context = await harness(t);
   let calls = 0;
   const provider = {
     name: 'sarvam', mode: 'live', health: () => ({ status: 'ready' }),
@@ -333,9 +326,8 @@ test('a dispatched invalid Sarvam response cannot be explicitly retried', async 
   assert.equal(calls, 1);
 });
 
-test('polling is bounded and an overdue job fails without another provider call', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('polling is bounded and an overdue job fails without another provider call', pgOptions, async t => {
+  const context = await harness(t);
   let current = new Date(AT);
   let polls = 0;
   const provider = {
@@ -363,9 +355,8 @@ test('polling is bounded and an overdue job fails without another provider call'
   assert.equal(polls, 1);
 });
 
-test('a new service instance resumes a durable provider job after restart', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('a new service instance resumes a durable provider job after restart', pgOptions, async t => {
+  const context = await harness(t);
   let current = new Date(AT);
   const provider = {
     name: 'sarvam', mode: 'live', health: () => ({ status: 'ready' }),
@@ -397,13 +388,14 @@ test('a new service instance resumes a durable provider job after restart', asyn
   assert.equal(completed.result.pages[0].text, 'Synthetic recovered page.');
 });
 
-test('a database failure rolls back every source page and leaves a failed job', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
-  context.database.exec(`CREATE TRIGGER synthetic_ocr_commit_failure
+test('a database failure rolls back every source page and leaves a failed job', pgOptions, async t => {
+  const context = await harness(t);
+  await context.database.run(`CREATE FUNCTION synthetic_ocr_commit_failure_fn() RETURNS trigger LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'synthetic OCR commit failure'; END $$`);
+  await context.database.run(`CREATE TRIGGER synthetic_ocr_commit_failure
     BEFORE UPDATE OF status ON ocr_jobs
-    WHEN NEW.status = 'succeeded'
-    BEGIN SELECT RAISE(ABORT, 'synthetic OCR commit failure'); END`);
+    FOR EACH ROW WHEN (NEW.status = 'succeeded')
+    EXECUTE FUNCTION synthetic_ocr_commit_failure_fn()`);
   const provider = {
     name: 'sarvam', mode: 'live', health: () => ({ status: 'ready' }),
     async createJob() { return { status: 'succeeded', result: { text: 'Must roll back.' } }; },
@@ -424,27 +416,28 @@ test('a database failure rolls back every source page and leaves a failed job', 
   });
   await assert.rejects(service.start({ documentId: 'document-ocr', authorization: liveAuthorization }),
     error => error.code === 'OCR_PERSISTENCE_FAILED' && !error.message.includes('synthetic OCR commit failure'));
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 0);
-  assert.deepEqual({ ...context.database.prepare('SELECT status, error_code FROM ocr_jobs').get() }, {
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM source_pages').get()).count, 0);
+  assert.deepEqual({ ...await context.database.prepare('SELECT status, error_code FROM ocr_jobs').get() }, {
     status: 'failed', error_code: 'OCR_PERSISTENCE_FAILED',
   });
-  assert.equal(context.database.prepare('SELECT provider_job_ref FROM ocr_jobs').get().provider_job_ref, 'synthetic-atomic-job');
-  context.database.exec('DROP TRIGGER synthetic_ocr_commit_failure');
-  const reconciled = await service.refresh(context.database.prepare('SELECT id FROM ocr_jobs').get().id, {
+  assert.equal((await context.database.prepare('SELECT provider_job_ref FROM ocr_jobs').get()).provider_job_ref, 'synthetic-atomic-job');
+  await context.database.run('DROP TRIGGER synthetic_ocr_commit_failure ON ocr_jobs');
+  const reconciled = await service.refresh((await context.database.prepare('SELECT id FROM ocr_jobs').get()).id, {
     authorization: liveAuthorization,
   });
   assert.equal(reconciled.status, 'succeeded');
   assert.equal(reconciled.result.pages[0].text, 'Recovered without resubmission.');
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 1);
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM source_pages').get()).count, 1);
 });
 
-test('a polled result survives a transient database failure and reconciles without another POST', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
-  context.database.exec(`CREATE TRIGGER synthetic_polled_commit_failure
+test('a polled result survives a transient database failure and reconciles without another POST', pgOptions, async t => {
+  const context = await harness(t);
+  await context.database.run(`CREATE FUNCTION synthetic_polled_commit_failure_fn() RETURNS trigger LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'synthetic polled commit failure'; END $$`);
+  await context.database.run(`CREATE TRIGGER synthetic_polled_commit_failure
     BEFORE UPDATE OF status ON ocr_jobs
-    WHEN NEW.status = 'succeeded'
-    BEGIN SELECT RAISE(ABORT, 'synthetic polled commit failure'); END`);
+    FOR EACH ROW WHEN (NEW.status = 'succeeded')
+    EXECUTE FUNCTION synthetic_polled_commit_failure_fn()`);
   let submissions = 0;
   let polls = 0;
   const provider = {
@@ -469,20 +462,19 @@ test('a polled result survives a transient database failure and reconciles witho
   const submitted = await service.start({ documentId: 'document-ocr', authorization: liveAuthorization });
   await assert.rejects(service.refresh(submitted.id, { authorization: liveAuthorization }),
     error => error.code === 'OCR_PERSISTENCE_FAILED');
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 0);
-  assert.deepEqual({ ...context.database.prepare('SELECT status, error_code, provider_job_ref FROM ocr_jobs').get() }, {
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM source_pages').get()).count, 0);
+  assert.deepEqual({ ...await context.database.prepare('SELECT status, error_code, provider_job_ref FROM ocr_jobs').get() }, {
     status: 'failed', error_code: 'OCR_PERSISTENCE_FAILED', provider_job_ref: 'polled-atomic-job',
   });
-  context.database.exec('DROP TRIGGER synthetic_polled_commit_failure');
+  await context.database.run('DROP TRIGGER synthetic_polled_commit_failure ON ocr_jobs');
   const reconciled = await service.refresh(submitted.id, { authorization: liveAuthorization });
   assert.equal(reconciled.status, 'succeeded');
   assert.equal(submissions, 1);
   assert.equal(polls, 2);
 });
 
-test('document deletion while provider submission is in flight stays cancelled and cancels remote work', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('document deletion while provider submission is in flight stays cancelled and cancels remote work', pgOptions, async t => {
+  const context = await harness(t);
   let releaseProvider;
   let providerEntered;
   const entered = new Promise(resolve => { providerEntered = resolve; });
@@ -512,9 +504,9 @@ test('document deletion while provider submission is in flight stays cancelled a
   });
   const starting = service.start({ documentId: 'document-ocr', authorization: liveAuthorization });
   await entered;
-  const job = context.database.prepare('SELECT id FROM ocr_jobs').get();
-  context.database.prepare("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-ocr'").run();
-  context.database.prepare(`UPDATE ocr_jobs SET status = 'cancelled', completed_at = ?,
+  const job = await context.database.prepare('SELECT id FROM ocr_jobs').get();
+  await context.database.prepare("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-ocr'").run();
+  await context.database.prepare(`UPDATE ocr_jobs SET status = 'cancelled', completed_at = ?,
     error_code = 'DOCUMENT_DELETED', error_message = 'Source document deletion was requested.', updated_at = ?
     WHERE id = ?`).run(AT, AT, job.id);
   releaseProvider();
@@ -523,13 +515,12 @@ test('document deletion while provider submission is in flight stays cancelled a
   assert.equal(result.status, 'cancelled');
   assert.deepEqual(cancelledRefs, ['remote-delete-race']);
   assert.deepEqual(requestIds, [job.id, job.id]);
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 0);
-  assert.equal(context.database.prepare('SELECT status FROM ocr_jobs WHERE id = ?').get(job.id).status, 'cancelled');
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM source_pages').get()).count, 0);
+  assert.equal((await context.database.prepare('SELECT status FROM ocr_jobs WHERE id = ?').get(job.id)).status, 'cancelled');
 });
 
-test('consent revocation during provider submission preserves a failed remote cancellation for retry', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('consent revocation during provider submission preserves a failed remote cancellation for retry', pgOptions, async t => {
+  const context = await harness(t);
   let releaseProvider;
   let providerEntered;
   const entered = new Promise(resolve => { providerEntered = resolve; });
@@ -548,23 +539,22 @@ test('consent revocation during provider submission preserves a failed remote ca
   });
   const starting = service.start({ documentId: 'document-ocr', authorization: liveAuthorization });
   await entered;
-  const job = context.database.prepare('SELECT id, started_at FROM ocr_jobs').get();
+  const job = await context.database.prepare('SELECT id, started_at FROM ocr_jobs').get();
   assert.equal(job.started_at, AT);
-  context.database.prepare(`UPDATE ocr_jobs SET status = 'cancelled', completed_at = ?,
+  await context.database.prepare(`UPDATE ocr_jobs SET status = 'cancelled', completed_at = ?,
     error_code = 'CONSENT_REVOKED', error_message = NULL, authorization_json = NULL, updated_at = ?
     WHERE id = ?`).run(AT, AT, job.id);
   releaseProvider();
 
   await assert.rejects(starting, /synthetic provider cancellation outage/);
-  assert.deepEqual({ ...context.database.prepare(`SELECT status, provider_job_ref, error_code
+  assert.deepEqual({ ...await context.database.prepare(`SELECT status, provider_job_ref, error_code
     FROM ocr_jobs WHERE id = ?`).get(job.id) }, {
     status: 'cancelled', provider_job_ref: 'remote-consent-race', error_code: 'CONSENT_REVOKED',
   });
 });
 
-test('deletion racing an immediate OCR result erases locally and reconciles by durable request id', async t => {
-  const context = harness();
-  t.after(() => context.database.close());
+test('deletion racing an immediate OCR result erases locally and reconciles by durable request id', pgOptions, async t => {
+  const context = await harness(t);
   let releaseProvider;
   let providerEntered;
   const entered = new Promise(resolve => { providerEntered = resolve; });
@@ -597,16 +587,16 @@ test('deletion racing an immediate OCR result erases locally and reconciles by d
   });
   const starting = service.start({ documentId: 'document-ocr', authorization: liveAuthorization });
   await entered;
-  const job = context.database.prepare('SELECT id FROM ocr_jobs').get();
-  context.database.prepare(`UPDATE ocr_jobs SET status = 'cancelled', completed_at = ?,
+  const job = await context.database.prepare('SELECT id FROM ocr_jobs').get();
+  await context.database.prepare(`UPDATE ocr_jobs SET status = 'cancelled', completed_at = ?,
     error_code = 'DOCUMENT_DELETED', error_message = NULL, authorization_json = NULL, updated_at = ?
     WHERE id = ?`).run(AT, AT, job.id);
   releaseProvider();
 
   const result = await starting;
   assert.equal(result.status, 'cancelled');
-  assert.equal(context.database.prepare('SELECT count(*) AS count FROM source_pages').get().count, 0);
-  assert.equal(context.database.prepare('SELECT provider_job_ref FROM ocr_jobs WHERE id = ?').get(job.id).provider_job_ref, null);
+  assert.equal((await context.database.prepare('SELECT count(*) AS count FROM source_pages').get()).count, 0);
+  assert.equal((await context.database.prepare('SELECT provider_job_ref FROM ocr_jobs WHERE id = ?').get(job.id)).provider_job_ref, null);
   assert.deepEqual(cancellations.map(item => ({ jobRef: item.jobRef, requestId: item.requestId })), [
     { jobRef: 'remote-immediate-result', requestId: job.id },
   ]);

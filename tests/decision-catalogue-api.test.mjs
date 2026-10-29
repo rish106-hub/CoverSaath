@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 
 // Block 3 decision catalogue API on top of the ADR 0008 answer API through the real application: upload, Sarvam OCR (mocked HTTP), stored blocks, clauses,
@@ -99,7 +99,7 @@ async function eventually(check, { timeoutMs = 3000 } = {}) {
 
 async function startApp(t, { env: extraEnv = {} } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-structuring-'));
-  const database = openDatabase({ path: join(directory, 'app.sqlite') });
+  const { db: database } = await freshDatabase(t);
   const requests = [];
   const env = {
     KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken,
@@ -119,7 +119,6 @@ async function startApp(t, { env: extraEnv = {} } = {}) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
-    database.close();
     rmSync(directory, { recursive: true, force: true });
   });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -195,23 +194,24 @@ async function scenario(app, name = 'Structuring') {
 const ask = (app, s, { grantId = s.questionGrantId, key = randomUUID(), question = 'What is the room rent limit?', token = s.token, caseId = s.caseId } = {}) => app.call(`/api/v1/cases/${caseId}/questions`, {
   method: 'POST', token, headers: { 'Idempotency-Key': key }, body: { question, consentGrantId: grantId },
 });
-const rows = (app, table) => app.database.prepare(`SELECT count(*) AS count FROM ${table}`).get().count;
+const rows = async (app, table) => (await app.database.prepare(`SELECT count(*) AS count FROM ${table}`).get()).count;
+const counts = async (app, tables) => { const result = []; for (const table of tables) result.push(await rows(app, table)); return result; };
 
 
 const catalogue = (app, s, answerId, query = '', { token = s.token, caseId = s.caseId } = {}) =>
   app.call(`/api/v1/cases/${caseId}/decision-catalogue?answerId=${encodeURIComponent(answerId)}${query}`, { token });
 
-test('B3: catalogue is derived from a stored answer, stays unverified and makes no provider call', async t => {
+test('B3: catalogue is derived from a stored answer, stays unverified and makes no provider call', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app);
   const answered = await ask(app, s);
   assert.equal(answered.status, 201, JSON.stringify(answered.data));
   const before = app.requests.length;
-  const tables = ['policy_clauses', 'policy_answers', 'evidence_facts', 'coverage_parameter_observations'].map(table => rows(app, table));
+  const tables = await counts(app, ['policy_clauses', 'policy_answers', 'evidence_facts', 'coverage_parameter_observations']);
   const res = await catalogue(app, s, answered.data.answerId);
   assert.equal(res.status, 200, JSON.stringify(res.data));
   assert.equal(app.requests.length, before, 'no model call');
-  assert.deepEqual(['policy_clauses', 'policy_answers', 'evidence_facts', 'coverage_parameter_observations'].map(table => rows(app, table)), tables, 'nothing is written');
+  assert.deepEqual(await counts(app, ['policy_clauses', 'policy_answers', 'evidence_facts', 'coverage_parameter_observations']), tables, 'nothing is written');
   const { catalogue: c } = res.data;
   assert.equal(c.catalogueVersion, 'decision-catalogue/v1');
   assert.equal(c.policies[0].kind, 'unresolved');
@@ -241,7 +241,7 @@ test('B3: catalogue is derived from a stored answer, stays unverified and makes 
   assert.ok(c.facts.every(fact => fact.page === 1 && fact.documentId === s.documentId));
 });
 
-test('B3: catalogue refuses bad input, foreign households and unknown answers', async t => {
+test('B3: catalogue refuses bad input, foreign households and unknown answers', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app, 'Mine');
   const other = await scenario(app, 'Other');
@@ -262,7 +262,7 @@ test('B3: catalogue refuses bad input, foreign households and unknown answers', 
   assert.equal((await catalogue(off, s2, 'answer-x')).status, 503);
 });
 
-test('B3: revoking the grant erases the source, so the catalogue is gone', async t => {
+test('B3: revoking the grant erases the source, so the catalogue is gone', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await scenario(app);
   const answered = await ask(app, s);

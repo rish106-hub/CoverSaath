@@ -3,10 +3,7 @@
 // Synthetic data only; no external network.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { testTempRoot as tmpdir } from './support/temp-root.mjs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 import {
   ANALYSIS_RUN_ROUTES,
@@ -53,14 +50,11 @@ test('P1-A API: error bodies are validated in both shapes the server emits', () 
 });
 
 async function start(t) {
-  const directory = mkdtempSync(join(tmpdir(), 'knowvia-p1a-api-'));
-  const database = openDatabase({ path: join(directory, 'knowvia.sqlite') });
+  const { db: database } = await freshDatabase(t);
   const server = createApiServer({ database, env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken } });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
-    try { database.close(); } catch {}
-    rmSync(directory, { recursive: true, force: true });
   });
   const base = `http://127.0.0.1:${server.address().port}`;
   return async (path, { method = 'GET', body, token, idempotencyKey } = {}) => {
@@ -77,7 +71,7 @@ async function start(t) {
   };
 }
 
-test('P1-A API: live route responses match the response schemas', async t => {
+test('P1-A API: live route responses match the response schemas', postgresTestOptions(), async t => {
   const call = await start(t);
   const identity = await call('/api/v1/households', { method: 'POST', token: bootstrapToken, body: { displayName: 'Synthetic household', owner: { displayName: 'Synthetic owner' } } });
   assert.equal(identity.status, 201);

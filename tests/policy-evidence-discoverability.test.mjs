@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
 import { CLAUSE_KINDS } from '../src/contracts/policy-evidence.js';
 import { buildClauses, checklistFor, classifyClause, selectContext, selectSweepContext } from '../src/features/policy-evidence/index.js';
 import { parameterAt, parameterIds, seedParameterWorld } from './support/parameter-fixtures.mjs';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+
+const pgOptions = postgresTestOptions();
 
 // Synthetic only. Clause kind ranks retrieval; it must never make a stored clause unreachable.
 const filler = Array.from({ length: 30 }, (_, index) => ({ page: 10 + index, status: 'stored', blocks: [
@@ -18,40 +20,39 @@ const stored = { pages: [
   { page: 62, status: 'stored', blocks: [{ tag: 'section-title', text: 'Lens Claims' }, { tag: 'paragraph', text: 'Phacoemulsification lens claims are settled only as reimbursement, never cashless.' }] },
 ] };
 
-function world(t) {
-  const database = openDatabase({ path: ':memory:' });
-  t.after(() => database.close());
-  seedParameterWorld(database);
+async function world(t) {
+  const { db: database } = await freshDatabase(t);
+  await seedParameterWorld(database);
   const services = createBackendServices(database, { clock: () => new Date(parameterAt) });
   const { householdId, caseId, documentId } = parameterIds;
-  services.clauses.saveClauses({ householdId, caseId, documentId, clauses: buildClauses(stored, { documentId, sourceVersion: 'v1' }).clauses });
-  const clauses = services.clauses.listClauses({ householdId, caseId, documentIds: [documentId] });
+  await services.clauses.saveClauses({ householdId, caseId, documentId, clauses: buildClauses(stored, { documentId, sourceVersion: 'v1' }).clauses });
+  const clauses = await services.clauses.listClauses({ householdId, caseId, documentIds: [documentId] });
   const search = ({ query, kinds, limit }) => services.clauses.searchClauses({ householdId, caseId, documentIds: [documentId], query, kinds, limit });
   return { clauses, search, lens: clauses.find(clause => clause.page === 61), claims: clauses.find(clause => clause.page === 62) };
 }
 
-test('S2: a relevant clause classified other reaches the first-pass context on the retrieved path', t => {
-  const { clauses, search, lens } = world(t);
+test('S2: a relevant clause classified other reaches the first-pass context on the retrieved path', pgOptions, async t => {
+  const { clauses, search, lens } = await world(t);
   assert.equal(lens.kind, 'other', 'fixture premise: the clause matches no kind rule');
   const question = 'Are phacoemulsification lens costs covered?';
-  const context = selectContext({ gated: clauses, checklist: checklistFor(question), question, search, budgetBytes: 1500 });
+  const context = await selectContext({ gated: clauses, checklist: checklistFor(question), question, search, budgetBytes: 1500 });
   assert.equal(context.path, 'retrieved');
   assert.ok(context.clauses.some(clause => clause.clauseId === lens.clauseId));
 });
 
-test('S2: the sweep reaches overriding clauses of kinds outside its boost list that the first pass did not read', t => {
-  const { clauses, search, lens, claims } = world(t);
+test('S2: the sweep reaches overriding clauses of kinds outside its boost list that the first pass did not read', pgOptions, async t => {
+  const { clauses, search, lens, claims } = await world(t);
   assert.equal(claims.kind, 'procedure', 'fixture premise: procedure is not a sweep kind, so only the unfiltered search finds it');
   const benefit = clauses.find(clause => clause.page === 2);
   const context = { path: 'retrieved', clauses: [benefit], truncated: true };
   const findings = [{ subject: 'phacoemulsification lens', quote: 'cataract surgery', clauseIds: [benefit.clauseId] }];
-  const sweep = selectSweepContext({ context, gated: clauses, findings, search, budgetBytes: 1500 });
+  const sweep = await selectSweepContext({ context, gated: clauses, findings, search, budgetBytes: 1500 });
   assert.ok(sweep.clauses.some(clause => clause.clauseId === lens.clauseId));
   assert.ok(sweep.clauses.some(clause => clause.clauseId === claims.clauseId));
   assert.ok(sweep.clauses.some(clause => clause.clauseId === benefit.clauseId), 'cited clause kept');
 });
 
-test('S2: every clause kind is reachable by retrieval, including kinds outside the checklist', () => {
+test('S2: every clause kind is reachable by retrieval, including kinds outside the checklist', async () => {
   const question = 'Is zygomycosis treatment payable?';
   const words = text => new Set(text.toLowerCase().match(/[a-z]{2,}/g));
   for (const kind of CLAUSE_KINDS) {
@@ -59,7 +60,7 @@ test('S2: every clause kind is reachable by retrieval, including kinds outside t
     const padding = Array.from({ length: 40 }, (_, index) => ({ clauseId: `p-${index}`, documentId: 'd', page: index + 1, kind: 'benefit', text: `Unrelated administrative wording number ${index}.`, sectionPath: [] }));
     const gated = [...padding, target];
     const search = ({ query, kinds }) => gated.filter(clause => (!kinds || kinds.includes(clause.kind)) && [...words(query)].some(word => words(clause.text).has(word)));
-    const context = selectContext({ gated, checklist: checklistFor(question), question, search, budgetBytes: 600 });
+    const context = await selectContext({ gated, checklist: checklistFor(question), question, search, budgetBytes: 600 });
     assert.equal(context.path, 'retrieved');
     assert.ok(context.clauses.some(clause => clause.clauseId === target.clauseId), `${kind} clause must be reachable`);
   }
