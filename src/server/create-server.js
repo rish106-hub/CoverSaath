@@ -163,7 +163,9 @@ export function createApiServer({
   const getBackend = () => {
     backendPromise ??= buildBackend().catch(error => {
       backendPromise = null;
-      throw error;
+      // A backend that cannot be built (for example a missing DATABASE_URL) is a server condition,
+      // not a client error. The cause stays server-side.
+      throw Object.assign(new Error('The service is not available.'), { code: 'BACKEND_UNAVAILABLE', statusCode: 503, cause: error });
     });
     return backendPromise;
   };

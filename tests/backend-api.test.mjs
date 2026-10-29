@@ -1,9 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { testTempRoot as tmpdir } from './support/temp-root.mjs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { createDatabase } from '../src/backend/database/postgres/db.js';
+import { createPostgresPool } from '../src/backend/database/postgres/pool.js';
 import { createBackendServices } from '../src/backend/services/index.js';
 import { createApiServer } from '../src/server/server.js';
 
@@ -32,16 +31,14 @@ async function start(database) {
 
 const stop = server => new Promise(resolve => server.close(resolve));
 
-test('versioned backend persists cases and queued analysis across restart', async t => {
-  const directory = mkdtempSync(join(tmpdir(), 'knowvia-backend-api-'));
-  const databasePath = join(directory, 'knowvia.sqlite');
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-
-  let database = openDatabase({ path: databasePath });
+test('versioned backend persists cases and queued analysis across restart', postgresTestOptions(), async t => {
+  const fresh = await freshDatabase(t);
+  let database = fresh.db;
   let app = await start(database);
+  let restarted = null;
   t.after(async () => {
     if (app?.server?.listening) await stop(app.server);
-    try { database.close(); } catch {}
+    await restarted?.close().catch(() => {});
   });
 
   const health = await app.call('/api/v1/health');
@@ -87,13 +84,13 @@ test('versioned backend persists cases and queued analysis across restart', asyn
   assert.equal((await app.call(`/api/v1/households/${otherIdentity.data.household.id}`, { token: otherToken })).status, 200);
 
   const setup = createBackendServices(database, { env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken } });
-  const householdViewer = setup.households.createAdult({ displayName: 'Synthetic household viewer' });
-  setup.households.addRole({
+  const householdViewer = await setup.households.createAdult({ displayName: 'Synthetic household viewer' });
+  await setup.households.addRole({
     householdId: identity.data.household.id,
     adultUserId: householdViewer.id,
     role: 'viewer',
   });
-  const viewerToken = setup.auth.issueSession({ adultUserId: householdViewer.id }).token;
+  const viewerToken = (await setup.auth.issueSession({ adultUserId: householdViewer.id })).token;
 
   const emergency = await app.call('/api/v1/cases', {
     method: 'POST',
@@ -238,7 +235,7 @@ test('versioned backend persists cases and queued analysis across restart', asyn
     },
   });
   assert.equal(sourceGrant.status, 201);
-  database.prepare(`INSERT INTO document_uploads
+  await database.prepare(`INSERT INTO document_uploads
     (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
      original_filename, storage_path, content_sha256, mime_type, byte_size, malware_status,
      encryption_status, lifecycle_state, uploaded_at)
@@ -289,9 +286,10 @@ test('versioned backend persists cases and queued analysis across restart', asyn
   const otherTenantJob = await app.call(`/api/v1/jobs/${analysis.data.id}`, { token: otherIdentity.data.session.token });
   assert.equal(otherTenantJob.status, 404);
 
+  // Restart: a new server on a new connection pool to the same database.
   await stop(app.server);
-  database.close();
-  database = openDatabase({ path: databasePath });
+  restarted = createDatabase(createPostgresPool({ connectionString: fresh.handle.url, max: 4 }));
+  database = restarted;
   app = await start(database);
 
   const persistedCase = await app.call(`/api/v1/cases/${emergency.data.id}`, { token });
@@ -339,5 +337,4 @@ test('versioned backend persists cases and queued analysis across restart', asyn
   assert.equal((await app.call('/api/v1/integrations', { token: otherToken })).status, 401);
 
   await stop(app.server);
-  database.close();
 });

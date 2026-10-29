@@ -7,6 +7,7 @@ import { createBackendServices, createCoverageAnalysisPort } from '../src/backen
 import { createGeminiCoverageRegistryFactory, createMemoryBudget, createModelGateway } from '../src/features/ai-analysis/index.js';
 import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
+import { postgresTestOptions } from './support/pg.mjs';
 import { liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
 const gatewayInput = () => ({
@@ -32,7 +33,7 @@ test('R3-1: a call refused before dispatch releases its reservation; a dispatche
   assert.equal(dispatchedBudget.snapshot().reservedUsd, 0.01);
 });
 
-test('R3-1: repeated pre-dispatch consent denials do not exhaust the project budget', async t => {
+test('R3-1: repeated pre-dispatch consent denials do not exhaust the project budget', postgresTestOptions(), async t => {
   const app = await startLiveServer(t);
   const scenario = await setupLiveCase(app, { pageText: 'Synthetic schedule: room rent limit is 5000.' });
   const services = createBackendServices(app.database);
@@ -51,7 +52,7 @@ test('R3-1: repeated pre-dispatch consent denials do not exhaust the project bud
     const service = createPersistentCoverageAnalysisService({ port, liveRegistry: factory(), maxConcurrency: 1 });
     const { job } = await service.createAnalysisRun({ caseId: scenario.caseId, consentGrantId: scenario.coverageConsentId, executionMode: 'live', modelPermission: true, idempotencyKey: key });
     await service.runUntilSettled(job.id);
-    return app.database.prepare('SELECT last_error_code FROM workflow_tasks WHERE workflow_run_id = ?').all(job.id).map(row => row.last_error_code);
+    return (await app.database.prepare('SELECT last_error_code FROM workflow_tasks WHERE workflow_run_id = ?').all(job.id)).map(row => row.last_error_code);
   };
 
   for (const key of ['r3-denied-1', 'r3-denied-2', 'r3-denied-3']) {

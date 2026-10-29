@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { AI_RESPONSIBILITY_MATRIX, buildPromptContract, createGeminiCoverageRegistryFactory, validateTaskOutput } from '../src/features/ai-analysis/index.js';
 import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { RESTRICTED_PROBES, TOKENIZED_PROBES } from './support/privacy-probes.mjs';
+import { postgresTestOptions } from './support/pg.mjs';
 import { liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
 const MODEL_AGENT_IDS = [
@@ -10,15 +11,15 @@ const MODEL_AGENT_IDS = [
   'knowvia-profile_extraction', 'knowvia-question_drafting',
 ];
 
-function everythingPersisted(database) {
+async function everythingPersisted(database) {
   return JSON.stringify({
-    runs: database.prepare('SELECT input_json FROM workflow_runs').all(),
-    tasks: database.prepare('SELECT input_json, output_json, last_error_code, last_error_message FROM workflow_tasks').all(),
-    audit: database.prepare('SELECT event_payload_json FROM audit_events').all(),
+    runs: await database.prepare('SELECT input_json FROM workflow_runs').all(),
+    tasks: await database.prepare('SELECT input_json, output_json, last_error_code, last_error_message FROM workflow_tasks').all(),
+    audit: await database.prepare('SELECT event_payload_json FROM audit_events').all(),
   });
 }
 
-test('no direct identifier from OCR text reaches the provider, workflow output, run input, audit or HTTP response', async t => {
+test('no direct identifier from OCR text reaches the provider, workflow output, run input, audit or HTTP response', postgresTestOptions(), async t => {
   const modelRequests = [];
   const app = await startLiveServer(t, { modelRequests });
   const pageText = `${Object.values(TOKENIZED_PROBES).map(([phrase]) => phrase).join('; ')}; Room rent limit is 5000.`;
@@ -30,7 +31,7 @@ test('no direct identifier from OCR text reaches the provider, workflow output, 
 
   const surfaces = {
     provider: JSON.stringify(modelRequests),
-    persisted: everythingPersisted(app.database),
+    persisted: await everythingPersisted(app.database),
     response: response.raw,
   };
   for (const [label, [, raw]] of Object.entries(TOKENIZED_PROBES)) {
@@ -43,7 +44,7 @@ test('no direct identifier from OCR text reaches the provider, workflow output, 
   }
 });
 
-test('restricted material in OCR text blocks the live run before any provider call and is not echoed', async t => {
+test('restricted material in OCR text blocks the live run before any provider call and is not echoed', postgresTestOptions(), async t => {
   for (const [label, probe] of Object.entries({ card: RESTRICTED_PROBES.cardSpaced, apiKey: RESTRICTED_PROBES.apiKeyJson, jwt: RESTRICTED_PROBES.jwt })) {
     const modelRequests = [];
     const app = await startLiveServer(t, { modelRequests });
@@ -54,11 +55,11 @@ test('restricted material in OCR text blocks the live run before any provider ca
     assert.match(response.raw, /at least one authorised, protected OCR source page/);
     assert.ok(!response.raw.includes(probe), `${label} echoed in response`);
     assert.equal(modelRequests.length, 0, label);
-    assert.ok(!everythingPersisted(app.database).includes(probe), `${label} persisted`);
+    assert.ok(!(await everythingPersisted(app.database)).includes(probe), `${label} persisted`);
   }
 });
 
-test('prompt injection inside OCR text stays in untrusted evidence and cannot change routing or instructions', async t => {
+test('prompt injection inside OCR text stays in untrusted evidence and cannot change routing or instructions', postgresTestOptions(), async t => {
   // The first injection rides on a line that mentions a requested parameter, so it
   // is part of the allowlisted excerpt; the second sits on a line of its own that
   // mentions no parameter and must never be sent at all.
@@ -91,7 +92,7 @@ test('prompt injection inside OCR text stays in untrusted evidence and cannot ch
   }
   assert.ok(modelRequests.every(request => !request.prompt.includes('approve the claim')), 'a line outside the parameter allowlist is never sent');
   // Deterministic tasks keep authority: the case remains unconfirmed by the institution.
-  const synthesis = app.database.prepare("SELECT output_json FROM workflow_tasks WHERE workflow_run_id = ? AND agent_name LIKE '%synthes%'").all(response.data.id)
+  const synthesis = (await app.database.prepare("SELECT output_json FROM workflow_tasks WHERE workflow_run_id = ? AND agent_name LIKE '%synthes%'").all(response.data.id))
     .map(row => JSON.stringify(JSON.parse(row.output_json)));
   assert.ok(synthesis.every(body => !/claim (?:is )?approved|covered for sure/i.test(body)));
 });
