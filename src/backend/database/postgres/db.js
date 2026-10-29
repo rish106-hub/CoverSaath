@@ -6,7 +6,7 @@
 //   db.run(sql, params)    -> { changes }               (was .run().changes)
 //   db.transaction(fn, { locks }) -> result of fn
 //   db.lock(namespace, key)        pg_advisory_xact_lock; throws outside a transaction
-//   db.inTransaction               (was DatabaseSync.isTransaction)
+//   db.inTransaction               true while a transaction is open
 //   db.close()
 //
 // SQL uses `?` placeholders (converted to $n). The transaction's client travels in
@@ -285,7 +285,7 @@ export function createDatabase(pool) {
   return Object.freeze(db);
 }
 
-/** True for an interface built by createDatabase (as opposed to a node:sqlite DatabaseSync). */
+/** True for an interface built by createDatabase (as opposed to any other database handle). */
 export function isDatabaseInterface(value) {
   return Boolean(value && value[BRAND] === true);
 }

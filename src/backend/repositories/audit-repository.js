@@ -20,12 +20,13 @@ const INSERT_EVENT = `
      event_payload_json, previous_event_hash, event_hash, occurred_at)
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-// Appends to a per-household hash chain. On the node:sqlite runtime the single writer serialises
-// appends and append() returns the event. On the PostgreSQL interface (S3.2) append() returns a
+// Appends to a per-household hash chain. On the PostgreSQL interface (the runtime) append() returns a
 // Promise: it runs in a transaction (a savepoint inside a caller's transaction) that holds the
 // household advisory lock while it reads the previous hash and inserts, so concurrent appends
 // cannot fork the chain. Callers that also lock rows must take the household lock first (lock
 // order, design section 3); the advisory lock is re-entrant within one transaction.
+// A database that is not a PostgreSQL interface takes a legacy synchronous path that only a test
+// exercises (tests/audit-chain-concurrency.test.mjs); S3.3 removes it with the SQLite migrations.
 export class AuditRepository {
   constructor(database, { clock = () => new Date() } = {}) {
     this.database = database;

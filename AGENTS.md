@@ -44,7 +44,7 @@ npm run db:init
 npm run dev
 git diff --check
 ```
-Runtime: Node 25 or later and npm. CI uses Node 26. SQLite is still the application runtime. PostgreSQL schema and tests exist under ADR 0004. No deployment target exists.
+Runtime: Node 25 or later and npm. CI uses Node 26. PostgreSQL is the application runtime (Supabase, ADR 0011). Tests need `TEST_DATABASE_URL` (a local PostgreSQL 17); set `REQUIRE_POSTGRES=1` to fail instead of skip. No deployment target exists yet.
 
 ## Working loop
 1. Restate the user outcome, scope, non-goals and acceptance criteria.

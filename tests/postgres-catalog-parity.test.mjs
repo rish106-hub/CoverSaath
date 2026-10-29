@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
-import { criticalIndexes, criticalTriggers, expectedTables, expectedViews } from '../src/backend/database/database.js';
+import {
+  criticalIndexes, criticalTriggers, expectedTables, expectedViews, openSqliteReference,
+} from './support/sqlite-reference.mjs';
 import { postgresTestOptions, useTestDatabase } from './support/postgres.mjs';
 
 const TYPE_MAP = { TEXT: 'text', INTEGER: 'bigint', BLOB: 'bytea' };
@@ -146,7 +147,7 @@ const sortKey = value => JSON.stringify(value);
 const sortedList = list => [...list].sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
 
 test('PostgreSQL catalog equals the final SQLite catalog (tables, columns, keys, indexes, views, triggers)', postgresTestOptions(), async t => {
-  const sqlite = openDatabase({ path: ':memory:' });
+  const sqlite = openSqliteReference();
   t.after(() => sqlite.close());
   const { pool } = await useTestDatabase(t);
   const expected = sqliteCatalog(sqlite);
@@ -195,7 +196,7 @@ test('PostgreSQL catalog equals the final SQLite catalog (tables, columns, keys,
 });
 
 test('seed rows equal the SQLite seed rows', postgresTestOptions(), async t => {
-  const sqlite = openDatabase({ path: ':memory:' });
+  const sqlite = openSqliteReference();
   t.after(() => sqlite.close());
   const { pool } = await useTestDatabase(t);
   const rules = 'SELECT extraction_method, resolution_state, transition_authority, requires_accepted FROM coverage_parameter_observation_rules ORDER BY 1, 2';
