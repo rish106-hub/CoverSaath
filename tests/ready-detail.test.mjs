@@ -1,9 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { testTempRoot as tmpdir } from './support/temp-root.mjs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createBackendServices } from '../src/backend/services/index.js';
 import { createApiServer } from '../src/server/server.js';
 import { handleV1BackendRoute } from '../src/server/routes/v1-backend-routes.js';
@@ -13,13 +10,8 @@ import { isLoopbackRequest } from '../src/shared/http/index.js';
 // guard may see schema detail; anyone else gets { status, checks } with booleans only.
 const env = { KNOWVIA_BOOTSTRAP_TOKEN: 'knowvia-test-bootstrap-token-00001' };
 
-function backend(t) {
-  const directory = mkdtempSync(join(tmpdir(), 'knowvia-ready-'));
-  const database = openDatabase({ path: join(directory, 'knowvia.sqlite') });
-  t.after(() => {
-    try { database.close(); } catch {}
-    rmSync(directory, { recursive: true, force: true });
-  });
+async function backend(t) {
+  const { db: database } = await freshDatabase(t);
   return { database, services: createBackendServices(database, { env }) };
 }
 
@@ -31,7 +23,7 @@ const fakeRequest = ({ remoteAddress, host }) => ({
 });
 
 async function ready(t, req) {
-  const { database, services } = backend(t);
+  const { database, services } = await backend(t);
   return handleV1BackendRoute({ req, url: new URL(req.url, 'http://127.0.0.1:8787'), database, services, integrations: {}, config: {} });
 }
 
@@ -42,7 +34,7 @@ function assertNoDetail(result) {
   assert.deepEqual(result.body.checks, { database: true, authentication: true });
 }
 
-test('a non-loopback caller gets readiness booleans and no schema detail', async t => {
+test('a non-loopback caller gets readiness booleans and no schema detail', postgresTestOptions(), async t => {
   // A public peer that forwards a local-looking Host header (as a misconfigured proxy might).
   assertNoDetail(await ready(t, fakeRequest({ remoteAddress: '203.0.113.7', host: '127.0.0.1:8787' })));
   assertNoDetail(await ready(t, fakeRequest({ remoteAddress: '::ffff:198.51.100.4', host: 'localhost:8787' })));
@@ -60,8 +52,8 @@ test('a non-loopback caller gets readiness booleans and no schema detail', async
   assertNoDetail(await ready(t, noSocket));
 });
 
-test('a proxied request through the real server gets no schema detail', async t => {
-  const { database } = backend(t);
+test('a proxied request through the real server gets no schema detail', postgresTestOptions(), async t => {
+  const { database } = await backend(t);
   const server = createApiServer({ database, env });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
@@ -70,8 +62,8 @@ test('a proxied request through the real server gets no schema detail', async t 
   assert.deepEqual(await response.json(), { status: 'ready', checks: { database: true, authentication: true } });
 });
 
-test('a not-ready response to a non-loopback caller still carries no detail', async t => {
-  const { database } = backend(t);
+test('a not-ready response to a non-loopback caller still carries no detail', postgresTestOptions(), async t => {
+  const { database } = await backend(t);
   const services = createBackendServices(database, { env: {} });
   const req = fakeRequest({ remoteAddress: '203.0.113.7', host: '127.0.0.1:8787' });
   const result = await handleV1BackendRoute({ req, url: new URL(req.url, 'http://127.0.0.1:8787'), database, services, integrations: {}, config: {} });
@@ -79,8 +71,8 @@ test('a not-ready response to a non-loopback caller still carries no detail', as
   assert.deepEqual(result.body, { status: 'not_ready', checks: { database: true, authentication: false } });
 });
 
-test('a loopback caller through the real server gets the schema detail', async t => {
-  const { database } = backend(t);
+test('a loopback caller through the real server gets the schema detail', postgresTestOptions(), async t => {
+  const { database } = await backend(t);
   const server = createApiServer({ database, env });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));

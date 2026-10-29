@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 import { assertHandoffContract } from '../src/features/decision-catalogue/index.js';
 
@@ -98,7 +98,7 @@ async function eventually(check, { timeoutMs = 3000 } = {}) {
 
 async function startApp(t) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-multidoc-'));
-  const database = openDatabase({ path: join(directory, 'app.sqlite') });
+  const { db: database } = await freshDatabase(t);
   const requests = [];
   const env = {
     KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken,
@@ -117,7 +117,6 @@ async function startApp(t) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
-    database.close();
     rmSync(directory, { recursive: true, force: true });
   });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -182,7 +181,7 @@ async function household(app) {
 const ask = (app, s, body) => app.call(`/api/v1/cases/${s.caseId}/questions`, { method: 'POST', token: s.token, headers: { 'Idempotency-Key': randomUUID() }, body });
 const catalogue = (app, s, answerId, query = '') => app.call(`/api/v1/cases/${s.caseId}/decision-catalogue?answerId=${encodeURIComponent(answerId)}${query}`, { token: s.token });
 
-test('two uploaded policies: separate candidate policies, model values only as candidates, a valid handoff, revocation erases', async t => {
+test('two uploaded policies: separate candidate policies, model values only as candidates, a valid handoff, revocation erases', postgresTestOptions(), async t => {
   const app = await startApp(t);
   const s = await household(app);
 
@@ -230,5 +229,5 @@ test('two uploaded policies: separate candidate policies, model values only as c
   assert.ok([200, 201, 204].includes(revoked.status));
   const after = await catalogue(app, s, answered.data.answerId);
   assert.equal(after.status, 404);
-  assert.equal(app.database.prepare('SELECT count(*) AS n FROM policy_clauses WHERE document_id IN (?, ?)').get(...s.documentIds).n, 0, 'derived clauses are erased');
+  assert.equal((await app.database.prepare('SELECT count(*) AS n FROM policy_clauses WHERE document_id IN (?, ?)').get(...s.documentIds)).n, 0, 'derived clauses are erased');
 });
