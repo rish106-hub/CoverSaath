@@ -154,6 +154,14 @@ export function createPersistentCoverageAnalysisService({
           } catch (error) {
             // The lease moved to another worker: this result is stale and that worker owns the task.
             if (error?.code === 'TASK_LEASE_LOST') continue;
+            // A source lost its consent between the unlocked re-check above and the locked one
+            // inside recordModelObservations. Failing only this task would leave the run going
+            // with excerpts the consent no longer covers: stop it on the revocation path, which
+            // erases its derived data, and discard every other in-flight result.
+            if (error?.code === 'CONSENT_SCOPE_REQUIRED') {
+              await port.stopForRevocation(runId, { reason: 'source_consent_not_current', reasonCode: error.reasonCode ?? 'COMMIT_RECHECK_ERROR' });
+              return port.getJob(runId);
+            }
             outcome.error = Object.assign(new Error('Model-extracted values could not be recorded as parameter evidence.'), {
               code: error?.code === 'PARAMETER_RECORDS_NOT_CONFIGURED' ? error.code : 'PARAMETER_OBSERVATION_FAILED',
             });
