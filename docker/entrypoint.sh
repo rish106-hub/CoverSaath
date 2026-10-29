@@ -6,14 +6,17 @@ set -eu
 mkdir -p "${DOCUMENT_STORAGE_PATH:-/data/documents}"
 chown -R node:node /data
 
-clamd --config-file=/app/docker/clamd.conf &
-clamd_pid=$!
+clamd_pid=""
+if [ "${DOCUMENT_SCAN_MODE:-disabled}" = "clamd" ]; then
+  clamd --config-file=/app/docker/clamd.conf &
+  clamd_pid=$!
+fi
 runuser -u node -- node /app/src/server/server.js &
 node_pid=$!
 
-trap 'kill "$clamd_pid" "$node_pid" 2>/dev/null || true' TERM INT
+trap 'kill $clamd_pid "$node_pid" 2>/dev/null || true' TERM INT
 wait -n || true
 status=$?
-kill "$clamd_pid" "$node_pid" 2>/dev/null || true
+kill $clamd_pid "$node_pid" 2>/dev/null || true
 wait || true
 exit "$status"

@@ -1,6 +1,7 @@
 # CoverSaath API (Fly app knowvia-api). Nothing is deployed until `fly deploy` is run.
 app = "knowvia-api"
-primary_region = "bom"
+# Same region as the Supabase database (ADR 0011). Fly has no Mumbai region.
+primary_region = "syd"
 
 [build]
 
@@ -8,9 +9,9 @@ primary_region = "bom"
   HOST = "0.0.0.0"
   PORT = "8080"
   DOCUMENT_STORAGE_PATH = "/data/documents"
-  DOCUMENT_SCAN_MODE = "clamd"
-  CLAMD_HOST = "127.0.0.1"
-  CLAMD_PORT = "3310"
+  # Scanner off: every upload stays quarantined. To enable it, use a 2 GB machine and set
+  # DOCUMENT_SCAN_MODE = "clamd", CLAMD_HOST = "127.0.0.1".
+  DOCUMENT_SCAN_MODE = "disabled"
   DATABASE_SSL_CA_PATH = "/app/docker/supabase-ca.crt"
   PUBLIC_HOSTS = "knowvia-api.fly.dev"
   TRUST_FLY_CLIENT_IP = "true"
@@ -41,10 +42,10 @@ primary_region = "bom"
       Host = "knowvia-api.fly.dev"
 
 # One machine: the encrypted document volume attaches to a single machine, and run claims and rate
-# limits are per process. clamd needs about 1 GB for its signature database.
+# limits are per process. clamd needs about 1 GB or more, so it stays off on this size.
 [[vm]]
-  size = "shared-cpu-2x"
-  memory = "2gb"
+  size = "shared-cpu-1x"
+  memory = "512mb"
 
 [[mounts]]
   source = "coversaath_data"
