@@ -28,8 +28,8 @@ const MARKER = 'zebrafinch quokka synthetic';
 const PAGE_TEXT = `Synthetic schedule: room rent limit is 5000 and ${MARKER} applies.`;
 const digest = value => createHash('sha256').update(value).digest('hex');
 
-// Policy structuring and clause stores belong to other repositories (not yet on PostgreSQL in
-// this package); these stand-ins record that revocation asked them to erase.
+// Policy structuring and clause stores belong to other repositories (covered by their own tests);
+// these stand-ins record that revocation asked them to erase.
 function derivedStoreStubs() {
   const calls = { structuring: [], clauses: [] };
   return {
@@ -307,10 +307,19 @@ test('a failure in a derived store rolls the whole revocation back', pgOptions, 
   assert.equal((await db.one('SELECT revoked_at FROM consent_grants WHERE id = ?', [DOCUMENT_GRANT])).revoked_at, null);
   assert.equal((await db.one('SELECT count(*) AS count FROM consent_revocations')).count, 0);
   assert.ok((await db.one('SELECT input_json FROM workflow_runs WHERE id = ?', [RUN])).input_json.includes(MARKER));
-  // Without the derived-store repositories the erasure fails closed instead of skipping them.
-  const unconfigured = new ConsentRepository(db, { clock: () => new Date(at), audit, coverageParameters });
-  await assert.rejects(revoke(unconfigured), { code: 'ERASURE_NOT_CONFIGURED' });
-  assert.equal((await db.one('SELECT count(*) AS count FROM consent_revocations')).count, 0);
+  // Without injection both derived stores are built on the database: erasure always has a path.
+  const defaults = new ConsentRepository(db, { clock: () => new Date(at), audit, coverageParameters });
+  assert.ok(defaults.policyStructuring, 'policy structuring erasure is built by default');
+  assert.ok(defaults.clauses, 'policy evidence erasure is built by default');
+  // A derived store that is missing (it could not be built) fails the erasure closed instead of skipping it.
+  for (const missing of ['policyStructuring', 'clauses']) {
+    const unconfigured = new ConsentRepository(db, { clock: () => new Date(at), audit, coverageParameters });
+    unconfigured[missing] = null;
+    await assert.rejects(revoke(unconfigured), { code: 'ERASURE_NOT_CONFIGURED' }, missing);
+    assert.equal((await db.one('SELECT count(*) AS count FROM consent_revocations')).count, 0);
+    assert.equal((await db.one('SELECT revoked_at FROM consent_grants WHERE id = ?', [DOCUMENT_GRANT])).revoked_at, null);
+    assert.ok((await db.one('SELECT input_json FROM workflow_runs WHERE id = ?', [RUN])).input_json.includes(MARKER));
+  }
 });
 
 test('double revoke, sequential and concurrent, never raises 23505 and erases once', pgOptions, async t => {

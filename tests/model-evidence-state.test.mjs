@@ -14,8 +14,8 @@ import { setupLiveCase, startLiveServer } from './support/live-analysis-scenario
 
 const MODEL_TASK_KINDS = ['profile_intake', 'group_cover_analysis', 'personal_cover_analysis', 'question_drafting', 'bounded_synthesis'];
 
-function taskOutputs(database, runId) {
-  return database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(runId)
+async function taskOutputs(database, runId) {
+  return (await database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(runId))
     .map(row => ({ taskKind: row.task_kind, envelope: JSON.parse(row.output_json) }));
 }
 
@@ -31,7 +31,7 @@ test('live HTTP run: no model-derived fact or envelope is Proven or document-bac
   assert.equal(run.data.modelUsage.calls, 5);
   assert.equal(modelRequests.length, 5);
 
-  const outputs = taskOutputs(app.database, run.data.id);
+  const outputs = await taskOutputs(app.database, run.data.id);
   const modelEnvelopes = outputs.filter(item => item.envelope.producer.execution);
   assert.deepEqual(modelEnvelopes.map(item => item.taskKind).sort(), [...MODEL_TASK_KINDS].sort());
   for (const { taskKind, envelope } of modelEnvelopes) {
@@ -67,7 +67,7 @@ test('live HTTP run: no model-derived fact or envelope is Proven or document-bac
   assert.equal(release.status, 'blocked');
   assert.equal(release.externalActionsAuthorized, false);
   assert.deepEqual(release.blockers, synthesis.blockers);
-  assert.equal(app.database.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(run.data.id).status, 'blocked');
+  assert.equal((await app.database.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(run.data.id)).status, 'blocked');
 });
 
 const personalPayload = assertionStatus => ({
