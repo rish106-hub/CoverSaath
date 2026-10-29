@@ -1,0 +1,21 @@
+docker/entrypoint.sh
+  s_692c874d7b8ff3::t_5e98158e98104d 9-13,17,20
+fly.toml
+  s_692c874d7b8ff3::t_13385adab3bc98 3-4,12-14,45,47-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "015d5f6f3af04371aefd15ffe58fe1dfe8633d6a",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
