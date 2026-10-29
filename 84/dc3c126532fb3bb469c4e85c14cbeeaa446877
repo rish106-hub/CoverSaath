@@ -1,0 +1,103 @@
+docs/runbooks/fly-deploy.md
+  s_692c874d7b8ff3::t_4ba138bde27860 1-48
+CLAUDE.md
+  s_855e84efa46c3b::t_421019f23fe40e 1
+.gitignore
+  s_855e84efa46c3b::t_2adeead56db58f 27-28,30-39
+README.md
+  s_855e84efa46c3b::t_a0e881cdbb6ecd 1,3-5,7,9,11,13,15-19,21,23-35,38,40-48,51-57,59-61,64-65,68-83,85-87,90-104,107,109,112-113,117,119,121,123,125-127,132-139,141,143
+.gitleaks.toml
+  s_855e84efa46c3b::t_421019f23fe40e 1-16,18
+  s_855e84efa46c3b::t_5c41b99060bc5c 17
+docs/exec-plans/active/demo-ui.md
+  s_855e84efa46c3b::t_0e4953156026c4 1-88
+AI.md
+  s_855e84efa46c3b::t_5c41b99060bc5c 76
+  s_855e84efa46c3b::t_6a422ae0c20d0d 1-75,77-85
+AGENTS.md
+  s_855e84efa46c3b::t_421019f23fe40e 11
+docs/exec-plans/active/policy-structuring-hardening.xml
+  s_bc964858720a51::t_3582f8f272cee5 1-224
+docs/iterations/block3-final-report.md
+  s_e8a7e264bec9ca::t_80314951b9d2e6 1-55
+docs/architecture/evidence-first-reasoning.md
+  s_59b53624ce42d3::t_6908b84714e699 1-277
+docs/exec-plans/active/block5-merge-and-commit-plan.xml
+  s_73f848dc1eb035::t_896a29a4d32c6a 1-368
+docs/exec-plans/active/retrieval-hardening.xml
+  s_6e15b274ff2b2b::t_2f72b1bec12cf6 1-192
+working/distributed-processing-migration.xml
+  s_7ad4d9cf37fd27::t_968bc7147f9c75 1-327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "84dc3c126532fb3bb469c4e85c14cbeeaa446877",
+  "prompts": {},
+  "sessions": {
+    "s_59b53624ce42d3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8b7cc699-bf23-476c-92af-086278731d48",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_6e15b274ff2b2b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "776ac7e6-ef3e-442c-9e87-b23bf54552c1",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_73f848dc1eb035": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "52d2e35a-59b5-4fb3-87c5-cbc29cc29443",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_7ad4d9cf37fd27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a16ddf-60f6-7933-a365-cd617a4caf0f",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_855e84efa46c3b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c1fd1e2b-a092-4ef0-9e46-139a5f2e40b4",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_bc964858720a51": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d7e3662a-825e-4aef-bdc0-aaf5250a235e",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_e8a7e264bec9ca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "013a202c-046a-4155-a656-174c664d7bb5",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
