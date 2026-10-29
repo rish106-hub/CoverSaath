@@ -9,8 +9,7 @@ This is not an insurance adviser, claims platform, or production-ready service. 
 ## Current boundary
 
 - Node 25 or later. CI uses Node 26.
-- SQLite is the application runtime.
-- PostgreSQL schema and tests exist under ADR 0004.
+- PostgreSQL is the application runtime (Supabase, ADR 0011). Tests need `TEST_DATABASE_URL`.
 - The API listens on `127.0.0.1:8787`.
 - Provider integrations fail closed and default off.
 - No deployment target exists.
@@ -98,8 +97,7 @@ See [AGENTS.md](AGENTS.md), [security architecture](docs/architecture/security.m
 
 ## Known limits
 
-- SQLite remains a single-machine runtime.
-- PostgreSQL is not the application runtime yet.
+- The SQLite runtime is removed from `src/`; its frozen migration files remain only as a test reference until S3.3.
 - Authentication is local prototype authentication, not production identity.
 - Live provider journeys and production deployment remain unverified.
 - Consent and privacy-notice wording requires legal review.

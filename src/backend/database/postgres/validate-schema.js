@@ -1,6 +1,6 @@
 import {
   criticalIndexes, criticalTriggers, expectedTables, expectedViews, requiredColumns,
-} from '../database.js';
+} from './schema-expectations.js';
 
 const REQUIRED_COLLATION = 'C';
 const SAFE_LOCALE_PROVIDERS = new Set(['b', 'c']);
@@ -65,7 +65,7 @@ async function foreignKeyErrors(pool) {
   return errors;
 }
 
-// Same shape as SQLite validateSchema (missing*, foreignKeyErrors, migrationCount, valid) plus the
+// Same shape as the retired SQLite validateSchema (missing*, foreignKeyErrors, migrationCount, valid) plus the
 // PostgreSQL checks: database collation must be C (ADR 0004, D4) and every critical trigger must be
 // enabled (a disabled trigger would silently stop enforcing its invariant).
 export async function validatePostgresSchema(pool) {

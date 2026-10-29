@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import { runMigrations } from '../src/backend/database/database.js';
+import { runMigrations } from './support/sqlite-reference.mjs';
 import { householdLock } from '../src/backend/database/postgres/locks.js';
 import { AuditRepository } from '../src/backend/repositories/audit-repository.js';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';

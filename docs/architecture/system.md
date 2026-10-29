@@ -18,9 +18,9 @@ Pipeline block map and Block 1 design: [pipeline-blocks.md](pipeline-blocks.md),
 |---|---|
 | `server/` | Node `http` server (`create-server.js`), config (`config.js`), `routes/v1-backend-routes.js` (all `/api/v1` routes and `errorResponse`), `policies/read-response-policy.js` (consent-checked, redacted read DTOs). |
 | `shared/http/` | Framework-free request parsing (16 KiB JSON body cap), security headers, Host/Origin check, rate limiter. `server/http/*` re-exports it. |
-| `backend/database/` | `node:sqlite` open, SQL migrations 001-006, `validateSchema`. See [data.md](data.md). |
+| `backend/database/` | Async PostgreSQL interface (`postgres/`), PostgreSQL migrations, `validatePostgresSchema`. Frozen SQLite migrations remain as a test reference until S3.3. See [data.md](data.md). |
 | `backend/repositories/` | Persistence per aggregate: household, auth, consent, case, workflow, OCR, evidence, coverage parameters, audit. |
-| `backend/services/` | `backend-services.js` composes repositories; `tenant-access-service.js` authenticates and checks household ownership; `coverage-analysis-port.js` is the SQLite port the analysis runtime uses (source selection, dispatch check, revocation stop). |
+| `backend/services/` | `backend-services.js` composes repositories; `tenant-access-service.js` authenticates and checks household ownership; `coverage-analysis-port.js` is the PostgreSQL port the analysis runtime uses (source selection, dispatch check, revocation stop). |
 | `backend/state/` | Case state machine (`case-state-machine.js`). |
 | `features/coverage-analysis/` | Workflow definition (v6), task registry, envelopes, parameter registry (`policy-parameters/v1`), persistent service and fixture runtime. |
 | `features/ai-analysis/` | Model eligibility matrix, prompts, output schemas, privacy evidence gate, model gateway, Gemini runtime. |
@@ -72,11 +72,11 @@ Not covered by the check:
 
 ## Runtime and deployment
 
-- Node `>=25.0.0` (`package.json` engines; CI uses Node 26), `node:sqlite`, `ai` and `@ai-sdk/google`. Node 25 is the floor because the PDF inspection child must deny network access.
+- Node `>=25.0.0` (`package.json` engines; CI uses Node 26), `pg`, `ai` and `@ai-sdk/google`. Node 25 is the floor because the PDF inspection child must deny network access.
 - One backend process. `src/server/server.js` listens on `127.0.0.1:8787` only. No active UI or frontend build exists.
-- Storage is one local SQLite file. Analysis work runs inside the API process; there is no queue, worker fleet, cache or container.
+- Storage is PostgreSQL (Supabase, ADR 0011). Analysis work runs inside the API process; there is no queue, worker fleet, cache or container.
 - No deployment target, infrastructure code, hosting, observability stack or capacity numbers exist. CI (`.github/workflows/`) only checks and scans. Scale claims are unsupported (`AGENTS.md`).
-- PostgreSQL schema migrations, validation, a migration runner and CI tests exist under ADR 0004. The application runtime still uses SQLite until S3.2 replaces the synchronous database layer.
+- PostgreSQL schema migrations, validation, a migration runner and CI tests exist under ADR 0004. The application runtime is PostgreSQL; the SQLite runtime was removed from `src/` in S3.2 WP4.
 
 ## Decisions
 
