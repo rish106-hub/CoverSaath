@@ -1,0 +1,43 @@
+tests/policy-structuring-jobs.test.mjs
+  s_692c874d7b8ff3::t_20904b95442ace 72-74,76
+src/backend/repositories/policy-structuring-repository.js
+  s_692c874d7b8ff3::t_c3d65a070924f1 591-593,595-612,614-616,620
+src/backend/database/postgres/locks.js
+  s_692c874d7b8ff3::t_eb29fa540252de 5-6,25-27,60-62
+  s_692c874d7b8ff3::t_323025a402c9ad 63
+src/backend/services/policy-structuring-service.js
+  s_692c874d7b8ff3::t_3882ef397d89dd 10-13
+  s_692c874d7b8ff3::t_c914ad02001e4a 18-19
+  s_692c874d7b8ff3::t_15f48157ae79f7 182-191
+  s_692c874d7b8ff3::t_b58373c8309f40 71-74,78-85,90,94-103
+  s_692c874d7b8ff3::t_68c76f758bbc56 150
+  s_692c874d7b8ff3::t_b764fd8e2bf7c0 223
+  s_692c874d7b8ff3::t_2a941cbd49dcc8 89
+  s_692c874d7b8ff3::t_cb5b0fe40c0738 208
+  s_692c874d7b8ff3::t_f1b5c8eadedbf0 104
+tests/caps-and-jobs.test.mjs
+  s_692c874d7b8ff3::t_afd17f68dd8658 1-40,42-50,52-192
+  s_692c874d7b8ff3::t_b51a9ee464ae44 41
+  s_692c874d7b8ff3::t_e76081f64b4f1c 51
+src/backend/repositories/case-repository.js
+  s_692c874d7b8ff3::t_eb29fa540252de 2,12-19,31-34,37-38,40-44
+  s_692c874d7b8ff3::t_ec02aa4656a42b 52
+src/server/routes/v1-backend-routes.js
+  s_692c874d7b8ff3::t_eb29fa540252de 408-409
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8a1eafdbc92d3bfdec4d8c388cad4be84617a254",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
