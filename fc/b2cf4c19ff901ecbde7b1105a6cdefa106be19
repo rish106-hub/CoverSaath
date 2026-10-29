@@ -1,0 +1,27 @@
+tests/consent-race-fixes.test.mjs
+  s_692c874d7b8ff3::t_7a46a2b42ef444 177
+  s_692c874d7b8ff3::t_f853b7dc88da93 187,189
+  s_692c874d7b8ff3::t_cff9630e92cc4e 1-176,178-186,188,190-225
+src/server/routes/v1-backend-routes.js
+  s_692c874d7b8ff3::t_93695b9458e9c3 140-141,159
+src/backend/services/coverage-analysis-port.js
+  s_692c874d7b8ff3::t_15149486c17285 130-135,142-144,411-420,424-432,569-574,576-586,647-665
+  s_692c874d7b8ff3::t_303517058c204e 575,587
+  s_692c874d7b8ff3::t_0af65a5239d626 421-423
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fcb2cf4c19ff901ecbde7b1105a6cdefa106be19",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
