@@ -83,6 +83,28 @@ test('a CA certificate turns on verified TLS and URL ssl parameters cannot weake
   }
 });
 
+test('remote hosts always get verified TLS, local hosts none, and PGSSLMODE cannot change either', async () => {
+  const previous = process.env.PGSSLMODE;
+  process.env.PGSSLMODE = 'disable';
+  const pools = [];
+  try {
+    const make = connectionString => { const pool = createPostgresPool({ connectionString }); pools.push(pool); return pool; };
+    // A remote host asking for no TLS, or for require, still gets certificate and host verification.
+    assert.deepEqual(make('postgres://u:p@db.example.test:5432/db?sslmode=disable').options.ssl, { rejectUnauthorized: true });
+    assert.deepEqual(make('postgres://u:p@db.example.test:5432/db?sslmode=require').options.ssl, { rejectUnauthorized: true });
+    assert.deepEqual(make('postgres://u:p@db.example.test:5432/db').options.ssl, { rejectUnauthorized: true });
+    // Loopback and Unix-socket databases run without TLS, set explicitly so PGSSLMODE cannot apply.
+    for (const url of ['postgres://u@localhost/db', 'postgres://u@127.0.0.1/db', 'postgres://u@[::1]/db', 'postgres:///db?host=/tmp']) {
+      assert.equal(make(url).options.ssl, false, url);
+    }
+    process.env.PGSSLMODE = 'no-verify';
+    assert.deepEqual(make('postgres://u:p@db.example.test/db').options.ssl, { rejectUnauthorized: true });
+  } finally {
+    if (previous === undefined) delete process.env.PGSSLMODE; else process.env.PGSSLMODE = previous;
+    await Promise.all(pools.map(pool => pool.end()));
+  }
+});
+
 test('pool options come from the environment without echoing values', () => {
   assert.throws(() => postgresPoolOptionsFromEnv({}), { code: 'DATABASE_URL_REQUIRED' });
   assert.deepEqual(postgresPoolOptionsFromEnv({ DATABASE_URL: 'postgres://u:p@h/db' }), { connectionString: 'postgres://u:p@h/db' });

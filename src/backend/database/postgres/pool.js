@@ -41,6 +41,15 @@ function sanitizedConnectionString(connectionString) {
   return url.toString();
 }
 
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+// A URL with no host (a Unix socket) or a loopback host is a local development database. Every other
+// host is remote and always gets verified TLS.
+function isLocalHost(connectionString) {
+  const { hostname } = new URL(connectionString);
+  return hostname === '' || LOOPBACK_HOSTS.has(hostname);
+}
+
 // Builds the pool. It does not connect, never logs the URL and is not yet wired into the runtime.
 // `onError` receives idle-client errors (a dropped connection). The default ignores them so an idle
 // failure cannot crash the process; the next query on a fresh connection surfaces the problem.
@@ -74,8 +83,12 @@ export function createPostgresPool({
     connectionString: sanitizedConnectionString(connectionString.trim()),
     max,
     application_name: name,
-    // A supplied CA turns on TLS with full certificate and host verification; it is never relaxed.
-    ...(sslCa === undefined ? {} : { ssl: { ca: sslCa, rejectUnauthorized: true } }),
+    // TLS is always set explicitly so neither the URL nor pg's PGSSLMODE fallback can change it. A
+    // supplied CA, or any non-local host, gets full certificate and host verification, which is never
+    // relaxed. Only a loopback or Unix-socket database may run without TLS.
+    ssl: sslCa !== undefined
+      ? { ca: sslCa, rejectUnauthorized: true }
+      : isLocalHost(connectionString.trim()) ? false : { rejectUnauthorized: true },
     connectionTimeoutMillis: connectionTimeoutMs,
     options: [
       `-c statement_timeout=${statementTimeoutMs}`,
