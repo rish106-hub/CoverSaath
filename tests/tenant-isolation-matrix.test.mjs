@@ -194,8 +194,10 @@ test('createApiServer builds its database from DATABASE_URL, reports ready, and 
   await new Promise(resolve => bare.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => { bare.close(resolve); bare.closeAllConnections(); }));
   const refused = await fetch(`http://127.0.0.1:${bare.address().port}/api/v1/ready`);
-  assert.ok(refused.status >= 500);
-  assert.ok(!JSON.stringify(await refused.json()).includes('postgres://'));
+  const refusedBody = await refused.json();
+  assert.equal(refused.status, 503, JSON.stringify(refusedBody));
+  assert.deepEqual(refusedBody, { error: 'The service is not available.' });
+  assert.ok(!JSON.stringify(refusedBody).includes('postgres://'));
 });
 
 test('the analysis port refuses cross-household dispatch and keeps each household\'s audit chain', pgOptions, async t => {
