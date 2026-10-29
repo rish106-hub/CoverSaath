@@ -127,12 +127,20 @@ function validIdempotency(idempotency) {
 // `database` is the async PostgreSQL interface (src/backend/database/postgres/db.js).
 // Every database and repository call is awaited: a check that is not awaited sees
 // a pending Promise (truthy, no rows, no throw) and fails open.
-export function createCoverageAnalysisPort({ database, services, modelRecipient = GEMINI_MODEL_RECIPIENT, clock = () => new Date() }) {
+// `maxActiveRunsPerCase` (optional positive integer) caps queued and running runs per case. It is
+// enforced inside createRunWithParameters' transaction under the household lock, so concurrent
+// creations with different idempotency keys cannot all pass a count taken outside the lock.
+export function createCoverageAnalysisPort({
+  database, services, modelRecipient = GEMINI_MODEL_RECIPIENT, clock = () => new Date(), maxActiveRunsPerCase = null,
+}) {
   if (!database || !services?.cases || !services?.consents || !services?.workflows || !services?.audit) {
     throw new TypeError('Database, case, consent, workflow and audit services are required.');
   }
   if (typeof modelRecipient !== 'string' || modelRecipient.trim() === '') {
     throw new TypeError('A named model recipient is required for model-bound source selection.');
+  }
+  if (maxActiveRunsPerCase !== null && (!Number.isInteger(maxActiveRunsPerCase) || maxActiveRunsPerCase < 1)) {
+    throw new TypeError('The active run limit per case must be a positive integer.');
   }
   const loadCaseRecord = async caseId => (await database.one(`SELECT service_case.id, service_case.household_id,
       service_case.opened_by_adult_id, (${ANALYSIS_SUBJECT_SQL}) AS analysis_subject_adult_id,
@@ -400,6 +408,28 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
           const existing = await database.one(SELECT_IDEMPOTENCY_SQL, [idempotency.scope, idempotency.key]);
           if (existing) return { existing };
         }
+        // The run's own coverage_reconstruction grant is re-checked under the
+        // household lock that revocation takes. A revocation that committed after
+        // the caller's pre-check therefore creates no run: otherwise the run would
+        // carry source excerpts under a revoked grant that the revocation, having
+        // already committed, never erases. The grant must belong to the case
+        // household, or this lock would not serialise with its revocation.
+        const caseRecord = await loadCaseRecord(runInput.caseId);
+        if (!caseRecord || caseRecord.household_id !== householdId) {
+          throw Object.assign(new Error('Active subject-scoped consent is required.'), { code: 'CONSENT_REQUIRED' });
+        }
+        await requireSubjectCoverageConsent(runInput.consentGrantId, caseRecord, at);
+        const grantHousehold = await database.one('SELECT household_id FROM consent_grants WHERE id = ?', [runInput.consentGrantId]);
+        if (grantHousehold?.household_id !== caseRecord.household_id) {
+          throw Object.assign(new Error('Active subject-scoped consent is required.'), { code: 'CONSENT_REQUIRED' });
+        }
+        if (maxActiveRunsPerCase !== null) {
+          const active = await database.one(`SELECT count(*) AS count FROM workflow_runs
+            WHERE case_id = ? AND status IN ('queued', 'running')`, [runInput.caseId]);
+          if (!active || Number(active.count) >= maxActiveRunsPerCase) {
+            throw Object.assign(new Error('Active analysis capacity reached for this case.'), { code: 'ANALYSIS_CAPACITY_REACHED', statusCode: 429 });
+          }
+        }
         await requireRunSourcesEligible(runInput, at);
         const run = await services.workflows.createRun(runInput);
         const tasksByKey = new Map();
@@ -536,7 +566,25 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
       const householdId = await householdOfCase(run.case_id);
       const at = clock().toISOString();
       await database.transaction(async () => {
-        if (reason === 'source_consent_not_current') {
+        // A run whose own coverage grant is revoked keeps nothing derived under it,
+        // whatever the stop reason: its excerpts and outputs are erased in this
+        // transaction, as the revocation itself would have done for runs it saw.
+        const grantRevoked = run.consent_grant_id ? await database.one(
+          'SELECT 1 AS revoked FROM consent_grants WHERE id = ? AND revoked_at IS NOT NULL', [run.consent_grant_id],
+        ) : null;
+        if (grantRevoked) {
+          if (typeof services.consents?.eraseDerivedRunData !== 'function') {
+            throw Object.assign(new Error('Derived run data erasure is not configured.'), { code: 'ERASURE_NOT_CONFIGURED', statusCode: 503 });
+          }
+          await services.consents.eraseDerivedRunData({
+            householdId,
+            runIds: [runId],
+            caseId: run.case_id,
+            resourceType: 'workflow_run',
+            resourceId: runId,
+            at,
+          });
+        } else if (reason === 'source_consent_not_current') {
           // A source this run was built from is no longer covered by current
           // consent: its excerpts in run input and everything derived from it are
           // erased in the same transaction as the stop. Fails closed (rolls the
@@ -596,6 +644,25 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
         const run = await database.one('SELECT id, case_id, input_json FROM workflow_runs WHERE id = ?', [runId]);
         if (!run) throw Object.assign(new Error('The run was not found.'), { code: 'RUN_NOT_FOUND' });
         const input = parse(run.input_json);
+        // Under the household lock, every source the run was built from and the
+        // run's coverage grant must still be current. A revocation that committed
+        // after the caller's unlocked re-check (verifyRunSourcesCurrent) writes no
+        // observation; nothing is recorded and the task does not complete.
+        const caseRecord = await loadCaseRecord(run.case_id);
+        const { decision } = await evaluateModelDispatch({
+          task: 'observation_recheck',
+          runId,
+          caseId: run.case_id,
+          subjectId: caseRecord?.analysis_subject_adult_id,
+          modelRecipient,
+          authorizedSourceIds: input?.authorizedSourceIds,
+          authorizedSources: input?.authorizedSources,
+        });
+        if (decision?.allowed !== true) {
+          throw Object.assign(new Error('A selected source is no longer covered by current consent.'), {
+            code: 'CONSENT_SCOPE_REQUIRED', statusCode: 403, reasonCode: decision?.reasonCode ?? 'COMMIT_RECHECK_ERROR',
+          });
+        }
         const pages = new Map();
         for (const page of Array.isArray(input?.sourcePages) ? input.sourcePages : []) {
           if (typeof page?.text !== 'string' || page.redacted !== undefined || !boundedId(page.sourceId)) continue;
