@@ -1,11 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  criticalIndexes, criticalTriggers, expectedTables, expectedViews, openSqliteReference,
-} from './support/sqlite-reference.mjs';
+  criticalIndexes, criticalTriggers, expectedTables, expectedViews,
+} from '../src/backend/database/postgres/schema-expectations.js';
 import { postgresTestOptions, useTestDatabase } from './support/postgres.mjs';
 
-const TYPE_MAP = { TEXT: 'text', INTEGER: 'bigint', BLOB: 'bytea' };
 const ACTIONS = { a: 'NO ACTION', r: 'RESTRICT', c: 'CASCADE', n: 'SET NULL', d: 'SET DEFAULT' };
 const POSTGRES_ONLY_TRIGGERS = new Set([
   'audit_events_no_truncate',
@@ -18,62 +17,6 @@ const POSTGRES_ONLY_TRIGGERS = new Set([
   'policy_structuring_runs_no_truncate',
   'proposed_parameters_no_truncate',
 ]);
-
-// SQLite-only objects: the FTS5 clause index (migration 016) and its shadow tables have no PostgreSQL counterpart yet.
-const SQLITE_ONLY = /^policy_clauses_fts(?:_|$)/;
-
-function sqliteCatalog(database) {
-  const objects = database.prepare("SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").all()
-    .filter(item => !SQLITE_ONLY.test(item.name));
-  const tables = objects.filter(item => item.type === 'table').map(item => item.name).sort();
-  const catalog = { tables: {}, views: {}, triggers: {}, indexes: {} };
-  for (const table of tables) {
-    const columns = database.prepare(`PRAGMA table_xinfo(${table})`).all();
-    const fks = new Map();
-    for (const row of database.prepare(`PRAGMA foreign_key_list(${table})`).all()) {
-      if (!fks.has(row.id)) fks.set(row.id, { parent: row.table, columns: [], parentColumns: [], onUpdate: row.on_update, onDelete: row.on_delete });
-      const fk = fks.get(row.id);
-      fk.columns[row.seq] = row.from;
-      fk.parentColumns[row.seq] = row.to;
-    }
-    const indexList = database.prepare(`PRAGMA index_list(${table})`).all();
-    const indexColumns = name => database.prepare(`PRAGMA index_xinfo(${name})`).all()
-      .filter(column => column.key === 1).map(column => `${column.name}${column.desc ? ' DESC' : ''}`);
-    const unique = indexList.filter(index => index.unique === 1 && index.origin === 'u')
-      .map(index => ({ columns: indexColumns(index.name), partial: index.partial === 1 }));
-    const primary = columns.filter(column => column.pk > 0).sort((a, b) => a.pk - b.pk).map(column => column.name);
-    catalog.tables[table] = {
-      columns: columns.map(column => ({
-        name: column.name,
-        type: TYPE_MAP[column.type] ?? column.type,
-        notNull: column.notnull === 1 || column.pk > 0,
-      })),
-      primary,
-      foreignKeys: [...fks.values()].map(fk => ({
-        columns: fk.columns, parent: fk.parent, parentColumns: fk.parentColumns, onUpdate: fk.onUpdate, onDelete: fk.onDelete,
-      })),
-      unique,
-      checks: (objects.find(item => item.name === table).sql.match(/\bCHECK\s*\(/g) ?? []).length,
-    };
-    for (const index of indexList.filter(item => item.origin === 'c')) {
-      catalog.indexes[index.name] = { table, columns: indexColumns(index.name), unique: index.unique === 1, partial: index.partial === 1 };
-    }
-  }
-  for (const view of objects.filter(item => item.type === 'view')) {
-    catalog.views[view.name] = database.prepare(`PRAGMA table_info(${view.name})`).all().map(column => column.name);
-  }
-  for (const trigger of objects.filter(item => item.type === 'trigger')) {
-    const match = /CREATE TRIGGER\s+\w+\s+(BEFORE|AFTER)\s+(INSERT|DELETE|UPDATE)(?:\s+OF\s+([\w,\s]+?))?\s+ON\s+(\w+)/i.exec(trigger.sql);
-    assert.ok(match, `unparsed SQLite trigger ${trigger.name}`);
-    catalog.triggers[trigger.name] = {
-      table: match[4],
-      timing: match[1].toUpperCase(),
-      event: match[2].toUpperCase(),
-      updateOf: match[3] ? match[3].split(',').map(name => name.trim()) : [],
-    };
-  }
-  return catalog;
-}
 
 async function postgresCatalog(pool) {
   const q = async (sql) => (await pool.query(sql)).rows;
@@ -143,69 +86,51 @@ async function postgresCatalog(pool) {
   return catalog;
 }
 
-const sortKey = value => JSON.stringify(value);
-const sortedList = list => [...list].sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : 1));
-
-test('PostgreSQL catalog equals the final SQLite catalog (tables, columns, keys, indexes, views, triggers)', postgresTestOptions(), async t => {
-  const sqlite = openSqliteReference();
-  t.after(() => sqlite.close());
+// The SQLite schema this catalog was proven equal to is gone with its migration files (S3.3). The
+// counts below freeze the PostgreSQL catalog: a migration that adds or drops an object changes them
+// and must update this test in the same change. Named objects come from schema-expectations.js.
+test('PostgreSQL catalog holds every expected object and the frozen object counts', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
-  const expected = sqliteCatalog(sqlite);
   const actual = await postgresCatalog(pool);
-  // schema_migrations is created by each runner; both sides have it.
-  assert.deepEqual(Object.keys(actual.tables).sort(), Object.keys(expected.tables).sort(), 'table names');
-  for (const [name, table] of Object.entries(expected.tables)) {
-    const pgTable = actual.tables[name];
-    assert.deepEqual(pgTable.columns, table.columns, `${name}: columns (name, type, not null, order)`);
-    assert.deepEqual(pgTable.primary, table.primary, `${name}: primary key`);
-    assert.deepEqual(sortedList(pgTable.foreignKeys), sortedList(table.foreignKeys), `${name}: foreign keys and actions`);
-    assert.deepEqual(sortedList(pgTable.unique), sortedList(table.unique), `${name}: unique constraints`);
-    assert.equal(pgTable.checks, table.checks, `${name}: CHECK constraint count`);
-  }
-  assert.deepEqual(actual.indexes, expected.indexes, 'named indexes (columns, order, unique, partial)');
-  assert.deepEqual(actual.views, expected.views, 'views and their columns');
-  assert.deepEqual(actual.triggers, expected.triggers, 'trigger names, tables, timing, events, UPDATE OF columns');
 
   for (const name of expectedTables) assert.ok(actual.tables[name], `expected table ${name}`);
   for (const name of expectedViews) assert.ok(actual.views[name], `expected view ${name}`);
   for (const name of criticalTriggers) assert.ok(actual.triggers[name], `critical trigger ${name}`);
   for (const name of criticalIndexes) assert.ok(actual.indexes[name], `critical index ${name}`);
 
-  const count = items => Object.values(items).reduce((sum, item) => sum + item.length, 0);
-  const counts = {
+  const total = pick => Object.values(actual.tables).reduce((sum, table) => sum + pick(table), 0);
+  assert.deepEqual({
     tables: Object.keys(actual.tables).length,
-    columns: count(Object.fromEntries(Object.entries(actual.tables).map(([name, table]) => [name, table.columns]))),
-    foreignKeys: count(Object.fromEntries(Object.entries(actual.tables).map(([name, table]) => [name, table.foreignKeys]))),
-    uniqueConstraints: count(Object.fromEntries(Object.entries(actual.tables).map(([name, table]) => [name, table.unique]))),
-    checkConstraints: Object.values(actual.tables).reduce((sum, table) => sum + table.checks, 0),
+    columns: total(table => table.columns.length),
+    foreignKeys: total(table => table.foreignKeys.length),
+    uniqueConstraints: total(table => table.unique.length),
+    checkConstraints: total(table => table.checks),
     namedIndexes: Object.keys(actual.indexes).length,
     views: Object.keys(actual.views).length,
     triggers: Object.keys(actual.triggers).length,
-  };
-  console.log(`catalog parity: ${JSON.stringify(counts)}`);
-  assert.deepEqual(counts, {
-    tables: Object.keys(expected.tables).length,
-    columns: counts.columns,
-    foreignKeys: Object.values(expected.tables).reduce((sum, table) => sum + table.foreignKeys.length, 0),
-    uniqueConstraints: Object.values(expected.tables).reduce((sum, table) => sum + table.unique.length, 0),
-    checkConstraints: Object.values(expected.tables).reduce((sum, table) => sum + table.checks, 0),
-    namedIndexes: Object.keys(expected.indexes).length,
-    views: Object.keys(expected.views).length,
-    triggers: Object.keys(expected.triggers).length,
+  }, {
+    tables: 53, columns: 548, foreignKeys: 122, uniqueConstraints: 20, checkConstraints: 201, namedIndexes: 67, views: 2, triggers: 103,
   });
 });
 
-test('seed rows equal the SQLite seed rows', postgresTestOptions(), async t => {
-  const sqlite = openSqliteReference();
-  t.after(() => sqlite.close());
+test('seed rows are the reviewed registry and observation rules', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const rules = 'SELECT extraction_method, resolution_state, transition_authority, requires_accepted FROM coverage_parameter_observation_rules ORDER BY 1, 2';
   assert.deepEqual(
-    (await pool.query(rules)).rows.map(row => ({ ...row, requires_accepted: Number(row.requires_accepted) })),
-    sqlite.prepare(rules).all().map(row => ({ ...row })),
+    (await pool.query(rules)).rows.map(row => [row.extraction_method, row.resolution_state, row.transition_authority, Number(row.requires_accepted)]),
+    [
+      ['deterministic_calculation', 'calculated', 'deterministic', 0],
+      ['deterministic_calculation', 'dynamic', 'deterministic', 0],
+      ['document_extraction', 'extracted_unverified', 'model', 0],
+      ['human_report', 'reported', 'deterministic', 0],
+      ['human_review', 'proven', 'human_reviewer', 1],
+      ['human_review', 'reported', 'human_reviewer', 0],
+      ['official_source_lookup', 'dynamic', 'official_source', 0],
+      ['official_source_lookup', 'proven', 'official_source', 1],
+    ],
   );
   const versions = 'SELECT version FROM coverage_parameter_registry_versions ORDER BY version';
-  assert.deepEqual((await pool.query(versions)).rows, sqlite.prepare(versions).all().map(row => ({ ...row })));
+  assert.deepEqual((await pool.query(versions)).rows, [{ version: 'policy-parameters/v1' }]);
   const registered = (await pool.query('SELECT registered_at FROM coverage_parameter_registry_versions')).rows[0].registered_at;
   assert.match(registered, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 });
@@ -213,5 +138,5 @@ test('seed rows equal the SQLite seed rows', postgresTestOptions(), async t => {
 test('the PostgreSQL migrations record exactly the immutable migration files', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const versions = (await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows.map(row => row.version);
-  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql', '013_catalogue_reviews.sql', '014_curated_product_workflow.sql', '015_curated_signed_actions.sql']);
+  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql', '013_catalogue_reviews.sql', '014_curated_product_workflow.sql', '015_curated_signed_actions.sql', '016_data_api_lockdown.sql']);
 });

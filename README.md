@@ -97,7 +97,7 @@ See [AGENTS.md](AGENTS.md), [security architecture](docs/architecture/security.m
 
 ## Known limits
 
-- The SQLite runtime is removed from `src/`; its frozen migration files remain only as a test reference until S3.3.
+- PostgreSQL is the only database engine; the SQLite runtime and its migration files are removed.
 - Authentication is local prototype authentication, not production identity.
 - Live provider journeys and production deployment remain unverified.
 - Consent and privacy-notice wording requires legal review.

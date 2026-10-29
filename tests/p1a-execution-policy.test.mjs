@@ -172,10 +172,10 @@ test('P1-A policy: undocumented task transitions are rejected', () => {
 });
 
 test('P1-A policy: persisted run and task states equal the migration CHECK constraints', () => {
-  const sql = readFileSync(new URL('../src/backend/database/migrations/001_initial_schema.sql', import.meta.url), 'utf8');
+  const sql = readFileSync(new URL('../src/backend/database/postgres/migrations/001_baseline_schema.sql', import.meta.url), 'utf8');
   const statesOf = table => {
     const block = sql.slice(sql.indexOf(`CREATE TABLE ${table} (`));
-    const match = block.match(/status TEXT NOT NULL CHECK \(status IN \(([^)]*)\)\)/);
+    const match = block.match(/status text NOT NULL CHECK \(status IN \(([^)]*)\)\)/);
     return match[1].split(',').map(value => value.trim().replace(/'/g, ''));
   };
   assert.deepEqual(statesOf('workflow_runs'), [...PERSISTED_RUN_STATES]);

@@ -10,7 +10,7 @@ const requiredPortMethods = FIXTURE_RUN_STORE_PORT_METHODS;
 export const WORKFLOW_VERSION_MISMATCH = 'WORKFLOW_VERSION_MISMATCH';
 
 /**
- * A run (persisted SQLite row or fixture run record) may be executed only when it is pinned
+ * A run (persisted row or fixture run record) may be executed only when it is pinned
  * to the current workflow version. A run pinned to another version (for example '5') stays
  * readable but is rejected here with WORKFLOW_VERSION_MISMATCH (ADR 0001).
  *

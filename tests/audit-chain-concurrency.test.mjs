@@ -3,8 +3,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
-import { runMigrations } from './support/sqlite-reference.mjs';
 import { householdLock } from '../src/backend/database/postgres/locks.js';
 import { AuditRepository } from '../src/backend/repositories/audit-repository.js';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
@@ -100,22 +98,4 @@ test('a PostgreSQL append with missing fields rejects instead of throwing synchr
   const pending = audit.append({ action: 'x', resourceType: 'y' });
   assert.ok(pending instanceof Promise);
   await assert.rejects(pending, /required/);
-});
-
-test('the node:sqlite runtime keeps the synchronous audit chain', () => {
-  const database = new DatabaseSync(':memory:');
-  database.exec('PRAGMA foreign_keys = ON');
-  runMigrations(database);
-  database.prepare('INSERT INTO households (id, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)').run('h-sqlite', 'Synthetic', at, at);
-  const audit = new AuditRepository(database, { clock: () => new Date(at) });
-  const first = audit.append(event('h-sqlite', 0));
-  const second = audit.append(event('h-sqlite', 1));
-  const unscoped = audit.append(event(null, 2));
-  assert.equal(typeof first.id, 'number');
-  assert.equal(first.previousEventHash, null);
-  assert.equal(second.previousEventHash, first.eventHash);
-  assert.equal(unscoped.previousEventHash, null);
-  assert.throws(() => audit.append({ action: 'x' }), /required/);
-  assert.deepEqual(audit.listForCase('missing-case'), []);
-  database.close();
 });

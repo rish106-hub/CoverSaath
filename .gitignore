@@ -25,3 +25,4 @@ docs/exec-plans/active/production-hardening.xml
 *.sqlite-wal
 # PostgreSQL runner tests write scratch migration sets here (tests/support/postgres.mjs).
 src/backend/database/postgres/migrations/test-scratch/
+.claude/launch.json

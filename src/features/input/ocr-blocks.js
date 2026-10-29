@@ -20,7 +20,7 @@ export const OCR_BLOCK_LIMITS = Object.freeze({
   maxBlockTextCharacters: 200_000,
   maxTableRows: 2_000,
   maxTableCells: 20_000,
-  // Must equal the blocks_json length CHECK in SQLite 012 and PostgreSQL 009.
+  // Must equal the blocks_json length CHECK in PostgreSQL migration 009.
   maxStoredCharacters: 1_000_000,
 });
 

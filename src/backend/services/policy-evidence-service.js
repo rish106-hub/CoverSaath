@@ -232,8 +232,8 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
 
   return Object.freeze({
     // One question per idempotency key runs at a time. A stored answer is written only after the paid model call, so a
-    // duplicate that arrives meanwhile would miss the replay and bill the model twice. The claim is per process (the
-    // SQLite runtime is one process); a multi-instance PostgreSQL deployment needs a database-level claim instead.
+    // duplicate that arrives meanwhile would miss the replay and bill the model twice. The claim is per process, so a
+    // multi-instance deployment needs a database-level claim instead.
     async ask(input) {
       const { caseRecord, idempotencyKey } = input;
       if (typeof idempotencyKey !== 'string' || !idempotencyKey || !caseRecord) return askOnce(input);

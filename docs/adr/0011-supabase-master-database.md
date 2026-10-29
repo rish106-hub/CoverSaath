@@ -1,6 +1,6 @@
 # ADR 0011: Supabase PostgreSQL as the master database
 
-- Status: Proposed (needs owner sign-off on region and host)
+- Status: Proposed (owner chose Sydney and Fly.io for synthetic data; real-data residency, D8, still needs legal sign-off)
 - Date: 2026-10-29
 - Builds on: ADR 0004 (PostgreSQL runtime). Supersedes the ADR 0004 D1 line "The production version is decided with the Azure owner" and the Azure assumption in `production-hardening.xml`.
 
@@ -16,8 +16,18 @@ The owner chose one PostgreSQL master database on Supabase for every CoverSaath 
 - **D4 TLS.** The pool verifies the server certificate against the pinned Supabase Root 2021 CA (`DATABASE_SSL_CA_PATH`, expires 2031). `rejectUnauthorized` is always true when a CA is given, and also for any non-loopback host without one (verified against system roots, so a hosted database without its CA fails closed instead of connecting in plaintext). Only loopback and Unix-socket databases run without TLS, and `ssl` is always set explicitly so `PGSSLMODE` cannot change it. URL parameters `sslmode`, `ssl*` and `uselibpqcompat` are stripped so a connection string cannot weaken TLS. The CA file is public and stays out of git; the password never enters code, logs or commits.
 - **D5 Credentials.** `DATABASE_URL` is a server-only secret in the host's secret store. The `postgres` superuser password is for migrations only; the runtime moves to a least-privilege role in a follow-up.
 - **D6 Tests never touch Supabase.** `TEST_DATABASE_URL` points at local or CI PostgreSQL 17. The harness creates many databases and must not run against the shared project.
-- **D7 Backend host.** The backend needs a container host: ClamAV daemon scanning, per-process in-flight claims and rate limits, and background OCR and structuring jobs do not fit pure serverless. The owner has deferred the host choice (2026-10-29). The candidate is Fly.io in Mumbai (`bom`) for the backend and `clamd`, with the website on Vercel. Nothing is deployed until the owner decides and approves the cost.
+- **D7 Backend host.** The backend needs a container host: ClamAV daemon scanning, per-process in-flight claims and rate limits, and background OCR and structuring jobs do not fit pure serverless. Fly.io hosts the backend (see D9); the website stays on Vercel. The earlier Mumbai (`bom`) candidate is withdrawn: Fly no longer offers that region.
 - **D8 Region and residency.** Sydney is accepted only for synthetic data. Real user data waits for a decision between moving the project to Mumbai (`ap-south-1`) and legal advice that cross-border storage is acceptable. Marked for legal review.
+
+- **D9 Fly.io deployment (2026-10-29, owner chose the cheapest option).**
+  - App `knowvia-api`, region `syd` (same region as the database), one `shared-cpu-1x` 512 MB machine, 1 GB encrypted volume `coversaath_data` at `/data` for protected documents. Config: `fly.toml`, `Dockerfile`, `docker/`.
+  - Single machine only. The volume attaches to one machine, and run claims and the rate limiter are per process. Do not scale out before moving those to the database (see the open risks in `docs/iterations/LATEST.md`).
+  - Scanner off (`DOCUMENT_SCAN_MODE=disabled`): `clamd` needs about 1 GB or more of RAM, so every upload stays quarantined. Enabling it needs a 2 GB machine, `DOCUMENT_SCAN_MODE=clamd` and `CLAMD_HOST=127.0.0.1`.
+  - Public exposure is an explicit opt-in. The server answers only loopback by default; `PUBLIC_HOSTS` lists exact hostnames (no wildcards) and any other `Host` is refused with 403. `TRUST_FLY_CLIENT_IP=true` keys the rate limit on a valid `Fly-Client-IP`, else on the socket peer. The limiter is in memory per process.
+  - Free platform features used: Fly proxy TLS and forced HTTPS, load balancing, connection concurrency limits (soft 40, hard 80) and an HTTP health check on `/api/v1/health`. There is no WAF on this plan.
+  - Secrets (`DATABASE_URL`, `DOCUMENT_ENCRYPTION_KEY_BASE64`, `KNOWVIA_BOOTSTRAP_TOKEN`) live only in Fly secrets and `.env.local`. The Supabase password was exposed in chat and must be rotated after setup; the runtime then moves to a least-privilege role (D5).
+  - Sydney keeps D8: synthetic data only.
+  - State at writing: app, volume and secrets exist; no machine is deployed because the Fly API returned 503 on every deploy attempt. The Dockerfile has never been built. See `docs/runbooks/fly-deploy.md`.
 
 ## Segment map
 
@@ -30,6 +40,8 @@ One project, one master database (`coversaath`), one schema per segment. Cross-s
 | Future segments (for example analytics, ingestion) | one new schema each | their own service | Not started |
 
 The backend keeps `public` because its schema validator and migration runner assume it; moving it to a named schema is a separate, reversible change. Separate databases per segment are not used: PostgreSQL cannot join or enforce foreign keys across databases, and the C-collation workaround in D2 is needed only once.
+
+- **D10 Data API lockdown (2026-10-29, owner chose `public` with RLS and revokes).** Supabase exposes `public` through PostgREST. The backend connects directly and never uses the Data API, so migration 016 enables row level security on every table (no policies, so deny by default) and revokes all table and sequence privileges, and default privileges, from `anon` and `authenticated`. `validatePostgresSchema` reports `tablesWithoutRls` and `apiRoleGrants`, so a later migration that forgets RLS fails `db:init` and `/ready`. The connection role owns the tables and bypasses RLS. Functions keep the default `PUBLIC` execute (trigger functions and the pure `julianday` and `coversaath_utc_now` helpers); revoking it could break CHECK evaluation for a non-owner runtime role. The website keeps its own schema `knowvia_web` and must get the same treatment. Service direction: any later split into services gives each service its own schema and its own role with no grants on another service's schema; no service is added without measured need (AGENTS.md).
 
 ## Consequences
 

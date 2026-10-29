@@ -79,6 +79,7 @@ test('the PostgreSQL migration set applies once on a fresh database and is not r
     '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql',
     '012_policy_evidence.sql', '013_catalogue_reviews.sql',
     '014_curated_product_workflow.sql', '015_curated_signed_actions.sql',
+    '016_data_api_lockdown.sql',
   ]);
   assert.deepEqual(
     (await database.prepare('SELECT version FROM coverage_parameter_registry_versions').all()).map(row => row.version),

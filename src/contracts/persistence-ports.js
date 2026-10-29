@@ -1,5 +1,5 @@
-// Persistence port interfaces the coverage-analysis runtime needs. A PostgreSQL adapter
-// must satisfy these with the same semantics as the SQLite implementation
+// Persistence port interfaces the coverage-analysis runtime needs. An adapter must satisfy
+// these with the same semantics as the PostgreSQL implementation
 // (src/backend/services/coverage-analysis-port.js and src/backend/repositories/*).
 // No database code here: method lists, JSDoc signatures and runtime shape checks only.
 //
