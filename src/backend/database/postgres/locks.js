@@ -18,7 +18,8 @@ export const LOCK_NAMESPACES = Object.freeze({
   HOUSEHOLD_NONE: 'household_none',
   // Serialises one idempotency key (scope + key) across concurrent requests.
   IDEMPOTENCY: 'idempotency',
-  // Serialises session issuance for one adult so the capacity check holds.
+  // Serialises session issuance so the capacity check holds. The capacity is global (one
+  // count of all active sessions), so callers take this lock with one fixed key, not per adult.
   SESSION_CAPACITY: 'session_capacity',
 });
 
@@ -49,6 +50,6 @@ export function idempotencyLock(scope, key) {
   return [LOCK_NAMESPACES.IDEMPOTENCY, `${scope}\0${key}`];
 }
 
-export function sessionCapacityLock(adultUserId) {
-  return [LOCK_NAMESPACES.SESSION_CAPACITY, adultUserId];
+export function sessionCapacityLock(key) {
+  return [LOCK_NAMESPACES.SESSION_CAPACITY, key];
 }

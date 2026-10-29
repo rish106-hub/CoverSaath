@@ -4,7 +4,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/index.js';
 import { CoverageParameterRepository } from '../src/backend/repositories/coverage-parameter-repository.js';
 import { opaqueSourceId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
@@ -14,15 +13,16 @@ import { CANONICAL_KEY_CRITERIA, POLICY_DECOMPOSITION, decomposePolicySection } 
 import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterRegistry } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { observationInput, parameterAt as at, parameterReviewerId, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 import { auditActions, setupLiveCase, startLiveServer } from './support/live-analysis-scenario.mjs';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 
 const v1 = POLICY_PARAMETER_REGISTRY_VERSION;
+const pg = postgresTestOptions();
 
-function open(t) {
-  const database = openDatabase({ path: ':memory:' });
-  t.after(() => database.close());
-  seedParameterWorld(database);
+async function open(t) {
+  const { db: database } = await freshDatabase(t);
+  await seedParameterWorld(database);
   const repository = new CoverageParameterRepository(database, { clock: () => new Date(at) });
-  repository.pinRegistry({ workflowRunId: 'run-parameters', registryVersion: v1 });
+  await repository.pinRegistry({ workflowRunId: 'run-parameters', registryVersion: v1 });
   return { database, repository };
 }
 
@@ -32,109 +32,109 @@ const entry = (parameterKey, value, overrides = {}) => ({
 });
 const otherPage = { sourceId: 'page-other', documentId: 'document-other' };
 
-test('guard: observations require an active document, in the repository and in the database', t => {
-  const { database, repository } = open(t);
-  const record = parameter(repository, 'd.room_rent_limit');
-  database.prepare("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-parameters'").run();
-  assert.throws(() => repository.appendObservation({ parameterRecordId: record.id, ...observationInput() }), { code: 'OBSERVATION_DOCUMENT_NOT_ACTIVE' });
-  assert.throws(() => database.prepare(`INSERT INTO coverage_parameter_observations
+test('guard: observations require an active document, in the repository and in the database', pg, async t => {
+  const { database, repository } = await open(t);
+  const record = await parameter(repository, 'd.room_rent_limit');
+  await database.prepare("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-parameters'").run();
+  await assert.rejects(repository.appendObservation({ parameterRecordId: record.id, ...observationInput() }), { code: 'OBSERVATION_DOCUMENT_NOT_ACTIVE' });
+  await assert.rejects(database.prepare(`INSERT INTO coverage_parameter_observations
     (id, parameter_record_id, source_id, document_id, version, page, extraction_method, review_status, value_json,
      source_digest, observed_at, recorded_by, created_at)
     VALUES ('direct', ?, 'page-parameters', 'document-parameters', 'version-1', '2', 'human_report', 'not_reviewed', '1', ?, ?, 'x', ?)`)
     .run(record.id, 'e'.repeat(64), at, at), /require an active document/);
   // The other, still active document is unaffected.
-  assert.ok(repository.appendObservation({ parameterRecordId: record.id, ...observationInput(otherPage) }));
+  assert.ok(await repository.appendObservation({ parameterRecordId: record.id, ...observationInput(otherPage) }));
 });
 
-test('guard: a human_review observation must be recorded by the reviewer of an open or completed review', t => {
-  const { database, repository } = open(t);
-  const record = parameter(repository, 'd.room_rent_limit');
+test('guard: a human_review observation must be recorded by the reviewer of an open or completed review', pg, async t => {
+  const { database, repository } = await open(t);
+  const record = await parameter(repository, 'd.room_rent_limit');
   const review = overrides => repository.appendObservation({ parameterRecordId: record.id, ...observationInput({ extractionMethod: 'human_review', reviewStatus: 'accepted', ...overrides }) });
 
-  assert.throws(() => review({ recordedBy: 'someone-else' }), { code: 'OBSERVATION_REVIEWER_REQUIRED' });
-  assert.ok(review({ recordedBy: parameterReviewerId }));
+  await assert.rejects(review({ recordedBy: 'someone-else' }), { code: 'OBSERVATION_REVIEWER_REQUIRED' });
+  assert.ok(await review({ recordedBy: parameterReviewerId }));
   for (const status of ['requested', 'declined']) {
-    database.prepare('UPDATE human_reviews SET status = ? WHERE id = ?').run(status, 'review-parameters');
-    assert.throws(() => review({ recordedBy: parameterReviewerId }), { code: 'OBSERVATION_REVIEWER_REQUIRED' });
+    await database.prepare('UPDATE human_reviews SET status = ? WHERE id = ?').run(status, 'review-parameters');
+    await assert.rejects(review({ recordedBy: parameterReviewerId }), { code: 'OBSERVATION_REVIEWER_REQUIRED' });
   }
-  database.prepare("UPDATE human_reviews SET status = 'completed' WHERE id = 'review-parameters'").run();
-  assert.ok(review({ recordedBy: parameterReviewerId }));
+  await database.prepare("UPDATE human_reviews SET status = 'completed' WHERE id = 'review-parameters'").run();
+  assert.ok(await review({ recordedBy: parameterReviewerId }));
   // A review bound to a different run does not authorise this run's parameters (database too).
-  database.prepare("INSERT INTO workflow_runs (id, case_id, workflow_name, workflow_version, execution_mode, status, input_digest, input_json, created_at) VALUES ('run-other', 'case-parameters', 'coverage-reconstruction', 'v2', 'fixture', 'queued', ?, '{}', ?)").run('d'.repeat(64), at);
-  database.prepare("UPDATE human_reviews SET workflow_run_id = 'run-other' WHERE id = 'review-parameters'").run();
-  assert.throws(() => review({ recordedBy: parameterReviewerId }), { code: 'OBSERVATION_REVIEWER_REQUIRED' });
-  assert.throws(() => database.prepare(`INSERT INTO coverage_parameter_observations
+  await database.prepare("INSERT INTO workflow_runs (id, case_id, workflow_name, workflow_version, execution_mode, status, input_digest, input_json, created_at) VALUES ('run-other', 'case-parameters', 'coverage-reconstruction', 'v2', 'fixture', 'queued', ?, '{}', ?)").run('d'.repeat(64), at);
+  await database.prepare("UPDATE human_reviews SET workflow_run_id = 'run-other' WHERE id = 'review-parameters'").run();
+  await assert.rejects(review({ recordedBy: parameterReviewerId }), { code: 'OBSERVATION_REVIEWER_REQUIRED' });
+  await assert.rejects(database.prepare(`INSERT INTO coverage_parameter_observations
     (id, parameter_record_id, source_id, document_id, version, page, extraction_method, review_status, value_json,
      source_digest, observed_at, recorded_by, created_at)
     VALUES ('direct-review', ?, 'page-parameters', 'document-parameters', 'version-1', '2', 'human_review', 'accepted', '1', ?, ?, ?, ?)`)
     .run(record.id, 'e'.repeat(64), at, parameterReviewerId, at), /assigned reviewer/);
 });
 
-test('recordModelExtraction: agreement is extracted_unverified, disagreement is conflicting, never higher', t => {
-  const { repository } = open(t);
-  const record = parameter(repository, 'd.room_rent_limit');
-  const first = repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '1% of sum insured')], recordedBy: 'runtime' });
+test('recordModelExtraction: agreement is extracted_unverified, disagreement is conflicting, never higher', pg, async t => {
+  const { repository } = await open(t);
+  const record = await parameter(repository, 'd.room_rent_limit');
+  const first = await repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '1% of sum insured')], recordedBy: 'runtime' });
   assert.deepEqual({ ...first }, { observations: 1, parameters: 1, conflicting: 0, skipped: 0 });
-  let current = repository.getParameter(record.id);
+  let current = await repository.getParameter(record.id);
   assert.equal(current.resolutionState, 'extracted_unverified');
   assert.equal(current.authority, 'model');
   assert.equal(current.resolvedValue, '1% of sum insured');
-  const [observation] = repository.listObservations(record.id);
+  const [observation] = await repository.listObservations(record.id);
   assert.equal(observation.extractionMethod, 'document_extraction');
   assert.equal(observation.reviewStatus, 'not_reviewed');
 
-  repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '1% of sum insured', otherPage)], recordedBy: 'runtime' });
-  assert.equal(repository.getParameter(record.id).resolutionState, 'extracted_unverified');
+  await repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '1% of sum insured', otherPage)], recordedBy: 'runtime' });
+  assert.equal((await repository.getParameter(record.id)).resolutionState, 'extracted_unverified');
 
-  const conflict = repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '2% of sum insured', otherPage)], recordedBy: 'runtime' });
+  const conflict = await repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '2% of sum insured', otherPage)], recordedBy: 'runtime' });
   assert.equal(conflict.conflicting, 1);
-  current = repository.getParameter(record.id);
+  current = await repository.getParameter(record.id);
   assert.equal(current.resolutionState, 'conflicting');
   assert.equal(current.resolvedValue, null);
-  assert.equal(repository.listObservations(record.id).length, 3, 'every controlling observation is preserved');
+  assert.equal((await repository.listObservations(record.id)).length, 3, 'every controlling observation is preserved');
 });
 
-test('recordModelExtraction: established, model-forbidden and unknown keys are skipped untouched', t => {
-  const { repository } = open(t);
-  const proven = parameter(repository, 'd.room_rent_limit');
-  const review = repository.appendObservation({ parameterRecordId: proven.id, ...observationInput({ extractionMethod: 'human_review', reviewStatus: 'accepted', recordedBy: parameterReviewerId }) });
-  repository.setResolution({ parameterRecordId: proven.id, state: 'proven', observationId: review.id, updatedBy: 'reviewer' });
-  const forbidden = parameter(repository, 'd.amount_already_used');
+test('recordModelExtraction: established, model-forbidden and unknown keys are skipped untouched', pg, async t => {
+  const { repository } = await open(t);
+  const proven = await parameter(repository, 'd.room_rent_limit');
+  const review = await repository.appendObservation({ parameterRecordId: proven.id, ...observationInput({ extractionMethod: 'human_review', reviewStatus: 'accepted', recordedBy: parameterReviewerId }) });
+  await repository.setResolution({ parameterRecordId: proven.id, state: 'proven', observationId: review.id, updatedBy: 'reviewer' });
+  const forbidden = await parameter(repository, 'd.amount_already_used');
 
-  const counts = repository.recordModelExtraction({
+  const counts = await repository.recordModelExtraction({
     workflowRunId: 'run-parameters',
     entries: [entry('d.room_rent_limit', 'model says otherwise'), entry('d.amount_already_used', 12345), entry('z.not_a_key', 'x')],
     recordedBy: 'runtime',
   });
   assert.deepEqual({ ...counts }, { observations: 0, parameters: 0, conflicting: 0, skipped: 3 });
-  assert.equal(repository.getParameter(proven.id).resolutionState, 'proven');
-  assert.equal(repository.listObservations(forbidden.id).length, 0);
+  assert.equal((await repository.getParameter(proven.id)).resolutionState, 'proven');
+  assert.equal((await repository.listObservations(forbidden.id)).length, 0);
 });
 
-test('recordModelExtraction is atomic: a bad entry leaves no observation behind', t => {
-  const { repository } = open(t);
-  const record = parameter(repository, 'd.room_rent_limit');
-  assert.throws(() => repository.recordModelExtraction({
+test('recordModelExtraction is atomic: a bad entry leaves no observation behind', pg, async t => {
+  const { repository } = await open(t);
+  const record = await parameter(repository, 'd.room_rent_limit');
+  await assert.rejects(repository.recordModelExtraction({
     workflowRunId: 'run-parameters',
     entries: [entry('d.room_rent_limit', 'ok'), entry('d.room_rent_limit', 'bad', { version: 'wrong-version' })],
     recordedBy: 'runtime',
   }));
-  assert.equal(repository.listObservations(record.id).length, 0);
-  assert.equal(repository.getParameter(record.id).resolutionState, 'unknown');
+  assert.equal((await repository.listObservations(record.id)).length, 0);
+  assert.equal((await repository.getParameter(record.id)).resolutionState, 'unknown');
 });
 
-test('redactObservationsForRun erases values of every observation of the run and resets resolutions', t => {
-  const { database, repository } = open(t);
-  const record = parameter(repository, 'd.room_rent_limit');
-  repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', 'SYNTHETIC-RUN-VALUE'), entry('d.room_rent_limit', 'SYNTHETIC-RUN-VALUE', otherPage)], recordedBy: 'runtime' });
-  const result = repository.redactObservationsForRun({ workflowRunId: 'run-parameters', reasonCode: 'consent_revoked' });
+test('redactObservationsForRun erases values of every observation of the run and resets resolutions', pg, async t => {
+  const { database, repository } = await open(t);
+  const record = await parameter(repository, 'd.room_rent_limit');
+  await repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', 'SYNTHETIC-RUN-VALUE'), entry('d.room_rent_limit', 'SYNTHETIC-RUN-VALUE', otherPage)], recordedBy: 'runtime' });
+  const result = await repository.redactObservationsForRun({ workflowRunId: 'run-parameters', reasonCode: 'consent_revoked' });
   assert.equal(result.redactedObservations, 2);
-  assert.equal(repository.getParameter(record.id).resolutionState, 'unknown');
-  assert.equal(database.prepare('SELECT count(*) AS count FROM coverage_parameter_observations WHERE value_json IS NOT NULL').get().count, 0);
-  const [event] = auditActions(database, 'coverage_parameter.run_observations_redacted');
+  assert.equal((await repository.getParameter(record.id)).resolutionState, 'unknown');
+  assert.equal((await database.prepare('SELECT count(*) AS count FROM coverage_parameter_observations WHERE value_json IS NOT NULL').get()).count, 0);
+  const [event] = await auditActions(database, 'coverage_parameter.run_observations_redacted');
   assert.deepEqual(event.payload, { reasonCode: 'consent_revoked', redactedObservations: 2, affectedParameters: 1 });
   assert.ok(!JSON.stringify(event).includes('SYNTHETIC-RUN-VALUE'));
-  assert.equal(repository.redactObservationsForRun({ workflowRunId: 'run-parameters', reasonCode: 'consent_revoked' }).redactedObservations, 0);
+  assert.equal((await repository.redactObservationsForRun({ workflowRunId: 'run-parameters', reasonCode: 'consent_revoked' })).redactedObservations, 0);
 });
 
 test('modelObservationCandidates reads only model_extracted_unverified scalar values with citations', () => {
@@ -187,9 +187,9 @@ test('live run: extracted values become cited unverified observations with a cou
   const run = await scenario.startLiveRun('closeout-live');
   assert.equal(run.status, 202, run.raw);
   const runId = run.data.id;
-  const input = JSON.parse(app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(runId).input_json);
+  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(runId)).input_json);
   const [page] = input.sourcePages;
-  const rows = app.database.prepare(`SELECT observation.* FROM coverage_parameter_observations observation
+  const rows = await app.database.prepare(`SELECT observation.* FROM coverage_parameter_observations observation
     JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id
     WHERE parameter.workflow_run_id = ?`).all(runId);
   assert.ok(rows.length >= 1);
@@ -202,7 +202,7 @@ test('live run: extracted values become cited unverified observations with a cou
     assert.equal(JSON.parse(row.value_json), 'model extracted value');
   }
   assert.ok(!input.authorizedSourceIds.includes(opaqueSourceId(page.sourceId)), 'opaque ids are never persisted as sources');
-  const events = auditActions(app.database, 'coverage_parameter.model_observations_recorded');
+  const events = await auditActions(app.database, 'coverage_parameter.model_observations_recorded');
   assert.ok(events.length >= 1);
   assert.ok(events.every(event => event.resourceId === runId && !JSON.stringify(event).includes('model extracted value')));
 });
@@ -212,13 +212,13 @@ test('live run: revoking the coverage consent erases the run observations', asyn
   const scenario = await setupLiveCase(app);
   const run = await scenario.startLiveRun('closeout-revoke');
   const services = createBackendServices(app.database);
-  const live = () => app.database.prepare(`SELECT count(*) AS count FROM coverage_parameter_observations observation
+  const live = async () => (await app.database.prepare(`SELECT count(*) AS count FROM coverage_parameter_observations observation
     JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id
-    WHERE parameter.workflow_run_id = ? AND observation.value_json IS NOT NULL`).get(run.data.id).count;
-  assert.ok(live() >= 1);
-  services.consents.revoke({ grantId: scenario.coverageConsentId, revokedByAdultId: scenario.ownerId, reason: 'synthetic' });
-  assert.equal(live(), 0);
-  assert.equal(auditActions(app.database, 'coverage_parameter.run_observations_redacted').length, 1);
+    WHERE parameter.workflow_run_id = ? AND observation.value_json IS NOT NULL`).get(run.data.id)).count;
+  assert.ok(await live() >= 1);
+  await services.consents.revoke({ grantId: scenario.coverageConsentId, revokedByAdultId: scenario.ownerId, reason: 'synthetic' });
+  assert.equal(await live(), 0);
+  assert.equal((await auditActions(app.database, 'coverage_parameter.run_observations_redacted')).length, 1);
 });
 
 test('live run: a document grant revoked during the model call records no observation', async t => {
@@ -226,45 +226,45 @@ test('live run: a document grant revoked during the model call records no observ
   let documentConsentId = null;
   const app = await startLiveServer(t, {
     onGenerate: async () => {
-      if (database && documentConsentId) database.prepare('UPDATE consent_grants SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL').run(new Date().toISOString(), documentConsentId);
+      if (database && documentConsentId) await database.prepare('UPDATE consent_grants SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL').run(new Date().toISOString(), documentConsentId);
     },
   });
   const scenario = await setupLiveCase(app);
   database = app.database;
   documentConsentId = scenario.documentConsentId;
   const run = await scenario.startLiveRun('closeout-race');
-  const runId = run.data?.id ?? app.database.prepare('SELECT id FROM workflow_runs ORDER BY created_at DESC LIMIT 1').get().id;
-  assert.equal(app.database.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(runId).status, 'revoked');
-  assert.equal(app.database.prepare(`SELECT count(*) AS count FROM coverage_parameter_observations observation
+  const runId = run.data?.id ?? (await app.database.prepare('SELECT id FROM workflow_runs ORDER BY created_at DESC LIMIT 1').get()).id;
+  assert.equal((await app.database.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(runId)).status, 'revoked');
+  assert.equal((await app.database.prepare(`SELECT count(*) AS count FROM coverage_parameter_observations observation
     JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id
-    WHERE parameter.workflow_run_id = ? AND observation.value_json IS NOT NULL`).get(runId).count, 0);
+    WHERE parameter.workflow_run_id = ? AND observation.value_json IS NOT NULL`).get(runId)).count, 0);
 });
 
 // ---------------------------------------------------------------------------
 // Independent review findings F1, F2, F4, F5, F6, F7 and F8.
 // ---------------------------------------------------------------------------
 
-function runningTask(database, { id = 'task-parameters', owner = 'worker-a', status = 'running' } = {}) {
-  database.prepare(`INSERT INTO workflow_tasks (id, workflow_run_id, agent_name, task_kind, status, lease_owner, created_at)
+async function runningTask(database, { id = 'task-parameters', owner = 'worker-a', status = 'running' } = {}) {
+  await database.prepare(`INSERT INTO workflow_tasks (id, workflow_run_id, agent_name, task_kind, status, lease_owner, created_at)
     VALUES (?, 'run-parameters', 'coverage-analysis/profile', 'profile_intake', ?, ?, ?)`).run(id, status, owner, at);
-  database.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = 'run-parameters'").run();
+  await database.prepare("UPDATE workflow_runs SET status = 'running' WHERE id = 'run-parameters'").run();
 }
 
-test('F1: a stale worker whose lease moved records nothing; the holder records once with an in-transaction audit', t => {
-  const { database, repository } = open(t);
-  const record = parameter(repository, 'd.room_rent_limit');
-  runningTask(database);
+test('F1: a stale worker whose lease moved records nothing; the holder records once with an in-transaction audit', pg, async t => {
+  const { database, repository } = await open(t);
+  const record = await parameter(repository, 'd.room_rent_limit');
+  await runningTask(database);
   const write = workerId => repository.recordModelExtraction({
     workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '1%')], recordedBy: 'runtime', taskKey: 'profile', lease: { taskId: 'task-parameters', workerId },
   });
-  assert.throws(() => write('worker-b'), { code: 'TASK_LEASE_LOST' });
-  assert.equal(repository.listObservations(record.id).length, 0);
-  assert.equal(write('worker-a').observations, 1);
-  const [event] = auditActions(database, 'coverage_parameter.model_observations_recorded');
+  await assert.rejects(write('worker-b'), { code: 'TASK_LEASE_LOST' });
+  assert.equal((await repository.listObservations(record.id)).length, 0);
+  assert.equal((await write('worker-a')).observations, 1);
+  const [event] = await auditActions(database, 'coverage_parameter.model_observations_recorded');
   assert.deepEqual(event.payload, { taskKey: 'profile', observations: 1, parameters: 1, conflicting: 0, skipped: 0 });
-  database.prepare("UPDATE workflow_runs SET status = 'revoked' WHERE id = 'run-parameters'").run();
-  assert.throws(() => write('worker-a'), { code: 'TASK_LEASE_LOST' });
-  assert.equal(repository.listObservations(record.id).length, 1);
+  await database.prepare("UPDATE workflow_runs SET status = 'revoked' WHERE id = 'run-parameters'").run();
+  await assert.rejects(write('worker-a'), { code: 'TASK_LEASE_LOST' });
+  assert.equal((await repository.listObservations(record.id)).length, 1);
 });
 
 test('F1: the persistent worker skips a result whose lease was lost instead of failing the run', async t => {
@@ -313,43 +313,45 @@ test('F2: the profile placeholder UNKNOWN is never recorded as evidence', () => 
   assert.deepEqual(modelObservationCandidates('profile', payload), []);
 });
 
-test('F5: a state set by a human reviewer is not replaced by model output', t => {
-  const { repository } = open(t);
-  const record = parameter(repository, 'd.room_rent_limit');
-  repository.setResolution({ parameterRecordId: record.id, state: 'unknown', authority: 'human_reviewer', reasonCode: 'reviewer_withheld', updatedBy: 'reviewer' });
-  const counts = repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '1%')], recordedBy: 'runtime' });
+test('F5: a state set by a human reviewer is not replaced by model output', pg, async t => {
+  const { repository } = await open(t);
+  const record = await parameter(repository, 'd.room_rent_limit');
+  await repository.setResolution({ parameterRecordId: record.id, state: 'unknown', authority: 'human_reviewer', reasonCode: 'reviewer_withheld', updatedBy: 'reviewer' });
+  const counts = await repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '1%')], recordedBy: 'runtime' });
   assert.equal(counts.skipped, 1);
-  assert.equal(repository.getParameter(record.id).authority, 'human_reviewer');
-  assert.equal(repository.listObservations(record.id).length, 0);
+  assert.equal((await repository.getParameter(record.id)).authority, 'human_reviewer');
+  assert.equal((await repository.listObservations(record.id)).length, 0);
 });
 
-test('F6 and F1: the port records a citation only for a page selected for that parameter, under the task lease', async t => {
+test('F6 and F1: the port records a citation only for a page selected for that parameter, under the task lease', pg, async t => {
   const { createBackendServices: services } = await import('../src/backend/services/index.js');
   const { createCoverageAnalysisPort } = await import('../src/backend/services/index.js');
-  const { database } = open(t);
+  const { database } = await open(t);
   const backend = services(database);
-  backend.coverageParameters.initializeRunParameters({ workflowRunId: 'run-parameters', registryVersion: v1, ...parameterScope(), updatedBy: 'test' });
-  database.prepare('UPDATE workflow_runs SET input_json = ? WHERE id = ?').run(JSON.stringify({ sourcePages: [{
+  await backend.coverageParameters.initializeRunParameters({ workflowRunId: 'run-parameters', registryVersion: v1, ...parameterScope(), updatedBy: 'test' });
+  await database.prepare('UPDATE workflow_runs SET input_json = ? WHERE id = ?').run(JSON.stringify({ sourcePages: [{
     sourceId: 'page-parameters', documentId: 'document-parameters', version: 'version-1', page: 2, text: 'Deductible is 10000.', parameterKeys: ['d.deductible'],
   }] }), 'run-parameters');
-  runningTask(database);
+  await runningTask(database);
   const port = createCoverageAnalysisPort({ database, services: backend });
   const cite = key => ({ profile: { [key]: { value: 'cited', status: MODEL_EXTRACTED_UNVERIFIED, sources: [{ id: opaqueSourceId('page-parameters') }] } } });
   const lease = { taskId: 'task-parameters', workerId: 'worker-a' };
-  assert.equal(port.recordModelObservations({ runId: 'run-parameters', taskKey: 'profile', payload: cite('d.room_rent_limit'), ...lease }).observations, 0);
-  assert.equal(port.recordModelObservations({ runId: 'run-parameters', taskKey: 'profile', payload: cite('d.deductible'), ...lease }).observations, 1);
-  assert.throws(() => port.recordModelObservations({ runId: 'run-parameters', taskKey: 'profile', payload: cite('d.deductible'), taskId: 'task-parameters', workerId: 'worker-b' }), { code: 'TASK_LEASE_LOST' });
+  assert.equal((await port.recordModelObservations({ runId: 'run-parameters', taskKey: 'profile', payload: cite('d.room_rent_limit'), ...lease })).observations, 0);
+  assert.equal((await port.recordModelObservations({ runId: 'run-parameters', taskKey: 'profile', payload: cite('d.deductible'), ...lease })).observations, 1);
+  await assert.rejects(port.recordModelObservations({ runId: 'run-parameters', taskKey: 'profile', payload: cite('d.deductible'), taskId: 'task-parameters', workerId: 'worker-b' }), { code: 'TASK_LEASE_LOST' });
 });
 
-test('F4: erasing run data without a parameter repository fails closed when observations exist', async t => {
+test('F4: erasing run data without a parameter repository fails closed when observations exist', pg, async t => {
   const { ConsentRepository } = await import('../src/backend/repositories/consent-repository.js');
-  const { database, repository } = open(t);
-  parameter(repository, 'd.room_rent_limit');
-  repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '1%')], recordedBy: 'runtime' });
+  const { database, repository } = await open(t);
+  await parameter(repository, 'd.room_rent_limit');
+  await repository.recordModelExtraction({ workflowRunId: 'run-parameters', entries: [entry('d.room_rent_limit', '1%')], recordedBy: 'runtime' });
   const bare = new ConsentRepository(database);
-  database.exec('BEGIN IMMEDIATE');
-  assert.throws(() => bare.eraseDerivedRunData({ householdId: 'household-parameters', runIds: ['run-parameters'], resourceType: 'workflow_run', resourceId: 'run-parameters' }), { code: 'ERASURE_NOT_CONFIGURED' });
-  database.exec('ROLLBACK');
+  await assert.rejects(bare.eraseDerivedRunData({ householdId: 'household-parameters', runIds: ['run-parameters'], resourceType: 'workflow_run', resourceId: 'run-parameters' }), { code: 'ERASURE_NOT_CONFIGURED' });
+  // The erasure transaction rolled back as a whole: no partial erasure was committed.
+  assert.equal(database.inTransaction, false);
+  assert.equal((await database.prepare('SELECT count(*) AS count FROM coverage_parameter_observations WHERE value_json IS NOT NULL').get()).count, 1);
+  assert.equal((await database.prepare("SELECT status FROM workflow_runs WHERE id = 'run-parameters'").get()).status, 'queued');
 });
 
 test('F7 and F8: values recorded by an earlier batch are erased when a later commit re-check fails', async t => {
@@ -358,7 +360,7 @@ test('F7 and F8: values recorded by an earlier batch are erased when a later com
   const app = await startLiveServer(t, {
     onGenerate: async request => {
       if (database && request.agentId.endsWith('question_drafting')) {
-        database.prepare('UPDATE consent_grants SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL').run(new Date().toISOString(), documentConsentId);
+        await database.prepare('UPDATE consent_grants SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL').run(new Date().toISOString(), documentConsentId);
       }
     },
   });
@@ -366,10 +368,10 @@ test('F7 and F8: values recorded by an earlier batch are erased when a later com
   database = app.database;
   documentConsentId = scenario.documentConsentId;
   await scenario.startLiveRun('closeout-two-batch');
-  const runId = app.database.prepare('SELECT id FROM workflow_runs ORDER BY created_at DESC LIMIT 1').get().id;
-  const rows = app.database.prepare(`SELECT observation.value_json, observation.redaction_reason_code FROM coverage_parameter_observations observation
+  const runId = (await app.database.prepare('SELECT id FROM workflow_runs ORDER BY created_at DESC LIMIT 1').get()).id;
+  const rows = await app.database.prepare(`SELECT observation.value_json, observation.redaction_reason_code FROM coverage_parameter_observations observation
     JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id WHERE parameter.workflow_run_id = ?`).all(runId);
   assert.ok(rows.length >= 1, 'the extraction batch recorded observations before the revocation');
   assert.ok(rows.every(row => row.value_json === null && row.redaction_reason_code === 'source_consent_not_current'));
-  assert.equal(app.database.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(runId).status, 'revoked');
+  assert.equal((await app.database.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(runId)).status, 'revoked');
 });
