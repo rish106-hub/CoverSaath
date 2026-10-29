@@ -1,0 +1,75 @@
+tests/evidence-completion-persistence.test.mjs
+  s_a648b4d63ff6dd::t_d105d9bee93588 82
+src/features/coverage-analysis/contracts.js
+  s_a648b4d63ff6dd::t_7827b09a18cb5c 13
+src/backend/database/postgres/validate-schema.js
+  s_a648b4d63ff6dd::t_f07685bb56286d 109-118,122,133,150-151
+  s_a648b4d63ff6dd::t_03f12b5273e9be 119-121
+src/backend/repositories/audit-repository.js
+  s_a648b4d63ff6dd::t_24ec4d18e43146 22-24,41
+  s_a648b4d63ff6dd::t_18a7f813f819de 58
+tests/postgres-runner.test.mjs
+  s_a648b4d63ff6dd::t_d105d9bee93588 15,37,256-280
+  s_a648b4d63ff6dd::t_fe7df6d7fec7f0 281
+tests/p1a-execution-policy.test.mjs
+  s_a648b4d63ff6dd::t_146a498d78f4bf 175,178
+README.md
+  s_a648b4d63ff6dd::t_735bd699ea72af 100
+src/contracts/persistence-ports.js
+  s_a648b4d63ff6dd::t_7827b09a18cb5c 1-2
+docs/iterations/LATEST.md
+  s_692c874d7b8ff3::t_23111197f26934 3-15
+  s_a648b4d63ff6dd::t_00559152e90878 16-17
+src/backend/database/AGENTS.md
+  s_a648b4d63ff6dd::t_735bd699ea72af 5,9
+tests/postgres-catalog-parity.test.mjs
+  s_a648b4d63ff6dd::t_146a498d78f4bf 4-5,89-92,101-102,104-107,111-112,116,120-130,133
+  s_a648b4d63ff6dd::t_d105d9bee93588 141
+src/contracts/task-contracts.js
+  s_a648b4d63ff6dd::t_7827b09a18cb5c 2
+src/features/input/ocr-blocks.js
+  s_a648b4d63ff6dd::t_7827b09a18cb5c 23
+src/backend/database/postgres/migrations/016_data_api_lockdown.sql
+  s_a648b4d63ff6dd::t_d6ec5b0ed9c48d 1-36
+.env.example
+  s_a648b4d63ff6dd::t_735bd699ea72af 3-6
+.gitignore
+  s_a648b4d63ff6dd::t_c7cb582067aac6 28
+src/backend/services/policy-evidence-service.js
+  s_a648b4d63ff6dd::t_7827b09a18cb5c 235-236
+tests/postgres-triggers.test.mjs
+  s_a648b4d63ff6dd::t_146a498d78f4bf 3
+AGENTS.md
+  s_692c874d7b8ff3::t_6bbd6d62246e0d 47
+docs/adr/0011-supabase-master-database.md
+  s_692c874d7b8ff3::t_d415bc18c30f57 19
+  s_692c874d7b8ff3::t_15b39146951e7e 3
+  s_692c874d7b8ff3::t_bc9b4fd91a3391 22-31
+  s_a648b4d63ff6dd::t_b93e6e7ddeca40 44-45
+docs/architecture/data.md
+  s_a648b4d63ff6dd::t_d6a2dcfbc50ea9 7,9,14,16-19,21,75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "098fe06c14965ad44b53a84482157e911fbb1929",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "unknown"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    },
+    "s_a648b4d63ff6dd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bcb08fdf-25c3-4ead-9a5f-2b37dae7a08d",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
