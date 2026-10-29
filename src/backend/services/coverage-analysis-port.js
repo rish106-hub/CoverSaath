@@ -219,6 +219,39 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
     }
     return { decision: Object.freeze({ allowed: true, reasonCode: null }), caseRecord };
   }
+  // One audited dispatch decision; the caller holds the household lock. The evaluation
+  // runs in a savepoint so a failed query denies without aborting the audit insert.
+  async function auditedDispatchDecision(request, safeRead) {
+    let decision;
+    let caseRecord = null;
+    try {
+      ({ decision, caseRecord } = await database.transaction(() => evaluateModelDispatch(request)));
+    } catch {
+      decision = deny('DISPATCH_VALIDATION_ERROR');
+    }
+    const sourceIds = safeRead(() => request.authorizedSourceIds);
+    const task = safeRead(() => request.task);
+    const runId = safeRead(() => request.runId);
+    try {
+      await services.audit.append({
+        householdId: caseRecord?.household_id ?? null,
+        caseId: caseRecord?.id ?? null,
+        action: decision.allowed ? 'analysis.model_dispatch_authorized' : 'analysis.model_dispatch_denied',
+        resourceType: 'workflow_run',
+        resourceId: (decision.allowed || caseRecord ? boundedId(runId) : null) ?? 'unresolved-run',
+        payload: {
+          task: typeof task === 'string' && /^[a-z_]{1,80}$/.test(task) ? task : 'invalid',
+          modelRecipient,
+          sourceCount: Array.isArray(sourceIds) ? Math.min(sourceIds.length, MAX_DISPATCH_SOURCES + 1) : 0,
+          reasonCode: decision.allowed ? null : decision.reasonCode,
+        },
+      });
+    } catch {
+      // A decision that cannot be audited is not allowed.
+      return deny('DISPATCH_AUDIT_FAILED');
+    }
+    return decision;
+  }
   // Documents of a run whose persisted sources are no longer eligible under
   // current consent. Used to scope derived-data erasure; an empty result means
   // the cause could not be attributed to documents and the whole run is erased.
@@ -452,38 +485,24 @@ export function createCoverageAnalysisPort({ database, services, modelRecipient 
     // error or rejected query denies. Each decision is audited with id-free
     // metadata only.
     async authorizeModelDispatch(request) {
-      let decision;
-      let caseRecord = null;
-      try {
-        ({ decision, caseRecord } = await evaluateModelDispatch(request));
-      } catch {
-        decision = deny('DISPATCH_VALIDATION_ERROR');
-      }
       // Audit metadata is read defensively: a hostile or malformed request must
       // not turn a denial into an exception, and no request content is echoed.
       const safeRead = read => { try { return read(); } catch { return undefined; } };
-      const sourceIds = safeRead(() => request.authorizedSourceIds);
-      const task = safeRead(() => request.task);
-      const runId = safeRead(() => request.runId);
+      // Decision and audit run under the household lock that revocation takes, so a
+      // check never reads consent that a concurrent revocation is about to commit
+      // and an allowed decision is always audited before that revocation.
+      let householdId = null;
       try {
-        await services.audit.append({
-          householdId: caseRecord?.household_id ?? null,
-          caseId: caseRecord?.id ?? null,
-          action: decision.allowed ? 'analysis.model_dispatch_authorized' : 'analysis.model_dispatch_denied',
-          resourceType: 'workflow_run',
-          resourceId: (decision.allowed || caseRecord ? boundedId(runId) : null) ?? 'unresolved-run',
-          payload: {
-            task: typeof task === 'string' && /^[a-z_]{1,80}$/.test(task) ? task : 'invalid',
-            modelRecipient,
-            sourceCount: Array.isArray(sourceIds) ? Math.min(sourceIds.length, MAX_DISPATCH_SOURCES + 1) : 0,
-            reasonCode: decision.allowed ? null : decision.reasonCode,
-          },
-        });
+        const caseId = boundedId(safeRead(() => request.caseId));
+        householdId = caseId ? await householdOfCase(caseId) : null;
       } catch {
-        // A decision that cannot be audited is not allowed.
+        return deny('DISPATCH_VALIDATION_ERROR');
+      }
+      try {
+        return await database.transaction(() => auditedDispatchDecision(request, safeRead), { locks: [householdLock(householdId)] });
+      } catch {
         return deny('DISPATCH_AUDIT_FAILED');
       }
-      return decision;
     },
     getJob,
     async getTask(taskId) { return services.workflows.getTask(taskId); },
