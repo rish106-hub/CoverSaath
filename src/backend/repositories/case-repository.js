@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { householdLock } from '../database/postgres/locks.js';
+import { caseCapacityLock, householdLock } from '../database/postgres/locks.js';
 import { assertCaseTransition, emergencyInstruction } from '../state/case-state-machine.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
@@ -7,6 +7,14 @@ function nextRevision(previous, candidate) {
   const before = Date.parse(previous);
   const after = Date.parse(candidate);
   return new Date(Number.isFinite(after) && after > before ? after : before + 1).toISOString();
+}
+
+// The cap counts every case in the database, so the lock that keeps it true under concurrency is one
+// fixed global key, like session capacity.
+const CASE_CAPACITY_KEY = 'global';
+
+function capacityReached() {
+  return Object.assign(new Error('Active case capacity reached.'), { code: 'CASE_CAPACITY_REACHED', statusCode: 429 });
 }
 
 function staleRevision() {
@@ -20,10 +28,20 @@ function staleRevision() {
 export class CaseRepository {
   constructor(database, { clock = () => new Date(), audit } = {}) { this.database = database; this.clock = clock; this.audit = audit; }
 
-  async create({ id: caseId = id('case'), householdId, subjectMemberId = null, openedByAdultId, triggerType, statedEstimateMinor = null, currency = null }) {
+  async create({ id: caseId = id('case'), householdId, subjectMemberId = null, openedByAdultId, triggerType, statedEstimateMinor = null, currency = null, maxActiveCases = null }) {
+    if (maxActiveCases !== null && (!Number.isSafeInteger(maxActiveCases) || maxActiveCases < 0)) {
+      throw new TypeError('maxActiveCases must be a non-negative integer or null.');
+    }
     const at = this.clock().toISOString();
     const emergency = triggerType === 'emergency' ? 1 : 0;
+    // With a cap, the count and the insert run in one transaction under the global case-capacity lock
+    // (taken before the household lock), so concurrent creations cannot all pass the check.
     return this.database.transaction(async () => {
+      if (maxActiveCases !== null) {
+        const { count } = await this.database.one(`SELECT count(*) AS count FROM service_cases
+          WHERE status NOT IN ('closed', 'revoked')`, []);
+        if (count >= maxActiveCases) throw capacityReached();
+      }
       await this.database.run(`INSERT INTO service_cases
         (id, household_id, subject_member_id, opened_by_adult_id, trigger_type, status, emergency_mode,
          stated_estimate_minor, currency, created_at, updated_at)
@@ -31,7 +49,7 @@ export class CaseRepository {
       [caseId, householdId, subjectMemberId, openedByAdultId, triggerType, emergency, statedEstimateMinor, currency, at, at]);
       await this.audit?.append({ householdId, caseId, actorType: 'adult_user', actorId: openedByAdultId, action: 'case.created', resourceType: 'case', resourceId: caseId, payload: { triggerType, emergencyInstruction: emergencyInstruction(triggerType) } });
       return this.get(caseId);
-    }, { locks: [householdLock(householdId)] });
+    }, { locks: [...(maxActiveCases !== null ? [caseCapacityLock(CASE_CAPACITY_KEY)] : []), householdLock(householdId)] });
   }
 
   async get(caseId) {

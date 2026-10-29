@@ -405,6 +405,8 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         triggerType: requiredString(body.triggerType, 'triggerType'),
         statedEstimateMinor: body.statedEstimateMinor ?? null,
         currency: body.currency ?? null,
+        // The check above is a fast fail only. This one counts and inserts under a global lock.
+        maxActiveCases: config.maxCases,
       });
       return { status: 201, body: record };
     }
