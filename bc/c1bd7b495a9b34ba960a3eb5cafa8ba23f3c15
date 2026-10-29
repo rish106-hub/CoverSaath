@@ -1,0 +1,21 @@
+tests/postgres-gap-coverage.test.mjs
+  s_692c874d7b8ff3::t_702e503a77fc56 37-38,41
+  s_692c874d7b8ff3::t_514f2a69f5a982 8
+  s_692c874d7b8ff3::t_34eb4aa4b71e78 1-7,9-36,39-40,42-248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bcc1bd7b495a9b34ba960a3eb5cafa8ba23f3c15",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
