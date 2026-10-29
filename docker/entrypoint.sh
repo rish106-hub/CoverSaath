@@ -15,8 +15,8 @@ runuser -u node -- node /app/src/server/server.js &
 node_pid=$!
 
 trap 'kill $clamd_pid "$node_pid" 2>/dev/null || true' TERM INT
-wait -n || true
-status=$?
+status=0
+wait -n || status=$?
 kill $clamd_pid "$node_pid" 2>/dev/null || true
 wait || true
 exit "$status"
