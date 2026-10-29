@@ -8,7 +8,7 @@
 - CoverSaath is canonical. Rename legacy `knowvia` identifiers only with a compatibility plan.
 
 ## Start here
-- Read this file, `docs/iterations/LATEST.md`, and the active task brief.
+- Read `AI.md` first (60-second orientation: commands, map, gotchas), then this file, `docs/iterations/LATEST.md`, and the active task brief.
 - Inspect only affected files, callers, data, contracts and tests before widening scope.
 - Map impact before editing. Use repository mapping tools when available and report gaps.
 - Check for a closer `AGENTS.md` in the directory being changed.

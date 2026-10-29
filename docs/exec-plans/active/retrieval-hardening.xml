@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<implementation_prompt id="coversaath-retrieval-hardening" version="1.0" created="2026-10-20" status="planned">
+  <title>Evidence retrieval hardening: budgets, completeness reporting, clause discoverability, honest recall</title>
+
+  <base_branch>codex/backend-first-layout at 523ccd1 (Ground claims, independent override sweep, consent-first document limit)</base_branch>
+  <parent_plan>docs/exec-plans/active/direction-change.md (evidence-retrieval-first, Phase B)</parent_plan>
+
+  <persona>
+    <role>
+      Retrieval hardening owner. Finish and prove the existing evidence pipeline; do not extend it.
+      Assume every silent drop of evidence is a defect until a test proves it is reported.
+    </role>
+    <operating_style>
+      One slice at a time, end to end: build, narrow checks, broad checks, independent read-only review, fix, then next slice.
+      Smallest reversible change. Deterministic code decides budgets, exclusions and completeness. Models propose only.
+      Never weaken a consent, tenant, privacy-gate or audit control to make a test pass.
+    </operating_style>
+    <refuses>
+      Embeddings, a vector database, new agents, a new provider, new dependencies, registry expansion,
+      UI work, multi-policy association (separate decision), deployment.
+    </refuses>
+  </persona>
+
+  <start_here>
+    <read>AGENTS.md</read>
+    <read>docs/iterations/LATEST.md</read>
+    <read>docs/exec-plans/active/direction-change.md</read>
+    <read>src/features/policy-evidence/investigate.js (selectContext, selectSweepContext, investigate)</read>
+    <read>src/features/policy-evidence/clauses.js (KIND_RULES, classifyClause)</read>
+    <read>src/features/policy-evidence/recall-eval.js</read>
+    <read>src/backend/services/policy-evidence-service.js (MAX_DOCUMENTS, ensureClauses loop)</read>
+    <read>src/features/ai-analysis/structuring-runtime.js, model-gateway.js, prompts.js (buildPromptContract)</read>
+    <read>src/contracts/policy-evidence.js (CLAUSE_KINDS, validateAnswer)</read>
+    <note>Run repomap impact before editing any shared file. Check for a closer AGENTS.md in each directory changed.</note>
+  </start_here>
+
+  <confirmed_facts>
+    <fact id="F1">INVESTIGATION_LIMITS.contextBudgetBytes = 80_000 (investigate.js:11). selectContext takes the whole_policy path when total wire bytes &lt;= budget (investigate.js:56).</fact>
+    <fact id="F2">STRUCTURING_GATEWAY_LIMITS.maxInputBytes = 64_000 default, env STRUCTURING_MAX_INPUT_BYTES capped at 96_000 (structuring-runtime.js:13,18).</fact>
+    <fact id="F3">The gateway rejects when Buffer.byteLength(contract.evidence) &gt; maxInputBytes (model-gateway.js:79). For structuring tasks contract.evidence = JSON.stringify(payload) (prompts.js:37). The system prompt is not counted; the question, checklist, findings and JSON punctuation are.</fact>
+    <fact id="F4">Consequence of F1-F3: a policy whose clause wire size is between ~64 KB and 80 KB takes the whole_policy path and is rejected before the first call. This is the normal mid-size path, not an edge case.</fact>
+    <fact id="F5">selectSweepContext allows budgetBytes * 1.5 = 120_000 bytes (investigate.js:159), above even the 96_000 ceiling. Sweep payload also carries findings. A rejected sweep is swallowed and reported only as sweep incomplete.</fact>
+    <fact id="F6">policy-evidence-service.js:81 drops authorised documents beyond MAX_DOCUMENTS = 10 with no count reported. Documents failing ensureClauses with OCR_PAGES_UNAVAILABLE, OCR_PAGES_INCOMPLETE or DOCUMENT_NOT_FOUND are skipped with a bare continue, also unreported.</fact>
+    <fact id="F7">CLAUSE_KINDS includes 'condition' and 'other' (contracts/policy-evidence.js:5). KIND_RULES has no 'condition' rule, so classifyClause never returns it; unmatched clauses become 'other' (clauses.js:8-22).</fact>
+    <fact id="F8">BASE_KINDS (checklist) includes 'condition' but not 'other'; SWEEP_KINDS excludes 'other', 'benefit' and 'procedure' (investigate.js:15,139). On the retrieved path a clause classified 'other' can never be selected.</fact>
+    <fact id="F9">recall-eval.js excludes expected clauses that cannot be located in gated text from the recall denominator (lines 17-28); the aggregate scores only resolved items.</fact>
+    <fact id="F10">recall-eval.js seeds the sweep with item.expected[0].quote (line 21): the golden answer is given to retrieval, which real operation never has.</fact>
+  </confirmed_facts>
+
+  <assumptions>
+    <assumption>Answer contract changes stay additive (new optional fields), so stored answers stay valid. Verify validateAnswer and persistence before adding fields; if a migration is needed, stop and ask.</assumption>
+    <assumption>FTS5 search can run without a kind filter (kinds empty or omitted) through services.clauses.searchClauses. Verify in the repository before relying on it.</assumption>
+    <assumption>Clause wire size is roughly stable across gate runs, so a byte-exact payload check at call time is enough; no tokenizer is needed.</assumption>
+  </assumptions>
+
+  <blocking_unknowns>
+    <unknown>Whether the owner prefers refusing or answering-incomplete when authorised documents exceed MAX_DOCUMENTS. Plan default: answer, force state 'conditional', report counts in unknowns and a new completeness block. Confirm before S1 BUILD.</unknown>
+  </blocking_unknowns>
+
+  <risk_classification>data-sensitive and AI-sensitive (changes what evidence reaches Gemini and how completeness is reported). Each slice needs an independent read-only review before PR.</risk_classification>
+
+  <slices>
+
+    <slice id="S1" title="Align retrieval budgets with the gateway and report every excluded document and clause" issues="1,2">
+      <outcome>
+        No investigation payload can exceed the gateway input limit. First pass and sweep have separate budgets derived from
+        the live gateway limit minus measured payload overhead. Every authorised document or clause not read is counted in the
+        answer, and an incomplete read can never produce state 'evidence_found'.
+      </outcome>
+      <owned_paths>
+        <path>src/features/policy-evidence/investigate.js</path>
+        <path>src/backend/services/policy-evidence-service.js</path>
+        <path>src/features/ai-analysis/structuring-runtime.js (expose maxInputBytes on the call factory only; no limit change)</path>
+        <path>src/contracts/policy-evidence.js (additive completeness field, if validateAnswer requires it)</path>
+        <path>tests/policy-evidence-investigate.test.mjs</path>
+        <path>tests/policy-evidence-document-limit.test.mjs</path>
+        <path>tests/policy-evidence-api.test.mjs (only if response shape assertions change)</path>
+      </owned_paths>
+      <steps>
+        <step n="1">Make the model call factory expose its maxInputBytes (read-only). The service passes it into investigate as limits.maxInputBytes. Remove the independent 80_000 constant as the source of truth; keep it only as a fallback when no gateway limit is supplied (tests).</step>
+        <step n="2">Add a deterministic budget function: firstPassBudget = maxInputBytes - bytes(payload without clauses) - safety margin (fixed, e.g. 2% or 1 KB, documented). sweepBudget computed the same way from the sweep payload skeleton, including the serialised findings. Both are measured with the same JSON.stringify the gateway uses (prompts.js:37).</step>
+        <step n="3">selectContext: choose whole_policy only when the full first-pass payload fits firstPassBudget. Otherwise take the retrieved path.</step>
+        <step n="4">selectSweepContext: replace budgetBytes * 1.5 with sweepBudget. If the first-pass context plus findings already exceeds sweepBudget, drop lowest-priority first-pass clauses not cited by any finding before adding sweep hits; never drop a cited clause. Record clauses dropped.</step>
+        <step n="5">Before each call, assert bytes(payload) &lt;= maxInputBytes in investigate. On violation fail with a coded INVESTIGATION_BUDGET_EXCEEDED rather than a provider error, so a regression is visible in tests.</step>
+        <step n="6">Service: collect excluded documents with reasons: over_document_limit, ocr_unavailable, ocr_incomplete, not_found. Do not include document names or identifiers in unknowns text; counts and reasons only.</step>
+        <step n="7">Answer: add an additive completeness block, e.g. { documentsAuthorised, documentsRead, documentsExcluded: [{reason, count}], clausesWithheldByGate, clausesNotRead, sweepClausesDropped }. Any non-zero exclusion forces state 'conditional' and adds a plain unknown line. Existing truncated and withheld handling feeds the same block.</step>
+      </steps>
+      <tests>
+        <test>Policy whose payload is 1 byte under firstPassBudget: whole_policy path, gateway accepts (use the real gateway in fixture mode, not a stub).</test>
+        <test>Policy 1 byte over firstPassBudget but under 80 KB: retrieved path, gateway accepts. This test fails on current main.</test>
+        <test>Sweep near limit: many findings plus large context; sweep payload &lt;= maxInputBytes, cited clauses kept, sweepClausesDropped reported.</test>
+        <test>STRUCTURING_MAX_INPUT_BYTES set to 96_000 and to a small value: budgets follow the setting.</test>
+        <test>12 authorised documents: 10 read, completeness reports 2 over_document_limit, state is 'conditional', unknowns mention the count.</test>
+        <test>One authorised document with OCR incomplete: reported as ocr_incomplete; answer not 'evidence_found'.</test>
+        <test>Unauthorised documents are not counted as excluded (consent filtering stays first) and never leak counts across households.</test>
+        <test>Revocation mid-run still throws CONSENT_* (no regression).</test>
+      </tests>
+      <acceptance>
+        <item>No code path sends a payload above the gateway limit (asserted in tests at both limits).</item>
+        <item>Zero silent exclusions: every dropped document or clause appears in completeness.</item>
+        <item>npm run check, npm run eval:safety, npm run check:architecture, npm test, git diff --check pass.</item>
+      </acceptance>
+      <non_goals>Changing gateway default limits; token-based budgeting; chunking a policy into multiple first-pass calls.</non_goals>
+    </slice>
+
+    <slice id="S2" title="Make every stored clause discoverable, including 'other' and unusual conditions" issues="3">
+      <outcome>
+        Clause kind is a ranking hint, not a filter. On the retrieved path and in the sweep, a relevant clause classified
+        'other' (or misclassified) can still reach Gemini.
+      </outcome>
+      <owned_paths>
+        <path>src/features/policy-evidence/investigate.js (selectContext, selectSweepContext, BASE_KINDS, SWEEP_KINDS)</path>
+        <path>src/features/policy-evidence/clauses.js (KIND_RULES)</path>
+        <path>src/backend/repositories (clause search only, if an unfiltered or boosted query is needed; verify path with repomap)</path>
+        <path>tests/policy-evidence-clauses.test.mjs</path>
+        <path>tests/policy-evidence-investigate.test.mjs</path>
+      </owned_paths>
+      <steps>
+        <step n="1">Add a 'condition' rule to KIND_RULES (e.g. "subject to", "provided that", "only if", "on condition", "shall be eligible"), ordered after exclusion and waiting_period. Bump the clause builder version if clause ids or kinds are versioned so stored clauses are rebuilt; check ensureClauses behaviour first.</step>
+        <step n="2">Retrieval order in selectContext: (a) endorsements and schedule facts, (b) an unfiltered FTS search over all kinds for the question, (c) per-kind searches as boosts interleaved by rank, (d) an explicit 'other' search. Dedup as today. Budget from S1 still caps the total.</step>
+        <step n="3">selectSweepContext: run each sweep query once unfiltered and once with SWEEP_KINDS, and include 'other' in SWEEP_KINDS. Cap queries as today.</step>
+        <step n="4">Keep the comment in clauses.js that kind is a retrieval aid; add that it must never gate retrieval.</step>
+      </steps>
+      <tests>
+        <test>Synthetic large policy (retrieved path) whose only relevant clause is classified 'other': clause appears in first-pass context.</test>
+        <test>Same for a sweep-only override clause classified 'other' and one classified 'benefit': appears in sweep context.</test>
+        <test>classifyClause returns 'condition' for representative synthetic condition wording and does not steal exclusion or waiting-period wording.</test>
+        <test>Existing recall tests do not regress.</test>
+      </tests>
+      <acceptance>
+        <item>No CLAUSE_KINDS value is unreachable by retrieval (test enumerates kinds).</item>
+        <item>Broad checks pass as in S1.</item>
+      </acceptance>
+      <non_goals>Embeddings, reranker models, model-based classification.</non_goals>
+    </slice>
+
+    <slice id="S3" title="Make the recall evaluator honest" issues="4">
+      <outcome>
+        The evaluator reports end-to-end evidence recall over every expected clause, and evaluates the sweep with findings
+        the pipeline itself produced, never with golden quotes.
+      </outcome>
+      <owned_paths>
+        <path>src/features/policy-evidence/recall-eval.js</path>
+        <path>tests/policy-evidence-recall.test.mjs</path>
+        <path>scripts/ (only the existing recall runner, if one exists)</path>
+      </owned_paths>
+      <steps>
+        <step n="1">Count unresolvable expected clauses as misses in an endToEndRecall metric (denominator = all expected). Keep retrievalRecall over resolved items as a secondary diagnostic, clearly labelled. Report unresolvable reasons separately: not_in_stored_text vs withheld_by_gate.</step>
+        <step n="2">Remove the golden-quote seed. Two sweep modes: (a) offline: seed findings from first-pass context only, using clause subjects or titles the pipeline would see, with no expected data; (b) live: accept recorded first-pass model findings (a fixture file or a callback) so the sweep is measured against what Gemini actually returned.</step>
+        <step n="3">Headline result = endToEndRecall for the sweep context. Report per question: expected, missed pages, unresolvable, path, and S1 completeness counts.</step>
+        <step n="4">Fail loudly (coded RECALL_INPUT_INVALID) if golden data is passed into the sweep seed, guarded by a test.</step>
+      </steps>
+      <tests>
+        <test>Golden item with one unresolvable expected clause: endToEndRecall &lt; 1 while retrievalRecall can be 1.</test>
+        <test>Sweep seed contains no text from expected quotes (assert by substring check).</test>
+        <test>Recorded-findings mode produces the same sweep context as investigate given the same findings.</test>
+      </tests>
+      <acceptance>
+        <item>Synthetic tests only. The report states that recall on real policies is unmeasured until the owner runs it on a human-verified corpus.</item>
+        <item>Broad checks pass as in S1.</item>
+      </acceptance>
+      <non_goals>Building the human-verified corpus; committing any real policy text or golden quotes from real policies.</non_goals>
+    </slice>
+
+  </slices>
+
+  <after_slices owner="product owner">
+    <item>Run the corrected evaluator on a human-verified policy corpus kept outside the repository; record only aggregate numbers in LATEST.md.</item>
+    <item>Run one complete live backend journey (upload, Sarvam OCR, clauses, question, Gemini first pass and sweep) and verify citations, exclusions and omissions by hand.</item>
+    <item>Decide multi-policy association (issue 5) separately; until then multi-document answers keep the existing warning and the S1 completeness block.</item>
+  </after_slices>
+
+  <verification>
+    <command>npm run check</command>
+    <command>npm run eval:safety</command>
+    <command>npm run check:architecture</command>
+    <command>npm test</command>
+    <command>git diff --check</command>
+    <rule>Mocked or fixture-mode tests do not prove the live journey. Each slice report states what remains unverified.</rule>
+    <rule>Independent read-only review per slice (AI and data-sensitive change) before PR.</rule>
+  </verification>
+
+  <rollback>
+    Each slice is one PR with no migration (stop and ask if one becomes necessary). Revert the PR to roll back.
+    S2 may change stored clause kinds through a builder version bump; rollback means clauses rebuild under the old version on next ensureClauses.
+  </rollback>
+
+  <report_format>
+    Per slice: changes with file:line, tests added, check results, unverified items, security and data impact, rollback, follow-ups.
+    Update docs/iterations/LATEST.md only when a slice merges.
+  </report_format>
+</implementation_prompt>
