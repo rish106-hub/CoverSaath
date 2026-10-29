@@ -5,8 +5,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
-import { openDatabase } from '../src/backend/database/index.js';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
+
+const pgOptions = postgresTestOptions();
 
 // ADR 0008 answer API through the real application: upload, Sarvam OCR (mocked HTTP), stored blocks, clauses,
 // Gemini through the model gateway (mocked SDK driver), cited conditional answer. Synthetic data only.
@@ -98,7 +100,7 @@ async function eventually(check, { timeoutMs = 3000 } = {}) {
 
 async function startApp(t, { env: extraEnv = {} } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-structuring-'));
-  const database = openDatabase({ path: join(directory, 'app.sqlite') });
+  const { db: database } = await freshDatabase(t);
   const requests = [];
   const env = {
     KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken,
@@ -118,7 +120,6 @@ async function startApp(t, { env: extraEnv = {} } = {}) {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise(resolve => server.close(resolve));
-    database.close();
     rmSync(directory, { recursive: true, force: true });
   });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -194,9 +195,9 @@ async function scenario(app, name = 'Structuring') {
 const ask = (app, s, { grantId = s.questionGrantId, key = randomUUID(), question = 'What is the room rent limit?', token = s.token, caseId = s.caseId } = {}) => app.call(`/api/v1/cases/${caseId}/questions`, {
   method: 'POST', token, headers: { 'Idempotency-Key': key }, body: { question, consentGrantId: grantId },
 });
-const rows = (app, table) => app.database.prepare(`SELECT count(*) AS count FROM ${table}`).get().count;
+const rows = async (app, table) => (await app.database.prepare(`SELECT count(*) AS count FROM ${table}`).get()).count;
 
-test('B4: a question is answered with cited, conditional evidence and replays without new provider calls', async t => {
+test('B4: a question is answered with cited, conditional evidence and replays without new provider calls', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app);
   const key = randomUUID();
@@ -227,7 +228,7 @@ test('B4: a question is answered with cited, conditional evidence and replays wi
   assert.ok(!JSON.stringify(read.data).includes('consentGrantId') && !JSON.stringify(replay.data).includes('consentGrantId'), 'access metadata is never returned');
 });
 
-test('B4: no question grant, a structuring-only grant or a disabled flag never reaches the model', async t => {
+test('B4: no question grant, a structuring-only grant or a disabled flag never reaches the model', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app);
   const structuringOnly = await ask(app, s, { grantId: s.structuringGrantId });
@@ -246,7 +247,7 @@ test('B4: no question grant, a structuring-only grant or a disabled flag never r
   assert.equal(off.requests.length, 0);
 });
 
-test('B4: another household gets the same 404 and no stored answer is readable', async t => {
+test('B4: another household gets the same 404 and no stored answer is readable', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app, 'Mine');
   const other = await scenario(app, 'Other');
@@ -262,29 +263,29 @@ test('B4: another household gets the same 404 and no stored answer is readable',
   assert.equal(ownCaseForeignAnswer.status, 404);
 });
 
-test('B4: revoking the question grant erases clauses, FTS rows and answers', async t => {
+test('B4: revoking the question grant erases clauses and answers', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app);
   const answered = await ask(app, s);
   assert.equal(answered.status, 201);
-  assert.ok(rows(app, 'policy_clauses') > 0 && rows(app, 'policy_answers') === 1);
+  assert.ok(await rows(app, 'policy_clauses') > 0 && await rows(app, 'policy_answers') === 1);
   const revoked = await app.call(`/api/v1/consents/${s.questionGrantId}/revoke`, { method: 'POST', token: s.token, body: {} });
   assert.ok([200, 201, 204].includes(revoked.status), JSON.stringify(revoked.data));
-  assert.equal(rows(app, 'policy_clauses'), 0);
-  assert.equal(rows(app, 'policy_answers'), 0);
+  assert.equal(await rows(app, 'policy_clauses'), 0);
+  assert.equal(await rows(app, 'policy_answers'), 0);
   assert.equal((await app.call(`/api/v1/cases/${s.caseId}/questions/${answered.data.answerId}`, { token: s.token })).status, 404);
   const after = await ask(app, s, { key: randomUUID() });
   assert.ok([403, 409].includes(after.status));
   assert.equal(app.requests.length, 2, 'no new provider call after revocation');
 });
 
-test('v9 review: the stored question and answer carry the gated question, never the raw one; revocation erases the row', async t => {
+test('v9 review: the stored question and answer carry the gated question, never the raw one; revocation erases the row', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app);
   const question = `What is the room rent limit for ${OWNER_NAME}, mobile 98765 43210?`;
   const answered = await ask(app, s, { question });
   assert.equal(answered.status, 201, JSON.stringify(answered.data));
-  const stored = app.database.prepare('SELECT question, answer_json FROM policy_answers').get();
+  const stored = await app.database.prepare('SELECT question, answer_json FROM policy_answers').get();
   for (const text of [stored.question, stored.answer_json, JSON.stringify(answered.data)]) {
     assert.ok(!text.includes('98765') && !text.includes('43210') && !text.includes('Ishaan'), text);
   }
@@ -292,16 +293,16 @@ test('v9 review: the stored question and answer carry the gated question, never 
   assert.ok(app.requests.every(request => !request.prompt.includes('98765')));
   const revoked = await app.call(`/api/v1/consents/${s.questionGrantId}/revoke`, { method: 'POST', token: s.token, body: {} });
   assert.ok([200, 201, 204].includes(revoked.status));
-  assert.equal(rows(app, 'policy_answers'), 0, 'the question column is erased with its row');
+  assert.equal(await rows(app, 'policy_answers'), 0, 'the question column is erased with its row');
 });
 
-test('v9 re-review: the stored request digest is keyed, not a plain hash of the raw question', async t => {
+test('v9 re-review: the stored request digest is keyed, not a plain hash of the raw question', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app);
   const question = 'What is the room rent limit?';
   const key = randomUUID();
   assert.equal((await ask(app, s, { question, key })).status, 201);
-  const stored = app.database.prepare('SELECT request_digest FROM policy_answers').get().request_digest;
+  const stored = (await app.database.prepare('SELECT request_digest FROM policy_answers').get()).request_digest;
   const plain = named => createHash('sha256').update(JSON.stringify([s.caseId, question, s.questionGrantId, named])).digest('hex');
   for (const named of [null, undefined, []]) assert.notEqual(stored, plain(named), 'an unsalted hash of the question can be confirmed by guessing');
   assert.equal((await ask(app, s, { question, key })).status, 200, 'a replay in the same process still matches');

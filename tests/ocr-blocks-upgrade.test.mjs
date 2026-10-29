@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { openDatabase } from '../src/backend/database/index.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
 import { createPolicyStructuringService } from '../src/backend/services/policy-structuring-service.js';
 import { buildStoredBlocks, createOcrService, serializeStoredBlocks, validateOcrOutput } from '../src/features/input/index.js';
 import { parameterAt as at, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 import { rawSarvamResult, sarvamTransport } from './support/sarvam-blocks-fixture.mjs';
+import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+
+const pgOptions = postgresTestOptions();
 
 // Explicit block upgrade for knowvia.ocr.v1 documents (blocks upgrade defect): structuring told the
 // household to "Run OCR again", which a stored v1 success always blocked. Fake providers count every
@@ -20,32 +22,31 @@ const expected = { documentId: document, sourceVersion: 'version-1', contentSha2
 // The page text a Sarvam-shaped result normalises to; a v1 document stored exactly this text.
 const sarvamTexts = (raw = rawSarvamResult()) => sarvamTransport().normalizeResult(raw, expected).pages.map(page => page.text);
 
-function open(t, { texts = sarvamTexts(), withBlocks = false } = {}) {
-  const database = openDatabase({ path: ':memory:' });
-  t.after(() => database.close());
-  seedParameterWorld(database);
+async function open(t, { texts = sarvamTexts(), withBlocks = false } = {}) {
+  const { db: database } = await freshDatabase(t);
+  await seedParameterWorld(database);
   const services = createBackendServices(database, { clock: () => new Date(at) });
-  services.coverageParameters.initializeRunParameters({ workflowRunId: run, registryVersion: 'policy-parameters/v1', ...parameterScope(), updatedBy: 'test' });
-  database.prepare(`INSERT INTO document_uploads (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
+  await services.coverageParameters.initializeRunParameters({ workflowRunId: run, registryVersion: 'policy-parameters/v1', ...parameterScope(), updatedBy: 'test' });
+  await database.prepare(`INSERT INTO document_uploads (id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
     original_filename, storage_path, content_sha256, mime_type, byte_size, malware_status, encryption_status, lifecycle_state, uploaded_at, source_version)
     VALUES (?, ?, 'case-parameters', 'adult-parameters', 'consent-parameters', 'policy_schedule', 'fixture.pdf', 'fixture/document-upgrade', ?,
     'application/pdf', 100, 'clean', 'encrypted_local', 'active', ?, 'version-1')`).run(document, household, expected.contentSha256, at);
   for (const [id, action, recipient] of [['scope-collect', 'collect', null], ['scope-gemini-upgrade', 'derive', 'google-gemini']]) {
-    database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
+    await database.prepare(`INSERT INTO consent_scopes (id, consent_grant_id, resource_type, resource_id, action, data_category, recipient, created_at)
       VALUES (?, 'consent-parameters', 'document', ?, ?, 'insurance_document', ?, ?)`).run(id, document, action, recipient, at);
   }
-  database.prepare(`INSERT INTO ocr_jobs (id, document_upload_id, provider, status, attempt_count, contract_version, requested_at, completed_at, updated_at)
+  await database.prepare(`INSERT INTO ocr_jobs (id, document_upload_id, provider, status, attempt_count, contract_version, requested_at, completed_at, updated_at)
     VALUES ('ocr-v1', ?, 'fixture', 'succeeded', 1, 'knowvia.ocr.v1', ?, ?, ?)`).run(document, at, at, at);
-  texts.forEach((text, index) => {
+  for (const [index, text] of texts.entries()) {
     const blocks = withBlocks ? serializeStoredBlocks(index + 1, buildStoredBlocks([{ text, tag: 'paragraph', readingOrder: 1 }], text)) : null;
-    database.prepare(`INSERT INTO source_pages (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
+    await database.prepare(`INSERT INTO source_pages (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
       extracted_text, extraction_status, created_at, text_sha256, output_contract_version, blocks_json)
       VALUES (?, ?, 'ocr-v1', ?, 'version-1', ?, ?, 'extracted', ?, ?, 'knowvia.ocr.v1', ?)`)
       .run(`page-upgrade-${index + 1}`, document, index + 1, 'b'.repeat(64), text, at, validateOcrOutput({
         schemaVersion: 'knowvia.ocr.v1', document: { id: document, sourceVersion: 'version-1', contentSha256: expected.contentSha256 },
         provider: { name: 'fixture', jobRef: 'x' }, pages: [{ pageNumber: 1, text }],
       }, {}).pages[0].textSha256, blocks);
-  });
+  }
   return { database, services };
 }
 
@@ -83,16 +84,16 @@ test('U1: the Sarvam normaliser reproduces page text exactly for the same provid
   assert.deepEqual(sarvamTexts(shuffled), first, 'text follows reading order, not response order');
 });
 
-test('a v1 document: structuring names the upgrade request instead of "Run OCR again"', t => {
-  const { services } = open(t);
+test('a v1 document: structuring names the upgrade request instead of "Run OCR again"', pgOptions, async t => {
+  const { services } = await open(t);
   const structuring = createPolicyStructuringService({ services, loadKnownIdentifiers: async () => [], createModelCall: () => () => {}, env: { POLICY_STRUCTURING_ENABLED: 'true' } });
-  assert.throws(() => structuring.start({ document: { id: document, householdId: household, caseId: 'case-parameters' }, workflowRunId: run,
+  await assert.rejects(structuring.start({ document: { id: document, householdId: household, caseId: 'case-parameters' }, workflowRunId: run,
     consentGrantId: 'consent-parameters', subjectAdultId: 'adult-parameters' }), error => error.code === 'STRUCTURING_BLOCKS_UNAVAILABLE'
     && error.statusCode === 409 && /blocks_upgrade/.test(error.message) && !/Run OCR again/.test(error.message));
 });
 
-test('without acknowledgement the upgrade is refused before any provider call (blocks upgrade defect)', async t => {
-  const { database, services } = open(t);
+test('without acknowledgement the upgrade is refused before any provider call (blocks upgrade defect)', pgOptions, async t => {
+  const { database, services } = await open(t);
   const { provider, calls } = upgradeProvider();
   const service = ocrService(services, provider);
   for (const extra of [{ acknowledgeProviderCharge: false }, { acknowledgeProviderCharge: 'true' }, { acknowledgeProviderCharge: undefined }]) {
@@ -100,39 +101,39 @@ test('without acknowledgement the upgrade is refused before any provider call (b
   }
   await assert.rejects(service.start({ documentId: document, authorization, mode: 'everything' }), { code: 'OCR_MODE_INVALID' });
   assert.equal(calls.length, 0);
-  assert.deepEqual(ocrJobs(database).map(job => job.id), ['ocr-v1'], 'no job row either');
+  assert.deepEqual((await ocrJobs(database)).map(job => job.id), ['ocr-v1'], 'no job row either');
 });
 
-test('a normal OCR request on a v1 document never starts a silent paid rerun', async t => {
-  const { database, services } = open(t);
+test('a normal OCR request on a v1 document never starts a silent paid rerun', pgOptions, async t => {
+  const { database, services } = await open(t);
   const { provider, calls } = upgradeProvider();
   const job = await ocrService(services, provider).start({ documentId: document, authorization });
   assert.equal(job.id, 'ocr-v1');
   assert.equal(calls.length, 0);
-  assert.equal(ocrJobs(database).length, 1);
+  assert.equal((await ocrJobs(database)).length, 1);
 });
 
-test('an acknowledged upgrade makes one provider call, attaches blocks to the same pages and unblocks structuring', async t => {
-  const { database, services } = open(t);
-  const before = pages(database);
+test('an acknowledged upgrade makes one provider call, attaches blocks to the same pages and unblocks structuring', pgOptions, async t => {
+  const { database, services } = await open(t);
+  const before = await pages(database);
   const { provider, calls } = upgradeProvider();
   const service = ocrService(services, provider);
   const job = await upgrade(service);
   assert.equal(job.status, 'succeeded');
   assert.equal(job.contractVersion, 'knowvia.ocr.v2', 'a job that stored blocks records the v2 output contract');
   assert.deepEqual(calls, ['createJob']);
-  const after = pages(database);
+  const after = await pages(database);
   assert.deepEqual(after.map(page => [page.id, page.extracted_text, page.text_sha256]), before.map(page => [page.id, page.extracted_text, page.text_sha256]),
     'page identity and text are unchanged, so existing observations keep their source page');
   assert.ok(after.every(page => page.blocks_json !== null && page.blocks_upgrade_job_id === job.id));
-  const stored = services.ocr.getDocumentBlockPages({ documentId: document, householdId: household });
+  const stored = await services.ocr.getDocumentBlockPages({ documentId: document, householdId: household });
   assert.equal(stored.complete, true);
 
   // Repeat request: nothing left to upgrade, no second charge.
   await assert.rejects(upgrade(service), { code: 'OCR_UPGRADE_NOT_NEEDED' });
   assert.equal(calls.length, 1);
 
-  const audits = database.prepare("SELECT action, event_payload_json FROM audit_events WHERE action LIKE 'ocr.blocks_upgrade%' ORDER BY id").all();
+  const audits = await database.prepare("SELECT action, event_payload_json FROM audit_events WHERE action LIKE 'ocr.blocks_upgrade%' ORDER BY id").all();
   assert.deepEqual(audits.map(row => row.action), ['ocr.blocks_upgrade_requested', 'ocr.blocks_upgrade_completed']);
   assert.equal(JSON.parse(audits[1].event_payload_json).pageCount, 2);
   assert.equal(JSON.stringify(audits).includes('Synthetic Insurer'), false, 'audit holds counts and codes only');
@@ -143,20 +144,20 @@ test('an acknowledged upgrade makes one provider call, attaches blocks to the sa
     createModelCall: () => async ({ payload }) => (payload.chunks ? { json: { items: [] }, usage: {} } : { json: { conflicts: [] }, usage: {} }),
   });
   const owned = { id: document, householdId: household, caseId: 'case-parameters' };
-  assert.equal(structuring.start({ document: owned, workflowRunId: run, consentGrantId: 'consent-parameters', subjectAdultId: 'adult-parameters' }).status, 'running');
+  assert.equal((await structuring.start({ document: owned, workflowRunId: run, consentGrantId: 'consent-parameters', subjectAdultId: 'adult-parameters' })).status, 'running');
   await structuring.settle(document, run);
 });
 
-test('a document that already has blocks is refused with zero provider calls', async t => {
-  const { database, services } = open(t, { withBlocks: true });
+test('a document that already has blocks is refused with zero provider calls', pgOptions, async t => {
+  const { database, services } = await open(t, { withBlocks: true });
   const { provider, calls } = upgradeProvider();
   await assert.rejects(upgrade(ocrService(services, provider)), { code: 'OCR_UPGRADE_NOT_NEEDED' });
   assert.equal(calls.length, 0);
-  assert.equal(ocrJobs(database).length, 1);
+  assert.equal((await ocrJobs(database)).length, 1);
 });
 
-test('a duplicate upgrade request returns the in-flight job without a second charge', async t => {
-  const { database, services } = open(t);
+test('a duplicate upgrade request returns the in-flight job without a second charge', pgOptions, async t => {
+  const { database, services } = await open(t);
   const { provider, calls } = upgradeProvider({ async: true });
   const service = ocrService(services, provider);
   const first = await upgrade(service);
@@ -166,18 +167,18 @@ test('a duplicate upgrade request returns the in-flight job without a second cha
   assert.deepEqual(calls, ['createJob']);
   const done = await service.refresh(first.id, { authorization });
   assert.equal(done.status, 'succeeded');
-  assert.ok(pages(database).every(page => page.blocks_upgrade_job_id === first.id));
+  assert.ok((await pages(database)).every(page => page.blocks_upgrade_job_id === first.id));
 });
 
-test('text that differs from the stored page fails closed and keeps the v1 pages', async t => {
-  const { database, services } = open(t, { texts: ['Synthetic page that was read differently', sarvamTexts()[1]] });
+test('text that differs from the stored page fails closed and keeps the v1 pages', pgOptions, async t => {
+  const { database, services } = await open(t, { texts: ['Synthetic page that was read differently', sarvamTexts()[1]] });
   const { provider, calls } = upgradeProvider({ async: true });
   const service = ocrService(services, provider);
   const job = await upgrade(service);
   await assert.rejects(service.refresh(job.id, { authorization }), { code: 'OCR_UPGRADE_TEXT_CHANGED' });
-  const failed = ocrJobs(database).find(row => row.id === job.id);
+  const failed = (await ocrJobs(database)).find(row => row.id === job.id);
   assert.deepEqual([failed.status, failed.error_code, failed.contract_version], ['failed', 'OCR_UPGRADE_TEXT_CHANGED', 'knowvia.ocr.v2']);
-  assert.ok(pages(database).every(page => page.blocks_json === null && page.blocks_upgrade_job_id === null), 'no page takes blocks');
+  assert.ok((await pages(database)).every(page => page.blocks_json === null && page.blocks_upgrade_job_id === null), 'no page takes blocks');
   // A repeat request returns the failed attempt: no second charge.
   const again = await upgrade(service);
   assert.equal(again.id, job.id);
@@ -185,47 +186,47 @@ test('text that differs from the stored page fails closed and keeps the v1 pages
   assert.deepEqual(calls, ['createJob', 'getJob']);
 });
 
-test('revocation during an upgrade cancels it, and revocation after one erases the attached blocks', async t => {
-  const { database, services } = open(t);
+test('revocation during an upgrade cancels it, and revocation after one erases the attached blocks', pgOptions, async t => {
+  const { database, services } = await open(t);
   const { provider, calls } = upgradeProvider({ async: true });
   const service = ocrService(services, provider);
   const job = await upgrade(service);
-  services.consents.revoke({ grantId: 'consent-parameters', revokedByAdultId: 'adult-parameters' });
-  assert.equal(services.ocr.getJob(job.id).status, 'cancelled');
+  await services.consents.revoke({ grantId: 'consent-parameters', revokedByAdultId: 'adult-parameters' });
+  assert.equal((await services.ocr.getJob(job.id)).status, 'cancelled');
   assert.equal((await service.refresh(job.id, { authorization })).status, 'cancelled');
   assert.equal(calls.includes('getJob'), false, 'nothing fetched after revocation');
-  assert.ok(pages(database).every(page => page.blocks_json === null));
+  assert.ok((await pages(database)).every(page => page.blocks_json === null));
 
-  const second = open(t);
+  const second = await open(t);
   const completed = upgradeProvider();
   await upgrade(ocrService(second.services, completed.provider));
-  assert.ok(pages(second.database).every(page => page.blocks_json !== null));
-  second.services.consents.revoke({ grantId: 'consent-parameters', revokedByAdultId: 'adult-parameters' });
-  assert.ok(pages(second.database).every(page => page.blocks_json === null && page.extracted_text === null));
+  assert.ok((await pages(second.database)).every(page => page.blocks_json !== null));
+  await second.services.consents.revoke({ grantId: 'consent-parameters', revokedByAdultId: 'adult-parameters' });
+  assert.ok((await pages(second.database)).every(page => page.blocks_json === null && page.extracted_text === null));
 });
 
-test('the narrowed immutability trigger allows only the one-time fill by a succeeded v2 upgrade job', async t => {
-  const { database, services } = open(t);
-  const [page] = pages(database);
+test('the narrowed immutability trigger allows only the one-time fill by a succeeded v2 upgrade job', pgOptions, async t => {
+  const { database, services } = await open(t);
+  const [page] = await pages(database);
   const blocks = serializeStoredBlocks(1, buildStoredBlocks([{ text: page.extracted_text, tag: 'paragraph', readingOrder: 1 }], page.extracted_text));
   const fill = (jobId, id = page.id) => database.prepare('UPDATE source_pages SET blocks_json = ?, blocks_upgrade_job_id = ? WHERE id = ?').run(blocks, jobId, id);
   const immutable = /source page blocks are immutable/;
-  assert.throws(() => database.prepare('UPDATE source_pages SET blocks_json = ? WHERE id = ?').run(blocks, page.id), immutable, 'no fill without an upgrade job');
-  assert.throws(() => fill('ocr-v1'), immutable, 'the v1 job is not an upgrade job');
-  database.prepare(`INSERT INTO ocr_jobs (id, document_upload_id, provider, status, attempt_count, contract_version, requested_at, updated_at)
+  await assert.rejects(database.prepare('UPDATE source_pages SET blocks_json = ? WHERE id = ?').run(blocks, page.id), immutable, 'no fill without an upgrade job');
+  await assert.rejects(fill('ocr-v1'), immutable, 'the v1 job is not an upgrade job');
+  await database.prepare(`INSERT INTO ocr_jobs (id, document_upload_id, provider, status, attempt_count, contract_version, requested_at, updated_at)
     VALUES ('ocr-v2-running', ?, 'sarvam', 'processing', 1, 'knowvia.ocr.v2', ?, ?)`).run(document, at, at);
-  assert.throws(() => fill('ocr-v2-running'), immutable, 'an unfinished upgrade job cannot fill');
-  assert.throws(() => database.prepare("UPDATE source_pages SET blocks_upgrade_job_id = 'ocr-v1' WHERE id = ?").run(page.id),
+  await assert.rejects(fill('ocr-v2-running'), immutable, 'an unfinished upgrade job cannot fill');
+  await assert.rejects(database.prepare("UPDATE source_pages SET blocks_upgrade_job_id = 'ocr-v1' WHERE id = ?").run(page.id),
     /blocks upgrade job is set once with its blocks/);
 
   const { provider } = upgradeProvider();
   const job = await upgrade(ocrService(services, provider));
-  const [upgraded, other] = pages(database);
-  assert.throws(() => database.prepare('UPDATE source_pages SET blocks_json = ? WHERE id = ?').run(other.blocks_json, upgraded.id), immutable,
+  const [upgraded, other] = await pages(database);
+  await assert.rejects(database.prepare('UPDATE source_pages SET blocks_json = ? WHERE id = ?').run(other.blocks_json, upgraded.id), immutable,
     'blocks never change after the fill');
-  assert.throws(() => database.prepare("UPDATE source_pages SET blocks_upgrade_job_id = 'ocr-v2-running' WHERE id = ?").run(upgraded.id),
+  await assert.rejects(database.prepare("UPDATE source_pages SET blocks_upgrade_job_id = 'ocr-v2-running' WHERE id = ?").run(upgraded.id),
     /blocks upgrade job is set once with its blocks/);
-  database.prepare('UPDATE source_pages SET extracted_text = NULL WHERE id = ?').run(upgraded.id);
-  assert.equal(pages(database)[0].blocks_json, null, 'erasure still clears blocks');
-  assert.throws(() => fill(job.id, upgraded.id), immutable, 'an erased page is never refilled');
+  await database.prepare('UPDATE source_pages SET extracted_text = NULL WHERE id = ?').run(upgraded.id);
+  assert.equal((await pages(database))[0].blocks_json, null, 'erasure still clears blocks');
+  await assert.rejects(fill(job.id, upgraded.id), immutable, 'an erased page is never refilled');
 });
