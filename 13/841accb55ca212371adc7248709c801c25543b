@@ -1,0 +1,25 @@
+tests/consent-scope-stop.test.mjs
+  s_692c874d7b8ff3::t_cfc259912fa351 1-77
+tests/round3-runtime-integration.test.mjs
+  s_692c874d7b8ff3::t_e68d692ea54c43 161-166,168
+tests/mvp-closeout.test.mjs
+  s_692c874d7b8ff3::t_e16344252a1dc6 247,249-250,329,332-356,360-362
+src/features/coverage-analysis/persistent-service.js
+  s_692c874d7b8ff3::t_9acaf091538ed8 157-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "13841accb55ca212371adc7248709c801c25543b",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
