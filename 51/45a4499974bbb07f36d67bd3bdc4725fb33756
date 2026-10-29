@@ -1,0 +1,20 @@
+docs/adr/0011-supabase-master-database.md
+  s_692c874d7b8ff3::t_cc8d172e50c406 16
+  s_692c874d7b8ff3::t_c12fb6aaad3cf2 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5145a4499974bbb07f36d67bd3bdc4725fb33756",
+  "prompts": {},
+  "sessions": {
+    "s_692c874d7b8ff3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e449cbd-4219-4d37-bfc1-8574afc0a080",
+        "model": "claude-sonnet-5-5"
+      },
+      "human_author": "RISHAV DEWAN <rishavdewan10@gmail.com>"
+    }
+  }
+}
