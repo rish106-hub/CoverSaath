@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { publicError } from './http/errors.js';
 import { prepareJsonResponse, sendJson } from './http/request.js';
-import { assertLocalRequest } from './http/security.js';
+import { assertLocalRequest, clientRateKey } from './http/security.js';
 import { createRateLimiter } from '../shared/http/index.js';
 import { createDatabase } from '../backend/database/postgres/db.js';
 import { createPostgresPool, postgresPoolOptionsFromEnv } from '../backend/database/postgres/pool.js';
@@ -195,8 +195,8 @@ export function createApiServer({
     const send = (status, value) => sendJson(res, status, value);
     try {
       // Local-only isolation. Host checks also reduce DNS-rebinding exposure.
-      assertLocalRequest(req);
-      rateLimiter.check(req.socket.remoteAddress ?? 'local-unknown');
+      assertLocalRequest(req, config.network);
+      rateLimiter.check(clientRateKey(req, config.network));
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = await getBackend();
