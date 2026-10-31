@@ -69,6 +69,7 @@ test('versioned backend persists cases and queued analysis across restart', post
     storageConfigured: false,
     scanMode: 'disabled',
     scannerConfigured: false,
+    scannerReachable: false,
     missing: ['encryptedDocumentStorage', 'malwareScanning'],
   });
   assert.equal(integrations.data.productFlow.documentIntake.ready, false);
