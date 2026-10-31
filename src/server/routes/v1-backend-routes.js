@@ -270,7 +270,6 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const body = {
         status: ready ? 'ready' : 'not_ready',
         checks: { database: schema.valid === true, authentication: services.access.bootstrapConfigured },
-        productFlow: productFlowReadiness({ config, documentUploads, integrations }),
       };
       // Schema detail (missing tables, triggers, migration count) is for local operators only.
       if (isLoopbackRequest(req)) Object.assign(body, { database: schema, externalProviderCalls: false });
