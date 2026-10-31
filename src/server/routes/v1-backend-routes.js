@@ -9,6 +9,7 @@ import { classifyDatabaseError } from '../../backend/database/postgres/errors.js
 import { validatePostgresSchema } from '../../backend/database/postgres/validate-schema.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../../features/coverage-analysis/index.js';
+import { INTAKE_CONNECTORS } from '../../contracts/intake-connectors.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
 import {
@@ -240,7 +241,7 @@ async function schemaStatus(database) {
 
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -291,9 +292,34 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         body: {
           providers: Object.fromEntries(Object.entries(integrations).map(([name, provider]) => [name, provider.health()])),
           hrms: { status: 'on_hold', intake: 'manual_upload_only' },
+          intake: INTAKE_CONNECTORS.map(connector => ({
+            ...connector,
+            health: connector.availability === 'available'
+              ? { connector: connector.id, status: 'available_via_document_route', networkAttempted: false }
+              : intakeConnectors[connector.id]?.health() ?? { connector: connector.id, status: 'not_built', networkAttempted: false },
+          })),
+          documentScan: { mode: config.documents?.scanMode ?? 'unknown' },
           note: 'Configuration status only. This endpoint makes no provider request.',
         },
       };
+    }
+    const listMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/(cases|consents)$/);
+    if (req.method === 'GET' && listMatch) {
+      await services.access.requireHousehold(principal, listMatch[1]);
+      const rawLimit = url.searchParams.get('limit');
+      if (rawLimit !== null && !/^[0-9]{1,3}$/.test(rawLimit)) badRequest('limit must be a whole number from 1 to 100.');
+      const limit = rawLimit === null ? 50 : Number(rawLimit);
+      if (limit < 1 || limit > 100) badRequest('limit must be a whole number from 1 to 100.');
+      if (listMatch[2] === 'cases') {
+        const { cases, truncated } = await services.cases.listOpenedBy({ householdId: listMatch[1], adultId: principal.adultId, limit });
+        return { status: 200, body: {
+          householdId: listMatch[1],
+          cases: cases.map(row => ({ id: row.id, triggerType: row.trigger_type, status: row.status, emergencyMode: Number(row.emergency_mode) === 1, createdAt: row.created_at, updatedAt: row.updated_at })),
+          truncated,
+        } };
+      }
+      const { consents, truncated } = await services.consents.listForSubject({ householdId: listMatch[1], subjectAdultId: principal.adultId, limit });
+      return { status: 200, body: { householdId: listMatch[1], consents, truncated } };
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/sessions/current/revoke') {
       await services.auth.revokeSession({ sessionId: principal.sessionId, adultUserId: principal.adultId });

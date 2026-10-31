@@ -57,6 +57,14 @@ export class CaseRepository {
     return record ? { ...record, revision: record.updated_at, emergencyInstruction: emergencyInstruction(record.trigger_type) } : null;
   }
 
+  // The caller's own cases in one household, newest first. Reads only the columns the list route returns.
+  async listOpenedBy({ householdId, adultId, limit }) {
+    const rows = await this.database.many(`SELECT id, trigger_type, status, emergency_mode, created_at, updated_at
+      FROM service_cases WHERE household_id = ? AND opened_by_adult_id = ?
+      ORDER BY created_at DESC, id DESC LIMIT ?`, [householdId, adultId, limit + 1]);
+    return { cases: rows.slice(0, limit), truncated: rows.length > limit };
+  }
+
   async transition(caseId, toStatus, { expectedRevision, actorType = 'system', actorId = 'local-backend', payload = {} } = {}) {
     if (!expectedRevision) throw new Error('Expected case revision is required.');
     // The household is needed for the lock, which comes before the row lock.
