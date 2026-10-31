@@ -248,11 +248,30 @@ function productFlowReadiness({ config, documentUploads, integrations }) {
     ocrProvider: ocr.contractVerified === true,
     policyEvidence: config.capabilities?.policyEvidenceEnabled === true,
     liveAi: config.capabilities?.liveAiConfigured === true,
+    policyStructuring: config.capabilities?.policyStructuringEnabled === true,
   };
-  const missing = Object.entries(checks).filter(([, ready]) => !ready).map(([name]) => name);
-  return { ready: missing.length === 0, status: missing.length === 0 ? 'ready' : 'blocked', checks, missing };
+  const intakeMissing = ['encryptedDocumentStorage', 'malwareScanning'].filter(key => !checks[key]);
+  const readingMissing = ['ocrProvider'].filter(key => !checks[key]);
+  const answerMissing = ['policyEvidence', 'liveAi'].filter(key => !checks[key]);
+  const intakeReady = intakeMissing.length === 0;
+  const readingReady = intakeReady && readingMissing.length === 0;
+  const questionsReady = readingReady && answerMissing.length === 0;
+  const fullMissing = [...intakeMissing, ...readingMissing, ...answerMissing];
+  return {
+    ready: questionsReady,
+    status: questionsReady ? 'ready' : 'blocked',
+    documentIntake: { ready: intakeReady, status: intakeReady ? 'ready' : 'blocked', checks: { encryptedDocumentStorage: checks.encryptedDocumentStorage, malwareScanning: checks.malwareScanning }, missing: intakeMissing },
+    policyProcessing: {
+      readingReady,
+      questionsReady,
+      structuringEnabled: checks.policyStructuring,
+      checks: { ocrProvider: checks.ocrProvider, policyEvidence: checks.policyEvidence, liveAi: checks.liveAi, policyStructuring: checks.policyStructuring },
+      missing: [...readingMissing, ...answerMissing],
+    },
+    checks,
+    missing: fullMissing,
+  };
 }
-
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
 export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
@@ -308,15 +327,17 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         body: {
           providers,
           documentIntake: {
+            ready: productFlow.documentIntake.ready,
             storageConfigured: documentUploads?.configured === true,
             scanMode: config.documents.scanMode,
             scannerConfigured: documentUploads?.scannerConfigured === true,
+            missing: productFlow.documentIntake.missing,
           },
           policyProcessing: {
+            ...productFlow.policyProcessing,
             ocrReady: providers.sarvam?.contractVerified === true,
             evidenceEnabled: config.capabilities?.policyEvidenceEnabled === true,
             liveAiConfigured: config.capabilities?.liveAiConfigured === true,
-            structuringEnabled: config.capabilities?.policyStructuringEnabled === true,
           },
           productFlow,
           hrms: { status: 'on_hold', intake: 'manual_upload_only' },
