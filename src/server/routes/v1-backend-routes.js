@@ -238,6 +238,21 @@ async function schemaStatus(database) {
   }
 }
 
+// A product-flow readiness check is separate from process/database readiness.
+// The API can be healthy while uploads or policy reading are unavailable.
+function productFlowReadiness({ config, documentUploads, integrations }) {
+  const ocr = integrations?.sarvam?.health?.() ?? {};
+  const checks = {
+    encryptedDocumentStorage: documentUploads?.configured === true,
+    malwareScanning: documentUploads?.scannerConfigured === true,
+    ocrProvider: ocr.contractVerified === true,
+    policyEvidence: config.capabilities?.policyEvidenceEnabled === true,
+    liveAi: config.capabilities?.liveAiConfigured === true,
+  };
+  const missing = Object.entries(checks).filter(([, ready]) => !ready).map(([name]) => name);
+  return { ready: missing.length === 0, status: missing.length === 0 ? 'ready' : 'blocked', checks, missing };
+}
+
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
 export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
@@ -255,6 +270,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const body = {
         status: ready ? 'ready' : 'not_ready',
         checks: { database: schema.valid === true, authentication: services.access.bootstrapConfigured },
+        productFlow: productFlowReadiness({ config, documentUploads, integrations }),
       };
       // Schema detail (missing tables, triggers, migration count) is for local operators only.
       if (isLoopbackRequest(req)) Object.assign(body, { database: schema, externalProviderCalls: false });
@@ -286,10 +302,24 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     const responses = createReadResponsePolicy({ database, consents: services.consents });
 
     if (req.method === 'GET' && url.pathname === '/api/v1/integrations') {
+      const providers = Object.fromEntries(Object.entries(integrations).map(([name, provider]) => [name, provider.health()]));
+      const productFlow = productFlowReadiness({ config, documentUploads, integrations });
       return {
         status: 200,
         body: {
-          providers: Object.fromEntries(Object.entries(integrations).map(([name, provider]) => [name, provider.health()])),
+          providers,
+          documentIntake: {
+            storageConfigured: documentUploads?.configured === true,
+            scanMode: config.documents.scanMode,
+            scannerConfigured: documentUploads?.scannerConfigured === true,
+          },
+          policyProcessing: {
+            ocrReady: providers.sarvam?.contractVerified === true,
+            evidenceEnabled: config.capabilities?.policyEvidenceEnabled === true,
+            liveAiConfigured: config.capabilities?.liveAiConfigured === true,
+            structuringEnabled: config.capabilities?.policyStructuringEnabled === true,
+          },
+          productFlow,
           hrms: { status: 'on_hold', intake: 'manual_upload_only' },
           note: 'Configuration status only. This endpoint makes no provider request.',
         },
