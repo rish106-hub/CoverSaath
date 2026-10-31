@@ -483,6 +483,15 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         return { status: 200, body: { answerId: stored.answerId, current: stored.current, answer: stored.answer } };
       }
     }
+    // Read-back of values the deterministic extractor found in the owner's own read documents (ADR 0012 D9). Same case
+    // lookup and source-pack field gate as questions; no model call, nothing stored. Off unless DOCUMENT_READBACK_ENABLED is exactly "true" (checked by the service, after the case and
+    // field gates, so a foreign caller never learns the flag state).
+    const readFactsMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/read-facts$/);
+    if (req.method === 'GET' && readFactsMatch) {
+      const caseRecord = await requireDocumentCase(services, principal, readFactsMatch[1]);
+      await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      return { status: 200, body: await (await getEvidenceService()).readFacts({ caseRecord }) };
+    }
     // Authenticated review of one catalogue fact (ADR 0009 part 2). Reviewer strength comes from a stored grant, never from
     // the request body. The caller names a fact; the server rebuilds it from live clauses. Idempotent, audited, no model call.
     const reviewMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/decision-catalogue\/reviews$/);

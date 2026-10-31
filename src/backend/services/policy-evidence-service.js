@@ -1,7 +1,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import { QUESTION_CONSENT_SCOPE } from '../../contracts/policy-evidence.js';
+import { FINDING_STATES, QUESTION_CONSENT_SCOPE } from '../../contracts/policy-evidence.js';
 import { INVESTIGATION_VERSION, buildClauses, investigate } from '../../features/policy-evidence/index.js';
-import { extractFields, FIELD_NAMES } from '../../features/ai-analysis/eval-extractor.js';
+import { extractFields, flattenBlock, tableRows, FIELD_NAMES, FIELD_SPECS } from '../../features/ai-analysis/eval-extractor.js';
 
 // Answers one question about a case's policy documents (ADR 0008): stored OCR blocks become clauses, the
 // privacy-gated clauses go to Gemini through the injected model call, code validates and assembles a cited
@@ -16,6 +16,116 @@ const MAX_CASE_DOCUMENTS = 1_000;
 const SKIP_REASONS = Object.freeze({ OCR_PAGES_UNAVAILABLE: 'ocr_unavailable', OCR_PAGES_INCOMPLETE: 'ocr_incomplete', DOCUMENT_NOT_FOUND: 'not_found' });
 
 export const evidenceEnabled = (env = process.env) => env.POLICY_EVIDENCE_ENABLED === 'true';
+// Read-back of values and passages (ADR 0012 D9) is a separate switch: it makes no model call and does not need
+// POLICY_EVIDENCE_ENABLED, and enabling it never opens the paid question route.
+export const readbackEnabled = (env = process.env) => env.DOCUMENT_READBACK_ENABLED === 'true';
+
+// Fields read back to the owner. Identity fields (policy number, policyholder, insured members, premium) are
+// deliberately absent and never returned; the first three are read internally only so they can be hidden.
+const READBACK_TOPICS = Object.freeze({
+  insurer: null, plan_name: null,
+  policy_period_start: 'policy_period', policy_period_end: 'policy_period',
+  base_sum_insured: 'sum_insured',
+  room_rent_limit: 'room_rent', icu_limit: 'room_rent',
+  co_payment: 'co_payment',
+  initial_waiting_period: 'waiting_period', specified_disease_waiting_period: 'waiting_period', ped_waiting_period: 'waiting_period',
+});
+const READBACK_FIELD_NAMES = Object.freeze(Object.keys(READBACK_TOPICS));
+const MAX_QUOTE_LENGTH = 160;
+const MAX_VALUE_LENGTH = 60;
+const HIDDEN = '[hidden]';
+const READBACK_NOTICE = 'Read from your documents by a rule, not checked.';
+const squash = text => String(text).replace(/\s+/g, ' ').trim();
+
+// Identity strings of this document and household: the identity fields are extracted here only to be hidden, never
+// returned, plus the household's known identifiers (names, numbers). A name also hides each of its words.
+function identityTerms(pages, knownIdentifiers) {
+  const terms = new Set();
+  const add = value => {
+    if (typeof value !== 'string') return;
+    // A greeting such as "Dear Asha, your policy ..." can be captured whole by the extractor: only a short value is a name or number.
+    const text = squash(value).replace(/[,;:.]+$/, '');
+    if (text.length < 3 || text.length > MAX_VALUE_LENGTH) return;
+    terms.add(text);
+    if (/\p{L}\s+\p{L}/u.test(text)) for (const word of text.split(' ')) if (word.length >= 3 && /^\p{L}+$/u.test(word)) terms.add(word);
+  };
+  let identity = {};
+  try { identity = extractFields(pages, ['policy_number', 'policyholder_name', 'insured_members']); } catch { identity = {}; }
+  for (const hit of Object.values(identity)) for (const value of [hit?.value, hit?.second?.value].flat()) add(value);
+  for (const known of knownIdentifiers) add(known?.value);
+  return [...terms].sort((x, y) => y.length - x.length);
+}
+
+const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const hideIdentity = (text, terms) => terms.reduce((out, term) => out.replace(new RegExp(escapeRegExp(term), 'giu'), HIDDEN), text);
+const showsIdentity = (text, terms) => terms.some(term => text.toLowerCase().includes(term.toLowerCase()));
+
+// Cut `text` to MAX_QUOTE_LENGTH characters around the first occurrence of `value`.
+function cutAround(text, value) {
+  if (text.length <= MAX_QUOTE_LENGTH) return text;
+  const at = Math.max(0, text.indexOf(value));
+  const start = Math.max(0, Math.min(at - Math.floor((MAX_QUOTE_LENGTH - value.length) / 2), text.length - MAX_QUOTE_LENGTH));
+  return text.slice(start, start + MAX_QUOTE_LENGTH);
+}
+
+// The sentence of `line` that holds `value`.
+function sentenceAround(line, value) {
+  const at = line.indexOf(value);
+  if (at < 0) return null;
+  const before = Math.max(line.lastIndexOf('. ', at), line.lastIndexOf('! ', at), line.lastIndexOf('? ', at));
+  const afterAt = line.slice(at + value.length).search(/[.!?](\s|$)/);
+  return line.slice(before < 0 ? 0 : before + 2, afterAt < 0 ? line.length : at + value.length + afterAt + 1);
+}
+
+// The cited text, as little of it as will do. In a table block that is the matched label cell and value cell only
+// (never the rest of the row, which can hold other fields), found by the field's own label pattern. In any other
+// block it is the sentence holding the value. Null when it cannot be located with certainty.
+function quoteFor(field, pages, hit, terms) {
+  const block = pages.find(entry => entry.page === hit.page)?.blocks?.[hit.blockIndex];
+  if (!block || typeof block.text !== 'string') return null;
+  const value = squash(hit.value);
+  let quote = null;
+  if (block.tag === 'table') {
+    const labels = FIELD_SPECS[field]?.labels;
+    const candidates = [];
+    for (const row of tableRows(block.text)) {
+      row.forEach((cell, index) => {
+        const text = squash(cell);
+        if (!text || !text.includes(value)) return;
+        const labelled = labels instanceof RegExp && row.some(entry => labels.test(entry));
+        if (labelled) candidates.push({ row, index, exact: text === value });
+      });
+    }
+    const best = candidates.find(entry => entry.exact) ?? candidates[0];
+    if (!best) return null;
+    const before = best.row.slice(0, best.index).map(squash).filter(Boolean).at(-1);
+    const own = squash(best.row[best.index]);
+    quote = before !== undefined && !(labels.test(own)) ? `${before} | ${own}` : own;
+  } else {
+    const line = flattenBlock(block).split('\n').map(squash).find(text => text.includes(value));
+    quote = line ? sentenceAround(line, value) : null;
+  }
+  if (quote === null) return null;
+  const hidden = hideIdentity(quote, terms);
+  return hidden.includes(value) ? cutAround(hidden, value) : null;
+}
+
+function readbackFields(pages, knownIdentifiers) {
+  const terms = identityTerms(pages, knownIdentifiers);
+  const extracted = extractFields(pages, READBACK_FIELD_NAMES);
+  return READBACK_FIELD_NAMES.map(field => {
+    const hit = extracted[field];
+    const unknown = { field, topic: READBACK_TOPICS[field], value: null, state: 'unknown', page: null, quote: null };
+    if (typeof hit?.value !== 'string' || !hit.value.trim() || hit.state === 'unknown') return unknown;
+    const value = squash(hit.value);
+    // Fail closed: a value that is long, or that is or holds an identity string, is not shown.
+    if (value.length > MAX_VALUE_LENGTH || showsIdentity(value, terms)) return unknown;
+    return {
+      field, topic: READBACK_TOPICS[field], value, state: hit.state,
+      page: Number.isSafeInteger(hit.page) && hit.page >= 1 ? hit.page : null, quote: quoteFor(field, pages, { ...hit, value }, terms),
+    };
+  });
+}
 
 function coded(code, message, statusCode) { return Object.assign(new Error(message), { code, statusCode }); }
 
@@ -256,6 +366,63 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
         throw coded('POLICY_EVIDENCE_ANSWER_STALE', 'The documents behind this answer have changed. Ask again.', 409);
       }
       return { answerId: stored.answerId, answer: stored.answer, documentIds: access.documentIds, pipelineCurrent: stored.answer?.pipelineVersion === INVESTIGATION_VERSION };
+    },
+
+    /**
+     * Values the deterministic extractor reads from the case's own stored OCR pages, each with its page and a short
+     * quote. No model call, nothing stored, no logging. A document is read only while the exact reading grant it was
+     * read under is still current (re-checked here, not trusted from the job row); otherwise it is excluded with a
+     * reason. Never returns the identity fields (policy number, policyholder, insured members, premium).
+     */
+    async readFacts({ caseRecord }) {
+      if (!readbackEnabled(env)) throw coded('READBACK_DISABLED', 'Reading values back is disabled.', 503);
+      const { id: caseId, household_id: householdId } = caseRecord;
+      const listed = await services.documents.listForCase(caseId, householdId, MAX_CASE_DOCUMENTS + 1);
+      if (listed.length > MAX_CASE_DOCUMENTS) throw coded('POLICY_EVIDENCE_CASE_TOO_LARGE', 'The case has too many documents to read.', 409);
+      const active = listed.filter(document => document.lifecycleState === 'active');
+      const isCurrent = await currentVersionCheck(householdId, active);
+      const knownIdentifiers = active.length ? await loadKnownIdentifiers(caseId) : [];
+      const documents = [];
+      const excluded = [];
+      const now = Date.now();
+      for (const document of active) {
+        const exclude = reason => excluded.push({ documentId: document.id, reason });
+        if (!isCurrent(document)) { exclude('superseded'); continue; }
+        // Why a reading grant no longer passes: past its expiry (and not revoked) or withdrawn (revoked, erased or not matching).
+        const withdrawnReason = async grantId => {
+          const grant = grantId ? await services.consents.get(grantId) : null;
+          const expired = grant && !grant.revoked_at && grant.expires_at != null && !(Date.parse(grant.expires_at) > now);
+          return expired ? 'reading_permission_expired' : 'reading_permission_withdrawn';
+        };
+        const latest = await services.ocr.getLatestJobForDocument(document.id);
+        if (latest?.status === 'cancelled' && latest.errorCode === 'CONSENT_REVOKED') { exclude('reading_permission_withdrawn'); continue; }
+        if (latest?.status !== 'succeeded') { exclude('not_read'); continue; }
+        // Every succeeded job whose stored pages could be returned must still hold a current exact grant to sarvam.
+        const holders = await services.ocr.getJobsHoldingPages(document.id);
+        if (!holders.length) { exclude(latest.authorization?.consentGrantId ? 'not_read' : 'reading_permission_withdrawn'); continue; }
+        if (holders.some(job => job.provider !== 'sarvam')) { exclude('not_read'); continue; }
+        let blocked = null;
+        for (const job of holders) {
+          const authorization = job.authorization;
+          const ready = authorization?.consentGrantId && authorization.requestedByAdultId
+            ? await services.ocr.getReadyDocument(document.id, new Date(now).toISOString(), {
+              consentGrantId: authorization.consentGrantId, requestedByAdultId: authorization.requestedByAdultId, recipient: 'sarvam',
+            })
+            : null;
+          if (!ready) { blocked = await withdrawnReason(authorization?.consentGrantId); break; }
+        }
+        if (blocked) { exclude(blocked); continue; }
+        let stored;
+        try { stored = await services.ocr.getDocumentBlockPages({ documentId: document.id, householdId }); } catch (error) {
+          if (['OCR_PAGES_UNAVAILABLE', 'OCR_PAGES_INCOMPLETE'].includes(String(error?.code))) { exclude('not_read'); continue; }
+          throw error;
+        }
+        if (!stored.complete) { exclude('not_read'); continue; }
+        let fields;
+        try { fields = readbackFields(stored.pages.map(({ page, blocks }) => ({ page, blocks })), knownIdentifiers); } catch { exclude('not_read'); continue; }
+        documents.push({ documentId: document.id, documentKind: document.documentKind, fields });
+      }
+      return { label: 'read_not_checked', notice: READBACK_NOTICE, documents, excluded };
     },
 
     async get({ caseRecord, answerId }) {

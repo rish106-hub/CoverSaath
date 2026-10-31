@@ -207,6 +207,24 @@ export class OcrRepository {
     return mapJob(await this.database.one('SELECT * FROM ocr_jobs WHERE id = ?', [jobId]));
   }
 
+  // Newest job of a document, whatever its state, for read-only callers that need to know whether reading is
+  // current, still running or withdrawn. Revocation nulls authorization_json, so a withdrawn job has none.
+  async getLatestJobForDocument(documentId) {
+    return mapJob(await this.database.one(`SELECT * FROM ocr_jobs WHERE document_upload_id = ?
+      ORDER BY requested_at DESC, id DESC LIMIT 1`, [documentId]));
+  }
+
+  // The succeeded jobs whose stored pages of the document's current version are what getDocumentBlockPages reads
+  // (same filter), so a read-only caller can check the consent of every job whose text it is about to return.
+  async getJobsHoldingPages(documentId) {
+    return (await this.database.many(`SELECT DISTINCT job.* FROM ocr_jobs job
+      JOIN source_pages page ON page.ocr_job_id = job.id
+      JOIN document_uploads document ON document.id = page.document_upload_id AND document.source_version = page.source_version
+      WHERE document.id = ? AND job.status = 'succeeded'
+        AND page.extraction_status IN ('extracted', 'manual_verified') AND page.extracted_text IS NOT NULL
+      ORDER BY job.id`, [documentId])).map(mapJob);
+  }
+
   async updateJob(jobId, changes) {
     const householdId = await this.#householdOfJob(jobId);
     if (householdId === null) return null;
