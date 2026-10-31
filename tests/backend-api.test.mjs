@@ -48,6 +48,14 @@ test('versioned backend persists cases and queued analysis across restart', post
   const readiness = await app.call('/api/v1/ready');
   assert.equal(readiness.status, 200);
   assert.equal(readiness.data.database.valid, true);
+  assert.equal(readiness.data.productFlow.ready, false);
+  assert.deepEqual(readiness.data.productFlow.missing, [
+    'encryptedDocumentStorage',
+    'malwareScanning',
+    'ocrProvider',
+    'policyEvidence',
+    'liveAi',
+  ]);
 
   const unauthenticated = await app.call('/api/v1/integrations');
   assert.equal(unauthenticated.status, 401);
@@ -64,6 +72,14 @@ test('versioned backend persists cases and queued analysis across restart', post
   assert.equal(integrations.status, 200);
   assert.equal(integrations.data.providers.sarvam.networkAttempted, false);
   assert.equal(integrations.data.providers.gnani.status, 'not_configured');
+  assert.deepEqual(integrations.data.documentIntake, {
+    storageConfigured: false,
+    scanMode: 'disabled',
+    scannerConfigured: false,
+  });
+  assert.equal(integrations.data.policyProcessing.evidenceEnabled, false);
+  assert.equal(integrations.data.policyProcessing.liveAiConfigured, false);
+  assert.equal(integrations.data.productFlow.ready, false);
   assert.deepEqual(integrations.data.hrms, { status: 'on_hold', intake: 'manual_upload_only' });
 
   const matrix = await app.call(`/api/v1/households/${identity.data.household.id}`, { token });
