@@ -1,3 +1,5 @@
+import { readConfig as readLiveAiConfig } from '../features/ai-analysis/live-coverage-runtime.js';
+
 function boundedInteger(value, fallback, name, max) {
   if (value === undefined) return fallback;
   const parsed = Number(value);
@@ -42,6 +44,15 @@ function readDocumentConfig(env) {
   });
 }
 
+function liveAiConfigured(env) {
+  try {
+    readLiveAiConfig(env);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const HOSTNAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*(:\d{1,5})?$/;
 
 // A hosted deployment opts in to its public hostnames (exact match, no wildcards) and to reading the
@@ -66,5 +77,11 @@ export function readServerConfig(env = process.env) {
     projectBudgetUsd: positiveAmount(env.ORCHESTRATION_PROJECT_BUDGET_USD, 'ORCHESTRATION_PROJECT_BUDGET_USD'),
     documents: readDocumentConfig(env),
     network: readNetworkConfig(env),
+    // Safe capability flags only. Never expose provider keys, model identifiers or secret values.
+    capabilities: Object.freeze({
+      policyEvidenceEnabled: env.POLICY_EVIDENCE_ENABLED === 'true',
+      policyStructuringEnabled: env.POLICY_STRUCTURING_ENABLED === 'true',
+      liveAiConfigured: liveAiConfigured(env),
+    }),
   });
 }
