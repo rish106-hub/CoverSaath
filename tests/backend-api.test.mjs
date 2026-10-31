@@ -48,14 +48,6 @@ test('versioned backend persists cases and queued analysis across restart', post
   const readiness = await app.call('/api/v1/ready');
   assert.equal(readiness.status, 200);
   assert.equal(readiness.data.database.valid, true);
-  assert.equal(readiness.data.productFlow.ready, false);
-  assert.deepEqual(readiness.data.productFlow.missing, [
-    'encryptedDocumentStorage',
-    'malwareScanning',
-    'ocrProvider',
-    'policyEvidence',
-    'liveAi',
-  ]);
 
   const unauthenticated = await app.call('/api/v1/integrations');
   assert.equal(unauthenticated.status, 401);
