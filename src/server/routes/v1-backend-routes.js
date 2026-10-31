@@ -241,7 +241,7 @@ async function schemaStatus(database) {
 
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
-export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -281,6 +281,22 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       });
       const session = await services.auth.issueSession({ adultUserId: adult.id });
       return { status: 201, body: { household, owner: adult, ownerMember, session } };
+    }
+    // Sign-in identity -> adult -> session (ADR 0012 D3). Only a caller holding the identity credential (the website
+    // BFF) gets here; the bootstrap token is refused. The key is (issuer, subject) from an allow-listed issuer, never
+    // an e-mail address. Nothing from the body is logged.
+    if (req.method === 'POST' && url.pathname === '/api/v1/identity-sessions') {
+      services.access.requireIdentityService(req.headers.authorization);
+      const body = await readBody(req);
+      const issuer = typeof body.issuer === 'string' ? body.issuer : '';
+      if (!identity?.issuers.includes(issuer)) badRequest('issuer is not accepted.');
+      if (typeof body.subject !== 'string' || body.subject.length < 1 || body.subject.length > 255) badRequest('subject is required.');
+      const displayName = requiredString(body.displayName, 'displayName', { max: 80 });
+      if (body.contactEmail !== undefined && body.contactEmail !== null && (typeof body.contactEmail !== 'string' || body.contactEmail.length > 320)) {
+        badRequest('contactEmail is invalid.');
+      }
+      const result = await services.identities.signIn({ issuer, subject: body.subject, displayName, contactEmail: body.contactEmail || null });
+      return { status: result.returning ? 200 : 201, body: result };
     }
 
     const principal = await services.access.authenticate(req.headers.authorization);

@@ -17,7 +17,8 @@ primary_region = "syd"
   TRUST_FLY_CLIENT_IP = "true"
 
 # Secrets (never in this file): fly secrets set DATABASE_URL=... DOCUMENT_ENCRYPTION_KEY_BASE64=...
-# KNOWVIA_BOOTSTRAP_TOKEN=... and, when those features are enabled, GEMINI_API_KEY, SARVAM_API_KEY.
+# KNOWVIA_BOOTSTRAP_TOKEN=..., KNOWVIA_IDENTITY_TOKEN=... and IDENTITY_ISSUERS=... (website sign-in), and, when those features
+# are enabled, GEMINI_API_KEY, SARVAM_API_KEY.
 
 [http_service]
   internal_port = 8080

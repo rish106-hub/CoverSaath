@@ -5,7 +5,7 @@ Decision record: ADR 0011 D9. Synthetic data only until the residency decision (
 ## State (2026-10-29)
 
 - App `knowvia-api` exists in `syd`. Volume `coversaath_data` (1 GB, encrypted) exists.
-- Secrets staged, not applied to a machine: `DATABASE_URL`, `DOCUMENT_ENCRYPTION_KEY_BASE64`, `KNOWVIA_BOOTSTRAP_TOKEN`.
+- Secrets staged, not applied to a machine: `DATABASE_URL`, `DOCUMENT_ENCRYPTION_KEY_BASE64`, `KNOWVIA_BOOTSTRAP_TOKEN`. Before the website sign-in goes live, also set `KNOWVIA_IDENTITY_TOKEN` (a secret, different from the bootstrap token) and `IDENTITY_ISSUERS` (exact issuer strings, one canonical form each); both are names only here.
 - No machine is running. Every `fly deploy` failed with a Fly API 503 (builder creation and organisation lookup). Config validation passed. The Dockerfile has never been built, so it is untested.
 - Nothing is pushed. The deploy files are on local branch `feat/supabase-postgres` (3abaa9f).
 
