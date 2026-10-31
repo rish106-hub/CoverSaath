@@ -22,6 +22,11 @@ test('server configuration has explicit bounded defaults', () => {
       workerSweepMs: 30_000,
     },
     network: { publicHosts: [], trustFlyClientIp: false },
+    capabilities: {
+      policyEvidenceEnabled: false,
+      policyStructuringEnabled: false,
+      liveAiConfigured: false,
+    },
   });
 });
 
@@ -41,6 +46,25 @@ test('server capacity and rate settings are bounded before listening', () => {
   ]) {
     assert.throws(() => createApiServer({ env: { [name]: value } }), new RegExp(`Invalid ${name}`));
   }
+});
+
+test('policy flow capabilities report feature flags and validate live AI configuration without exposing secrets', () => {
+  const configured = readServerConfig({
+    POLICY_EVIDENCE_ENABLED: 'true',
+    POLICY_STRUCTURING_ENABLED: 'true',
+    LLM_PROVIDER: 'google',
+    GOOGLE_GENERATIVE_AI_API_KEY: 'test-secret-not-returned',
+    LLM_MODEL: 'gemini-test',
+    LLM_INPUT_USD_PER_MILLION: '0.1',
+    LLM_OUTPUT_USD_PER_MILLION: '0.4',
+    ORCHESTRATION_RUN_BUDGET_USD: '0.5',
+    ORCHESTRATION_PROJECT_BUDGET_USD: '5',
+  });
+  assert.deepEqual(configured.capabilities, {
+    policyEvidenceEnabled: true,
+    policyStructuringEnabled: true,
+    liveAiConfigured: true,
+  });
 });
 
 test('network settings are off by default and validated when set', () => {

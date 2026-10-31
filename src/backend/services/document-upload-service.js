@@ -118,6 +118,17 @@ export function createDocumentUploadService({
   return Object.freeze({
     configured: Boolean(intake),
     scannerConfigured: Boolean(scanner),
+    async checkReadiness() {
+      let scannerReachable = false;
+      if (typeof scanner?.ping === 'function') {
+        try { scannerReachable = await scanner.ping(); } catch { scannerReachable = false; }
+      }
+      return {
+        storageConfigured: Boolean(intake),
+        scannerConfigured: Boolean(scanner),
+        scannerReachable: scannerReachable === true,
+      };
+    },
 
     // Called after a document is committed, so the worker can scan it without waiting for a sweep.
     setOnStored(fn) { onStored = fn; },

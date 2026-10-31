@@ -160,6 +160,15 @@ test('a server that never replies times out and the socket is destroyed', async 
   });
 });
 
+test('readiness ping is bounded even when the scan timeout is long', async () => {
+  await withFake({ silent: true }, async fake => {
+    const scanner = scannerFor(fake, { timeoutMs: 10_000 });
+    const started = Date.now();
+    assert.equal(await scanner.ping(), false);
+    assert.ok(Date.now() - started < 3_000, 'readiness ping should not wait for the full scan timeout');
+  });
+});
+
 test('server closing early is SCANNER_UNAVAILABLE', async () => {
   await withFake({ closeEarly: true }, async fake => {
     await assert.rejects(scannerFor(fake).scan(EICAR), { code: 'SCANNER_UNAVAILABLE', retryable: true });

@@ -160,6 +160,13 @@ test('Block 1 journey: five uploads persist across restart and stay inside the h
 
   const owner = await household(app, 'Synthetic');
   const other = await household(app, 'Other');
+  const readiness = await app.call('/api/v1/integrations', { token: owner.token });
+  assert.equal(readiness.status, 200);
+  assert.equal(readiness.data.documentIntake.ready, true);
+  assert.equal(readiness.data.documentIntake.storageConfigured, true);
+  assert.equal(readiness.data.documentIntake.scannerConfigured, true);
+  assert.equal(readiness.data.documentIntake.scannerReachable, true);
+  assert.deepEqual(readiness.data.documentIntake.missing, []);
   const ids = [];
   for (let index = 0; index < 5; index += 1) {
     const result = await app.upload({ ...owner, bytes: syntheticPdf(`doc-${index}`), filename: `Synthetic Policy ${index}.pdf` });
