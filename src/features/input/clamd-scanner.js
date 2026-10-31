@@ -50,7 +50,7 @@ export function createClamdScanner({
   validateOptions({ host, port, timeoutMs, chunkBytes, maxBytes, connect });
 
   // One connection, one overall deadline, socket always destroyed. Resolves with the NUL-terminated reply.
-  function exchange(write) {
+  function exchange(write, deadlineMs = timeoutMs) {
     return new Promise((resolve, reject) => {
       let settled = false;
       let socket;
@@ -66,7 +66,7 @@ export function createClamdScanner({
         if (error) reject(error); else resolve(value);
       };
       const unavailable = () => finish(scannerError('SCANNER_UNAVAILABLE', 'Malware scanner is unavailable.'));
-      const timer = setTimeout(unavailable, timeoutMs);
+      const timer = setTimeout(unavailable, deadlineMs);
 
       try {
         socket = connect({ host, port });
@@ -116,7 +116,8 @@ export function createClamdScanner({
 
   async function ping() {
     try {
-      const reply = await exchange(send => send(Buffer.from('zPING\0', 'latin1')));
+      // Readiness checks must be bounded even when the configured scan timeout is long.
+      const reply = await exchange(send => send(Buffer.from('zPING\0', 'latin1')), Math.min(timeoutMs, 2_000));
       return reply.trim() === 'PONG';
     } catch {
       return false;
