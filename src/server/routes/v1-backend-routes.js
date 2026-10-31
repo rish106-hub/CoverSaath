@@ -240,11 +240,11 @@ async function schemaStatus(database) {
 
 // A product-flow readiness check is separate from process/database readiness.
 // The API can be healthy while uploads or policy reading are unavailable.
-function productFlowReadiness({ config, documentUploads, integrations }) {
+function productFlowReadiness({ config, documentReadiness, integrations }) {
   const ocr = integrations?.sarvam?.health?.() ?? {};
   const checks = {
-    encryptedDocumentStorage: documentUploads?.configured === true,
-    malwareScanning: documentUploads?.scannerConfigured === true,
+    encryptedDocumentStorage: documentReadiness?.storageConfigured === true,
+    malwareScanning: documentReadiness?.scannerReachable === true,
     ocrProvider: ocr.contractVerified === true,
     policyEvidence: config.capabilities?.policyEvidenceEnabled === true,
     liveAi: config.capabilities?.liveAiConfigured === true,
@@ -321,16 +321,18 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
 
     if (req.method === 'GET' && url.pathname === '/api/v1/integrations') {
       const providers = Object.fromEntries(Object.entries(integrations).map(([name, provider]) => [name, provider.health()]));
-      const productFlow = productFlowReadiness({ config, documentUploads, integrations });
+      const documentReadiness = await documentUploads.checkReadiness();
+      const productFlow = productFlowReadiness({ config, documentReadiness, integrations });
       return {
         status: 200,
         body: {
           providers,
           documentIntake: {
             ready: productFlow.documentIntake.ready,
-            storageConfigured: documentUploads?.configured === true,
+            storageConfigured: documentReadiness.storageConfigured,
             scanMode: config.documents.scanMode,
-            scannerConfigured: documentUploads?.scannerConfigured === true,
+            scannerConfigured: documentReadiness.scannerConfigured,
+            scannerReachable: documentReadiness.scannerReachable,
             missing: productFlow.documentIntake.missing,
           },
           policyProcessing: {
