@@ -1,5 +1,21 @@
 # Latest iteration
 
+## App data routes B-A (2026-11-01, branch `feat/app-data-ba`, local, nothing pushed)
+
+New `/api/v1` routes on existing tables, no migration. Session bearer; household ownership checked in `services.app` on every call; write needs owner or member role (viewer reads only, `HOUSEHOLD_WRITE_FORBIDDEN`); a foreign household or policy is 404.
+
+| Method and path | Roles | Notes |
+|---|---|---|
+| `GET /households/{id}/members` | owner, member, viewer | date of birth withheld for another adult without field consent |
+| `POST /households/{id}/members` | owner, member | `displayName`, `memberKind` (adult or dependent), `relationshipLabel?`, `dateOfBirth?`; an adult is an `invited` placeholder with no role |
+| `PATCH /households/{id}/members/{memberId}` | owner, member | name, label, date of birth |
+| `DELETE /households/{id}/members/{memberId}` | owner, member | owner and account holders: 409 `MEMBER_PROTECTED`; named by a case, fact or parameter record: 409 `MEMBER_HAS_RECORDS`; else policy links and the placeholder adult are erased |
+| `GET /households/{id}/policies` | all | policy, insurer, dates, covered members |
+| `GET /policies/{policyId}` | all | same shape |
+| `GET /households/{id}/overview` | all | household, members, policies, counts and next policy end (counts and dates only) |
+
+Display names stay sealed (ADR 0013). `npm run seed:demo-household` builds the synthetic Rao family on a loopback database other than `coversaath_dev`.
+
 ## PostgreSQL on Supabase, consent-race fixes and Fly.io deploy files (2026-10-29, branch `feat/supabase-postgres`, local, nothing pushed)
 
 HEAD `3abaa9f`. Synthetic data only. Decisions: ADR 0004, ADR 0011 (D9 added). Runbook: [fly-deploy.md](../runbooks/fly-deploy.md).
