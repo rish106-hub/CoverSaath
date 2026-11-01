@@ -60,7 +60,7 @@ export function buildDecisionCatalogue({ householdId, batches, clauseRows, polic
     officialSources: today ? officialSources.map(record => validateOfficialSource(record, { today })) : [],
     curatedComparison: compareToCurated({ clauseRows, facts, products: curatedProducts }),
     reviewRequired: facts.some(fact => !fact.verified) || unresolvedConflicts.length > 0 || riders.some(rider => rider.status === 'conflict'),
-    limitations: ['Derived from the evidence supplied; retrieval completeness is not established.', 'Not legal review. No claim approval or payout is predicted.'],
+    limitations: ['Derived from the evidence supplied; retrieval completeness is not established.', 'Shows what the supplied evidence supports. Your insurer decides claims and payouts.'],
   });
 }
 
