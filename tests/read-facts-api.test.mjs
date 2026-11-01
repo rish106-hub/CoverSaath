@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { sharedColumnCrypto } from '../src/backend/security/column-crypto.js';
 import { tableCounts } from './support/household-api-harness.mjs';
 import { createApiServer } from '../src/server/server.js';
 import { createBackendServices, readbackEnabled } from '../src/backend/services/index.js';
@@ -426,11 +427,14 @@ test('V3a: every succeeded job whose pages are returned must still hold a curren
   const app = await startApp(t);
   const s = await scenario(app);
   // A second succeeded job with a lapsed grant owns one of the stored pages: its text would be returned, so it must be checked.
+  const crypto = sharedColumnCrypto();
   const job = await app.database.one('SELECT * FROM ocr_jobs WHERE document_upload_id = ?', [s.documentId]);
   await app.database.run(`INSERT INTO ocr_jobs (id, document_upload_id, provider, provider_job_ref, status, attempt_count, contract_version, authorization_json, result_json, result_digest, requested_at, updated_at)
     VALUES (?, ?, 'sarvam', NULL, 'succeeded', 1, ?, ?, ?, ?, ?, ?)`, [
     'job-second', s.documentId, job.contract_version, JSON.stringify({ ...JSON.parse(job.authorization_json), consentGrantId: 'grant-does-not-exist' }),
-    job.result_json, job.result_digest, '2999-01-01T00:00:00.000Z', '2999-01-01T00:00:00.000Z']);
+    // result_json is sealed with the job id in its AAD (ADR 0013), so the copy is re-sealed for the new row.
+    crypto.seal('ocr_jobs', 'result_json', 'job-second', crypto.open('ocr_jobs', 'result_json', job.id, job.result_json)),
+    job.result_digest, '2999-01-01T00:00:00.000Z', '2999-01-01T00:00:00.000Z']);
   await app.database.run("UPDATE source_pages SET ocr_job_id = 'job-second' WHERE document_upload_id = ? AND page_number = 2", [s.documentId]);
   const res = await readFacts(app, s);
   assert.deepEqual(res.data.documents, []);

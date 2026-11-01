@@ -38,6 +38,8 @@ function environment(directory, extra = {}) {
     KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken,
     DOCUMENT_STORAGE_PATH: join(directory, 'documents'),
     DOCUMENT_ENCRYPTION_KEY_BASE64: randomBytes(32).toString('base64'),
+    // This suite proves the filesystem backend (it counts .csd files); tests/document-blobs.test.mjs proves the database one.
+    DOCUMENT_STORAGE_BACKEND: 'filesystem',
     ...extra,
   };
 }

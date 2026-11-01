@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createHash } from 'node:crypto';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { sharedColumnCrypto } from '../src/backend/security/column-crypto.js';
 import { createApiServer } from '../src/server/server.js';
 import { readServerConfig } from '../src/server/config.js';
 
@@ -119,8 +120,12 @@ test('first sign-in creates adult, household, owner member and identity; the sam
   assert.ok(Date.parse(row.last_used_at) > Date.parse(created.last_used_at), 'last_used_at must advance on a returning sign-in');
   assert.equal(row.revoked_at, null);
   // Returning does not rewrite the adult (no lookup or update by e-mail or name).
-  assert.equal((await app.db.one('SELECT display_name, contact_email FROM adult_users')).display_name, 'Asha Synthetic');
-  assert.equal((await app.db.one('SELECT contact_email FROM adult_users')).contact_email, 'asha@example.test');
+  // Name and e-mail are sealed at rest (ADR 0013): the raw columns are ciphertext that opens to the same values.
+  const stored = await app.db.one('SELECT id, display_name, contact_email FROM adult_users');
+  assert.match(stored.display_name, /^enc1\./);
+  assert.match(stored.contact_email, /^enc1\./);
+  assert.equal(sharedColumnCrypto().open('adult_users', 'display_name', stored.id, stored.display_name), 'Asha Synthetic');
+  assert.equal(sharedColumnCrypto().open('adult_users', 'contact_email', stored.id, stored.contact_email), 'asha@example.test');
 });
 
 test('the same subject at another issuer is a different adult; the same e-mail does not link identities', postgresTestOptions(), async t => {

@@ -71,7 +71,7 @@ export function createDocumentIntakeService({ repository, storage, mode = 'live'
       if (await repository.findVersion(householdId, logicalDocumentId, input.version)) throw new DocumentIntakeError('DOCUMENT_VERSION_EXISTS', 'This immutable document version already exists.');
 
       const id = randomUUID();
-      const storageKey = await storage.put({ documentId: id, bytes: validated.bytes });
+      const storageKey = await storage.put({ documentId: id, householdId, bytes: validated.bytes });
       const createdAt = now().toISOString();
       const record = {
         id, householdId, caseId, uploadedByAdultId, consentGrantId, logicalDocumentId, version: input.version,
