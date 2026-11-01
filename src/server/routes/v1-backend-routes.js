@@ -492,6 +492,15 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
       return { status: 200, body: await (await getEvidenceService()).readFacts({ caseRecord }) };
     }
+    // Passages from the owner's own read documents (ADR 0012 D9): stored clauses matching a short query, as snippets with
+    // their page. Same case lookup, field gate and flag as read-facts (the service then validates q and limit); no model
+    // call. The query is never logged here (it travels in the URL, so proxies in front of this process must not log it).
+    const passagesMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/passages$/);
+    if (req.method === 'GET' && passagesMatch) {
+      const caseRecord = await requireDocumentCase(services, principal, passagesMatch[1]);
+      await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      return { status: 200, body: await (await getEvidenceService()).searchPassages({ caseRecord, query: url.searchParams.get('q'), limit: url.searchParams.get('limit') }) };
+    }
     // Authenticated review of one catalogue fact (ADR 0009 part 2). Reviewer strength comes from a stored grant, never from
     // the request body. The caller names a fact; the server rebuilds it from live clauses. Idempotent, audited, no model call.
     const reviewMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/decision-catalogue\/reviews$/);

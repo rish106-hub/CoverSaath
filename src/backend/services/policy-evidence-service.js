@@ -1,6 +1,6 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import { FINDING_STATES, QUESTION_CONSENT_SCOPE } from '../../contracts/policy-evidence.js';
-import { INVESTIGATION_VERSION, buildClauses, investigate } from '../../features/policy-evidence/index.js';
+import { CLAUSE_KINDS, FINDING_STATES, QUESTION_CONSENT_SCOPE } from '../../contracts/policy-evidence.js';
+import { INVESTIGATION_VERSION, buildClauses, investigate, looksLikeSchedule } from '../../features/policy-evidence/index.js';
 import { extractFields, flattenBlock, tableRows, FIELD_NAMES, FIELD_SPECS } from '../../features/ai-analysis/eval-extractor.js';
 
 // Answers one question about a case's policy documents (ADR 0008): stored OCR blocks become clauses, the
@@ -57,7 +57,9 @@ function identityTerms(pages, knownIdentifiers) {
 }
 
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const hideIdentity = (text, terms) => terms.reduce((out, term) => out.replace(new RegExp(escapeRegExp(term), 'giu'), HIDDEN), text);
+// A term matches whatever separators sit between its parts: "SYN-PERS-410001" also hides "SYN PERS 410001" and "SYN/PERS/410001".
+const termPattern = term => escapeRegExp(term).replace(/(?:\\?[\s\-_/.])+/g, '[\\s\\-_/.]+');
+const hideIdentity = (text, terms) => terms.reduce((out, term) => out.replace(new RegExp(termPattern(term), 'giu'), HIDDEN), text);
 const showsIdentity = (text, terms) => terms.some(term => text.toLowerCase().includes(term.toLowerCase()));
 
 // Cut `text` to MAX_QUOTE_LENGTH characters around the first occurrence of `value`.
@@ -125,6 +127,45 @@ function readbackFields(pages, knownIdentifiers) {
       page: Number.isSafeInteger(hit.page) && hit.page >= 1 ? hit.page : null, quote: quoteFor(field, pages, { ...hit, value }, terms),
     };
   });
+}
+
+const PASSAGE_NOTICE = 'These are passages from your documents, not an answer or a claim decision.';
+const MAX_SNIPPET_LENGTH = 280;
+const MAX_TITLE_LENGTH = 120;
+// Clauses of every kind except the schedule facts, which are where names, numbers and premiums sit.
+const PASSAGE_KINDS = Object.freeze(CLAUSE_KINDS.filter(kind => kind !== 'schedule_fact'));
+// Labels of identity and schedule data. A clause that holds one is not shown at all, whatever its kind: the clause
+// classifier files a schedule table with a "waiting period" or rider row as something other than a schedule fact.
+// Optional punctuation or spaces may follow a label, or none ("DOB 01-02-1990"), so the label alone decides.
+const SEP = String.raw`\s*[:|\-\u2013]`;
+const IDENTITY_LABELS = [
+  String.raw`policy\s*(?:no|number|num|id|#)\b`, String.raw`policy\s*holder`, String.raw`proposer`, String.raw`nominee`,
+  String.raw`(?:insured|member|customer|patient|beneficiary|employee)(?:\s*person'?s?)?\s*(?:name|id|no|number|ref(?:erence)?)\b`,
+  String.raw`name\s*of\s*(?:the\s*)?(?:insured|policy\s*holder|proposer|member|nominee)`,
+  String.raw`\bname${SEP}`, String.raw`\b(?:dob|date\s*of\s*birth)\b`, String.raw`\bage${SEP}`, String.raw`\bage\s*\d`, String.raw`\b(?:gender|sex)${SEP}`,
+  String.raw`\b(?:mobile|phone|telephone)\b`, String.raw`contact\s*(?:no|number|details)`, String.raw`e-?\s?mail`,
+  String.raw`\baddress${SEP}`, String.raw`\b(?:residential|postal|permanent|communication|mailing)\s*address`,
+  String.raw`\bpremium\b`, String.raw`\b(?:pan|aadhaar|aadhar|abha|uhid)\b`,
+];
+const IDENTITY_LABEL = new RegExp(IDENTITY_LABELS.join('|'), 'iu');
+const holdsIdentityLabel = (...texts) => texts.some(text => typeof text === 'string' && IDENTITY_LABEL.test(text));
+// What may remain in a clause that holds no label: e-mail addresses and runs of 6 or more digits (numbers, phones, dates).
+const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
+const DIGIT_RUN = /\d(?:[\s\-/]?\d){5,}/g;
+const maskNumbers = text => text.replace(EMAIL, HIDDEN).replace(DIGIT_RUN, HIDDEN);
+
+// Up to MAX_SNIPPET_LENGTH characters of `text` centred on the first query word, cut at word boundaries.
+function snippetAround(text, query) {
+  const flat = squash(text);
+  if (flat.length <= MAX_SNIPPET_LENGTH) return flat;
+  const lower = flat.toLowerCase();
+  const words = String(query).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [];
+  const at = Math.max(0, Math.min(...words.map(word => lower.indexOf(word)).filter(index => index >= 0), flat.length));
+  let start = Math.max(0, Math.min(at - Math.floor(MAX_SNIPPET_LENGTH / 2), flat.length - MAX_SNIPPET_LENGTH));
+  let end = start + MAX_SNIPPET_LENGTH;
+  if (start > 0) { const space = flat.indexOf(' ', start); start = space < 0 || space >= end ? start : space + 1; }
+  if (end < flat.length) { const space = flat.lastIndexOf(' ', end); end = space > start ? space : end; }
+  return flat.slice(start, end).trim();
 }
 
 function coded(code, message, statusCode) { return Object.assign(new Error(message), { code, statusCode }); }
@@ -340,6 +381,60 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     }));
   }
 
+  /**
+   * The documents of a case whose stored text may be shown to its owner right now, with the reason for every one that
+   * may not. Shared by readFacts and searchPassages so the consent gate exists once. A document is readable only if it
+   * is active, current, and every succeeded sarvam job whose stored pages would be returned still holds a current exact
+   * reading grant, re-checked here on every call (never trusted from the job row). No model call, nothing stored.
+   */
+  async function readableDocuments({ caseRecord }) {
+    const { id: caseId, household_id: householdId } = caseRecord;
+    const listed = await services.documents.listForCase(caseId, householdId, MAX_CASE_DOCUMENTS + 1);
+    if (listed.length > MAX_CASE_DOCUMENTS) throw coded('POLICY_EVIDENCE_CASE_TOO_LARGE', 'The case has too many documents to read.', 409);
+    const active = listed.filter(document => document.lifecycleState === 'active');
+    const isCurrent = await currentVersionCheck(householdId, active);
+    const knownIdentifiers = active.length ? await loadKnownIdentifiers(caseId) : [];
+    const readable = [];
+    const excluded = [];
+    const now = Date.now();
+    for (const document of active) {
+      const exclude = reason => excluded.push({ documentId: document.id, reason });
+      if (!isCurrent(document)) { exclude('superseded'); continue; }
+      // Why a reading grant no longer passes: past its expiry (and not revoked) or withdrawn (revoked, erased or not matching).
+      const withdrawnReason = async grantId => {
+        const grant = grantId ? await services.consents.get(grantId) : null;
+        const expired = grant && !grant.revoked_at && grant.expires_at != null && !(Date.parse(grant.expires_at) > now);
+        return expired ? 'reading_permission_expired' : 'reading_permission_withdrawn';
+      };
+      const latest = await services.ocr.getLatestJobForDocument(document.id);
+      if (latest?.status === 'cancelled' && latest.errorCode === 'CONSENT_REVOKED') { exclude('reading_permission_withdrawn'); continue; }
+      if (latest?.status !== 'succeeded') { exclude('not_read'); continue; }
+      // Every succeeded job whose stored pages could be returned must still hold a current exact grant to sarvam.
+      const holders = await services.ocr.getJobsHoldingPages(document.id);
+      if (!holders.length) { exclude(latest.authorization?.consentGrantId ? 'not_read' : 'reading_permission_withdrawn'); continue; }
+      if (holders.some(job => job.provider !== 'sarvam')) { exclude('not_read'); continue; }
+      let blocked = null;
+      for (const job of holders) {
+        const authorization = job.authorization;
+        const ready = authorization?.consentGrantId && authorization.requestedByAdultId
+          ? await services.ocr.getReadyDocument(document.id, new Date(now).toISOString(), {
+            consentGrantId: authorization.consentGrantId, requestedByAdultId: authorization.requestedByAdultId, recipient: 'sarvam',
+          })
+          : null;
+        if (!ready) { blocked = await withdrawnReason(authorization?.consentGrantId); break; }
+      }
+      if (blocked) { exclude(blocked); continue; }
+      let stored;
+      try { stored = await services.ocr.getDocumentBlockPages({ documentId: document.id, householdId }); } catch (error) {
+        if (['OCR_PAGES_UNAVAILABLE', 'OCR_PAGES_INCOMPLETE'].includes(String(error?.code))) { exclude('not_read'); continue; }
+        throw error;
+      }
+      if (!stored.complete) { exclude('not_read'); continue; }
+      readable.push({ document, stored });
+    }
+    return { readable, excluded, knownIdentifiers };
+  }
+
   return Object.freeze({
     // One question per idempotency key runs at a time. A stored answer is written only after the paid model call, so a
     // duplicate that arrives meanwhile would miss the replay and bill the model twice. The claim is per process, so a
@@ -370,59 +465,73 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
 
     /**
      * Values the deterministic extractor reads from the case's own stored OCR pages, each with its page and a short
-     * quote. No model call, nothing stored, no logging. A document is read only while the exact reading grant it was
-     * read under is still current (re-checked here, not trusted from the job row); otherwise it is excluded with a
-     * reason. Never returns the identity fields (policy number, policyholder, insured members, premium).
+     * quote. No model call, nothing stored, no logging. Never returns the identity fields (policy number,
+     * policyholder, insured members, premium).
      */
     async readFacts({ caseRecord }) {
       if (!readbackEnabled(env)) throw coded('READBACK_DISABLED', 'Reading values back is disabled.', 503);
-      const { id: caseId, household_id: householdId } = caseRecord;
-      const listed = await services.documents.listForCase(caseId, householdId, MAX_CASE_DOCUMENTS + 1);
-      if (listed.length > MAX_CASE_DOCUMENTS) throw coded('POLICY_EVIDENCE_CASE_TOO_LARGE', 'The case has too many documents to read.', 409);
-      const active = listed.filter(document => document.lifecycleState === 'active');
-      const isCurrent = await currentVersionCheck(householdId, active);
-      const knownIdentifiers = active.length ? await loadKnownIdentifiers(caseId) : [];
+      const { readable, excluded, knownIdentifiers } = await readableDocuments({ caseRecord });
       const documents = [];
-      const excluded = [];
-      const now = Date.now();
-      for (const document of active) {
-        const exclude = reason => excluded.push({ documentId: document.id, reason });
-        if (!isCurrent(document)) { exclude('superseded'); continue; }
-        // Why a reading grant no longer passes: past its expiry (and not revoked) or withdrawn (revoked, erased or not matching).
-        const withdrawnReason = async grantId => {
-          const grant = grantId ? await services.consents.get(grantId) : null;
-          const expired = grant && !grant.revoked_at && grant.expires_at != null && !(Date.parse(grant.expires_at) > now);
-          return expired ? 'reading_permission_expired' : 'reading_permission_withdrawn';
-        };
-        const latest = await services.ocr.getLatestJobForDocument(document.id);
-        if (latest?.status === 'cancelled' && latest.errorCode === 'CONSENT_REVOKED') { exclude('reading_permission_withdrawn'); continue; }
-        if (latest?.status !== 'succeeded') { exclude('not_read'); continue; }
-        // Every succeeded job whose stored pages could be returned must still hold a current exact grant to sarvam.
-        const holders = await services.ocr.getJobsHoldingPages(document.id);
-        if (!holders.length) { exclude(latest.authorization?.consentGrantId ? 'not_read' : 'reading_permission_withdrawn'); continue; }
-        if (holders.some(job => job.provider !== 'sarvam')) { exclude('not_read'); continue; }
-        let blocked = null;
-        for (const job of holders) {
-          const authorization = job.authorization;
-          const ready = authorization?.consentGrantId && authorization.requestedByAdultId
-            ? await services.ocr.getReadyDocument(document.id, new Date(now).toISOString(), {
-              consentGrantId: authorization.consentGrantId, requestedByAdultId: authorization.requestedByAdultId, recipient: 'sarvam',
-            })
-            : null;
-          if (!ready) { blocked = await withdrawnReason(authorization?.consentGrantId); break; }
-        }
-        if (blocked) { exclude(blocked); continue; }
-        let stored;
-        try { stored = await services.ocr.getDocumentBlockPages({ documentId: document.id, householdId }); } catch (error) {
-          if (['OCR_PAGES_UNAVAILABLE', 'OCR_PAGES_INCOMPLETE'].includes(String(error?.code))) { exclude('not_read'); continue; }
-          throw error;
-        }
-        if (!stored.complete) { exclude('not_read'); continue; }
-        let fields;
-        try { fields = readbackFields(stored.pages.map(({ page, blocks }) => ({ page, blocks })), knownIdentifiers); } catch { exclude('not_read'); continue; }
-        documents.push({ documentId: document.id, documentKind: document.documentKind, fields });
+      for (const { document, stored } of readable) {
+        try {
+          documents.push({
+            documentId: document.id, documentKind: document.documentKind,
+            fields: readbackFields(stored.pages.map(({ page, blocks }) => ({ page, blocks })), knownIdentifiers),
+          });
+        } catch { excluded.push({ documentId: document.id, reason: 'not_read' }); }
       }
       return { label: 'read_not_checked', notice: READBACK_NOTICE, documents, excluded };
+    },
+
+    /**
+     * Passages (stored clauses) of the case's readable documents that match `query`, as short snippets with their page.
+     * Same gate and flag as readFacts. No model call; the only write is the existing deterministic clause derivation
+     * (an erasable derived store, as for questions). The query is never logged. Fail closed on identity: a clause is
+     * dropped, whatever kind the classifier gave it, if it reads as schedule content or holds an identity label
+     * (policy number, name, nominee, mobile, e-mail, date of birth, premium and the like); in what remains, e-mail
+     * addresses and digit runs are masked and the document's own identity strings are hidden. Best effort: it cannot
+     * know a name it was never told, so the route stays owner only (follow-up F3 for stronger masking).
+     */
+    async searchPassages({ caseRecord, query: rawQuery, limit: rawLimit }) {
+      if (!readbackEnabled(env)) throw coded('READBACK_DISABLED', 'Reading values back is disabled.', 503);
+      const invalid = message => coded('INVALID_REQUEST', message, 400);
+      const query = typeof rawQuery === 'string' ? rawQuery.trim() : '';
+      if (query.length < 2 || query.length > 120) throw invalid('q must be 2 to 120 characters.');
+      if (rawLimit !== null && rawLimit !== undefined && !/^[0-9]{1,2}$/.test(String(rawLimit))) throw invalid('limit must be a whole number from 1 to 10.');
+      const limit = rawLimit === null || rawLimit === undefined ? 5 : Number(rawLimit);
+      if (limit < 1 || limit > 10) throw invalid('limit must be a whole number from 1 to 10.');
+      const { id: caseId, household_id: householdId } = caseRecord;
+      const { readable, excluded, knownIdentifiers } = await readableDocuments({ caseRecord });
+      const termsByDocument = new Map();
+      const documentIds = [];
+      for (const { document, stored } of readable) {
+        let ensured;
+        try { ensured = await ensureClauses({ householdId, caseId, documentId: document.id }); } catch (error) {
+          if (Object.hasOwn(SKIP_REASONS, String(error?.code))) { excluded.push({ documentId: document.id, reason: 'not_read' }); continue; }
+          throw error;
+        }
+        if (!ensured) { excluded.push({ documentId: document.id, reason: 'not_read' }); continue; }
+        termsByDocument.set(document.id, identityTerms(stored.pages.map(({ page, blocks }) => ({ page, blocks })), knownIdentifiers));
+        documentIds.push(document.id);
+      }
+      // Over-fetch: clauses dropped below must not leave the caller short of its limit.
+      const found = documentIds.length
+        ? await services.clauses.searchClauses({ householdId, caseId, documentIds, query, kinds: PASSAGE_KINDS, limit: 100 })
+        : [];
+      const passages = [];
+      for (const clause of found) {
+        if (!termsByDocument.has(clause.documentId) || !PASSAGE_KINDS.includes(clause.kind)) continue;
+        const title = clause.sectionPath?.[0] ?? '';
+        if (looksLikeSchedule(title, clause.text) || holdsIdentityLabel(title, clause.text)) continue;
+        const terms = termsByDocument.get(clause.documentId);
+        const hide = text => maskNumbers(hideIdentity(text, terms));
+        passages.push({
+          clauseId: clause.clauseId, documentId: clause.documentId, page: clause.page, kind: clause.kind,
+          title: title ? squash(hide(title)).slice(0, MAX_TITLE_LENGTH) : null, snippet: snippetAround(hide(clause.text), query),
+        });
+        if (passages.length === limit) break;
+      }
+      return { label: 'passage_not_answer', notice: PASSAGE_NOTICE, query, passages, excluded };
     },
 
     async get({ caseRecord, answerId }) {
