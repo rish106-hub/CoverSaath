@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local --watch src/server/server.js",
     "db:init": "node --env-file-if-exists=.env.local scripts/database.mjs",
+    "seed:demo-household": "node scripts/seed-demo-household.js",
     "eval:safety": "node scripts/run-safety-evals.mjs",
     "eval:household": "node scripts/eval-household-reasoning.mjs",
     "eval:retrieval": "node scripts/eval-retrieval-recall.mjs",
