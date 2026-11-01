@@ -63,6 +63,11 @@ export class HouseholdAppRepository {
     await db.transaction(async () => {
       const row = await db.one('SELECT * FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
       if (!row) fail('MEMBER_NOT_FOUND', 'Member not found.', 404);
+      // A real adult (not an invited placeholder) owns their row: others cannot change it here, matching the consent-gated reads.
+      if (row.adult_user_id && row.adult_user_id !== actorAdultId) {
+        const adult = await db.one('SELECT account_status FROM adult_users WHERE id = ?', [row.adult_user_id]);
+        if (adult?.account_status !== 'invited') fail('MEMBER_PROTECTED', 'This adult manages their own details; they cannot be changed here.', 403);
+      }
       const sets = [];
       const params = [];
       const fields = [];

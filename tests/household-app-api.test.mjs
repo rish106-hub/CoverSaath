@@ -200,3 +200,21 @@ test('seed: builds the Rao family and is idempotent', opts, async t => {
   assert.equal(Number((await db.one('SELECT count(*) AS c FROM insurers')).c), 3);
   assert.equal(Number((await db.one('SELECT count(*) AS c FROM policy_members')).c), 8);
 });
+
+test('a real adult member row cannot be changed by another adult; placeholders and self stay editable', opts, async t => {
+  const { app, db, services, owner } = await setup(t);
+  const base = `/api/v1/households/${owner.householdId}/members`;
+  const real = await services.households.createAdult({ displayName: 'Real Adult Synthetic', contactEmail: 'real.adult@example.test' });
+  const realMember = await services.households.addMember({ householdId: owner.householdId, adultUserId: real.id, displayName: 'Real Adult Synthetic', relationshipLabel: 'Sibling' });
+  for (const body of [{ dateOfBirth: '1990-01-01' }, { displayName: 'Renamed' }, { relationshipLabel: 'Friend' }]) {
+    const r = await app.call(`${base}/${realMember.id}`, { method: 'PATCH', token: owner.token, body });
+    assert.equal(r.status, 403, JSON.stringify(body));
+    assert.equal(r.data.error.code, 'MEMBER_PROTECTED');
+  }
+  const unchanged = await db.one('SELECT relationship_label, date_of_birth FROM household_members WHERE id = ?', [realMember.id]);
+  assert.equal(unchanged.relationship_label, 'Sibling');
+  assert.equal(unchanged.date_of_birth, null);
+  const placeholder = await add(app, owner, { displayName: 'Placeholder Synthetic', memberKind: 'adult' });
+  assert.equal((await app.call(`${base}/${placeholder.data.id}`, { method: 'PATCH', token: owner.token, body: { relationshipLabel: 'Spouse', dateOfBirth: '1990-01-01' } })).status, 200);
+  assert.equal((await app.call(`${base}/${owner.memberId}`, { method: 'PATCH', token: owner.token, body: { relationshipLabel: 'Self' } })).status, 200);
+});
