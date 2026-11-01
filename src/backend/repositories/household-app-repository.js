@@ -94,26 +94,54 @@ export class HouseholdAppRepository {
   // links (policy_members) are erased with the member. Audit carries counts only.
   async deleteMember({ householdId, actorAdultId, memberId }) {
     const db = this.database;
-    await db.transaction(async () => {
-      const row = await db.one('SELECT * FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
-      if (!row) fail('MEMBER_NOT_FOUND', 'Member not found.', 404);
-      let placeholderAdultId = null;
-      if (row.adult_user_id) {
-        const adult = await db.one('SELECT account_status FROM adult_users WHERE id = ?', [row.adult_user_id]);
-        const roles = Number((await db.one('SELECT count(*) AS count FROM household_roles WHERE adult_user_id = ?', [row.adult_user_id])).count);
-        if (adult?.account_status !== 'invited' || roles > 0) fail('MEMBER_PROTECTED', 'This member has an account in the household and cannot be removed here.', 409);
-        placeholderAdultId = row.adult_user_id;
-      }
-      const references = Number((await db.one(`SELECT
-          (SELECT count(*) FROM service_cases WHERE subject_member_id = ?)
-        + (SELECT count(*) FROM evidence_facts WHERE subject_member_id = ?)
-        + (SELECT count(*) FROM coverage_parameter_records WHERE subject_id = ?) AS count`, [memberId, memberId, memberId])).count);
-      if (references > 0) fail('MEMBER_HAS_RECORDS', 'Records still refer to this member. Close those cases or withdraw their permission first.', 409);
-      const links = await db.many('DELETE FROM policy_members WHERE household_member_id = ? RETURNING policy_id', [memberId]);
-      await db.run('DELETE FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
-      if (placeholderAdultId) await db.run('DELETE FROM adult_users WHERE id = ?', [placeholderAdultId]);
-      await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.removed', resourceType: 'household_member', resourceId: memberId, payload: { policyLinksErased: links.length, placeholderAdultErased: Boolean(placeholderAdultId) } });
-    }, { locks: [householdLock(householdId)] });
+    try {
+      await db.transaction(async () => {
+        const row = await db.one('SELECT * FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
+        if (!row) fail('MEMBER_NOT_FOUND', 'Member not found.', 404);
+        const owner = await db.one(`SELECT 1 AS found FROM household_roles WHERE household_id = ? AND adult_user_id = ? AND role = 'owner'`, [householdId, row.adult_user_id]);
+        if (row.adult_user_id && owner) fail('MEMBER_PROTECTED', 'The household owner cannot be removed.', 409);
+        let placeholderAdultId = null;
+        if (row.adult_user_id) {
+          const adult = await db.one('SELECT account_status FROM adult_users WHERE id = ?', [row.adult_user_id]);
+          if (adult?.account_status !== 'invited' || await this.#adultIsReferenced(row.adult_user_id, memberId)) {
+            fail('MEMBER_PROTECTED', 'This member has an account or records in the household and cannot be removed here.', 409);
+          }
+          placeholderAdultId = row.adult_user_id;
+        }
+        const references = Number((await db.one(`SELECT
+            (SELECT count(*) FROM service_cases WHERE subject_member_id = ?)
+          + (SELECT count(*) FROM evidence_facts WHERE subject_member_id = ?)
+          + (SELECT count(*) FROM coverage_parameter_records WHERE subject_id = ?) AS count`, [memberId, memberId, memberId])).count);
+        if (references > 0) fail('MEMBER_HAS_RECORDS', 'Records still refer to this member. Close those cases or withdraw their permission first.', 409);
+        const links = await db.many('DELETE FROM policy_members WHERE household_member_id = ? RETURNING policy_id', [memberId]);
+        await db.run('DELETE FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
+        if (placeholderAdultId) await db.run('DELETE FROM adult_users WHERE id = ?', [placeholderAdultId]);
+        await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.removed', resourceType: 'household_member', resourceId: memberId, payload: { policyLinksErased: links.length, placeholderAdultErased: Boolean(placeholderAdultId) } });
+      }, { locks: [householdLock(householdId)] });
+    } catch (error) {
+      // Backstop: any foreign key we did not anticipate is a coded conflict, never a raw 500.
+      if (error?.code === '23503') fail('MEMBER_PROTECTED', 'Other records still refer to this member and it cannot be removed here.', 409);
+      throw error;
+    }
+  }
+
+  // True when anything other than the member row being deleted points at the adult. The referencing columns are read from the
+  // catalog, so a table added later is covered without editing this list (household_roles, auth_identities, api_sessions,
+  // profile_answers and consent grants included).
+  async #adultIsReferenced(adultId, memberId) {
+    const refs = await this.database.many(`SELECT cl.relname AS table_name, att.attname AS column_name
+      FROM pg_constraint con
+      JOIN pg_class cl ON cl.oid = con.conrelid
+      JOIN pg_namespace ns ON ns.oid = cl.relnamespace AND ns.nspname = current_schema()
+      JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = con.conkey[1]
+      WHERE con.contype = 'f' AND con.confrelid = 'adult_users'::regclass AND array_length(con.conkey, 1) = 1`);
+    for (const ref of refs) {
+      const quoted = name => `"${String(name).replaceAll('"', '""')}"`;
+      const sameTable = ref.table_name === 'household_members';
+      const found = await this.database.one(`SELECT 1 AS found FROM ${quoted(ref.table_name)} WHERE ${quoted(ref.column_name)} = ?${sameTable ? ' AND id <> ?' : ''} LIMIT 1`, sameTable ? [adultId, memberId] : [adultId]);
+      if (found) return true;
+    }
+    return false;
   }
 
   async ownerMemberIds(householdId) {

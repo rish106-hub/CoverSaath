@@ -130,7 +130,6 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
 
     async removeMember(principal, householdId, memberId) {
       await requireWrite(principal, householdId);
-      if ((await appRepository.ownerMemberIds(householdId)).includes(memberId)) fail('MEMBER_PROTECTED', 'The household owner cannot be removed.', 409);
       await appRepository.deleteMember({ householdId, actorAdultId: principal.adultId, memberId });
     },
 

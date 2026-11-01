@@ -218,3 +218,28 @@ test('a real adult member row cannot be changed by another adult; placeholders a
   assert.equal((await app.call(`${base}/${placeholder.data.id}`, { method: 'PATCH', token: owner.token, body: { relationshipLabel: 'Spouse', dateOfBirth: '1990-01-01' } })).status, 200);
   assert.equal((await app.call(`${base}/${owner.memberId}`, { method: 'PATCH', token: owner.token, body: { relationshipLabel: 'Self' } })).status, 200);
 });
+
+test('removing a placeholder adult that other rows still reference is a coded 409, not a 500', opts, async t => {
+  const { app, db, owner } = await setup(t);
+  const base = `/api/v1/households/${owner.householdId}/members`;
+  const placeholder = await add(app, owner, { displayName: 'Placeholder Synthetic', memberKind: 'adult' });
+  const adultId = (await db.one('SELECT adult_user_id FROM household_members WHERE id = ?', [placeholder.data.id])).adult_user_id;
+  await db.run(`INSERT INTO api_sessions (id, adult_user_id, token_sha256, issued_at, expires_at, created_at) VALUES ('session-synthetic', ?, ?, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-01T00:00:00Z')`, [adultId, 'a'.repeat(64)]);
+  const refused = await app.call(`${base}/${placeholder.data.id}`, { method: 'DELETE', token: owner.token });
+  assert.equal(refused.status, 409, JSON.stringify(refused.data));
+  assert.equal(refused.data.error.code, 'MEMBER_PROTECTED');
+  assert.equal(Number((await db.one('SELECT count(*) AS c FROM household_members WHERE id = ?', [placeholder.data.id])).c), 1);
+
+  // A second member row pointing at the same adult also blocks removal.
+  const other = await add(app, owner, { displayName: 'Second Placeholder', memberKind: 'adult' });
+  const otherAdult = (await db.one('SELECT adult_user_id FROM household_members WHERE id = ?', [other.data.id])).adult_user_id;
+  await db.run(`INSERT INTO household_members (id, household_id, adult_user_id, display_name, member_kind, created_at, updated_at) VALUES ('member-dup-synthetic', ?, ?, 'x', 'adult', now()::text, now()::text)`, [owner.householdId, otherAdult]);
+  const dup = await app.call(`${base}/${other.data.id}`, { method: 'DELETE', token: owner.token });
+  assert.equal(dup.status, 409);
+  assert.equal(dup.data.error.code, 'MEMBER_PROTECTED');
+});
+
+test('removeMember refuses the owner inside the repository transaction', opts, async t => {
+  const { services, owner } = await setup(t);
+  await assert.rejects(() => services.householdApp.deleteMember({ householdId: owner.householdId, actorAdultId: owner.adultId, memberId: owner.memberId }), { code: 'MEMBER_PROTECTED', statusCode: 409 });
+});
