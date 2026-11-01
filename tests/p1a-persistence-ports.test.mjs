@@ -94,8 +94,9 @@ test('P1-A ports: every port method the runtime calls is listed', () => {
   for (const method of used(/services\.consents\??\.([a-zA-Z]+)/g)) assert.ok(CONSENT_REPOSITORY_PORT_METHODS.includes(method), method);
   for (const method of used(/services\.cases\??\.([a-zA-Z]+)/g)) assert.ok(CASE_REPOSITORY_PORT_METHODS.includes(method), method);
   for (const method of used(/services\.audit\??\.([a-zA-Z]+)/g)) assert.ok(AUDIT_REPOSITORY_PORT_METHODS.includes(method), method);
-  // Nothing else on `services` is reached by the port.
-  assert.deepEqual([...used(/services\.([a-zA-Z]+)/g)].sort(), ['audit', 'cases', 'consents', 'coverageParameters', 'workflows']);
+  // Nothing else on `services` is reached by the port. `columnCrypto` is read only to open sealed
+  // household member names when the privacy scan terms are built (run E1, ADR 0013).
+  assert.deepEqual([...used(/services\.([a-zA-Z]+)/g)].sort(), ['audit', 'cases', 'columnCrypto', 'consents', 'coverageParameters', 'workflows']);
   const consentSource = readFileSync(new URL('../src/backend/repositories/consent-repository.js', import.meta.url), 'utf8');
   for (const method of new Set([...consentSource.matchAll(/this\.coverageParameters\.([a-zA-Z]+)/g)].map(match => match[1]))) {
     assert.ok(COVERAGE_PARAMETER_REPOSITORY_PORT_METHODS.includes(method), method);
