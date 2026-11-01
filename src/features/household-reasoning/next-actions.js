@@ -48,7 +48,7 @@ export function buildNextActions({ gaps: unsorted, questions }) {
   // An empty list while blocking gaps remain is intended: such a gap has no open question (answered, skipped or over the
   // budget) and no document, review or external resolver, so there is nothing new to ask. It stays visible in contextGaps.
   if (!list.length && !gaps.some(g => g.blocking)) {
-    list.push(act('no_further_context_needed', 'no_open_context_gaps', 'No further context is needed for this evidence summary. It is not a claim decision.', []));
+    list.push(act('no_further_context_needed', 'no_open_context_gaps', 'No further context is needed for this evidence summary.', []));
   }
   return deepFreeze(list);
 }

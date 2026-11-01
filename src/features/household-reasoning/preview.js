@@ -11,13 +11,13 @@ import { assertHouseholdPreviewContract } from './output-contract.js';
 
 const SCENARIO_CODE = Object.freeze({ planned_procedure: 'S1', general_benefit: 'S2', policy_comparison: 'S3', emergency_admission: 'S4', cashless_information: 'S5' });
 
+// LEGAL REVIEW: wording not final. Consent and privacy wording around this summary still needs legal review.
 const LIMITATIONS = Object.freeze([
-  'Evidence summary only. It is not a claim decision, an approval, a reimbursement estimate or advice on whether to buy a policy.',
+  'This summary is built from the documents you added and cites the source of each point. Your insurer makes the claim decision.',
   'Policy limits are never added together and no usable aggregate cover is calculated.',
   'Answers given in this journey are user-reported context. They do not make any policy fact verified.',
   'Retrieval completeness is not established. A term that is not found is an evidence gap, not an exclusion.',
   'Hospital network and cashless availability change over time and have not been checked. No insurer, TPA or hospital source was consulted.',
-  'Consent and privacy wording is pending legal review.',
 ]);
 
 export function assessmentStateOf({ normalized, positions, gaps, scenario }) {

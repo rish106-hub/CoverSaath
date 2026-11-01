@@ -33,11 +33,11 @@ const HISTORY_KEYS = ['state', 'contentSha256', 'sourceVersionId'];
 // A value or any field that names a household, an adult, a policy number or document content is refused wherever it appears.
 const FORBIDDEN_KEY = /household|adult|member|policy_?holder|policy_?number|user_?id|e-?mail|phone|collected_?by|checked_?by|curated_?by|page_?text|bytes|account/i;
 
+// LEGAL REVIEW: wording not final. Legal and privacy wording around these records still needs legal review.
 export const VERIFIED_RECORDS_LIMITATIONS = Object.freeze([
   'Public insurer wording only. A record informs a comparison; it never overrides a household\'s own contract.',
   'An absent record means unknown, not that no such term exists.',
   'A value is present only for a record independently checked and current on asOf. Candidate values are unverified and are not to be calculated with.',
-  'Legal and privacy wording is not final and needs legal review.',
 ]);
 
 // isIsoDate throws on an out-of-range month; a contract check must refuse, not crash.
