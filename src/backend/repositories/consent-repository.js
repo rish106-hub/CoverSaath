@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { PolicyStructuringRepository } from './policy-structuring-repository.js';
 import { ClauseRepository } from './clause-repository.js';
+import { AppEventRepository } from './app-event-repository.js';
 import { householdLock } from '../database/postgres/locks.js';
 import { GEMINI_MODEL_RECIPIENT } from '../../features/ai-analysis/privacy-evidence-gate.js';
 
@@ -33,11 +34,13 @@ const notConfigured = message => Object.assign(new Error(message), { code: 'ERAS
 // workflow_tasks -> the rest. Every DB-touching method is async; a rejected query (including a
 // dropped connection) rejects the method, so every consent check fails closed.
 export class ConsentRepository {
-  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null, clauses = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null, clauses = null, appEvents = null } = {}) {
     this.database = database;
     this.clock = clock;
     this.audit = audit;
     this.coverageParameters = coverageParameters;
+    // Activity events tied to a grant lose their sealed payload on revocation (ADR 0014). Needs only the database.
+    this.appEvents = appEvents ?? (database ? new AppEventRepository(database) : null);
     // Structuring proposals and runs are derived data: erasure always has a path, so a missing
     // injection never leaves proposals behind (the repository needs only the database to erase).
     this.policyStructuring = policyStructuring
@@ -326,6 +329,8 @@ export class ConsentRepository {
           SET lifecycle_state = 'deletion_requested', next_scan_at = NULL
           WHERE id = ? AND lifecycle_state IN ('active', 'quarantined')`, [documentId]);
       }
+      // Sealed payloads of activity events recorded under this grant are erased in the same transaction.
+      await this.appEvents?.redactForGrant(grantId);
       // Runs (already locked above) before their tasks, then the graph tombstones.
       await db.run(`UPDATE workflow_runs
         SET status = 'revoked', finished_at = ?, terminal_reason = 'CONSENT_REVOKED'

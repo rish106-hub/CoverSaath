@@ -12,6 +12,9 @@ test('server configuration has explicit bounded defaults', () => {
     rateLimitPerMinute: 600,
     budgetUsd: undefined,
     projectBudgetUsd: undefined,
+    rateLimitBackend: 'memory',
+    budgetBackend: 'memory',
+    events: { enabled: true, retentionDays: 30 },
     documents: {
       storageBackend: 'database',
       storagePath: '.local/documents',
@@ -51,4 +54,12 @@ test('network settings are off by default and validated when set', () => {
   assert.equal(hosted.trustFlyClientIp, true);
   for (const bad of ['*.fly.dev', 'host/path', 'http://x.dev', 'a b']) assert.throws(() => readServerConfig({ PUBLIC_HOSTS: bad }), /PUBLIC_HOSTS/);
   assert.throws(() => readServerConfig({ TRUST_FLY_CLIENT_IP: 'yes' }), /TRUST_FLY_CLIENT_IP/);
+});
+
+test('activity-event, rate-limit and budget backends are validated', () => {
+  assert.deepEqual(readServerConfig({ APP_EVENTS_ENABLED: 'false', APP_EVENTS_RETENTION_DAYS: '7', RATE_LIMIT_BACKEND: 'database', MODEL_BUDGET_BACKEND: 'database' })
+    .events, { enabled: false, retentionDays: 7 });
+  for (const [name, value] of [['APP_EVENTS_ENABLED', 'yes'], ['APP_EVENTS_RETENTION_DAYS', '0'], ['APP_EVENTS_RETENTION_DAYS', '99999'], ['RATE_LIMIT_BACKEND', 'redis'], ['MODEL_BUDGET_BACKEND', 'file']]) {
+    assert.throws(() => readServerConfig({ [name]: value }), new RegExp(`Invalid ${name}`));
+  }
 });

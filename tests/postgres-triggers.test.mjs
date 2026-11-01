@@ -1098,6 +1098,18 @@ test('an active checker grant needs a public key, and signed-action nonces are i
   proves('curated_product_submissions_text_origin_immutable');
 });
 
+test('app events are append only except for redacting the sealed payload', postgresTestOptions(), async t => {
+  const { pool } = await useTestDatabase(t);
+  await pool.query("INSERT INTO app_events (event_name, expires_at, payload_enc) VALUES ('http_request', now() + interval '1 day', 'enc1.k.a.b.c')");
+  await rejects(pool.query("UPDATE app_events SET status = 500"), 'app events are append only');
+  await rejects(pool.query('UPDATE app_events SET payload_enc = NULL'), 'app events are append only');
+  await rejects(pool.query("UPDATE app_events SET payload_enc = NULL, redacted_at = now(), route = '/x'"), 'app events are append only');
+  assert.equal((await pool.query('UPDATE app_events SET status = 500 WHERE false')).rowCount, 0, 'row-level: no row, no fire');
+  assert.equal((await pool.query('UPDATE app_events SET payload_enc = NULL, redacted_at = now()')).rowCount, 1);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM app_events WHERE payload_enc IS NULL AND redacted_at IS NOT NULL')).n, 1);
+  proves('app_events_guard_update');
+});
+
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const catalog = (await pool.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname")).rows.map(row => row.tgname);

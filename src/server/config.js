@@ -61,6 +61,23 @@ function readNetworkConfig(env) {
   return Object.freeze({ publicHosts: Object.freeze(publicHosts), trustFlyClientIp: env.TRUST_FLY_CLIENT_IP === 'true' });
 }
 
+const BACKENDS = Object.freeze(['memory', 'database']);
+
+function backend(value, name) {
+  const chosen = value ?? 'memory';
+  if (!BACKENDS.includes(chosen)) throw new Error(`Invalid ${name}.`);
+  return chosen;
+}
+
+// Activity events (ADR 0014): on by default, metadata plus sealed payloads, kept APP_EVENTS_RETENTION_DAYS (default 30).
+function readEventsConfig(env) {
+  if (env.APP_EVENTS_ENABLED !== undefined && !['true', 'false'].includes(env.APP_EVENTS_ENABLED)) throw new Error('Invalid APP_EVENTS_ENABLED.');
+  return Object.freeze({
+    enabled: env.APP_EVENTS_ENABLED !== 'false',
+    retentionDays: boundedInteger(env.APP_EVENTS_RETENTION_DAYS, 30, 'APP_EVENTS_RETENTION_DAYS', 3_650),
+  });
+}
+
 const TOKEN_CHARSET = /^[A-Za-z0-9_-]+$/;
 const MAX_IDENTITY_ISSUERS = 10;
 
@@ -99,6 +116,11 @@ export function readServerConfig(env = process.env) {
     // run. live-coverage-runtime.js reads the same variables with its own bounds.
     budgetUsd: positiveAmount(env.ORCHESTRATION_RUN_BUDGET_USD, 'ORCHESTRATION_RUN_BUDGET_USD', 1),
     projectBudgetUsd: positiveAmount(env.ORCHESTRATION_PROJECT_BUDGET_USD, 'ORCHESTRATION_PROJECT_BUDGET_USD'),
+    // 'database' shares the request limit and the model spend cap between machines and across restarts (ADR 0014).
+    // 'memory' (default) keeps both per process.
+    rateLimitBackend: backend(env.RATE_LIMIT_BACKEND, 'RATE_LIMIT_BACKEND'),
+    budgetBackend: backend(env.MODEL_BUDGET_BACKEND, 'MODEL_BUDGET_BACKEND'),
+    events: readEventsConfig(env),
     documents: readDocumentConfig(env),
     network: readNetworkConfig(env),
   });

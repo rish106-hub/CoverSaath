@@ -326,6 +326,8 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     }
 
     const principal = await services.access.authenticate(req.headers.authorization);
+    // Read by the activity-event recorder after the response; carries an id only, never a credential.
+    req.appContext = { adultUserId: principal.adultId };
     const responses = createReadResponsePolicy({ database, consents: services.consents });
 
     if (req.method === 'GET' && url.pathname === '/api/v1/integrations') {

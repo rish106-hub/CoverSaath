@@ -16,7 +16,7 @@ export const expectedTables = Object.freeze([
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
   'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs', 'policy_clauses', 'policy_answers', 'catalogue_reviewer_grants', 'catalogue_reviews',
   'source_curator_grants', 'curated_source_archives', 'curated_product_submissions', 'curated_action_nonces',
-  'auth_identities', 'profile_answers', 'document_blobs',
+  'auth_identities', 'profile_answers', 'document_blobs', 'app_events', 'rate_limit_buckets', 'model_budget_scopes', 'model_budget_reservations',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -26,7 +26,7 @@ export const criticalTriggers = Object.freeze([
   'catalogue_reviewer_grants_independent_insert', 'catalogue_reviewer_grants_independent_update', 'curated_source_archives_immutable', 'curated_source_archives_no_delete', 'curated_product_submissions_content_immutable', 'curated_product_submissions_state_transition', 'curated_product_submissions_no_delete',
   'source_curator_grants_checker_key_insert', 'source_curator_grants_checker_key_update', 'curated_action_nonces_immutable', 'curated_action_nonces_no_delete', 'curated_product_submissions_text_origin_immutable',
   'consent_revocations_mark_grant', 'integration_outbox_requires_active_consent',
-  'audit_events_no_update', 'audit_events_no_delete',
+  'audit_events_no_update', 'audit_events_no_delete', 'app_events_guard_update',
   'workflow_task_dependencies_same_run_insert', 'workflow_task_dependencies_same_run_update',
   'consent_grants_household_subject_insert', 'service_cases_household_refs_insert',
   'consent_scopes_household_resource_insert', 'case_participants_household_refs_insert',
@@ -74,6 +74,8 @@ export const criticalIndexes = Object.freeze([
   'workflow_task_dependencies_parent_idx', 'integration_outbox_ready_idx',
   'integration_outbox_consent_status_idx', 'idempotency_keys_expiry_idx',
   'audit_events_household_chain_idx',
+  'app_events_time_idx', 'app_events_name_time_idx', 'app_events_household_idx', 'app_events_expiry_idx', 'rate_limit_buckets_window_idx',
+  'model_budget_reservations_scope_idx', 'document_uploads_consent_grant_idx', 'consent_grants_household_subject_idx',
   'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'consent_scopes_field_viewer_idx',
   'ocr_jobs_lifecycle_idx',
   'coverage_parameter_records_run_idx', 'coverage_parameter_records_case_idx',
@@ -102,4 +104,8 @@ export const requiredColumns = Object.freeze({
   proposed_parameters: ['redacted_at', 'redaction_reason_code', 'status'],
   policy_structuring_jobs: ['status', 'evidence_outcome', 'error_code', 'attempt', 'structuring_run_id', 'erased_at'],
   auth_identities: ['adult_user_id', 'issuer', 'subject_sha256', 'created_at', 'last_used_at', 'revoked_at'],
+  app_events: ['occurred_at', 'expires_at', 'event_name', 'household_id', 'consent_grant_id', 'payload_enc', 'redacted_at'],
+  rate_limit_buckets: ['key_hash', 'window_start', 'request_count'],
+  model_budget_scopes: ['scope', 'reserved_micro_usd', 'spent_micro_usd'],
+  model_budget_reservations: ['scope', 'amount_micro_usd', 'state', 'actual_micro_usd'],
 });

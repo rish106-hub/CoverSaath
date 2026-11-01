@@ -40,10 +40,13 @@ function validateExecutionResult(result, request, mode) {
   return { output: validateTaskOutput(request.task, result.output, request.input), metadata: structuredClone(metadata) };
 }
 
-export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, limits } = {}) {
+// `onEvent` (optional) hears one metadata-only event per live call: { task, outcome, latencyMs, dispatched, inputTokens,
+// outputTokens, costUsd }. It never receives prompt or output text, and a throwing listener cannot affect the call.
+export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, limits, onEvent } = {}) {
   if (!['fixture', 'live'].includes(mode)) fail('invalid_gateway_config', 'Choose fixture or live mode explicitly.');
   if (mode === 'live' && typeof liveRunner !== 'function') fail('live_not_configured', 'Live mode needs an explicit model runner.');
   const bounded = limitsWithDefaults(limits);
+  const emit = event => { try { onEvent?.(event); } catch { /* telemetry must not affect a model call */ } };
   let activeCalls = 0;
   const waiters = [];
   const acquire = async signal => {
@@ -81,7 +84,11 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
       if (mode === 'live') {
         if (!budget || typeof budget.reserve !== 'function' || typeof budget.settle !== 'function') fail('budget_not_configured', 'Live mode needs a reservation ledger.');
         const reservation = await budget.reserve(reservationUsd, { task, promptVersion: PROMPT_VERSION });
-        if (!reservation) fail('budget_refused', 'The budget ledger refused this model call.');
+        if (!reservation) {
+          emit({ task, outcome: 'budget_refused', latencyMs: 0, dispatched: false, inputTokens: 0, outputTokens: 0, costUsd: 0 });
+          fail('budget_refused', 'The budget ledger refused this model call.');
+        }
+        const startedAt = Date.now();
         const timeoutSignal = AbortSignal.timeout(bounded.timeoutMs);
         const abortSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         let result;
@@ -104,11 +111,13 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
           // runner refused it before dispatch) releases its reservation; any
           // other failure keeps it reserved, since the provider may have charged.
           const dispatched = acquired && error?.modelDispatched !== false;
+          emit({ task, outcome: error?.code ?? 'error', latencyMs: Date.now() - startedAt, dispatched, inputTokens: 0, outputTokens: 0, costUsd: 0 });
           await budget.settle(reservation, dispatched ? null : 0, { failed: dispatched });
           throw error;
         } finally {
           if (acquired) release();
         }
+        emit({ task, outcome: 'ok', latencyMs: result.metadata.latencyMs, dispatched: true, inputTokens: result.metadata.inputTokens, outputTokens: result.metadata.outputTokens, costUsd: result.metadata.costUsd });
         await budget.settle(reservation, result.metadata.costUsd);
         if (result.metadata.costUsd > reservation.amountUsd) fail('reservation_exceeded', 'Actual model cost exceeded the reserved amount. Further paid work must stop.');
         return { ...result, reservation: structuredClone(reservation) };
