@@ -985,6 +985,25 @@ test('policy clauses and answers stay scoped, immutable and erase with their doc
   proves('policy_evidence_erase_on_document_erasure');
 });
 
+test('profile answers stay scoped to their case and household; document blobs erase with their document (E1)', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const scope = 'profile answer must match its case and household';
+  await rejects(insert(pool, 'profile_answers', { id: 'pr-foreign', household_id: b.household, case_id: a.case, adult_user_id: b.adult }), scope);
+  await insert(pool, 'profile_answers', { id: 'pr-1', household_id: a.household, case_id: a.case, adult_user_id: a.adult });
+  await assert.rejects(insert(pool, 'profile_answers', { id: 'pr-dup', household_id: a.household, case_id: a.case, adult_user_id: a.adult }), /duplicate key/);
+  await assert.rejects(insert(pool, 'profile_answers', { id: 'pr-bad-key', household_id: a.household, case_id: a.case, adult_user_id: a.adult, field_key: 'diagnosis' }), /violates check constraint/);
+  await assert.rejects(insert(pool, 'profile_answers', { id: 'pr-bad-source', household_id: a.household, case_id: a.case, adult_user_id: a.adult, field_key: 'state', source: 'model' }), /violates check constraint/);
+  proves('profile_answers_scope_insert');
+
+  await insert(pool, 'document_blobs', { document_id: a.document, household_id: a.household });
+  await insert(pool, 'document_blobs', { document_id: 'document-elsewhere', storage_key: 'b'.repeat(64), household_id: a.household });
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['quarantined', a.document]);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM document_blobs')).n, 2, 'quarantine is not erasure');
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['deletion_requested', a.document]);
+  assert.deepEqual((await pool.query('SELECT document_id FROM document_blobs')).rows.map(row => row.document_id), ['document-elsewhere'], 'only the blob of the erased document goes');
+  proves('document_blobs_erase_on_document_erasure');
+});
+
 test('catalogue reviews need an active grant, stay immutable and erase with their document', postgresTestOptions(), async t => {
   const { pool, a, b } = await worlds(t);
   const scope = 'catalogue review must match an active document, case, household and active reviewer grant';

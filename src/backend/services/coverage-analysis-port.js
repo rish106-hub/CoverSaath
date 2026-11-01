@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { GEMINI_MODEL_RECIPIENT, opaqueSourceId } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { modelObservationCandidates } from '../../features/coverage-analysis/model-observations.js';
 import { householdLock, idempotencyLock } from '../database/postgres/locks.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const textDigest = value => createHash('sha256').update(value, 'utf8').digest('hex');
@@ -142,6 +143,8 @@ export function createCoverageAnalysisPort({
   if (maxActiveRunsPerCase !== null && (!Number.isInteger(maxActiveRunsPerCase) || maxActiveRunsPerCase < 1)) {
     throw new TypeError('The active run limit per case must be a positive integer.');
   }
+  // Sealed columns (ADR 0013) are opened here for the two direct reads below: page text and the household's own identifiers.
+  const columnCrypto = services.columnCrypto ?? resolveColumnCrypto({});
   const loadCaseRecord = async caseId => (await database.one(`SELECT service_case.id, service_case.household_id,
       service_case.opened_by_adult_id, (${ANALYSIS_SUBJECT_SQL}) AS analysis_subject_adult_id,
       (${ANALYSIS_MEMBER_SQL}) AS analysis_subject_member_id
@@ -322,9 +325,9 @@ export function createCoverageAnalysisPort({
         const id = boundedId(caseId);
         const record = id ? await loadCaseRecord(id) : null;
         if (!record?.household_id) throw knownIdentifiersUnavailable('The case household could not be resolved.');
-        const members = await database.many(`SELECT display_name, date_of_birth FROM household_members
+        const members = await database.many(`SELECT id, display_name, date_of_birth FROM household_members
           WHERE household_id = ? ORDER BY created_at, id LIMIT ?`, [record.household_id, KNOWN_IDENTIFIER_SQL_LIMIT]);
-        const adults = await database.many(`SELECT adult.display_name, adult.contact_email, adult.contact_phone FROM adult_users adult
+        const adults = await database.many(`SELECT adult.id, adult.display_name, adult.contact_email, adult.contact_phone FROM adult_users adult
           WHERE adult.id IN (
             SELECT adult_user_id FROM household_members WHERE household_id = ? AND adult_user_id IS NOT NULL
             UNION
@@ -345,8 +348,12 @@ export function createCoverageAnalysisPort({
           seen.add(key);
           identifiers.push({ kind, value: trimmed });
         };
-        for (const member of members) { add('NAME', member.display_name); add('DOB', member.date_of_birth); }
-        for (const adult of adults) { add('NAME', adult.display_name); add('EMAIL', adult.contact_email); add('PHONE', adult.contact_phone); }
+        for (const member of members) { add('NAME', columnCrypto.open('household_members', 'display_name', member.id, member.display_name)); add('DOB', member.date_of_birth); }
+        for (const adult of adults) {
+          add('NAME', columnCrypto.open('adult_users', 'display_name', adult.id, adult.display_name));
+          add('EMAIL', columnCrypto.open('adult_users', 'contact_email', adult.id, adult.contact_email));
+          add('PHONE', columnCrypto.open('adult_users', 'contact_phone', adult.id, adult.contact_phone));
+        }
         if (identifiers.length > MAX_KNOWN_IDENTIFIERS) {
           throw knownIdentifiersUnavailable('The household has more identifiers than the privacy gate accepts.');
         }
@@ -506,7 +513,8 @@ export function createCoverageAnalysisPort({
     // derive scope names the configured model recipient are admitted.
     async getCoverageSourcePages(caseId) {
       const at = clock().toISOString();
-      return database.many(eligibleSourcePagesSql(), [caseId, at, modelRecipient]);
+      const rows = await database.many(eligibleSourcePagesSql(), [caseId, at, modelRecipient]);
+      return rows.map(row => ({ ...row, extracted_text: columnCrypto.open('source_pages', 'extracted_text', row.id, row.extracted_text) }));
     },
     // Production pre-dispatch validator. Called immediately before every
     // provider call with the authorization registered for that exact request.

@@ -42,7 +42,8 @@ Tests need PostgreSQL 17 in `TEST_DATABASE_URL` (see [local-postgres runbook](do
 | Deterministic rules and household reasoning | `src/features/insurance-rules/`, `src/features/household-reasoning/` |
 | Model calls, privacy gate, budget | `src/features/ai-analysis/` |
 | Provider adapters | `src/integrations/` (import via `src/integrations/index.js` only) |
-| Decisions | `docs/adr/` (0011 = Supabase + Fly) |
+| Column encryption, DB document bytes, profile answers | `src/backend/security/`, `src/features/input/encrypted-database-storage.js`, ADR 0013 |
+| Decisions | `docs/adr/` (0011 = Supabase + Fly, 0013 = encryption + RLS) |
 | Deploy and recovery | `docs/runbooks/fly-deploy.md` |
 | Product behaviour sources | `working/`, `building/` |
 
@@ -57,6 +58,7 @@ Check `AGENTS.md` in the directory you edit; `src/backend/` and `src/integration
 5. Synthetic data only. No personal data, policies, keys or tokens in code, logs, prompts, fixtures, tests or commits.
 6. Consent, privacy and legal wording is never final. Mark it for legal review.
 7. Add infrastructure or dependencies only for measured need; record hard-to-reverse choices in an ADR.
+8. Sensitive text columns are sealed (`enc1.` envelope, AAD `table.column.rowId`) through `src/backend/security/column-crypto.js`; never write one raw and never search one in SQL. Every new table enables RLS and revokes `anon`/`authenticated` in its own migration (`tests/rls-coverage.test.mjs` fails otherwise).
 
 ## How to work
 
@@ -71,8 +73,8 @@ Check `AGENTS.md` in the directory you edit; `src/backend/` and `src/integration
 
 - Names: public name is CoverSaath; `knowvia` identifiers (env vars, DB values, Fly app `knowvia-api`) stay until a compatibility plan exists.
 - The API answers 403 to any `Host` other than loopback or a `PUBLIC_HOSTS` entry, and to any browser `Origin` except the dev one. There is no CORS. A UI must call it server-side (BFF), never from the browser.
-- Auth is a bearer token from `POST /api/v1/households` (needs the bootstrap token). No login, OTP or member-invite routes exist.
-- No route lists cases or consent grants, serves PDF bytes, or returns OCR text.
+- Auth is a bearer token from `POST /api/v1/households` (needs the bootstrap token) or from `POST /api/v1/identity-sessions` (sign-in by the BFF; needs the identity credential and an allow-listed issuer). No OTP or member-invite routes exist.
+- No route serves PDF bytes or raw OCR text. `GET /api/v1/cases/{caseId}/read-facts` and `GET /api/v1/cases/{caseId}/passages?q=&limit=` (U5, ADR 0012 D9) return bounded, labelled values (a rule-read value, its page and a quote of at most 160 characters) and passage snippets (at most 280 characters) from the caller's own read documents; they make no model call, re-check the exact reading grant on every call, and are off (503 `READBACK_DISABLED`) unless `DOCUMENT_READBACK_ENABLED` is exactly `true`. Identity fields are never returned by `read-facts`; passages are best effort and fail closed (clauses that read as schedule content or hold an identity label are dropped, numbers and e-mails masked), owner only, with stronger masking still open (F3). Passages derive clauses on first use (an existing, erasable derived store).
 - Provider features (`SARVAM_OCR_ENABLED`, `POLICY_EVIDENCE_ENABLED`, `POLICY_STRUCTURING_ENABLED`) are off unless exactly `true`. Live calls cost money; tests use local stubs, and live tests (`test:sarvam-live`) are opt-in.
 - `src/ui` is rejected by `check:architecture`. A frontend needs an accepted task and an ADR first. Website and BFF code live in separate sibling repos (`Knowvia_website*`).
 - Rate limit, model budget and the evidence-claim guard are per process: one machine only.

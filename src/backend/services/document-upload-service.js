@@ -5,7 +5,7 @@ import { createDocumentIntakeService } from '../../features/input/index.js';
 // household from the case row, never from the request. Bytes are validated and inspected before
 // they are stored; a stored document stays quarantined until a malware scan marks it clean.
 
-export const UPLOAD_DOCUMENT_KINDS = Object.freeze(['policy_wording', 'policy_schedule', 'endorsement']);
+export const UPLOAD_DOCUMENT_KINDS = Object.freeze(['policy_wording', 'policy_schedule', 'endorsement', 'member_card']);
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 const SCAN_RETRY_BASE_MS = 30_000;
 const SCAN_RETRY_MAX_MS = 60 * 60 * 1000;

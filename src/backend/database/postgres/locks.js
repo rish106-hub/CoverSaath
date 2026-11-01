@@ -3,7 +3,8 @@
 // Lock order for every transaction: household advisory lock -> consent_grants row FOR UPDATE ->
 // workflow_runs rows FOR UPDATE by id -> workflow_tasks rows -> the rest. Take the household lock
 // first, before any row lock (the one exception is case creation, which takes the global case-capacity
-// lock before its household lock; nothing takes them in the other order); advisory locks are re-entrant inside one transaction, so a nested
+// lock before its household lock; nothing takes them in the other order; the other is first sign-in, which takes the
+// AUTH_IDENTITY lock before any household or session-capacity lock, and nothing takes AUTH_IDENTITY later); advisory locks are re-entrant inside one transaction, so a nested
 // call (for example AuditRepository.append) that takes the same lock again does not block.
 //
 // A key is the first 64 bits of SHA-256(namespace NUL key), as a signed bigint in decimal text,
@@ -25,6 +26,9 @@ export const LOCK_NAMESPACES = Object.freeze({
   // Serialises case creation so the global active-case cap holds. One fixed key, like session capacity.
   // Taken before the household lock when both are needed (see caseCapacityLock).
   CASE_CAPACITY: 'case_capacity',
+  // Serialises first sign-in for one (issuer, subject) so a sign-in identity maps to one adult. The key is the
+  // identity hash, never the raw subject. Taken first in the sign-in transaction (before household locks).
+  AUTH_IDENTITY: 'auth_identity',
 });
 
 const namespaces = new Set(Object.values(LOCK_NAMESPACES));
@@ -60,4 +64,8 @@ export function sessionCapacityLock(key) {
 
 export function caseCapacityLock(key) {
   return [LOCK_NAMESPACES.CASE_CAPACITY, key];
+}
+
+export function authIdentityLock(subjectSha256) {
+  return [LOCK_NAMESPACES.AUTH_IDENTITY, subjectSha256];
 }

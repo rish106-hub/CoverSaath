@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 
@@ -14,9 +15,11 @@ const evidenceKind = Object.freeze({
 // Evidence facts on the async PostgreSQL interface (S3.2). Redaction of facts is owned by the
 // consent and document erasure paths and enforced by database triggers.
 export class EvidenceRepository {
-  constructor(database, { clock = () => new Date() } = {}) {
+  constructor(database, { clock = () => new Date(), ...options } = {}) {
     this.database = database;
     this.clock = clock;
+    // value_json is sealed at rest (ADR 0013); rows read here come back opened.
+    this.crypto = resolveColumnCrypto(options);
   }
 
   async append({
@@ -39,7 +42,7 @@ export class EvidenceRepository {
       subject_confirmation_state, permitted_viewers_json, expires_at, supersedes_fact_id, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       factId, householdId, caseId, policyId, subjectMemberId, factKey,
-      value === null ? null : JSON.stringify(value), epistemicState, evidenceKind[provenanceKind],
+      this.crypto.sealJson('evidence_facts', 'value_json', factId, value), epistemicState, evidenceKind[provenanceKind],
       provenanceKind, sourcePageId, statementAdultId, institutionalSourceRef, calculationMethod,
       sourceLocator, assertedBy, effectiveAt, observedAt, retrievedAt, confidenceBasisPoints,
       reviewStatus, subjectConfirmationState,
@@ -62,13 +65,15 @@ export class EvidenceRepository {
     if (!fact) return null;
     return {
       ...fact,
-      value: fact.value_json === null ? null : JSON.parse(fact.value_json),
+      value_json: this.crypto.open('evidence_facts', 'value_json', fact.id, fact.value_json),
+      value: this.crypto.openJson('evidence_facts', 'value_json', fact.id, fact.value_json),
       permittedViewers: fact.permitted_viewers_json === null ? null : JSON.parse(fact.permitted_viewers_json),
     };
   }
 
   async listForCase(caseId) {
-    return this.database.many(`SELECT * FROM evidence_facts
+    const rows = await this.database.many(`SELECT * FROM evidence_facts
       WHERE case_id = ? ORDER BY fact_key, observed_at, created_at`, [caseId]);
+    return rows.map(row => ({ ...row, value_json: this.crypto.open('evidence_facts', 'value_json', row.id, row.value_json) }));
   }
 }

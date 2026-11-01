@@ -8,3 +8,4 @@ export {
   UnconfiguredConnectorError,
   UnverifiedConnectorError,
 } from './shared/index.js';
+export { createIntakeConnectorStubs } from './intake/index.js';

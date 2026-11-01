@@ -53,6 +53,7 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   KNOWN_IDENTIFIERS_UNAVAILABLE: entry(503, 'configuration', false),
   ERASURE_NOT_CONFIGURED: entry(503, 'configuration', false),
   EXECUTION_MODE_NOT_CONFIGURED: entry(null, 'configuration', false),
+  READBACK_DISABLED: entry(503, 'configuration', false),
   // Document intake (Block 1): upload route, upload service, document repository and the
   // document-intake module errors those surfaces return. ADR 0005.
   DOCUMENT_NOT_FOUND: entry(404, 'not_found', false),

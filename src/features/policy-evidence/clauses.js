@@ -19,6 +19,12 @@ const KIND_RULES = Object.freeze([
   ['benefit', /\b(?:we will (?:pay|cover|reimburse)|covered|coverage|benefit|hospitali[sz]ation|treatment)\b/i],
 ]);
 
+// True when the text reads as policy-schedule content (names, numbers, premium, period), whatever kind it was filed under.
+export function looksLikeSchedule(title, text) {
+  const haystack = `${title ?? ''}\n${text}`;
+  return KIND_RULES.some(([kind, pattern]) => kind === 'schedule_fact' && pattern.test(haystack));
+}
+
 export function classifyClause(title, text) {
   const haystack = `${title ?? ''}\n${text}`;
   for (const [kind, pattern] of KIND_RULES) if (pattern.test(haystack)) return kind;

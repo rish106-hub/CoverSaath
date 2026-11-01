@@ -26,6 +26,14 @@ export class TenantAccessService {
     if (this.bootstrapToken && (typeof this.bootstrapToken !== 'string' || this.bootstrapToken.length < 32 || this.bootstrapToken.length > 256)) {
       throw new Error('KNOWVIA_BOOTSTRAP_TOKEN must contain 32 to 256 characters.');
     }
+    // The identity-session credential is a separate secret: the bootstrap token must never open that route.
+    this.identityToken = env.KNOWVIA_IDENTITY_TOKEN || null;
+    if (this.identityToken && (typeof this.identityToken !== 'string' || this.identityToken.length < 32 || this.identityToken.length > 256)) {
+      throw new Error('KNOWVIA_IDENTITY_TOKEN must contain 32 to 256 characters.');
+    }
+    if (this.identityToken && this.identityToken === this.bootstrapToken) {
+      throw new Error('KNOWVIA_IDENTITY_TOKEN must differ from KNOWVIA_BOOTSTRAP_TOKEN.');
+    }
   }
 
   get bootstrapConfigured() { return Boolean(this.bootstrapToken); }
@@ -33,6 +41,12 @@ export class TenantAccessService {
   requireBootstrap(authorization) {
     if (!this.bootstrapToken) fail('AUTH_NOT_CONFIGURED', 'Household bootstrap authentication is not configured.', 503);
     if (!sameSecret(bearer(authorization), this.bootstrapToken)) fail('AUTHENTICATION_REQUIRED', 'Valid authentication is required.', 401);
+    return true;
+  }
+
+  requireIdentityService(authorization) {
+    if (!this.identityToken) fail('AUTH_NOT_CONFIGURED', 'Identity session authentication is not configured.', 503);
+    if (!sameSecret(bearer(authorization), this.identityToken)) fail('AUTHENTICATION_REQUIRED', 'Valid authentication is required.', 401);
     return true;
   }
 

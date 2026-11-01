@@ -37,14 +37,15 @@ test('PostgreSQL keeps tables, layout tags, block indices and page references of
   assert.ok(rows.every(row => !row.blocks_json.includes(IMAGE_DESCRIPTION) && !row.blocks_json.includes('coordinates')));
 });
 
-test('PostgreSQL blocks CHECK rejects invalid, non-object and oversize JSON', postgresTestOptions(), async t => {
+test('PostgreSQL caps the size of a sealed blocks value; the IS JSON check moved to the application (E1)', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const a = await seedWorld(pool, 'a');
   const page = (id, json) => insert(pool, 'source_pages', {
     id, document_upload_id: a.document, ocr_job_id: a.ocr, page_number: 20, source_version: `v-${id}`,
     page_sha256: hex('e'), extracted_text: 'x', blocks_json: json,
   });
+  await assertConstraintRejects(page('bad-size', 'x'.repeat(2_000_001)), '23514');
+  // A sealed value is not JSON, so it is accepted here (migration 021: sealed or JSON); the repository opens and validates it on read.
+  await page('sealed-ok', 'enc1.k1.AAAA.BBBB.CCCC');
   await assertConstraintRejects(page('bad-json', '{not json'), '23514');
-  await assertConstraintRejects(page('bad-array', '[]'), '23514');
-  await assertConstraintRejects(page('bad-size', JSON.stringify({ pad: 'x'.repeat(OCR_BLOCK_LIMITS.maxStoredCharacters) })), '23514');
 });

@@ -13,6 +13,7 @@ test('server configuration has explicit bounded defaults', () => {
     budgetUsd: undefined,
     projectBudgetUsd: undefined,
     documents: {
+      storageBackend: 'database',
       storagePath: '.local/documents',
       encryptionKeyBase64: null,
       scanMode: 'disabled',

@@ -9,7 +9,9 @@ import { createBackendServices, createCoverageAnalysisPort, createDecisionCatalo
 import {
   createClamdScanner,
   createDocumentScanWorker,
+  createEncryptedDatabaseByteStorage,
   createEncryptedLocalByteStorage,
+  createFallbackByteStorage,
   createOcrService,
   createSandboxedPdfInspector,
   createSandboxedPdfSegmenter,
@@ -17,11 +19,13 @@ import {
 import {
   createEmailProvider,
   createGnaniVoiceProvider,
+  createIntakeConnectorStubs,
   createPineLabsPaymentProvider,
   createSarvamOcrProvider,
 } from '../integrations/index.js';
+import { INTAKE_CONNECTORS } from '../contracts/index.js';
 import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
-import { readServerConfig } from './config.js';
+import { readIdentityConfig, readServerConfig } from './config.js';
 import { createGeminiCoverageRegistryFactory, createSharedProjectBudget, createStructuringModelCallFactory } from '../features/ai-analysis/index.js';
 
 // `database`, when injected, is an async PostgreSQL interface (createDatabase) that the caller
@@ -36,10 +40,23 @@ export function createApiServer({
   sarvamFetch,
 } = {}) {
   const config = readServerConfig(env);
+  const identity = readIdentityConfig(env);
   // Built at startup so an invalid encryption key or scanner setting fails before listening.
-  const documentStorage = config.documents.encryptionKeyBase64
-    ? createEncryptedLocalByteStorage({ baseDirectory: config.documents.storagePath, key: config.documents.encryptionKeyBase64 })
-    : null;
+  // Document bytes live in the database by default (DOCUMENT_STORAGE_BACKEND=database) or on the server filesystem
+  // (=filesystem). Both write the same encrypted CSD1 envelope. Whichever is not the primary stays readable, so documents
+  // stored before a switch still open and a rollback loses nothing. The database is built lazily (its pool may not exist yet).
+  const ownsDatabase = !injectedDatabase;
+  let database = injectedDatabase ?? null;
+  const ensureDatabase = () => (database ||= createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(env))));
+  const documentStorage = (() => {
+    const key = config.documents.encryptionKeyBase64;
+    if (!key) return null;
+    const filesystem = createEncryptedLocalByteStorage({ baseDirectory: config.documents.storagePath, key });
+    const inDatabase = createEncryptedDatabaseByteStorage({ database: ensureDatabase, key });
+    return config.documents.storageBackend === 'database'
+      ? createFallbackByteStorage({ primary: inDatabase, fallback: filesystem })
+      : createFallbackByteStorage({ primary: filesystem, fallback: inDatabase });
+  })();
   const scanner = documentScanner
     ?? (config.documents.clamd ? createClamdScanner(config.documents.clamd) : null);
   // Untrusted PDF structure is parsed only in a permission-restricted child process (ADR 0005).
@@ -121,8 +138,6 @@ export function createApiServer({
     householdPreviewService ||= createHouseholdPreviewService({ services, catalogue });
     return householdPreviewService;
   };
-  const ownsDatabase = !injectedDatabase;
-  let database = injectedDatabase ?? null;
   let services = backendServices ?? null;
   let documentUploads = null;
   let ocrService = null;
@@ -130,7 +145,7 @@ export function createApiServer({
   // DATABASE_URL) is not cached, so the next request tries again.
   let backendPromise = null;
   const buildBackend = async () => {
-    database ||= createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(env)));
+    ensureDatabase();
     services ||= createBackendServices(database, {
       env,
       sessionDurationMs: config.sessionTtlMs,
@@ -175,6 +190,8 @@ export function createApiServer({
     pineLabs: createPineLabsPaymentProvider({ env }),
     email: createEmailProvider({ env }),
   };
+  // Intake connectors that are not built are fail-closed stubs; upload is served by the document route.
+  const intakeConnectors = createIntakeConnectorStubs({ ids: INTAKE_CONNECTORS.filter(connector => connector.availability !== 'available').map(connector => connector.id) });
   const getOcrService = async () => {
     if (!documentStorage) {
       throw Object.assign(new Error('Document storage is not configured.'), { code: 'DOCUMENT_STORAGE_NOT_CONFIGURED', statusCode: 503 });
@@ -200,7 +217,7 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = await getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, config, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');

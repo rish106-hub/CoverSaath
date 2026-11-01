@@ -1,3 +1,5 @@
+import { readDataEncryptionConfig } from '../backend/security/column-crypto.js';
+
 function boundedInteger(value, fallback, name, max) {
   if (value === undefined) return fallback;
   const parsed = Number(value);
@@ -13,6 +15,7 @@ function positiveAmount(value, name, max = Infinity) {
 }
 
 const SCAN_MODES = Object.freeze(['disabled', 'clamd']);
+const STORAGE_BACKENDS = Object.freeze(['database', 'filesystem']);
 
 // Document intake settings. Storage stays unconfigured (uploads return 503) until a key is set; a
 // key that is set but invalid fails at startup. Scanning is disabled by default, which keeps every
@@ -31,7 +34,12 @@ function readDocumentConfig(env) {
       timeoutMs: boundedInteger(env.CLAMD_TIMEOUT_MS, 30_000, 'CLAMD_TIMEOUT_MS', 300_000),
     })
     : null;
+  // Where encrypted document bytes live (ADR 0013): the database (default) or the server filesystem. Documents stored under
+  // the other backend stay readable: reads fall back to the filesystem, and a removal clears both.
+  const storageBackend = env.DOCUMENT_STORAGE_BACKEND ?? 'database';
+  if (!STORAGE_BACKENDS.includes(storageBackend)) throw new Error('Invalid DOCUMENT_STORAGE_BACKEND.');
   return Object.freeze({
+    storageBackend,
     storagePath: env.DOCUMENT_STORAGE_PATH || '.local/documents',
     encryptionKeyBase64: env.DOCUMENT_ENCRYPTION_KEY_BASE64 || null,
     scanMode,
@@ -53,7 +61,34 @@ function readNetworkConfig(env) {
   return Object.freeze({ publicHosts: Object.freeze(publicHosts), trustFlyClientIp: env.TRUST_FLY_CLIENT_IP === 'true' });
 }
 
+const TOKEN_CHARSET = /^[A-Za-z0-9_-]+$/;
+const MAX_IDENTITY_ISSUERS = 10;
+
+// Sign-in identity settings (POST /api/v1/identity-sessions). Both are off until set: no credential means the
+// route answers 503 AUTH_NOT_CONFIGURED, and no issuers means every request is refused. Issuers are exact
+// strings (no wildcards, no whitespace); the credential must differ from the bootstrap token.
+export function readIdentityConfig(env) {
+  const credential = env.KNOWVIA_IDENTITY_TOKEN || null;
+  if (credential !== null && (credential.length < 32 || credential.length > 256 || !TOKEN_CHARSET.test(credential))) {
+    throw new Error('Invalid KNOWVIA_IDENTITY_TOKEN.');
+  }
+  if (credential !== null && credential === (env.KNOWVIA_BOOTSTRAP_TOKEN || null)) {
+    throw new Error('KNOWVIA_IDENTITY_TOKEN must differ from KNOWVIA_BOOTSTRAP_TOKEN.');
+  }
+  const issuers = String(env.IDENTITY_ISSUERS ?? '').split(',').map(issuer => issuer.trim()).filter(Boolean);
+  if (issuers.length > MAX_IDENTITY_ISSUERS
+    || issuers.some(issuer => issuer.length > 200 || !/^[\x21-\x7e]+$/.test(issuer))
+    || new Set(issuers).size !== issuers.length) {
+    throw new Error('Invalid IDENTITY_ISSUERS.');
+  }
+  return Object.freeze({ issuers: Object.freeze(issuers) });
+}
+
 export function readServerConfig(env = process.env) {
+  // Validated here so a bad identity setting stops startup; the route reads it through readIdentityConfig.
+  readIdentityConfig(env);
+  // Fails startup with a coded error when column encryption is required (production) and the key is missing or invalid.
+  readDataEncryptionConfig(env);
   return Object.freeze({
     sessionTtlMs: boundedInteger(env.SESSION_TTL_SECONDS, 3600, 'SESSION_TTL_SECONDS', 86_400) * 1000,
     maxSessions: boundedInteger(env.MAX_ACTIVE_SESSIONS, 100, 'MAX_ACTIVE_SESSIONS', 100_000),

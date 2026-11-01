@@ -82,6 +82,13 @@ const defaults = {
     id, household_id: 'household-a', case_id: 'case-a', document_id: 'document-a', source_version: 'version-1', page: 1,
     block_indexes_json: '[0]', title: null, kind: 'benefit', text: 'Synthetic clause text.', digest: 'c'.repeat(64), created_at: at,
   }),
+  profile_answers: id => ({
+    id, household_id: 'household-a', case_id: 'case-a', adult_user_id: 'adult-a', field_key: 'city',
+    value_ciphertext: 'enc1.k1.AAAA.BBBB.CCCC', source: 'user_stated', created_at: at, updated_at: at,
+  }),
+  document_blobs: id => ({
+    document_id: id, storage_key: 'a'.repeat(64), household_id: 'household-a', envelope: Buffer.from('CSD1-synthetic'), created_at: at,
+  }),
   catalogue_reviewer_grants: id => ({
     id, household_id: 'household-a', adult_user_id: 'adult-a', kind: 'household_confirmer', status: 'active', granted_by: 'adult-a', created_at: at, revoked_at: null,
   }),
