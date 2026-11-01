@@ -1,5 +1,6 @@
 export { createDocumentIntakeService } from './document-intake-service.js';
 export { createEncryptedLocalByteStorage } from './encrypted-local-storage.js';
+export { createEncryptedDatabaseByteStorage, createFallbackByteStorage } from './encrypted-database-storage.js';
 export { createFixtureMemoryByteStorage } from './fixture-memory-storage.js';
 export { createMemoryDocumentRepository } from './memory-document-repository.js';
 export { createFixtureOcrProvider } from './fixture-ocr-provider.js';

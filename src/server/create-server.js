@@ -9,7 +9,9 @@ import { createBackendServices, createCoverageAnalysisPort, createDecisionCatalo
 import {
   createClamdScanner,
   createDocumentScanWorker,
+  createEncryptedDatabaseByteStorage,
   createEncryptedLocalByteStorage,
+  createFallbackByteStorage,
   createOcrService,
   createSandboxedPdfInspector,
   createSandboxedPdfSegmenter,
@@ -40,9 +42,21 @@ export function createApiServer({
   const config = readServerConfig(env);
   const identity = readIdentityConfig(env);
   // Built at startup so an invalid encryption key or scanner setting fails before listening.
-  const documentStorage = config.documents.encryptionKeyBase64
-    ? createEncryptedLocalByteStorage({ baseDirectory: config.documents.storagePath, key: config.documents.encryptionKeyBase64 })
-    : null;
+  // Document bytes live in the database by default (DOCUMENT_STORAGE_BACKEND=database) or on the server filesystem
+  // (=filesystem). Both write the same encrypted CSD1 envelope. Whichever is not the primary stays readable, so documents
+  // stored before a switch still open and a rollback loses nothing. The database is built lazily (its pool may not exist yet).
+  const ownsDatabase = !injectedDatabase;
+  let database = injectedDatabase ?? null;
+  const ensureDatabase = () => (database ||= createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(env))));
+  const documentStorage = (() => {
+    const key = config.documents.encryptionKeyBase64;
+    if (!key) return null;
+    const filesystem = createEncryptedLocalByteStorage({ baseDirectory: config.documents.storagePath, key });
+    const inDatabase = createEncryptedDatabaseByteStorage({ database: ensureDatabase, key });
+    return config.documents.storageBackend === 'database'
+      ? createFallbackByteStorage({ primary: inDatabase, fallback: filesystem })
+      : createFallbackByteStorage({ primary: filesystem, fallback: inDatabase });
+  })();
   const scanner = documentScanner
     ?? (config.documents.clamd ? createClamdScanner(config.documents.clamd) : null);
   // Untrusted PDF structure is parsed only in a permission-restricted child process (ADR 0005).
@@ -124,8 +138,6 @@ export function createApiServer({
     householdPreviewService ||= createHouseholdPreviewService({ services, catalogue });
     return householdPreviewService;
   };
-  const ownsDatabase = !injectedDatabase;
-  let database = injectedDatabase ?? null;
   let services = backendServices ?? null;
   let documentUploads = null;
   let ocrService = null;
@@ -133,7 +145,7 @@ export function createApiServer({
   // DATABASE_URL) is not cached, so the next request tries again.
   let backendPromise = null;
   const buildBackend = async () => {
-    database ||= createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(env)));
+    ensureDatabase();
     services ||= createBackendServices(database, {
       env,
       sessionDurationMs: config.sessionTtlMs,

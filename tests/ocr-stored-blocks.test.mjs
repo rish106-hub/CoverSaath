@@ -12,6 +12,7 @@ import {
   BLOCKS_DOCUMENT, IMAGE_DESCRIPTION, inMemoryBlockPages, rawSarvamResult, sarvamShapedFixtureProvider, sarvamTransport,
 } from './support/sarvam-blocks-fixture.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { sharedColumnCrypto } from '../src/backend/security/column-crypto.js';
 
 const pgOptions = postgresTestOptions();
 
@@ -55,9 +56,10 @@ async function persistSarvamShaped(context, provider = sarvamShapedFixtureProvid
   return job;
 }
 
-const blocksJson = (database, documentId = 'document-ocr') => database.prepare(
-  'SELECT page_number, blocks_json FROM source_pages WHERE document_upload_id = ? ORDER BY page_number',
-).all(documentId);
+// blocks_json is sealed at rest (ADR 0013); the helper returns it opened.
+const blocksJson = async (database, documentId = 'document-ocr') => (await database.prepare(
+  'SELECT id, page_number, blocks_json FROM source_pages WHERE document_upload_id = ? ORDER BY page_number',
+).all(documentId)).map(row => ({ ...row, blocks_json: sharedColumnCrypto().open('source_pages', 'blocks_json', row.id, row.blocks_json) }));
 
 test('round trip: synthetic Sarvam blocks persist, read back and section exactly like the in-memory output', pgOptions, async t => {
   const context = await harness(t);
@@ -205,14 +207,19 @@ test('trigger safety nets erase blocks with page text and on document erasure; b
   await insert('page-live', 'document-v1', 'x');
 });
 
-test('the database CHECK rejects invalid, non-object and oversize blocks', pgOptions, async t => {
+test('the database caps sealed blocks; invalid and non-object blocks are refused when read (E1: validity is checked in the application)', pgOptions, async t => {
   const context = await harness(t);
   const insert = (id, json) => context.database.prepare(`INSERT INTO source_pages
     (id, document_upload_id, page_number, source_version, page_sha256, extracted_text, extraction_status, created_at, blocks_json)
     VALUES (?, 'document-v1', 1, ?, ?, 'x', 'extracted', ?, ?)`).run(id, `v-${id}`, 'd'.repeat(64), AT, json);
-  await assert.rejects(insert('bad-json', '{not json'));
-  await assert.rejects(insert('bad-array', '[]'), /violates check constraint/);
-  await assert.rejects(insert('bad-size', JSON.stringify({ pad: 'x'.repeat(OCR_BLOCK_LIMITS.maxStoredCharacters) })), /violates check constraint/);
+  // The IS JSON check is gone (a sealed value is not JSON); only the length cap remains.
+  await assert.rejects(insert('bad-size', 'x'.repeat(2_000_001)), /violates check constraint/);
+  // A legacy plaintext value that is not valid blocks still fails closed when the repository reads it.
+  for (const [id, json] of [['bad-json', '{not json'], ['bad-array', '[]']]) {
+    await context.database.prepare('DELETE FROM source_pages WHERE document_upload_id = ?').run('document-v1');
+    await insert(id, json);
+    await assert.rejects(context.repository.getDocumentBlockPages({ documentId: 'document-v1', householdId: 'household-ocr' }), /./, id);
+  }
 });
 
 test('the block validator fails closed on missing, duplicate, reordered, unknown, oversize and tampered blocks', () => {

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { parseStoredBlocks, serializeStoredBlocks } from '../../features/input/ocr-blocks.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
 
 // OCR jobs and source pages on the async PostgreSQL interface (S3.2). Every write that also audits
 // runs in one transaction that takes the document's household advisory lock first (lock order,
@@ -15,7 +16,8 @@ const SAFE_PRE_DISPATCH_RETRY_CODES = new Set([
   'OCR_SEGMENTATION_UNAVAILABLE',
 ]);
 
-function mapJob(row) {
+// result_json and the page text columns are sealed (ADR 0013); `crypto` opens them, legacy plaintext passes through.
+function mapJob(row, crypto) {
   if (!row) return null;
   return {
     id: row.id,
@@ -26,7 +28,7 @@ function mapJob(row) {
     attemptCount: row.attempt_count,
     contractVersion: row.contract_version,
     authorization: parse(row.authorization_json),
-    result: parse(row.result_json),
+    result: parse(crypto.open('ocr_jobs', 'result_json', row.id, row.result_json)),
     resultDigest: row.result_digest,
     errorCode: row.error_code,
     errorMessage: row.error_message,
@@ -40,17 +42,20 @@ function mapJob(row) {
 const UPDATE_JOB_COLUMNS = `provider_job_ref = ?, status = ?, contract_version = ?, result_json = ?, result_digest = ?,
   error_code = ?, error_message = ?, started_at = ?, completed_at = ?, updated_at = ?`;
 
-const jobParams = next => [
+const jobParams = (next, crypto) => [
   next.providerJobRef, next.status, next.contractVersion,
-  next.result == null ? null : JSON.stringify(next.result), next.resultDigest,
+  next.result == null ? null : crypto.seal('ocr_jobs', 'result_json', next.id, JSON.stringify(next.result)), next.resultDigest,
   next.errorCode, next.errorMessage, next.startedAt, next.completedAt, next.updatedAt,
 ];
 
 export class OcrRepository {
-  constructor(database, { audit = null } = {}) {
+  constructor(database, { audit = null, ...options } = {}) {
     this.database = database;
     this.audit = audit;
+    this.crypto = resolveColumnCrypto(options);
   }
+
+  #job(row) { return mapJob(row, this.crypto); }
 
   // The household of a document never changes, so a transaction can take its lock before any row lock.
   async #householdOfDocument(documentId) {
@@ -63,7 +68,7 @@ export class OcrRepository {
   }
 
   async #lockJob(jobId) {
-    return mapJob(await this.database.one('SELECT * FROM ocr_jobs WHERE id = ? FOR UPDATE', [jobId]));
+    return this.#job(await this.database.one('SELECT * FROM ocr_jobs WHERE id = ? FOR UPDATE', [jobId]));
   }
 
   async appendLifecycleAudit(job, previousStatus, { pageCount = null } = {}) {
@@ -166,7 +171,7 @@ export class OcrRepository {
   async createOrGetJob(value, { retryFailed = false, anyContract = false } = {}) {
     const householdId = await this.#householdOfDocument(value.documentUploadId);
     return this.database.transaction(async () => {
-      const existing = mapJob(await this.database.one(`SELECT * FROM ocr_jobs
+      const existing = this.#job(await this.database.one(`SELECT * FROM ocr_jobs
         WHERE document_upload_id = ? AND provider = ? AND (CAST(? AS boolean) OR contract_version = ?)
           AND status IN ('queued', 'submitted', 'processing', 'succeeded')
           AND NOT (status = 'succeeded' AND result_json IS NULL AND NOT EXISTS (
@@ -174,7 +179,7 @@ export class OcrRepository {
               AND page.extracted_text IS NOT NULL AND page.extraction_status IN ('extracted', 'manual_verified')))
         ORDER BY requested_at, id LIMIT 1`, [value.documentUploadId, value.provider, Boolean(anyContract), value.contractVersion]));
       if (existing) return { created: false, job: existing };
-      const failed = mapJob(await this.database.one(`SELECT * FROM ocr_jobs
+      const failed = this.#job(await this.database.one(`SELECT * FROM ocr_jobs
         WHERE document_upload_id = ? AND provider = ? AND (CAST(? AS boolean) OR contract_version = ?) AND status = 'failed'
         ORDER BY requested_at DESC, id DESC LIMIT 1`, [value.documentUploadId, value.provider, Boolean(anyContract), value.contractVersion]));
       const safeToRetry = failed && !failed.providerJobRef && SAFE_PRE_DISPATCH_RETRY_CODES.has(failed.errorCode);
@@ -204,13 +209,13 @@ export class OcrRepository {
   }
 
   async getJob(jobId) {
-    return mapJob(await this.database.one('SELECT * FROM ocr_jobs WHERE id = ?', [jobId]));
+    return this.#job(await this.database.one('SELECT * FROM ocr_jobs WHERE id = ?', [jobId]));
   }
 
   // Newest job of a document, whatever its state, for read-only callers that need to know whether reading is
   // current, still running or withdrawn. Revocation nulls authorization_json, so a withdrawn job has none.
   async getLatestJobForDocument(documentId) {
-    return mapJob(await this.database.one(`SELECT * FROM ocr_jobs WHERE document_upload_id = ?
+    return this.#job(await this.database.one(`SELECT * FROM ocr_jobs WHERE document_upload_id = ?
       ORDER BY requested_at DESC, id DESC LIMIT 1`, [documentId]));
   }
 
@@ -222,7 +227,7 @@ export class OcrRepository {
       JOIN document_uploads document ON document.id = page.document_upload_id AND document.source_version = page.source_version
       WHERE document.id = ? AND job.status = 'succeeded'
         AND page.extraction_status IN ('extracted', 'manual_verified') AND page.extracted_text IS NOT NULL
-      ORDER BY job.id`, [documentId])).map(mapJob);
+      ORDER BY job.id`, [documentId])).map(row => this.#job(row));
   }
 
   async updateJob(jobId, changes) {
@@ -236,7 +241,7 @@ export class OcrRepository {
       if (current.status === 'cancelled') return current;
       const next = { ...current, ...changes };
       await this.database.run(`UPDATE ocr_jobs SET ${UPDATE_JOB_COLUMNS}
-        WHERE id = ? AND status <> 'cancelled'`, [...jobParams(next), jobId]);
+        WHERE id = ? AND status <> 'cancelled'`, [...jobParams(next, this.crypto), jobId]);
       const result = await this.getJob(jobId);
       await this.appendLifecycleAudit(result, current.status);
       return result;
@@ -291,15 +296,17 @@ export class OcrRepository {
       for (const page of pages) {
         // knowvia.ocr.v2 pages carry validated blocks; they are re-validated here so a malformed,
         // reordered or oversize block set fails the whole completion closed. v1 pages store NULL.
+        const pageId = `page-${randomUUID()}`;
         const blocksJson = page.blocks == null ? null : serializeStoredBlocks(page.pageNumber, page.blocks);
         await this.database.run(`INSERT INTO source_pages
           (id, document_upload_id, ocr_job_id, page_number, source_version, page_sha256,
            extracted_text, extraction_status, confidence_basis_points, created_at,
            output_contract_version, text_sha256, provider_page_ref, provenance_json, blocks_json)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-          `page-${randomUUID()}`, page.documentUploadId, jobId, page.pageNumber, page.sourceVersion,
-          page.textSha256, page.text, page.extractionStatus, page.confidenceBasisPoints, page.createdAt,
-          page.outputContractVersion, page.textSha256, page.providerPageRef, JSON.stringify(page.provenance), blocksJson,
+          pageId, page.documentUploadId, jobId, page.pageNumber, page.sourceVersion,
+          page.textSha256, this.crypto.seal('source_pages', 'extracted_text', pageId, page.text), page.extractionStatus, page.confidenceBasisPoints, page.createdAt,
+          page.outputContractVersion, page.textSha256, page.providerPageRef, JSON.stringify(page.provenance),
+          this.crypto.seal('source_pages', 'blocks_json', pageId, blocksJson),
         ]);
       }
       const next = { ...current, ...changes };
@@ -307,7 +314,7 @@ export class OcrRepository {
         WHERE id = ? AND (
           status IN ('queued', 'submitted', 'processing')
           OR (status = 'failed' AND error_code = 'OCR_PERSISTENCE_FAILED')
-        )`, [...jobParams(next), jobId]);
+        )`, [...jobParams(next, this.crypto), jobId]);
       if (updated.changes !== 1) throw new Error('OCR job changed before completion.');
       await this.appendLifecycleAudit(await this.getJob(jobId), current.status, { pageCount: pages.length });
       return this.getJob(jobId);
@@ -356,13 +363,13 @@ export class OcrRepository {
       if (!matches) throw coded('OCR_UPGRADE_TEXT_CHANGED', 'The provider text differs from the stored page text; the stored pages are kept.', 409);
       const next = { ...current, ...changes };
       const updated = await this.database.run(`UPDATE ocr_jobs SET ${UPDATE_JOB_COLUMNS}
-        WHERE id = ? AND status IN ('queued', 'submitted', 'processing')`, [...jobParams(next), jobId]);
+        WHERE id = ? AND status IN ('queued', 'submitted', 'processing')`, [...jobParams(next, this.crypto), jobId]);
       if (updated.changes !== 1) throw new Error('OCR job changed before completion.');
       for (const row of stored) {
         if (row.blocks_json !== null) continue;
         const page = byNumber.get(row.page_number);
         await this.database.run(`UPDATE source_pages SET blocks_json = ?, blocks_upgrade_job_id = ?
-          WHERE id = ? AND blocks_json IS NULL`, [serializeStoredBlocks(page.pageNumber, page.blocks), jobId, row.id]);
+          WHERE id = ? AND blocks_json IS NULL`, [this.crypto.seal('source_pages', 'blocks_json', row.id, serializeStoredBlocks(page.pageNumber, page.blocks)), jobId, row.id]);
       }
       await this.appendLifecycleAudit(await this.getJob(jobId), current.status, { pageCount: stored.length });
       return this.getJob(jobId);
@@ -394,7 +401,7 @@ export class OcrRepository {
       sourcePageId: row.id,
       providerPageRef: row.provider_page_ref,
       status: row.blocks_json == null ? 'blocks_unavailable' : 'stored',
-      blocks: row.blocks_json == null ? null : parseStoredBlocks(row.blocks_json, row.page_number),
+      blocks: row.blocks_json == null ? null : parseStoredBlocks(this.crypto.open('source_pages', 'blocks_json', row.id, row.blocks_json), row.page_number),
     }));
     return Object.freeze({
       documentId: document.id,

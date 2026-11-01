@@ -3,14 +3,16 @@ import { AuditRepository } from './audit-repository.js';
 import { isDatabaseInterface } from '../database/postgres/db.js';
 import { householdLock } from '../database/postgres/locks.js';
 import { CLAUSE_KINDS, ANSWER_STATES } from '../../contracts/policy-evidence.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { queryTerms, scoreClause } from './clause-text-search.js';
 
 // Storage for evidence-first reasoning (ADR 0008, PostgreSQL migration 012) on the async PostgreSQL
 // interface (S3.2). Clauses are deterministic and immutable; answers are immutable. Both are derived
 // stores: erasure deletes them and audits counts only. Every read and write is household-scoped.
 //
-// Retrieval: PostgreSQL has no clause index yet (migration 012), so search builds an English tsvector
-// over the clause text and title at query time, bounded by household, case and the given documents.
-// English stemming stands in for the SQLite FTS5 porter tokenizer; ranking is ts_rank_cd, not bm25.
+// Retrieval: clause text and title are sealed columns (ADR 0013), so PostgreSQL cannot search them. Search pages through
+// the clauses of the given documents (household and case scoped, bounded), opens them here and ranks them in
+// clause-text-search.js (English stemming, any-term match). Nothing sealed is ever compared in SQL.
 
 const erasureReasons = new Set(['consent_revoked', 'document_erasure', 'source_consent_not_current', 'retention_expired', 'data_subject_request']);
 const MAX_CLAUSES_PER_DOCUMENT = 2000;
@@ -19,7 +21,9 @@ const MAX_SEARCH_DOCUMENTS = 1000;
 const MAX_QUERY_WORDS = 24;
 // Insertion order of the SQLite runtime (rowid): page, then the clause's first block.
 const CLAUSE_ORDER = "clause.page, CAST(CAST(clause.block_indexes_json AS jsonb) ->> 0 AS bigint), clause.id";
-const SEARCH_DOCUMENT = "to_tsvector('english', clause.text || ' ' || coalesce(clause.title, ''))";
+// Search decrypts clauses in the application (ADR 0013): at most this many clauses are scanned per search, in pages.
+const SEARCH_PAGE_ROWS = 200;
+const MAX_SEARCH_SCAN_ROWS = 10_000;
 
 function coded(code, message, statusCode) { return Object.assign(new Error(message), { code, statusCode }); }
 const invalid = message => coded('CLAUSE_INPUT_INVALID', message, 400);
@@ -41,15 +45,11 @@ export function ftsQuery(query) {
   return queryWords(query).map(word => `"${word}"`).join(' OR ');
 }
 
-// The same words as a PostgreSQL tsquery: letters and digits only, each quoted, OR-joined.
-function tsQuery(query) {
-  return queryWords(query).map(word => `'${word}'`).join(' | ');
-}
-
 export class ClauseRepository {
-  constructor(database, { clock = () => new Date(), audit = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit = null, ...options } = {}) {
     if (!isDatabaseInterface(database)) throw new TypeError('A database is required.');
     this.database = database;
+    this.crypto = resolveColumnCrypto(options);
     this.clock = clock;
     this.audit = audit ?? new AuditRepository(database, { clock });
   }
@@ -93,7 +93,8 @@ export class ClauseRepository {
           (id, household_id, case_id, document_id, source_version, page, block_indexes_json, title, kind, text, digest, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
           clause.clauseId, householdId, caseId, documentId, clause.sourceVersion, clause.page,
-          JSON.stringify(clause.blockIndexes), clause.sectionPath?.[0] ?? null, clause.kind, clause.text, clause.digest, at,
+          JSON.stringify(clause.blockIndexes), this.crypto.seal('policy_clauses', 'title', clause.clauseId, clause.sectionPath?.[0] ?? null), clause.kind,
+          this.crypto.seal('policy_clauses', 'text', clause.clauseId, clause.text), clause.digest, at,
         ]);
         inserted += 1;
       }
@@ -102,10 +103,11 @@ export class ClauseRepository {
   }
 
   #shape(row) {
+    const title = this.crypto.open('policy_clauses', 'title', row.id, row.title);
     return Object.freeze({
       clauseId: row.id, documentId: row.document_id, sourceVersion: row.source_version, page: row.page,
-      blockIndexes: JSON.parse(row.block_indexes_json), sectionPath: row.title ? [row.title] : [], kind: row.kind,
-      text: row.text, digest: row.digest,
+      blockIndexes: JSON.parse(row.block_indexes_json), sectionPath: title ? [title] : [], kind: row.kind,
+      text: this.crypto.open('policy_clauses', 'text', row.id, row.text), digest: row.digest,
     });
   }
 
@@ -129,16 +131,27 @@ export class ClauseRepository {
     documentIds.forEach(documentId => text(documentId, 'documentIds'));
     if (!Number.isInteger(limit) || limit < 1 || limit > MAX_SEARCH_RESULTS) throw invalid('limit is out of range.');
     if (kinds !== null && (!Array.isArray(kinds) || kinds.some(kind => !CLAUSE_KINDS.includes(kind)))) throw invalid('kinds are invalid.');
-    const match = tsQuery(query);
-    if (!match) return [];
-    const rows = await this.database.many(`SELECT clause.* FROM policy_clauses clause,
-        to_tsquery('english', ?) AS search
-      WHERE clause.household_id = ? AND clause.case_id = ? AND clause.document_id = ANY(CAST(? AS text[]))
-        ${kinds ? 'AND clause.kind = ANY(CAST(? AS text[]))' : ''}
-        AND ${SEARCH_DOCUMENT} @@ search
-      ORDER BY ts_rank_cd(${SEARCH_DOCUMENT}, search) DESC, ${CLAUSE_ORDER} LIMIT ?`,
-    [match, householdId, caseId, documentIds, ...(kinds ? [kinds] : []), limit]);
-    return rows.map(row => this.#shape(row));
+    const terms = queryTerms(query, MAX_QUERY_WORDS);
+    if (terms.length === 0) return [];
+    const kindFilter = kinds ? 'AND clause.kind = ANY(CAST(? AS text[]))' : '';
+    const hits = [];
+    let scanned = 0;
+    for (let offset = 0; scanned < MAX_SEARCH_SCAN_ROWS; offset += SEARCH_PAGE_ROWS) {
+      const rows = await this.database.many(`SELECT clause.* FROM policy_clauses clause
+        WHERE clause.household_id = ? AND clause.case_id = ? AND clause.document_id = ANY(CAST(? AS text[])) ${kindFilter}
+        ORDER BY ${CLAUSE_ORDER} LIMIT ? OFFSET ?`,
+      [householdId, caseId, documentIds, ...(kinds ? [kinds] : []), SEARCH_PAGE_ROWS, offset]);
+      for (const row of rows) {
+        const shaped = this.#shape(row);
+        const score = scoreClause(terms, shaped.text, shaped.sectionPath[0]);
+        if (score > 0) hits.push({ score, order: hits.length, shaped });
+      }
+      scanned += rows.length;
+      if (rows.length < SEARCH_PAGE_ROWS) break;
+    }
+    // Best score first; equal scores keep the document order (page, first block, id).
+    hits.sort((a, b) => b.score - a.score || a.order - b.order);
+    return hits.slice(0, limit).map(hit => hit.shaped);
   }
 
   /**
@@ -171,7 +184,8 @@ export class ClauseRepository {
         (id, household_id, case_id, requested_by_adult_id, idempotency_key, request_digest, question, state, document_ids_json, answer_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         id, householdId, caseId, requestedByAdultId, idempotencyKey, requestDigest, question, answer.state,
-        JSON.stringify(documentIds), JSON.stringify({ ...answer, access: { consentGrantId: access.consentGrantId, subjectAdultId: access.subjectAdultId, documentIds: [...access.documentIds] } }),
+        JSON.stringify(documentIds),
+        this.crypto.seal('policy_answers', 'answer_json', id, JSON.stringify({ ...answer, access: { consentGrantId: access.consentGrantId, subjectAdultId: access.subjectAdultId, documentIds: [...access.documentIds] } })),
         this.clock().toISOString(),
       ]);
       return { replayed: false, ...this.#answer(await this.database.one('SELECT * FROM policy_answers WHERE id = ?', [id])) };
@@ -179,7 +193,7 @@ export class ClauseRepository {
   }
 
   #answer(row) {
-    const { access = null, ...answer } = JSON.parse(row.answer_json);
+    const { access = null, ...answer } = JSON.parse(this.crypto.open('policy_answers', 'answer_json', row.id, row.answer_json));
     return { answerId: row.id, caseId: row.case_id, createdAt: row.created_at, answer, access };
   }
 

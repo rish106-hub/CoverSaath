@@ -169,7 +169,10 @@ test('migration 006 redacts facts of documents whose erasure started before 005'
   for (const name of readdirSync(source).filter(file => /^00[1-4]_.*\.sql$/.test(file))) copyFileSync(join(source, name), join(directory, name));
   const { db: database, handle } = await freshDatabase(t, { directory });
   await seedParameterWorld(database);
-  const evidence = new EvidenceRepository(database, { clock: () => new Date(at) });
+  // This database predates E1: it still has the IS JSON check on value_json, so facts are written the way the code of that
+  // time wrote them (plaintext). A pass-through crypto stands in for that writer; reads accept the legacy form anyway.
+  const legacyWriter = { seal: (table, column, id, value) => value, sealJson: (table, column, id, value) => (value === null ? null : JSON.stringify(value)), open: (table, column, id, value) => value, openJson: (table, column, id, value) => (value === null ? null : JSON.parse(value)) };
+  const evidence = new EvidenceRepository(database, { clock: () => new Date(at), columnCrypto: legacyWriter });
   await documentFact(evidence, 'fact-erased-document');
   await documentFact(evidence, 'fact-live-document', 'page-other');
   await database.run("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'document-parameters'");

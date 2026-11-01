@@ -42,7 +42,8 @@ Tests need PostgreSQL 17 in `TEST_DATABASE_URL` (see [local-postgres runbook](do
 | Deterministic rules and household reasoning | `src/features/insurance-rules/`, `src/features/household-reasoning/` |
 | Model calls, privacy gate, budget | `src/features/ai-analysis/` |
 | Provider adapters | `src/integrations/` (import via `src/integrations/index.js` only) |
-| Decisions | `docs/adr/` (0011 = Supabase + Fly) |
+| Column encryption, DB document bytes, profile answers | `src/backend/security/`, `src/features/input/encrypted-database-storage.js`, ADR 0013 |
+| Decisions | `docs/adr/` (0011 = Supabase + Fly, 0013 = encryption + RLS) |
 | Deploy and recovery | `docs/runbooks/fly-deploy.md` |
 | Product behaviour sources | `working/`, `building/` |
 
@@ -57,6 +58,7 @@ Check `AGENTS.md` in the directory you edit; `src/backend/` and `src/integration
 5. Synthetic data only. No personal data, policies, keys or tokens in code, logs, prompts, fixtures, tests or commits.
 6. Consent, privacy and legal wording is never final. Mark it for legal review.
 7. Add infrastructure or dependencies only for measured need; record hard-to-reverse choices in an ADR.
+8. Sensitive text columns are sealed (`enc1.` envelope, AAD `table.column.rowId`) through `src/backend/security/column-crypto.js`; never write one raw and never search one in SQL. Every new table enables RLS and revokes `anon`/`authenticated` in its own migration (`tests/rls-coverage.test.mjs` fails otherwise).
 
 ## How to work
 

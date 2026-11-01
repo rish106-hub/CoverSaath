@@ -11,6 +11,7 @@ import { createCoverageAnalysisPort } from '../../backend/services/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../../features/coverage-analysis/index.js';
 import { INTAKE_CONNECTORS } from '../../contracts/intake-connectors.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
+import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from '../../contracts/profile-answers.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
 import {
   READ_FIELDS, analysisJobDto, analysisTaskDto, auditSummaryDto, caseSummaryDto,
@@ -193,6 +194,31 @@ async function requireDocumentCase(services, principal, caseId, options) {
     throw error;
   }
 }
+
+// DRAFT wording, needs legal review. The answers are the user's own statements, not evidence.
+const PROFILE_ANSWERS_NOTICE = 'These are answers you gave us. They are not read from your documents and they are not checked.';
+
+// Profile answers belong to the person the case is about: the adult who opened the case or the adult behind its subject
+// member. Anyone else in the household gets the same 404 as a missing case.
+async function requireProfileCaseOwner(database, principal, caseRecord) {
+  let owner = caseRecord.opened_by_adult_id;
+  if (caseRecord.subject_member_id) {
+    const member = await database.one('SELECT adult_user_id FROM household_members WHERE id = ? AND household_id = ?',
+      [caseRecord.subject_member_id, caseRecord.household_id]);
+    if (member?.adult_user_id) owner = member.adult_user_id;
+  }
+  if (principal.adultId !== owner && principal.adultId !== caseRecord.opened_by_adult_id) {
+    throw Object.assign(new Error('Case not found.'), { code: 'CASE_NOT_FOUND', statusCode: 404 });
+  }
+}
+
+const profileAnswersBody = answers => ({
+  label: 'user_stated',
+  source: PROFILE_ANSWER_SOURCE,
+  notice: PROFILE_ANSWERS_NOTICE,
+  fields: PROFILE_ANSWER_KEYS,
+  answers: answers.map(answer => ({ fieldKey: answer.fieldKey, value: answer.value, updatedAt: answer.updatedAt })),
+});
 
 function documentNotFound() {
   const error = new Error('Document not found.');
@@ -500,6 +526,21 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const caseRecord = await requireDocumentCase(services, principal, passagesMatch[1]);
       await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
       return { status: 200, body: await (await getEvidenceService()).searchPassages({ caseRecord, query: url.searchParams.get('q'), limit: url.searchParams.get('limit') }) };
+    }
+    // Stored user-stated profile answers (run E1a, ADR 0013): GET lists, PUT sets or removes (null) answers and is idempotent,
+    // DELETE erases them all. Values are sealed before they are stored, never logged, never audited. Not evidence: no state chip.
+    const profileMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/profile-answers$/);
+    if (profileMatch && ['GET', 'PUT', 'DELETE'].includes(req.method)) {
+      const caseRecord = await requireDocumentCase(services, principal, profileMatch[1], { write: req.method !== 'GET' });
+      await requireProfileCaseOwner(database, principal, caseRecord);
+      const scope = { householdId: caseRecord.household_id, caseId: caseRecord.id };
+      if (req.method === 'PUT') {
+        const body = await readBody(req);
+        await services.profileAnswers.upsert({ ...scope, adultUserId: principal.adultId, answers: parseProfileAnswers(body.answers) });
+      } else if (req.method === 'DELETE') {
+        await services.profileAnswers.eraseForCase({ ...scope, reasonCode: 'user_request', actorType: 'adult_user', actorId: principal.adultId });
+      }
+      return { status: 200, body: profileAnswersBody(await services.profileAnswers.list(scope)) };
     }
     // Authenticated review of one catalogue fact (ADR 0009 part 2). Reviewer strength comes from a stored grant, never from
     // the request body. The caller names a fact; the server rebuilds it from live clauses. Idempotent, audited, no model call.

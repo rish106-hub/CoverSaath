@@ -16,7 +16,7 @@ export const expectedTables = Object.freeze([
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
   'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs', 'policy_clauses', 'policy_answers', 'catalogue_reviewer_grants', 'catalogue_reviews',
   'source_curator_grants', 'curated_source_archives', 'curated_product_submissions', 'curated_action_nonces',
-  'auth_identities',
+  'auth_identities', 'profile_answers', 'document_blobs',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -64,6 +64,7 @@ export const criticalTriggers = Object.freeze([
   'source_pages_blocks_erase_on_document_erasure', 'source_pages_blocks_upgrade_job_immutable',
   'policy_structuring_jobs_scope_insert', 'policy_structuring_jobs_no_update', 'policy_structuring_jobs_no_delete',
   'policy_structuring_jobs_erase_on_document_erasure',
+  'profile_answers_scope_insert', 'document_blobs_erase_on_document_erasure',
 ]);
 
 export const criticalIndexes = Object.freeze([
