@@ -58,7 +58,7 @@ test('the check is not vacuous: a table created without RLS, or granted to an AP
 
 test('E1 tables exist with RLS on and no policy (deny by default)', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
-  for (const table of ['profile_answers', 'document_blobs']) {
+  for (const table of ['profile_answers', 'document_blobs', 'device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios']) {
     const row = (await pool.query(`SELECT relrowsecurity FROM pg_class
       WHERE relnamespace = 'public'::regnamespace AND relname = $1`, [table])).rows[0];
     assert.ok(row, `${table} must exist`);

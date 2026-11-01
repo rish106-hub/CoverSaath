@@ -308,6 +308,13 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const session = await services.auth.issueSession({ adultUserId: adult.id });
       return { status: 201, body: { household, owner: adult, ownerMember, session } };
     }
+    // Beta access that is safe to repeat (ADR 0015): the bootstrap credential, then one household per e-mail. A known e-mail gets a
+    // fresh session for its existing household, a new one gets a household. Only the BFF holds the credential.
+    if (req.method === 'POST' && url.pathname === '/api/v1/access') {
+      services.access.requireBootstrap(req.headers.authorization);
+      const result = await services.userData.access(await readBody(req));
+      return { status: result.returning ? 200 : 201, body: result };
+    }
     // Sign-in identity -> adult -> session (ADR 0012 D3). Only a caller holding the identity credential (the website
     // BFF) gets here; the bootstrap token is refused. The key is (issuer, subject) from an allow-listed issuer, never
     // an e-mail address. Nothing from the body is logged.
@@ -382,6 +389,28 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       }
       if (resource === 'policies' && !memberId && req.method === 'GET') return { status: 200, body: await services.app.listPolicies(principal, householdId) };
       if (resource === 'overview' && !memberId && req.method === 'GET') return { status: 200, body: await services.app.overview(principal, householdId) };
+    }
+    // User data (ADR 0015): permissions, places, preferences, onboarding, tool scenarios. The adult comes from the session; the
+    // service proves household membership and the repository proves it again inside the write transaction.
+    const userDataMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/(permissions|places|preferences|onboarding|scenarios)(?:\/([^/]+))?$/);
+    if (userDataMatch) {
+      const [, householdId, resource, name] = userDataMatch;
+      const query = Object.fromEntries(url.searchParams);
+      const ifMatch = req.headers['if-match'];
+      const userData = services.userData;
+      const method = req.method;
+      if (resource === 'permissions' && !name && method === 'GET') return { status: 200, body: await userData.listPermissions(principal, householdId) };
+      if (resource === 'permissions' && name && method === 'PUT') return { status: 200, body: await userData.setPermission(principal, householdId, name, await readBody(req), ifMatch) };
+      if (resource === 'places' && !name && method === 'GET') return { status: 200, body: await userData.listPlaces(principal, householdId) };
+      if (resource === 'places' && name && method === 'PUT') return { status: 200, body: await userData.setPlace(principal, householdId, name, query, await readBody(req), ifMatch) };
+      if (resource === 'places' && name && method === 'DELETE') return { status: 200, body: await userData.deletePlace(principal, householdId, name, query, ifMatch) };
+      if (resource === 'preferences' && !name && method === 'GET') return { status: 200, body: await userData.getPreferences(principal, householdId) };
+      if (resource === 'preferences' && !name && method === 'PUT') return { status: 200, body: await userData.setPreferences(principal, householdId, await readBody(req), ifMatch) };
+      if (resource === 'onboarding' && !name && method === 'GET') return { status: 200, body: await userData.getOnboarding(principal, householdId) };
+      if (resource === 'onboarding' && !name && method === 'PUT') return { status: 200, body: await userData.setOnboarding(principal, householdId, await readBody(req), ifMatch) };
+      if (resource === 'scenarios' && !name && method === 'GET') return { status: 200, body: await userData.listScenarios(principal, householdId) };
+      if (resource === 'scenarios' && name && method === 'GET') return { status: 200, body: await userData.getScenario(principal, householdId, name) };
+      if (resource === 'scenarios' && name && method === 'PUT') return { status: 200, body: await userData.setScenario(principal, householdId, name, await readBody(req), ifMatch) };
     }
     const policyMatch = url.pathname.match(/^\/api\/v1\/policies\/([^/]+)$/);
     if (req.method === 'GET' && policyMatch) return { status: 200, body: await services.app.getPolicy(principal, policyMatch[1]) };

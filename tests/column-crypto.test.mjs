@@ -211,3 +211,14 @@ test('development key: refused for a database that is not on this machine, with 
   // Service construction and the server share the rule.
   assert.throws(() => resolveColumnCrypto({ env: { DATABASE_URL: 'postgres://u@db.example.com/db' } }), { code: 'DATA_ENCRYPTION_KEY_REQUIRED' });
 });
+
+test('blindIndex is deterministic, label-separated, key-dependent and not the plaintext', () => {
+  const a = createColumnCrypto(readDataEncryptionConfig({ DATA_ENCRYPTION_KEY_BASE64: Buffer.alloc(32, 7).toString('base64') }));
+  const b = createColumnCrypto(readDataEncryptionConfig({ DATA_ENCRYPTION_KEY_BASE64: Buffer.alloc(32, 8).toString('base64') }));
+  assert.equal(a.blindIndex('email', 'x@example.test'), a.blindIndex('email', 'x@example.test'));
+  assert.notEqual(a.blindIndex('email', 'x@example.test'), a.blindIndex('phone', 'x@example.test'));
+  assert.notEqual(a.blindIndex('email', 'x@example.test'), b.blindIndex('email', 'x@example.test'));
+  assert.match(a.blindIndex('email', 'x@example.test'), /^[0-9a-f]{64}$/);
+  assert.throws(() => a.blindIndex('', 'x'), error => error.code === 'COLUMN_ENCRYPTION_CONTEXT_INVALID');
+  assert.throws(() => a.blindIndex('email', null), error => error.code === 'COLUMN_ENCRYPTION_CONTEXT_INVALID');
+});

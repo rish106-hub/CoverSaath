@@ -1,6 +1,7 @@
-import { AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, ProfileAnswerRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
+import { AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, ProfileAnswerRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
+import { createUserDataService } from './user-data-service.js';
 import { TenantAccessService } from './tenant-access-service.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 
@@ -33,9 +34,11 @@ export function createBackendServices(database, options = {}) {
   const access = new TenantAccessService(database, { auth, households, consents, env: options.env ?? {} });
   const householdApp = new HouseholdAppRepository(database, shared);
   const app = createHouseholdAppService({ access, appRepository: householdApp, consents, clock: options.clock });
+  const userDataRepository = new UserDataRepository(database, { ...shared, households, auth });
+  const userData = createUserDataService({ access, repository: userDataRepository, clock: options.clock });
 
   return {
-    access, app, householdApp, audit, appEvents, runtimeLimits, auth, columnCrypto, identities, profileAnswers, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
+    access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, columnCrypto, identities, profileAnswers, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {

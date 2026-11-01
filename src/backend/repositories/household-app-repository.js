@@ -114,9 +114,11 @@ export class HouseholdAppRepository {
           + (SELECT count(*) FROM coverage_parameter_records WHERE subject_id = ?) AS count`, [memberId, memberId, memberId])).count);
         if (references > 0) fail('MEMBER_HAS_RECORDS', 'Records still refer to this member. Close those cases or withdraw their permission first.', 409);
         const links = await db.many('DELETE FROM policy_members WHERE household_member_id = ? RETURNING policy_id', [memberId]);
+        // The member's addresses and saved places go with the member (ADR 0015); they are erased, not a reason to refuse.
+        const places = await db.run('DELETE FROM household_places WHERE member_id = ? AND household_id = ?', [memberId, householdId]);
         await db.run('DELETE FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
         if (placeholderAdultId) await db.run('DELETE FROM adult_users WHERE id = ?', [placeholderAdultId]);
-        await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.removed', resourceType: 'household_member', resourceId: memberId, payload: { policyLinksErased: links.length, placeholderAdultErased: Boolean(placeholderAdultId) } });
+        await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.removed', resourceType: 'household_member', resourceId: memberId, payload: { policyLinksErased: links.length, placeholderAdultErased: Boolean(placeholderAdultId), placesErased: places.changes } });
       }, { locks: [householdLock(householdId)] });
     } catch (error) {
       // Backstop: any foreign key we did not anticipate is a coded conflict, never a raw 500.
