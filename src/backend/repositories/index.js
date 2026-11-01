@@ -17,3 +17,4 @@ export { ProfileAnswerRepository } from './profile-answer-repository.js';
 export { AppEventRepository } from './app-event-repository.js';
 export { RuntimeLimitsRepository } from './runtime-limits-repository.js';
 export { HouseholdAppRepository } from './household-app-repository.js';
+export { UserDataRepository } from './user-data-repository.js';

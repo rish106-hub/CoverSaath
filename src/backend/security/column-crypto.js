@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
 
 // Application-level column encryption (ADR 0013). Sensitive text columns hold an envelope string
 //
@@ -176,8 +176,18 @@ export function createColumnCrypto(config = readDataEncryptionConfig()) {
     }
   }
 
+  // Blind index for equality lookups on a sealed value (an e-mail, a phone): HMAC-SHA256 under a key derived from the current
+  // data key, separated per label. It is deterministic by design, so it reveals equality and nothing else. After a key
+  // rotation old hashes no longer match until they are recomputed (scripts/backfill-adult-contacts.mjs --rehash).
+  const blindKey = createHmac('sha256', currentKey).update('cover-saath blind index v1').digest();
+  const blindIndex = (label, value) => {
+    if (typeof label !== 'string' || !label || typeof value !== 'string') throw coded('COLUMN_ENCRYPTION_CONTEXT_INVALID', 'A blind index needs a label and text.');
+    return createHmac('sha256', blindKey).update(`${label}\0${value}`).digest('hex');
+  };
+
   return Object.freeze({
     keyId: currentId,
+    blindIndex,
     developmentKey: config.developmentKey === true,
     allowLegacyPlaintext,
     seal,

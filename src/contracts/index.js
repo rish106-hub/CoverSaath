@@ -10,3 +10,4 @@ export * from './policy-evidence.js';
 export * from './intake-connectors.js';
 export * from './voice-intake.js';
 export * from './insight-status.js';
+export * from './user-data.js';
