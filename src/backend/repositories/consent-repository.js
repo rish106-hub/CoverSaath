@@ -81,6 +81,38 @@ export class ConsentRepository {
     return { ...grant, scopes: await this.database.many('SELECT * FROM consent_scopes WHERE consent_grant_id = ? ORDER BY created_at, id', [grantId]) };
   }
 
+  // The subject's own grants in one household, newest first, with a status computed by the same julianday
+  // comparison as requireActive (a NULL expiry reads as active, meaning no expiry; an unparseable expiry reads as expired). Two bounded queries.
+  async listForSubject({ householdId, subjectAdultId, limit, at = this.clock().toISOString() }) {
+    const grants = await this.database.many(`SELECT id, purpose, granted_to_actor, notice_version, evidence_method, granted_at, expires_at, revoked_at,
+        CASE WHEN revoked_at IS NOT NULL THEN 'revoked'
+             WHEN expires_at IS NULL OR julianday(expires_at) > julianday(CAST(? AS text)) THEN 'active'
+             ELSE 'expired' END AS status
+      FROM consent_grants WHERE household_id = ? AND subject_adult_id = ?
+      ORDER BY granted_at DESC, id DESC LIMIT ?`, [at, householdId, subjectAdultId, limit + 1]);
+    const page = grants.slice(0, limit);
+    const scopes = page.length === 0 ? [] : await this.database.many(`SELECT consent_grant_id, resource_type, resource_id, action, data_category, recipient
+      FROM consent_scopes WHERE consent_grant_id IN (${page.map(() => '?').join(', ')})
+      ORDER BY created_at, id`, page.map(grant => grant.id));
+    return {
+      consents: page.map(grant => ({
+        id: grant.id,
+        purpose: grant.purpose,
+        grantedToActor: grant.granted_to_actor,
+        noticeVersion: grant.notice_version,
+        evidenceMethod: grant.evidence_method,
+        grantedAt: grant.granted_at,
+        expiresAt: grant.expires_at,
+        revokedAt: grant.revoked_at,
+        status: grant.status,
+        scopes: scopes.filter(scope => scope.consent_grant_id === grant.id).map(scope => ({
+          resourceType: scope.resource_type, resourceId: scope.resource_id, action: scope.action, dataCategory: scope.data_category, recipient: scope.recipient,
+        })),
+      })),
+      truncated: grants.length > limit,
+    };
+  }
+
   async requireActive(grantId, { subjectAdultId, purpose, resourceType, resourceId = null, action, dataCategory, recipient = null, at = this.clock().toISOString() } = {}) {
     // Expiry uses the same julianday comparison as source selection: timestamps
     // in different ISO forms compare by instant, and an unparseable expiry or

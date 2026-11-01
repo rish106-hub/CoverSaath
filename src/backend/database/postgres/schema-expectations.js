@@ -16,6 +16,7 @@ export const expectedTables = Object.freeze([
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
   'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs', 'policy_clauses', 'policy_answers', 'catalogue_reviewer_grants', 'catalogue_reviews',
   'source_curator_grants', 'curated_source_archives', 'curated_product_submissions', 'curated_action_nonces',
+  'auth_identities',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -81,6 +82,7 @@ export const criticalIndexes = Object.freeze([
   'policy_structuring_runs_live_identity_uidx', 'policy_structuring_runs_document_idx',
   'proposed_parameters_document_idx', 'proposed_parameters_run_idx',
   'policy_structuring_jobs_active_uidx', 'policy_structuring_jobs_attempt_uidx', 'policy_structuring_jobs_status_idx',
+  'auth_identities_adult_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
@@ -98,4 +100,5 @@ export const requiredColumns = Object.freeze({
   policy_structuring_runs: ['erased_at', 'erasure_reason_code', 'counts_json'],
   proposed_parameters: ['redacted_at', 'redaction_reason_code', 'status'],
   policy_structuring_jobs: ['status', 'evidence_outcome', 'error_code', 'attempt', 'structuring_run_id', 'erased_at'],
+  auth_identities: ['adult_user_id', 'issuer', 'subject_sha256', 'created_at', 'last_used_at', 'revoked_at'],
 });

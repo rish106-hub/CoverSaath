@@ -7,3 +7,6 @@ export * from './persistence-ports.js';
 export * from './task-contracts.js';
 export * from './workflow-graph.js';
 export * from './policy-evidence.js';
+export * from './intake-connectors.js';
+export * from './voice-intake.js';
+export * from './insight-status.js';

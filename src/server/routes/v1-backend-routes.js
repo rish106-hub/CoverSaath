@@ -9,6 +9,7 @@ import { classifyDatabaseError } from '../../backend/database/postgres/errors.js
 import { validatePostgresSchema } from '../../backend/database/postgres/validate-schema.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../../features/coverage-analysis/index.js';
+import { INTAKE_CONNECTORS } from '../../contracts/intake-connectors.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
 import {
@@ -240,7 +241,7 @@ async function schemaStatus(database) {
 
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
-export async function handleV1BackendRoute({ req, url, database, services, integrations, config, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -281,6 +282,22 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const session = await services.auth.issueSession({ adultUserId: adult.id });
       return { status: 201, body: { household, owner: adult, ownerMember, session } };
     }
+    // Sign-in identity -> adult -> session (ADR 0012 D3). Only a caller holding the identity credential (the website
+    // BFF) gets here; the bootstrap token is refused. The key is (issuer, subject) from an allow-listed issuer, never
+    // an e-mail address. Nothing from the body is logged.
+    if (req.method === 'POST' && url.pathname === '/api/v1/identity-sessions') {
+      services.access.requireIdentityService(req.headers.authorization);
+      const body = await readBody(req);
+      const issuer = typeof body.issuer === 'string' ? body.issuer : '';
+      if (!identity?.issuers.includes(issuer)) badRequest('issuer is not accepted.');
+      if (typeof body.subject !== 'string' || body.subject.length < 1 || body.subject.length > 255) badRequest('subject is required.');
+      const displayName = requiredString(body.displayName, 'displayName', { max: 80 });
+      if (body.contactEmail !== undefined && body.contactEmail !== null && (typeof body.contactEmail !== 'string' || body.contactEmail.length > 320)) {
+        badRequest('contactEmail is invalid.');
+      }
+      const result = await services.identities.signIn({ issuer, subject: body.subject, displayName, contactEmail: body.contactEmail || null });
+      return { status: result.returning ? 200 : 201, body: result };
+    }
 
     const principal = await services.access.authenticate(req.headers.authorization);
     const responses = createReadResponsePolicy({ database, consents: services.consents });
@@ -291,9 +308,34 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         body: {
           providers: Object.fromEntries(Object.entries(integrations).map(([name, provider]) => [name, provider.health()])),
           hrms: { status: 'on_hold', intake: 'manual_upload_only' },
+          intake: INTAKE_CONNECTORS.map(connector => ({
+            ...connector,
+            health: connector.availability === 'available'
+              ? { connector: connector.id, status: 'available_via_document_route', networkAttempted: false }
+              : intakeConnectors[connector.id]?.health() ?? { connector: connector.id, status: 'not_built', networkAttempted: false },
+          })),
+          documentScan: { mode: config.documents?.scanMode ?? 'unknown' },
           note: 'Configuration status only. This endpoint makes no provider request.',
         },
       };
+    }
+    const listMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/(cases|consents)$/);
+    if (req.method === 'GET' && listMatch) {
+      await services.access.requireHousehold(principal, listMatch[1]);
+      const rawLimit = url.searchParams.get('limit');
+      if (rawLimit !== null && !/^[0-9]{1,3}$/.test(rawLimit)) badRequest('limit must be a whole number from 1 to 100.');
+      const limit = rawLimit === null ? 50 : Number(rawLimit);
+      if (limit < 1 || limit > 100) badRequest('limit must be a whole number from 1 to 100.');
+      if (listMatch[2] === 'cases') {
+        const { cases, truncated } = await services.cases.listOpenedBy({ householdId: listMatch[1], adultId: principal.adultId, limit });
+        return { status: 200, body: {
+          householdId: listMatch[1],
+          cases: cases.map(row => ({ id: row.id, triggerType: row.trigger_type, status: row.status, emergencyMode: Number(row.emergency_mode) === 1, createdAt: row.created_at, updatedAt: row.updated_at })),
+          truncated,
+        } };
+      }
+      const { consents, truncated } = await services.consents.listForSubject({ householdId: listMatch[1], subjectAdultId: principal.adultId, limit });
+      return { status: 200, body: { householdId: listMatch[1], consents, truncated } };
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/sessions/current/revoke') {
       await services.auth.revokeSession({ sessionId: principal.sessionId, adultUserId: principal.adultId });
@@ -440,6 +482,24 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         const stored = await (await getEvidenceService()).get({ caseRecord, answerId: questionsMatch[2] });
         return { status: 200, body: { answerId: stored.answerId, current: stored.current, answer: stored.answer } };
       }
+    }
+    // Read-back of values the deterministic extractor found in the owner's own read documents (ADR 0012 D9). Same case
+    // lookup and source-pack field gate as questions; no model call, nothing stored. Off unless DOCUMENT_READBACK_ENABLED is exactly "true" (checked by the service, after the case and
+    // field gates, so a foreign caller never learns the flag state).
+    const readFactsMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/read-facts$/);
+    if (req.method === 'GET' && readFactsMatch) {
+      const caseRecord = await requireDocumentCase(services, principal, readFactsMatch[1]);
+      await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      return { status: 200, body: await (await getEvidenceService()).readFacts({ caseRecord }) };
+    }
+    // Passages from the owner's own read documents (ADR 0012 D9): stored clauses matching a short query, as snippets with
+    // their page. Same case lookup, field gate and flag as read-facts (the service then validates q and limit); no model
+    // call. The query is never logged here (it travels in the URL, so proxies in front of this process must not log it).
+    const passagesMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/passages$/);
+    if (req.method === 'GET' && passagesMatch) {
+      const caseRecord = await requireDocumentCase(services, principal, passagesMatch[1]);
+      await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack });
+      return { status: 200, body: await (await getEvidenceService()).searchPassages({ caseRecord, query: url.searchParams.get('q'), limit: url.searchParams.get('limit') }) };
     }
     // Authenticated review of one catalogue fact (ADR 0009 part 2). Reviewer strength comes from a stored grant, never from
     // the request body. The caller names a fact; the server rebuilds it from live clauses. Idempotent, audited, no model call.

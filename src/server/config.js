@@ -53,7 +53,32 @@ function readNetworkConfig(env) {
   return Object.freeze({ publicHosts: Object.freeze(publicHosts), trustFlyClientIp: env.TRUST_FLY_CLIENT_IP === 'true' });
 }
 
+const TOKEN_CHARSET = /^[A-Za-z0-9_-]+$/;
+const MAX_IDENTITY_ISSUERS = 10;
+
+// Sign-in identity settings (POST /api/v1/identity-sessions). Both are off until set: no credential means the
+// route answers 503 AUTH_NOT_CONFIGURED, and no issuers means every request is refused. Issuers are exact
+// strings (no wildcards, no whitespace); the credential must differ from the bootstrap token.
+export function readIdentityConfig(env) {
+  const credential = env.KNOWVIA_IDENTITY_TOKEN || null;
+  if (credential !== null && (credential.length < 32 || credential.length > 256 || !TOKEN_CHARSET.test(credential))) {
+    throw new Error('Invalid KNOWVIA_IDENTITY_TOKEN.');
+  }
+  if (credential !== null && credential === (env.KNOWVIA_BOOTSTRAP_TOKEN || null)) {
+    throw new Error('KNOWVIA_IDENTITY_TOKEN must differ from KNOWVIA_BOOTSTRAP_TOKEN.');
+  }
+  const issuers = String(env.IDENTITY_ISSUERS ?? '').split(',').map(issuer => issuer.trim()).filter(Boolean);
+  if (issuers.length > MAX_IDENTITY_ISSUERS
+    || issuers.some(issuer => issuer.length > 200 || !/^[\x21-\x7e]+$/.test(issuer))
+    || new Set(issuers).size !== issuers.length) {
+    throw new Error('Invalid IDENTITY_ISSUERS.');
+  }
+  return Object.freeze({ issuers: Object.freeze(issuers) });
+}
+
 export function readServerConfig(env = process.env) {
+  // Validated here so a bad identity setting stops startup; the route reads it through readIdentityConfig.
+  readIdentityConfig(env);
   return Object.freeze({
     sessionTtlMs: boundedInteger(env.SESSION_TTL_SECONDS, 3600, 'SESSION_TTL_SECONDS', 86_400) * 1000,
     maxSessions: boundedInteger(env.MAX_ACTIVE_SESSIONS, 100, 'MAX_ACTIVE_SESSIONS', 100_000),

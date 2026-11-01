@@ -159,13 +159,19 @@ export class OcrRepository {
   // recorded, so recording a newer contract never starts a silent paid rerun. A blocks upgrade is keyed by
   // its own contract (knowvia.ocr.v2), so a stored v1 success does not block it and a repeat request
   // returns the same job. The household lock serialises concurrent requests for one document, so two
-  // callers never create two jobs.
+  // callers never create two jobs. A succeeded job is erased, and so not reusable, when its result_json is NULL
+  // AND none of its pages still holds text (consent revocation nulls both). It is skipped, so a fresh job re-reads
+  // the document under the new consent; the erased row stays as the audit trail. A succeeded job with a result,
+  // or with stored page text (a legacy job that never recorded a result), is still reused: no silent paid rerun.
   async createOrGetJob(value, { retryFailed = false, anyContract = false } = {}) {
     const householdId = await this.#householdOfDocument(value.documentUploadId);
     return this.database.transaction(async () => {
       const existing = mapJob(await this.database.one(`SELECT * FROM ocr_jobs
         WHERE document_upload_id = ? AND provider = ? AND (CAST(? AS boolean) OR contract_version = ?)
           AND status IN ('queued', 'submitted', 'processing', 'succeeded')
+          AND NOT (status = 'succeeded' AND result_json IS NULL AND NOT EXISTS (
+            SELECT 1 FROM source_pages page WHERE page.ocr_job_id = ocr_jobs.id
+              AND page.extracted_text IS NOT NULL AND page.extraction_status IN ('extracted', 'manual_verified')))
         ORDER BY requested_at, id LIMIT 1`, [value.documentUploadId, value.provider, Boolean(anyContract), value.contractVersion]));
       if (existing) return { created: false, job: existing };
       const failed = mapJob(await this.database.one(`SELECT * FROM ocr_jobs
@@ -199,6 +205,24 @@ export class OcrRepository {
 
   async getJob(jobId) {
     return mapJob(await this.database.one('SELECT * FROM ocr_jobs WHERE id = ?', [jobId]));
+  }
+
+  // Newest job of a document, whatever its state, for read-only callers that need to know whether reading is
+  // current, still running or withdrawn. Revocation nulls authorization_json, so a withdrawn job has none.
+  async getLatestJobForDocument(documentId) {
+    return mapJob(await this.database.one(`SELECT * FROM ocr_jobs WHERE document_upload_id = ?
+      ORDER BY requested_at DESC, id DESC LIMIT 1`, [documentId]));
+  }
+
+  // The succeeded jobs whose stored pages of the document's current version are what getDocumentBlockPages reads
+  // (same filter), so a read-only caller can check the consent of every job whose text it is about to return.
+  async getJobsHoldingPages(documentId) {
+    return (await this.database.many(`SELECT DISTINCT job.* FROM ocr_jobs job
+      JOIN source_pages page ON page.ocr_job_id = job.id
+      JOIN document_uploads document ON document.id = page.document_upload_id AND document.source_version = page.source_version
+      WHERE document.id = ? AND job.status = 'succeeded'
+        AND page.extraction_status IN ('extracted', 'manual_verified') AND page.extracted_text IS NOT NULL
+      ORDER BY job.id`, [documentId])).map(mapJob);
   }
 
   async updateJob(jobId, changes) {

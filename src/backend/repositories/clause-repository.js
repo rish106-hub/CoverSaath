@@ -71,6 +71,12 @@ export class ClauseRepository {
     if (!Array.isArray(clauses) || clauses.length === 0 || clauses.length > MAX_CLAUSES_PER_DOCUMENT) throw invalid('clauses must be a bounded non-empty array.');
     return this.#atomic(householdId, async () => {
       await this.#document(householdId, caseId, documentId);
+      // Clauses are built from stored pages read outside this lock. If the text was erased meanwhile (consent revoked
+      // between the read and this write) nothing is written, so no clause outlives the text it was built from.
+      const stillStored = await this.database.one(`SELECT 1 AS present FROM source_pages page
+        JOIN document_uploads document ON document.id = page.document_upload_id AND document.source_version = page.source_version
+        WHERE document.id = ? AND page.extracted_text IS NOT NULL AND page.extraction_status IN ('extracted', 'manual_verified') LIMIT 1`, [documentId]);
+      if (!stillStored) throw coded('OCR_PAGES_UNAVAILABLE', 'No stored OCR pages are available for this document.', 409);
       const at = this.clock().toISOString();
       let inserted = 0;
       for (const clause of clauses) {
