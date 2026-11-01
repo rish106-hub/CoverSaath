@@ -41,8 +41,14 @@ const STEP2 = [['ational', 'ate'], ['tional', 'tion'], ['enci', 'ence'], ['anci'
 const STEP3 = [['icate', 'ic'], ['ative', ''], ['alize', 'al'], ['iciti', 'ic'], ['ical', 'ic'], ['ful', ''], ['ness', '']];
 const STEP4 = ['al', 'ance', 'ence', 'er', 'ic', 'able', 'ible', 'ant', 'ement', 'ment', 'ent', 'ion', 'ou', 'ism', 'ate', 'iti', 'ous', 'ive', 'ize'];
 
+// Longest suffix first, sorted once at load (not per word).
+const byLongestSuffix = table => Object.freeze([...table].sort((a, b) => b[0].length - a[0].length));
+const STEP2_SORTED = byLongestSuffix(STEP2);
+const STEP3_SORTED = byLongestSuffix(STEP3);
+const STEP4_SORTED = Object.freeze([...STEP4].sort((a, b) => b.length - a.length));
+
 function replaceSuffix(word, table, minMeasure) {
-  for (const [suffix, replacement] of [...table].sort((a, b) => b[0].length - a[0].length)) {
+  for (const [suffix, replacement] of table) {
     if (word.endsWith(suffix)) {
       const stem = word.slice(0, -suffix.length);
       return measure(stem) > minMeasure ? stem + replacement : word;
@@ -51,8 +57,21 @@ function replaceSuffix(word, table, minMeasure) {
   return word;
 }
 
+// Bounded memo of stems: real text repeats a small vocabulary. Cleared when full, so memory stays bounded.
+const STEM_MEMO_LIMIT = 50_000;
+const stemMemo = new Map();
+
 /** Porter (1980) stemmer for lower-case ASCII-letter words; other words are returned unchanged. */
 export function stem(input) {
+  const known = stemMemo.get(input);
+  if (known !== undefined) return known;
+  const result = stemUncached(input);
+  if (stemMemo.size >= STEM_MEMO_LIMIT) stemMemo.clear();
+  stemMemo.set(input, result);
+  return result;
+}
+
+function stemUncached(input) {
   let word = input;
   if (word.length <= 2 || !/^[a-z]+$/.test(word)) return word;
   // Step 1a
@@ -73,10 +92,10 @@ export function stem(input) {
   // Step 1c
   if (word.endsWith('y') && hasVowel(word.slice(0, -1))) word = `${word.slice(0, -1)}i`;
   // Steps 2 and 3
-  word = replaceSuffix(word, STEP2, 0);
-  word = replaceSuffix(word, STEP3, 0);
+  word = replaceSuffix(word, STEP2_SORTED, 0);
+  word = replaceSuffix(word, STEP3_SORTED, 0);
   // Step 4
-  for (const suffix of [...STEP4].sort((a, b) => b.length - a.length)) {
+  for (const suffix of STEP4_SORTED) {
     if (!word.endsWith(suffix)) continue;
     const base = word.slice(0, -suffix.length);
     if (measure(base) > 1 && (suffix !== 'ion' || /[st]$/.test(base))) word = base;
@@ -104,26 +123,43 @@ export function queryTerms(query, max = 24) {
   return terms;
 }
 
-const documentTokens = value => (String(value ?? '').normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])
-  .filter(word => !STOP_WORDS.has(word)).map(stem);
+const WORD = /[\p{L}\p{N}]{2,}/gu;
 
 /**
  * Score of `texts` (clause text, then title) for `terms`; 0 means no match. Any term matches (OR), like the earlier
- * tsquery. More distinct terms rank first, then term frequency, then a bonus when matched terms sit close together.
+ * tsquery. More distinct terms rank first, then term frequency (each term counted up to 10 times), then a bonus when matched
+ * terms sit close together. One pass over each text, no token array: only a count and a first position per matched term.
  */
 export function scoreClause(terms, ...texts) {
   if (terms.length === 0) return 0;
-  const tokens = documentTokens(texts.filter(Boolean).join(' '));
   const wanted = new Set(terms);
-  const positions = new Map();
-  tokens.forEach((token, index) => { if (wanted.has(token)) positions.set(token, [...(positions.get(token) ?? []), index]); });
-  if (positions.size === 0) return 0;
-  const frequency = [...positions.values()].reduce((sum, list) => sum + Math.min(list.length, 10), 0);
-  let proximity = 0;
-  if (positions.size > 1) {
-    // Distance between the first occurrences of the matched terms: the closer, the higher.
-    const firsts = [...positions.values()].map(list => list[0]);
-    proximity = 100 / (1 + Math.max(...firsts) - Math.min(...firsts));
+  const matched = new Map();
+  let index = 0;
+  for (const value of texts) {
+    if (!value) continue;
+    const text = String(value).normalize('NFKC').toLowerCase();
+    WORD.lastIndex = 0;
+    for (let match = WORD.exec(text); match !== null; match = WORD.exec(text)) {
+      if (STOP_WORDS.has(match[0])) continue;
+      const token = stem(match[0]);
+      if (wanted.has(token)) {
+        const seen = matched.get(token);
+        if (seen === undefined) matched.set(token, { count: 1, first: index });
+        else if (seen.count < 10) seen.count += 1;
+      }
+      index += 1;
+    }
   }
-  return positions.size * 1000 + frequency * 10 + proximity;
+  if (matched.size === 0) return 0;
+  let frequency = 0;
+  let low = Infinity;
+  let high = -Infinity;
+  for (const { count, first } of matched.values()) {
+    frequency += count;
+    if (first < low) low = first;
+    if (first > high) high = first;
+  }
+  // Distance between the first occurrences of the matched terms: the closer, the higher.
+  const proximity = matched.size > 1 ? 100 / (1 + high - low) : 0;
+  return matched.size * 1000 + frequency * 10 + proximity;
 }

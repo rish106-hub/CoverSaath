@@ -45,6 +45,7 @@ test('PostgreSQL caps the size of a sealed blocks value; the IS JSON check moved
     page_sha256: hex('e'), extracted_text: 'x', blocks_json: json,
   });
   await assertConstraintRejects(page('bad-size', 'x'.repeat(2_000_001)), '23514');
-  // A sealed value is not JSON, so it is accepted here; the repository opens and validates it on read.
+  // A sealed value is not JSON, so it is accepted here (migration 021: sealed or JSON); the repository opens and validates it on read.
   await page('sealed-ok', 'enc1.k1.AAAA.BBBB.CCCC');
+  await assertConstraintRejects(page('bad-json', '{not json'), '23514');
 });

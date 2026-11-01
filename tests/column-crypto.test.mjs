@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
   ENVELOPE_PREFIX, createColumnCrypto, readDataEncryptionConfig, resolveColumnCrypto,
 } from '../src/backend/security/column-crypto.js';
@@ -11,11 +11,11 @@ import { queryTerms, scoreClause, stem } from '../src/backend/repositories/claus
 const b64 = () => randomBytes(32).toString('base64');
 const make = (extra = {}) => createColumnCrypto(readDataEncryptionConfig({ DATA_ENCRYPTION_KEY_BASE64: b64(), ...extra }));
 
-test('round trip: seal gives an enc1 envelope, open returns the text, every call uses a fresh nonce', () => {
+test('round trip: seal gives an enc2 envelope, open returns the text, every call uses a fresh nonce', () => {
   const crypto = make();
   const a = crypto.seal('adult_users', 'contact_email', 'adult-1', 'asha@example.test');
   const b = crypto.seal('adult_users', 'contact_email', 'adult-1', 'asha@example.test');
-  assert.match(a, /^enc1\.k1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]+$/);
+  assert.match(a, /^enc2\.k1\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]+$/);
   assert.notEqual(a, b, 'a new nonce each time');
   assert.ok(!a.includes('asha'));
   assert.equal(crypto.open('adult_users', 'contact_email', 'adult-1', a), 'asha@example.test');
@@ -66,7 +66,7 @@ test('key rotation: an old key id still opens, new writes use the new id, needsR
     DATA_ENCRYPTION_KEY_BASE64: b64(), DATA_ENCRYPTION_KEY_ID: 'k1', DATA_ENCRYPTION_PREVIOUS_KEYS_JSON: JSON.stringify({ k0: oldKey }),
   }));
   assert.equal(after.open('t', 'c', 'r', legacySealed), 'value');
-  assert.match(after.seal('t', 'c', 'r', 'value'), /^enc1\.k1\./);
+  assert.match(after.seal('t', 'c', 'r', 'value'), /^enc2\.k1\./);
   assert.equal(after.needsRotation(legacySealed), true);
   assert.equal(after.needsRotation(after.seal('t', 'c', 'r', 'v')), false);
   assert.throws(() => before.open('t', 'c', 'r', after.seal('t', 'c', 'r', 'v')), { code: 'COLUMN_DECRYPTION_FAILED' });
@@ -140,4 +140,74 @@ test('clause text search: Porter stemming, stop words, any-term ranking', () => 
   assert.equal(scoreClause(terms, 'Maternity expenses are listed separately.'), 0);
   assert.ok(scoreClause(terms, 'unrelated text', 'Cataract waiting period') > 0, 'the title counts');
   assert.equal(scoreClause([], 'anything'), 0);
+});
+
+// ---- review fixes: length padding and the development key ----
+
+const sealedLength = (crypto, text, options) => crypto.seal('t', 'c', 'r', text, options).length;
+
+test('padding: values in one size bucket seal to the same stored length, larger buckets are larger, all open exactly', () => {
+  const crypto = make();
+  // Frame is 4 bytes, so up to 28 bytes of text fit the 32-byte bucket.
+  const lengths = ['', 'a', 'Pune', 'x'.repeat(28)].map(text => sealedLength(crypto, text));
+  assert.equal(new Set(lengths).size, 1, 'same bucket, same stored length');
+  assert.ok(sealedLength(crypto, 'x'.repeat(29)) > lengths[0]);
+  assert.equal(sealedLength(crypto, 'x'.repeat(29)), sealedLength(crypto, 'x'.repeat(60)));
+  for (const size of [0, 1, 28, 29, 60, 61, 4092, 4093, 4100, 5000, 100_000]) {
+    const text = 'é'.repeat(Math.floor(size / 2)) + 'z'.repeat(size % 2);
+    assert.equal(crypto.open('t', 'c', 'r', crypto.seal('t', 'c', 'r', text)), text, `size ${size}`);
+  }
+  // Large values round up to the next KiB, not to the next power of two.
+  const big = sealedLength(crypto, 'x'.repeat(100_000));
+  assert.ok(big < Math.ceil(101_024 * 4 / 3) + 80, `a 100 KB value stays near its size (${big})`);
+});
+
+test('padding: a fixed size makes every short value the same stored length, a longer one falls back to the buckets', () => {
+  const crypto = make();
+  const lengths = new Set(['{"v":true}', '{"v":"Pune"}', `{"v":"${'𠀀'.repeat(60)}"}`, '{"v":7}'].map(text => sealedLength(crypto, text, { fixedSize: 256 })));
+  assert.equal(lengths.size, 1);
+  assert.ok(sealedLength(crypto, 'x'.repeat(300), { fixedSize: 256 }) > [...lengths][0]);
+  assert.equal(crypto.open('t', 'c', 'r', crypto.seal('t', 'c', 'r', 'Pune', { fixedSize: 256 })), 'Pune');
+  assert.deepEqual(crypto.openJson('t', 'c', 'r', crypto.sealJson('t', 'c', 'r', { v: false }, { fixedSize: 256 })), { v: false });
+});
+
+test('padding: enc1 envelopes written by the first build (unframed) still open, and --rotate treats them as needing a re-seal', async () => {
+  const { createCipheriv, randomBytes: rb } = await import('node:crypto');
+  const key = rb(32);
+  const crypto = createColumnCrypto(readDataEncryptionConfig({ DATA_ENCRYPTION_KEY_BASE64: key.toString('base64') }));
+  const nonce = rb(12);
+  const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  cipher.setAAD(Buffer.from('t.c.r'));
+  const body = Buffer.concat([cipher.update('first build value', 'utf8'), cipher.final()]);
+  const legacy = `enc1.k1.${nonce.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}.${body.toString('base64url')}`;
+  assert.equal(crypto.open('t', 'c', 'r', legacy), 'first build value');
+  assert.equal(crypto.isSealed(legacy), true);
+  assert.equal(crypto.needsRotation(legacy), true);
+  assert.equal(crypto.needsRotation(crypto.seal('t', 'c', 'r', 'x')), false);
+  // The same bytes under the enc2 prefix are framed, so they do not open as a value (a downgrade of the prefix cannot forge one).
+  assert.throws(() => crypto.open('t', 'c', 'r', legacy.replace('enc1.', 'enc2.')), { code: 'COLUMN_DECRYPTION_FAILED' });
+});
+
+test('development key: refused for a database that is not on this machine, with a configured copy of it, and in a required previous-key list', () => {
+  assert.equal(readDataEncryptionConfig({}).developmentKey, true);
+  for (const url of ['postgres://u@localhost:5432/db', 'postgres://u@127.0.0.1/db', 'postgres://u@[::1]:5432/db']) {
+    assert.equal(readDataEncryptionConfig({ DATABASE_URL: url }).developmentKey, true, url);
+  }
+  for (const url of ['postgres://u@db.example.com:5432/db', 'postgres://u@10.0.0.5/db', 'postgres://u@db.abcd.supabase.co:5432/postgres', 'not a url']) {
+    assert.throws(() => readDataEncryptionConfig({ DATABASE_URL: url }), error => error.code === 'DATA_ENCRYPTION_KEY_REQUIRED' && !error.message.includes(url), url);
+  }
+  assert.ok(readDataEncryptionConfig({ DATABASE_URL: 'postgres://u@db.example.com/db', DATA_ENCRYPTION_KEY_BASE64: b64() }), 'a real key is fine anywhere');
+  // The development key's value, copied into the real key variable, is refused.
+  const devKey = createHash('sha256').update('cover-saath development column key, not a secret').digest('base64');
+  assert.throws(() => readDataEncryptionConfig({ DATA_ENCRYPTION_KEY_BASE64: devKey }), { code: 'DATA_ENCRYPTION_KEY_INVALID' });
+  // A required (production) configuration refuses the development key and the id "dev" among the previous keys, and as the current id.
+  const required = { NODE_ENV: 'production', DATA_ENCRYPTION_KEY_BASE64: b64() };
+  assert.throws(() => readDataEncryptionConfig({ ...required, DATA_ENCRYPTION_PREVIOUS_KEYS_JSON: JSON.stringify({ dev: b64() }) }), { code: 'DATA_ENCRYPTION_KEY_INVALID' });
+  assert.throws(() => readDataEncryptionConfig({ ...required, DATA_ENCRYPTION_PREVIOUS_KEYS_JSON: JSON.stringify({ k0: devKey }) }), { code: 'DATA_ENCRYPTION_KEY_INVALID' });
+  assert.throws(() => readDataEncryptionConfig({ ...required, DATA_ENCRYPTION_KEY_ID: 'dev' }), { code: 'DATA_ENCRYPTION_KEY_INVALID' });
+  assert.ok(readDataEncryptionConfig({ ...required, DATA_ENCRYPTION_PREVIOUS_KEYS_JSON: JSON.stringify({ k0: b64() }) }));
+  // Outside production the previous list may still hold the development key, so a local database can be migrated off it.
+  assert.ok(readDataEncryptionConfig({ DATA_ENCRYPTION_KEY_BASE64: b64(), DATA_ENCRYPTION_PREVIOUS_KEYS_JSON: JSON.stringify({ dev: devKey }) }));
+  // Service construction and the server share the rule.
+  assert.throws(() => resolveColumnCrypto({ env: { DATABASE_URL: 'postgres://u@db.example.com/db' } }), { code: 'DATA_ENCRYPTION_KEY_REQUIRED' });
 });

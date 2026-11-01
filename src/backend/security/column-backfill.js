@@ -1,5 +1,3 @@
-import { ENVELOPE_PREFIX } from './column-crypto.js';
-
 // Seals rows written before column encryption (ADR 0013), or re-seals them under the current key after a rotation.
 // Idempotent: a row whose columns are already sealed under the current key is not selected, so a second run changes 0 rows.
 // Batched (one transaction per batch), keyset-paged by id, dry-run capable. Resolves counts only; it never returns, logs or
@@ -45,8 +43,9 @@ export async function encryptExistingRows({ database, crypto, dryRun = false, ro
     const candidate = columns.map(column => {
       const c = quote(column);
       return rotate
-        ? `(${c} IS NOT NULL AND (left(${c}, 5) <> '${ENVELOPE_PREFIX}' OR split_part(${c}, '.', 2) <> ?))`
-        : `(${c} IS NOT NULL AND left(${c}, 5) <> '${ENVELOPE_PREFIX}')`;
+        // enc1 (unpadded) and other-key values are re-sealed by --rotate; any enc1 or enc2 value counts as sealed otherwise.
+        ? `(${c} IS NOT NULL AND (${c} !~ '^enc2[.]' OR split_part(${c}, '.', 2) <> ?))`
+        : `(${c} IS NOT NULL AND ${c} !~ '^enc[12][.]')`;
     }).join(' OR ');
     const candidateParams = rotate ? columns.map(() => crypto.keyId) : [];
     let rows = 0;
@@ -61,16 +60,16 @@ export async function encryptExistingRows({ database, crypto, dryRun = false, ro
         if (batch.length === 0) return { last: null };
         if (!dryRun) {
           for (const trigger of triggers) await database.run(`ALTER TABLE public.${t} DISABLE TRIGGER ${quote(trigger)}`);
-          try {
-            for (const row of batch) {
-              const changes = columns.filter(column => needs(row[column]));
-              if (changes.length === 0) continue;
-              const values = changes.map(column => crypto.seal(table, column, row.id, crypto.open(table, column, row.id, row[column])));
-              await database.run(`UPDATE public.${t} SET ${changes.map(column => `${quote(column)} = ?`).join(', ')} WHERE id = ?`, [...values, row.id]);
-            }
-          } finally {
-            for (const trigger of triggers) await database.run(`ALTER TABLE public.${t} ENABLE TRIGGER ${quote(trigger)}`);
+          // No finally: after a failed statement the transaction is aborted and any further statement would replace the real
+          // error with "current transaction is aborted". The rollback restores the trigger (DDL is transactional), and the
+          // original error is what the caller sees.
+          for (const row of batch) {
+            const changes = columns.filter(column => needs(row[column]));
+            if (changes.length === 0) continue;
+            const values = changes.map(column => crypto.seal(table, column, row.id, crypto.open(table, column, row.id, row[column])));
+            await database.run(`UPDATE public.${t} SET ${changes.map(column => `${quote(column)} = ?`).join(', ')} WHERE id = ?`, [...values, row.id]);
           }
+          for (const trigger of triggers) await database.run(`ALTER TABLE public.${t} ENABLE TRIGGER ${quote(trigger)}`);
         }
         let touched = 0;
         for (const row of batch) {

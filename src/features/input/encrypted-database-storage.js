@@ -11,7 +11,7 @@ import { documentEncryptionKey, openDocumentBytes, sealDocumentBytes } from './d
 // storage before its pool exists. Reads never list or return bytes except to the caller that holds the document row.
 
 const STORAGE_KEY = /^[0-9a-f]{64}$/;
-const MAX_LISTED = 10_000;
+const LIST_PAGE = 1_000;
 
 const invalidKey = () => new DocumentIntakeError('INVALID_STORAGE_KEY', 'The storage reference is invalid.');
 const unavailable = () => Object.assign(new DocumentIntakeError('STORAGE_UNAVAILABLE', 'Document storage is temporarily unavailable.'), { retryable: true });
@@ -56,8 +56,17 @@ export function createEncryptedDatabaseByteStorage({ database, key }) {
     },
     // Stored objects for the orphan sweep (names and times only, never bytes). The sweep removes a blob with no live row.
     async list() {
-      const rows = await (await resolveDatabase()).many('SELECT storage_key, created_at FROM document_blobs ORDER BY created_at LIMIT ?', [MAX_LISTED]);
-      return rows.map(row => ({ name: `${row.storage_key}.csd`, storageKey: row.storage_key, temporary: false, modifiedAt: Date.parse(row.created_at) || 0 }));
+      // Keyset-paged over the whole table (names and times only, never bytes), so the orphan sweep sees every blob and
+      // not just the first page of them.
+      const db = await resolveDatabase();
+      const entries = [];
+      let after = '';
+      for (;;) {
+        const rows = await db.many('SELECT storage_key, created_at FROM document_blobs WHERE storage_key > ? ORDER BY storage_key LIMIT ?', [after, LIST_PAGE]);
+        for (const row of rows) entries.push({ name: `${row.storage_key}.csd`, storageKey: row.storage_key, temporary: false, modifiedAt: Date.parse(row.created_at) || 0 });
+        if (rows.length < LIST_PAGE) return entries;
+        after = rows.at(-1).storage_key;
+      }
     },
     async removeTemporary() {},
     async remove({ storageKey }) {

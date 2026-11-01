@@ -122,8 +122,8 @@ test('first sign-in creates adult, household, owner member and identity; the sam
   // Returning does not rewrite the adult (no lookup or update by e-mail or name).
   // Name and e-mail are sealed at rest (ADR 0013): the raw columns are ciphertext that opens to the same values.
   const stored = await app.db.one('SELECT id, display_name, contact_email FROM adult_users');
-  assert.match(stored.display_name, /^enc1\./);
-  assert.match(stored.contact_email, /^enc1\./);
+  assert.match(stored.display_name, /^enc2\./);
+  assert.match(stored.contact_email, /^enc2\./);
   assert.equal(sharedColumnCrypto().open('adult_users', 'display_name', stored.id, stored.display_name), 'Asha Synthetic');
   assert.equal(sharedColumnCrypto().open('adult_users', 'contact_email', stored.id, stored.contact_email), 'asha@example.test');
 });

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { AuditRepository } from './audit-repository.js';
 import { isDatabaseInterface } from '../database/postgres/db.js';
 import { householdLock } from '../database/postgres/locks.js';
-import { CLAUSE_KINDS, ANSWER_STATES } from '../../contracts/policy-evidence.js';
+import { CLAUSE_KINDS, ANSWER_STATES, MAX_CLAUSE_TEXT_CHARS, MAX_CLAUSE_TITLE_CHARS } from '../../contracts/policy-evidence.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { queryTerms, scoreClause } from './clause-text-search.js';
 
@@ -22,8 +22,12 @@ const MAX_QUERY_WORDS = 24;
 // Insertion order of the SQLite runtime (rowid): page, then the clause's first block.
 const CLAUSE_ORDER = "clause.page, CAST(CAST(clause.block_indexes_json AS jsonb) ->> 0 AS bigint), clause.id";
 // Search decrypts clauses in the application (ADR 0013): at most this many clauses are scanned per search, in pages.
-const SEARCH_PAGE_ROWS = 200;
-const MAX_SEARCH_SCAN_ROWS = 10_000;
+// Each page is scored synchronously, so pages are small and the event loop is released between them. A search that reaches
+// the row cap or the time budget stops and reports `truncated` instead of holding the process.
+const SEARCH_PAGE_ROWS = 100;
+const MAX_SEARCH_SCAN_ROWS = 2_000;
+const SEARCH_TIME_BUDGET_MS = 3_000;
+const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve));
 
 function coded(code, message, statusCode) { return Object.assign(new Error(message), { code, statusCode }); }
 const invalid = message => coded('CLAUSE_INPUT_INVALID', message, 400);
@@ -82,6 +86,9 @@ export class ClauseRepository {
       for (const clause of clauses) {
         if (clause.documentId !== documentId) throw invalid('Every clause must belong to the document.');
         if (!CLAUSE_KINDS.includes(clause.kind)) throw invalid('Clause kind is invalid.');
+        // The 1-100000 text and 200-character title caps were database checks on plaintext; a sealed value can only be capped by length.
+        if (typeof clause.text !== 'string' || clause.text.length < 1 || clause.text.length > MAX_CLAUSE_TEXT_CHARS) throw invalid('Clause text length is invalid.');
+        if ((clause.sectionPath?.[0] ?? '').length > MAX_CLAUSE_TITLE_CHARS) throw invalid('Clause title is too long.');
         const existing = await this.database.one('SELECT digest, document_id, household_id FROM policy_clauses WHERE id = ?', [clause.clauseId]);
         if (existing) {
           if (existing.household_id !== householdId || existing.document_id !== documentId || existing.digest !== clause.digest) {
@@ -124,7 +131,7 @@ export class ClauseRepository {
     return listed;
   }
 
-  /** Word retrieval, household and case scoped; optional kind filter. Ranked by ts_rank_cd. */
+  /** Word retrieval, household and case scoped; optional kind filter. Ranked in the application (clause-text-search.js). The result carries a non-enumerable `truncated` flag when the scan cap or time budget cut the search short. */
   async searchClauses({ householdId, caseId, documentIds, query, kinds = null, limit = 20 }) {
     text(householdId, 'householdId'); text(caseId, 'caseId');
     if (!Array.isArray(documentIds) || !documentIds.length || documentIds.length > MAX_SEARCH_DOCUMENTS) throw invalid('documentIds are required.');
@@ -136,7 +143,9 @@ export class ClauseRepository {
     const kindFilter = kinds ? 'AND clause.kind = ANY(CAST(? AS text[]))' : '';
     const hits = [];
     let scanned = 0;
-    for (let offset = 0; scanned < MAX_SEARCH_SCAN_ROWS; offset += SEARCH_PAGE_ROWS) {
+    let truncated = false;
+    const started = Date.now();
+    for (let offset = 0; ; offset += SEARCH_PAGE_ROWS) {
       const rows = await this.database.many(`SELECT clause.* FROM policy_clauses clause
         WHERE clause.household_id = ? AND clause.case_id = ? AND clause.document_id = ANY(CAST(? AS text[])) ${kindFilter}
         ORDER BY ${CLAUSE_ORDER} LIMIT ? OFFSET ?`,
@@ -148,10 +157,16 @@ export class ClauseRepository {
       }
       scanned += rows.length;
       if (rows.length < SEARCH_PAGE_ROWS) break;
+      if (scanned >= MAX_SEARCH_SCAN_ROWS || Date.now() - started > SEARCH_TIME_BUDGET_MS) { truncated = true; break; }
+      await yieldToEventLoop();
     }
     // Best score first; equal scores keep the document order (page, first block, id).
     hits.sort((a, b) => b.score - a.score || a.order - b.order);
-    return hits.slice(0, limit).map(hit => hit.shaped);
+    const found = hits.slice(0, limit).map(hit => hit.shaped);
+    // Non-enumerable, so a result that was not cut short compares equal to a plain array and callers that ignore it are unchanged.
+    if (truncated) Object.defineProperty(found, 'truncated', { value: true });
+    return found;
+
   }
 
   /**

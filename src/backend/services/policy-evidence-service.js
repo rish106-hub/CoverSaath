@@ -531,7 +531,8 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
         });
         if (passages.length === limit) break;
       }
-      return { label: 'passage_not_answer', notice: PASSAGE_NOTICE, query, passages, excluded };
+      // `truncated` appears only when the search stopped at its scan cap or time budget, so later matches may be missing.
+      return { label: 'passage_not_answer', notice: PASSAGE_NOTICE, query, passages, excluded, ...(found.truncated === true ? { truncated: true } : {}) };
     },
 
     async get({ caseRecord, answerId }) {

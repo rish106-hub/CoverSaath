@@ -60,7 +60,7 @@ test('E1a: the stored value is ciphertext at rest', pgOptions, async t => {
   const rows = await rawRows(app);
   assert.equal(rows.length, 3);
   for (const row of rows) {
-    assert.match(row.value_ciphertext, /^enc1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+    assert.match(row.value_ciphertext, /^enc2\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     assert.ok(!row.value_ciphertext.includes('Nashik') && !row.value_ciphertext.includes('Maharashtra'));
     assert.equal(row.source, 'user_stated');
   }
@@ -148,4 +148,44 @@ test('E1a: the database refuses an answer whose case belongs to another househol
     VALUES ('x1', ?, ?, ?, 'city', 'enc1.k.a.b.c', 't', 't')`, [a.householdId, b.caseId, a.adultId]), /./);
   await assert.rejects(app.database.run(`INSERT INTO profile_answers (id, household_id, case_id, adult_user_id, field_key, value_ciphertext, created_at, updated_at)
     VALUES ('x2', ?, ?, ?, 'free_text', 'enc1.k.a.b.c', 't', 't')`, [a.householdId, a.caseId, a.adultId]), /./);
+});
+
+test('review: the stored length of an answer does not depend on the field or the value (all seven fields, short and longest values)', pgOptions, async t => {
+  const app = await startApp(t);
+  const s = await scenario(app, { read: false });
+  const longest = '𠀀'.repeat(60); // the longest allowed place name, four bytes a character
+  const variants = [
+    { covered_people: 'self', city: 'Pune', state: 'Goa', renewal_month: 1, has_employer_cover: true, has_personal_policy: false, has_top_up_policy: true },
+    { covered_people: 'self_partner_children_parents', city: longest, state: longest, renewal_month: 12, has_employer_cover: false, has_personal_policy: true, has_top_up_policy: false },
+  ];
+  const lengths = new Set();
+  for (const answers of variants) {
+    assert.equal((await put(app, s, answers)).status, 200);
+    const rows = await rawRows(app);
+    assert.equal(rows.length, 7);
+    for (const row of rows) lengths.add(row.value_ciphertext.length);
+  }
+  assert.equal(lengths.size, 1, `all fields and values store the same length (saw ${[...lengths].join(', ')})`);
+  assert.deepEqual((await get(app, s)).data.answers.find(answer => answer.fieldKey === 'city').value, longest);
+});
+
+test('review: a second adult of the same household gets the same 404 as a stranger on every profile route', pgOptions, async t => {
+  const app = await startApp(t);
+  const s = await scenario(app, { read: false });
+  await put(app, s, { city: 'Pune' });
+  const { createBackendServices } = await import('../src/backend/services/index.js');
+  const services = createBackendServices(app.database);
+  const second = await services.households.createAdult({ displayName: 'Second Synthetic' });
+  await services.households.addRole({ householdId: s.householdId, adultUserId: second.id, role: 'member' });
+  const session = await services.auth.issueSession({ adultUserId: second.id });
+  const token = session.token;
+  // The second adult really is a member of the household (the case-level gate alone would let them in).
+  assert.equal((await app.call(`/api/v1/households/${s.householdId}`, { token })).status, 200);
+  const missing = await app.call(path('case-does-not-exist'), { token });
+  for (const method of ['GET', 'PUT', 'DELETE']) {
+    const res = await app.call(path(s.caseId), { method, token, ...(method === 'PUT' ? { body: { answers: { city: 'Delhi' } } } : {}) });
+    assert.equal(res.status, 404, method);
+    assert.deepEqual(res.data, missing.data);
+  }
+  assert.deepEqual((await get(app, s)).data.answers.map(answer => answer.value), ['Pune'], 'nothing was changed or erased');
 });

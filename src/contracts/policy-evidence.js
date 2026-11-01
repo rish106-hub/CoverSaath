@@ -27,6 +27,9 @@ const nonEmpty = value => typeof value === 'string' && value.trim() !== '';
 
 function problems(list) { return list.length ? list : null; }
 
+export const MAX_CLAUSE_TEXT_CHARS = 100_000;
+export const MAX_CLAUSE_TITLE_CHARS = 200;
+
 export function validateClause(clause) {
   const errors = [];
   if (!isObject(clause)) return ['clause must be an object'];
@@ -36,6 +39,9 @@ export function validateClause(clause) {
   if (!Array.isArray(clause.sectionPath)) errors.push('sectionPath must be an array');
   if (!CLAUSE_KINDS.includes(clause.kind)) errors.push('kind invalid');
   if (!nonEmpty(clause.text)) errors.push('text required');
+  // Caps the database used to enforce on plaintext (migration 012) and no longer can on a sealed value (migration 019).
+  else if (clause.text.length > MAX_CLAUSE_TEXT_CHARS) errors.push('text too long');
+  if (Array.isArray(clause.sectionPath) && typeof clause.sectionPath[0] === 'string' && clause.sectionPath[0].length > MAX_CLAUSE_TITLE_CHARS) errors.push('title too long');
   return problems(errors) ?? [];
 }
 

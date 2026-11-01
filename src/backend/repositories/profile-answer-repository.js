@@ -10,6 +10,9 @@ import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE } from '../../contracts/prof
 
 const TABLE = 'profile_answers';
 const COLUMN = 'value_ciphertext';
+// Every answer is padded to the same size, so the stored length reveals nothing about the value: the longest allowed answer (a
+// 60-letter place name of 4-byte characters, framed as {"v":"..."}) is 248 bytes plus the 4-byte length frame.
+const ANSWER_SEAL = Object.freeze({ fixedSize: 256 });
 const erasureReasons = new Set(['user_request', 'case_erasure', 'household_erasure', 'retention_expired', 'data_subject_request']);
 const text = (value, name) => {
   if (typeof value !== 'string' || !value || value.length > 256) throw Object.assign(new Error(`${name} is invalid.`), { code: 'PROFILE_ANSWER_INVALID', statusCode: 400 });
@@ -60,13 +63,13 @@ export class ProfileAnswerRepository {
           if (existing.household_id !== householdId) throw Object.assign(new Error('Case not found.'), { code: 'CASE_NOT_FOUND', statusCode: 404 });
           if (this.#shape(existing).value === value) { counts.unchanged += 1; continue; }
           await db.run('UPDATE profile_answers SET value_ciphertext = ?, adult_user_id = ?, updated_at = ? WHERE id = ?',
-            [this.crypto.seal(TABLE, COLUMN, existing.id, JSON.stringify({ v: value })), adultUserId, at, existing.id]);
+            [this.crypto.seal(TABLE, COLUMN, existing.id, JSON.stringify({ v: value }), ANSWER_SEAL), adultUserId, at, existing.id]);
         } else {
           const id = `profile-${randomUUID()}`;
           await db.run(`INSERT INTO profile_answers
             (id, household_id, case_id, adult_user_id, field_key, value_ciphertext, source, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-            id, householdId, caseId, adultUserId, fieldKey, this.crypto.seal(TABLE, COLUMN, id, JSON.stringify({ v: value })),
+            id, householdId, caseId, adultUserId, fieldKey, this.crypto.seal(TABLE, COLUMN, id, JSON.stringify({ v: value }), ANSWER_SEAL),
             PROFILE_ANSWER_SOURCE, at, at]);
         }
         counts.set += 1;

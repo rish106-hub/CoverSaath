@@ -34,7 +34,7 @@ async function assertSealedEverywhere(db, { expectPresent = true } = {}) {
     for (const column of columns) {
       const present = await readCount(db, name, column, '');
       if (expectPresent) assert.ok(present > 0, `${name}.${column} was never written by the test`);
-      const plain = await readCount(db, name, column, `AND left(${column}, 5) <> 'enc1.'`);
+      const plain = await readCount(db, name, column, `AND ${column} !~ '^enc[12][.]'`);
       assert.equal(plain, 0, `${name}.${column} holds ${plain} readable value(s)`);
     }
   }
@@ -118,7 +118,7 @@ test('E1b: legacy plaintext rows still read; the backfill dry run changes nothin
   const passagesBefore = (await app.call(`/api/v1/cases/${s.caseId}/passages?q=${encodeURIComponent('room rent')}`, { token: s.token })).data;
 
   await downgrade(app.database, crypto);
-  assert.equal(await readCount(app.database, 'adult_users', 'display_name', "AND left(display_name, 5) <> 'enc1.'"), 2, 'legacy plaintext is in place');
+  assert.equal(await readCount(app.database, 'adult_users', 'display_name', "AND display_name !~ '^enc[12][.]'"), 2, 'legacy plaintext is in place');
   // Reads accept it: same API output, same answers.
   assert.deepEqual((await app.call(`/api/v1/cases/${s.caseId}/passages?q=${encodeURIComponent('room rent')}`, { token: s.token })).data, passagesBefore);
   assert.deepEqual(await services.clauses.getAnswer({ householdId: s.householdId, caseId: s.caseId, answerId: answerBefore.answerId }), answerBefore);
@@ -160,7 +160,7 @@ test('E1b: a key rotation re-seals under the new key id, idempotently, and old r
   // Move everything from the development key to k1 first, then rotate k1 to k2.
   await downgrade(app.database, sharedColumnCrypto());
   await encryptExistingRows({ database: app.database, crypto: first });
-  assert.equal(await readCount(app.database, 'adult_users', 'display_name', "AND left(display_name, 8) = 'enc1.k1.'"), 2);
+  assert.equal(await readCount(app.database, 'adult_users', 'display_name', "AND left(display_name, 8) = 'enc2.k1.'"), 2);
 
   const second = createColumnCrypto(readDataEncryptionConfig({
     DATA_ENCRYPTION_KEY_BASE64: randomBytes(32).toString('base64'), DATA_ENCRYPTION_KEY_ID: 'k2', DATA_ENCRYPTION_PREVIOUS_KEYS_JSON: JSON.stringify({ k1: oldKey }),
@@ -172,7 +172,7 @@ test('E1b: a key rotation re-seals under the new key id, idempotently, and old r
   assert.ok(rotated.rows > 0);
   for (const { table: name, columns } of ENCRYPTED_COLUMNS) {
     for (const column of columns) {
-      assert.equal(await readCount(app.database, name, column, `AND left(${column}, 8) <> 'enc1.k2.'`), 0, `${name}.${column} is under k2`);
+      assert.equal(await readCount(app.database, name, column, `AND left(${column}, 8) <> 'enc2.k2.'`), 0, `${name}.${column} is under k2`);
     }
   }
   assert.equal((await encryptExistingRows({ database: app.database, crypto: second, rotate: true })).rows, 0, 'a second rotation changes 0 rows');
@@ -211,4 +211,65 @@ test('E1d/E1b: migrations 018, 019 and 020 can be run again on a migrated databa
     'policy_clauses_text_sealed_len_check', 'policy_clauses_title_sealed_len_check', 'source_pages_blocks_json_sealed_len_check',
   ]);
   assert.ok(readdirSync(postgresMigrationDirectory).filter(name => /^0(18|19|20)_/.test(name)).length === 3);
+});
+
+// ---- review fixes ----
+
+test('review: migration 021 makes the JSON columns take a sealed envelope or JSON only, and profile answers a sealed envelope only', pgOptions, async t => {
+  const app = await startApp(t);
+  const s = await scenario(app, { read: true });
+  await populate(app, s);
+  const db = app.database;
+  await assert.rejects(db.run("UPDATE ocr_jobs SET result_json = 'readable text, not JSON'"), /violates check constraint/);
+  await assert.rejects(db.run("UPDATE policy_answers SET answer_json = 'x'"), /immutable|violates check constraint/);
+  await assert.rejects(db.run(`INSERT INTO profile_answers (id, household_id, case_id, adult_user_id, field_key, value_ciphertext, created_at, updated_at)
+    VALUES ('plain-answer', ?, ?, ?, 'city', 'Pune', 't', 't')`, [s.householdId, s.caseId, s.adultId]), /violates check constraint/);
+  // Valid JSON (legacy rows) and envelopes of either version remain acceptable.
+  await db.run(`INSERT INTO profile_answers (id, household_id, case_id, adult_user_id, field_key, value_ciphertext, created_at, updated_at)
+    VALUES ('sealed-answer', ?, ?, ?, 'state', 'enc1.k1.AAAA.BBBB.CCCC', 't', 't')`, [s.householdId, s.caseId, s.adultId]);
+  const names = (await db.many("SELECT conname FROM pg_constraint WHERE conname LIKE '%sealed_or_json_check' OR conname = 'profile_answers_value_sealed_check' ORDER BY conname")).map(row => row.conname);
+  assert.deepEqual(names, ['evidence_facts_value_json_sealed_or_json_check', 'ocr_jobs_result_json_sealed_or_json_check', 'policy_answers_answer_json_sealed_or_json_check',
+    'profile_answers_value_sealed_check', 'source_pages_blocks_json_sealed_or_json_check']);
+});
+
+test('review: a backfill batch that fails in SQL rethrows the original error, rolls back, and leaves the trigger enabled', pgOptions, async t => {
+  const app = await startApp(t);
+  const s = await scenario(app, { read: true });
+  await populate(app, s);
+  const crypto = sharedColumnCrypto();
+  await downgrade(app.database, crypto);
+  // A legacy title just under the plaintext cap seals to more than the sealed-length cap, so its UPDATE fails inside the batch
+  // while policy_clauses_immutable is disabled.
+  await app.database.run('ALTER TABLE policy_clauses DISABLE TRIGGER policy_clauses_immutable');
+  await app.database.run("UPDATE policy_clauses SET title = ? WHERE id = (SELECT id FROM policy_clauses ORDER BY id LIMIT 1)", ['t'.repeat(1990)]);
+  await app.database.run('ALTER TABLE policy_clauses ENABLE TRIGGER policy_clauses_immutable');
+  const before = await app.database.one("SELECT count(*) AS n FROM adult_users WHERE display_name !~ '^enc[12][.]'");
+  await assert.rejects(encryptExistingRows({ database: app.database, crypto }), error => error.code === '23514' && /sealed_len_check/.test(error.constraint ?? error.message));
+  const trigger = await app.database.one("SELECT tgenabled FROM pg_trigger WHERE tgname = 'policy_clauses_immutable'");
+  assert.equal(trigger.tgenabled, 'O', 'the failed batch did not leave the trigger disabled');
+  await assert.rejects(app.database.run("UPDATE policy_clauses SET text = 'x'"), /immutable/);
+  // Tables sealed before the failing one stay sealed (their batches committed); the failing table is unchanged.
+  assert.equal((await app.database.one("SELECT count(*) AS n FROM adult_users WHERE display_name !~ '^enc[12][.]'")).n, 0);
+  assert.ok(before.n > 0);
+  assert.equal((await app.database.one("SELECT count(*) AS n FROM policy_clauses WHERE text !~ '^enc[12][.]'")).n > 0, true);
+});
+
+test('review: the backfill script needs a real key unless --allow-development-key, and never seals into a remote database with the public key', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const script = fileURLToPath(new URL('../scripts/encrypt-existing-rows.mjs', import.meta.url));
+  const run = (args, env) => spawnSync(process.execPath, [script, ...args], { env: { PATH: process.env.PATH, ...env }, encoding: 'utf8' });
+  const unreachable = 'postgres://user@127.0.0.1:1/none';
+  const noKey = run([], { DATABASE_URL: unreachable });
+  assert.equal(noKey.status, 1);
+  assert.match(noKey.stderr, /DATA_ENCRYPTION_KEY_REQUIRED/, 'stopped on the missing key, before any connection');
+  const dev = run(['--allow-development-key'], { DATABASE_URL: unreachable });
+  assert.match(dev.stderr, /public development key/);
+  assert.doesNotMatch(dev.stderr, /DATA_ENCRYPTION_KEY_REQUIRED/, 'passed the key gate and failed later, on the connection');
+  const remote = run(['--allow-development-key'], { DATABASE_URL: 'postgres://user@db.example.com/none' });
+  assert.match(remote.stderr, /DATA_ENCRYPTION_KEY_REQUIRED/, 'the flag never allows the public key against a remote database');
+  const withKey = run(['--dry-run'], { DATABASE_URL: unreachable, DATA_ENCRYPTION_KEY_BASE64: randomBytes(32).toString('base64') });
+  assert.doesNotMatch(withKey.stderr, /DATA_ENCRYPTION_KEY|public development key/);
+  assert.equal(run(['--bogus'], {}).status, 2);
+  for (const result of [noKey, dev, remote, withKey]) assert.ok(!result.stdout.includes('"rows"') || result.status === 0);
 });

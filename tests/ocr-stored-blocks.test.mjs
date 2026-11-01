@@ -212,10 +212,11 @@ test('the database caps sealed blocks; invalid and non-object blocks are refused
   const insert = (id, json) => context.database.prepare(`INSERT INTO source_pages
     (id, document_upload_id, page_number, source_version, page_sha256, extracted_text, extraction_status, created_at, blocks_json)
     VALUES (?, 'document-v1', 1, ?, ?, 'x', 'extracted', ?, ?)`).run(id, `v-${id}`, 'd'.repeat(64), AT, json);
-  // The IS JSON check is gone (a sealed value is not JSON); only the length cap remains.
+  // The column takes a sealed envelope or valid JSON (migration 021) with a size cap (019); anything else is refused.
   await assert.rejects(insert('bad-size', 'x'.repeat(2_000_001)), /violates check constraint/);
-  // A legacy plaintext value that is not valid blocks still fails closed when the repository reads it.
-  for (const [id, json] of [['bad-json', '{not json'], ['bad-array', '[]']]) {
+  await assert.rejects(insert('bad-json', '{not json'), /violates check constraint/);
+  // Valid JSON that is not valid blocks, and an envelope that does not authenticate, still fail closed when read.
+  for (const [id, json] of [['bad-array', '[]'], ['bad-envelope', 'enc2.k1.AAAA.BBBB.CCCC']]) {
     await context.database.prepare('DELETE FROM source_pages WHERE document_upload_id = ?').run('document-v1');
     await insert(id, json);
     await assert.rejects(context.repository.getDocumentBlockPages({ documentId: 'document-v1', householdId: 'household-ocr' }), /./, id);
