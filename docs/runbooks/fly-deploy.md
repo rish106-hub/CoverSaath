@@ -43,6 +43,13 @@ Dockerfile build, entrypoint behaviour, live health, ready and host guard, real 
 - Rotate the Supabase password (it was pasted into chat twice), update `DATABASE_URL` in `.env.local` and with `fly secrets set`, then move the runtime to a least-privilege role.
 - Abandon: `fly apps destroy knowvia-api` removes the app, volume and secrets. Destructive; needs explicit owner approval.
 
+## Activity events and shared limits (ADR 0014)
+
+- Production (`NODE_ENV=production` in the Dockerfile) needs the secret `DATA_ENCRYPTION_KEY_BASE64` (32 bytes, base64; name only) because activity events seal their payloads. Without it the server stops at startup. To boot without events set `APP_EVENTS_ENABLED=false`.
+- `APP_EVENTS_RETENTION_DAYS` (default 30) sets how long events live; the server purges expired rows hourly. Retention is a draft for legal review.
+- `RATE_LIMIT_BACKEND=database` and `MODEL_BUDGET_BACKEND=database` move the request limit and the model spend cap into PostgreSQL (migration 023) so they hold across machines and restarts. Defaults are `memory`. Turn both on before running more than one machine; the document volume, the scan worker and the evidence claim guard still need one machine until run E1c lands.
+- Run `npm run db:init` against the hosted database before the first deploy that includes migrations 022 to 024, then check `GET /api/v1/ready`.
+
 ## Rollback
 
 `fly deploy` with the previous image or `fly machine stop`. The database schema is expand-only, so no data rollback is needed; no real data exists.

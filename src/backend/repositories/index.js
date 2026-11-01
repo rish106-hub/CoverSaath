@@ -13,3 +13,5 @@ export { ClauseRepository } from './clause-repository.js';
 export { CatalogueReviewRepository } from './catalogue-review-repository.js';
 export { CuratedProductRepository } from './curated-product-repository.js';
 export { AuthIdentityRepository } from './auth-identity-repository.js';
+export { AppEventRepository } from './app-event-repository.js';
+export { RuntimeLimitsRepository } from './runtime-limits-repository.js';

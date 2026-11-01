@@ -33,7 +33,7 @@ function readStructuringConfig(env) {
  * `projectBudget` (createSharedProjectBudget) is passed, else one per factory. onCall receives
  * counts only (task, tokens, cost, outcome), never prompts or output.
  */
-export function createStructuringModelCallFactory({ env = process.env, loadModel, createAgent, projectBudget } = {}) {
+export function createStructuringModelCallFactory({ env = process.env, loadModel, createAgent, projectBudget, onProviderEvent } = {}) {
   let project;
   return ({ consentCheck, onCall = () => {} } = {}) => {
     if (typeof consentCheck !== 'function') {
@@ -55,7 +55,7 @@ export function createStructuringModelCallFactory({ env = process.env, loadModel
       return modelRunner(request);
     };
     const gateway = createModelGateway({
-      mode: 'live', liveRunner: runner, budget: createRunBudget(config.runBudgetUsd, project),
+      mode: 'live', liveRunner: runner, budget: createRunBudget(config.runBudgetUsd, project), onEvent: onProviderEvent,
       limits: {
         maxInputBytes: config.maxInputBytes, maxOutputTokens: config.maxOutputTokens, timeoutMs: config.timeoutMs,
         maxRetries: 0, maxReservationUsd: config.reservationUsd, maxConcurrentCalls: STRUCTURING_GATEWAY_LIMITS.maxConcurrentCalls,

@@ -23,6 +23,10 @@ import {
 } from '../integrations/index.js';
 import { INTAKE_CONNECTORS } from '../contracts/index.js';
 import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
+import { createColumnCrypto, readDataEncryptionConfig } from '../backend/security/column-crypto.js';
+import { createAppEventRecorder, deriveEventHmacKey } from '../backend/services/app-event-recorder.js';
+import { createSharedRateLimiter } from './http/shared-rate-limiter.js';
+import { pathAttribution, requestEventName, routeTemplate } from './http/event-context.js';
 import { readIdentityConfig, readServerConfig } from './config.js';
 import { createGeminiCoverageRegistryFactory, createSharedProjectBudget, createStructuringModelCallFactory } from '../features/ai-analysis/index.js';
 
@@ -57,7 +61,33 @@ export function createApiServer({
     })
     : null;
   const pdfSegmenter = documentStorage ? createSandboxedPdfSegmenter() : null;
-  const rateLimiter = createRateLimiter({ limit: config.rateLimitPerMinute });
+  // Activity events and the database-backed limiter both need the data key (payload sealing, keyed client hash). It is read
+  // here so a missing key in production stops startup instead of the first request (ADR 0014).
+  const needsDataKey = config.events.enabled || config.rateLimitBackend === 'database';
+  const dataEncryption = needsDataKey ? readDataEncryptionConfig(env) : null;
+  const columnCrypto = dataEncryption ? createColumnCrypto(dataEncryption) : null;
+  const eventHmacKey = dataEncryption ? deriveEventHmacKey(dataEncryption) : null;
+  let recorder = null;
+  let closing = false;
+  const recordEvent = event => recorder?.record(event);
+  let lastTelemetryWarning = 0;
+  const warnTelemetry = event => {
+    const now = Date.now();
+    if (now - lastTelemetryWarning < 60_000) return;
+    lastTelemetryWarning = now;
+    console.warn(JSON.stringify(event));
+  };
+  const localRateLimiter = createRateLimiter({ limit: config.rateLimitPerMinute });
+  // Shared limiter: the per-process limiter still runs first and is the fallback if the database is unavailable.
+  const rateLimiter = config.rateLimitBackend === 'database'
+    ? createSharedRateLimiter({
+      local: localRateLimiter,
+      store: { consumeRequest: async (keyHash, windowMs) => (await getBackend()).services.runtimeLimits.consumeRequest(keyHash, windowMs) },
+      hmacKey: eventHmacKey,
+      limit: config.rateLimitPerMinute,
+      onFallback: () => warnTelemetry({ event: 'rate_limit_store_unavailable' }),
+    })
+    : { check: key => localRateLimiter.check(key) };
   // The live path always re-checks current document consent from the database
   // immediately before every provider call and always runs the privacy gate.
   // Only the model driver (loadModel/createAgent) may be injected; there is no
@@ -65,10 +95,29 @@ export function createApiServer({
   const modelDispatchValidator = async request => createCoverageAnalysisPort(await getBackend()).authorizeModelDispatch(request);
   const loadKnownIdentifiers = async caseId => createCoverageAnalysisPort(await getBackend()).loadKnownIdentifiers(caseId);
   // Analysis and structuring share one project budget, so the configured cap bounds their total spend.
-  const projectBudget = createSharedProjectBudget();
+  // With MODEL_BUDGET_BACKEND=database the spend cap lives in PostgreSQL: it holds across machines and restarts.
+  const projectBudget = createSharedProjectBudget(config.budgetBackend === 'database'
+    ? {
+      ledger: {
+        reserveBudget: async request => (await getBackend()).services.runtimeLimits.reserveBudget(request),
+        settleBudget: async request => (await getBackend()).services.runtimeLimits.settleBudget(request),
+        budgetSnapshot: async (scope, maxUsd) => (await getBackend()).services.runtimeLimits.budgetSnapshot(scope, maxUsd),
+      },
+    }
+    : {});
+  // Metadata-only provider events (outcome, latency, tokens, cost); never prompt or output text.
+  const onProviderEvent = event => {
+    const outcome = String(event.outcome ?? '').toLowerCase();
+    recordEvent({
+      name: 'provider_call', provider: 'google', outcome: /^[a-z0-9_.-]{1,64}$/.test(outcome) ? outcome : 'error',
+      code: event.outcome === 'ok' ? null : event.outcome, durationMs: event.latencyMs,
+      payload: { task: event.task, dispatched: event.dispatched, inputTokens: event.inputTokens, outputTokens: event.outputTokens, costMicroUsd: Math.round((event.costUsd ?? 0) * 1_000_000) },
+    });
+  };
   const liveRegistryFactory = createGeminiCoverageRegistryFactory({
     env,
     projectBudget,
+    onProviderEvent,
     ...(analysisLiveModelDriver?.loadModel ? { loadModel: analysisLiveModelDriver.loadModel } : {}),
     ...(analysisLiveModelDriver?.createAgent ? { createAgent: analysisLiveModelDriver.createAgent } : {}),
     preDispatchValidator: modelDispatchValidator,
@@ -81,6 +130,7 @@ export function createApiServer({
   const createStructuringModelCall = createStructuringModelCallFactory({
     env,
     projectBudget,
+    onProviderEvent,
     ...(analysisLiveModelDriver?.loadModel ? { loadModel: analysisLiveModelDriver.loadModel } : {}),
     ...(analysisLiveModelDriver?.createAgent ? { createAgent: analysisLiveModelDriver.createAgent } : {}),
   });
@@ -132,13 +182,34 @@ export function createApiServer({
   // Memoised: every request shares one backend. A failed build (for example a missing
   // DATABASE_URL) is not cached, so the next request tries again.
   let backendPromise = null;
+  let housekeepingTimer = null;
   const buildBackend = async () => {
     database ||= createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(env)));
     services ||= createBackendServices(database, {
       env,
       sessionDurationMs: config.sessionTtlMs,
       maxActiveSessions: config.maxSessions,
+      ...(columnCrypto ? { columnCrypto } : {}),
     });
+    if (config.events.enabled && !recorder) {
+      // An injected `backendServices` may lack the event repository; events are then simply not recorded.
+      const eventRepository = services.appEvents;
+      if (eventRepository) {
+        eventRepository.columnCrypto ??= columnCrypto;
+        recorder = createAppEventRecorder({
+          repository: eventRepository, hmacKey: eventHmacKey, retentionDays: config.events.retentionDays,
+          onError: error => { if (!closing) warnTelemetry({ event: 'app_event_write_failed', code: typeof error?.code === 'string' ? error.code : null }); },
+        });
+      }
+    }
+    if (!housekeepingTimer && services.appEvents && services.runtimeLimits) {
+      const sweep = () => {
+        services.appEvents.purgeExpired().catch(() => {});
+        services.runtimeLimits.purgeRequestWindows(10 * 60_000).catch(() => {});
+      };
+      housekeepingTimer = setInterval(sweep, 60 * 60 * 1000);
+      housekeepingTimer.unref?.();
+    }
     documentUploads ||= createDocumentUploadService({
       services,
       repository: services.documents,
@@ -197,11 +268,30 @@ export function createApiServer({
   };
   const server = http.createServer(async (req, res) => {
     prepareJsonResponse(res);
-    const send = (status, value) => sendJson(res, status, value);
+    const startedAt = performance.now();
+    let errorCode = null;
+    const send = (status, value) => {
+      errorCode = typeof value?.error?.code === 'string' ? value.error.code : null;
+      return sendJson(res, status, value);
+    };
+    // One metadata-only activity event per finished request. The route is a template (ids replaced); the client address
+    // is only ever hashed; the household, case or grant id is attributed only when the request succeeded.
+    res.once('finish', () => {
+      if (!recorder) return;
+      const pathname = String(req.url ?? '').split('?')[0];
+      const route = routeTemplate(pathname);
+      const status = res.statusCode;
+      recordEvent({
+        name: requestEventName({ status, method: req.method, route }), route, method: req.method, status,
+        durationMs: Math.round(performance.now() - startedAt), code: errorCode,
+        clientKey: clientRateKey(req, config.network), adultUserId: req.appContext?.adultUserId,
+        ...pathAttribution(pathname, status),
+      });
+    });
     try {
       // Local-only isolation. Host checks also reduce DNS-rebinding exposure.
       assertLocalRequest(req, config.network);
-      rateLimiter.check(clientRateKey(req, config.network));
+      await rateLimiter.check(clientRateKey(req, config.network), { shared: !/^\/api\/v1\/(?:health|live)(?:\?|$)/.test(req.url ?? '') });
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = await getBackend();
@@ -256,9 +346,20 @@ export function createApiServer({
     });
   }
   if (pdfInspector) server.once('close', () => pdfInspector.close());
-  // The database closes only after in-flight document work has finished.
+  // Buffered activity events are written before the server's own database pool closes, and before a caller's close
+  // callback runs (so an injected database is still open when the last batch is written).
+  let eventsFlushed = Promise.resolve();
+  server.once('close', () => {
+    closing = true;
+    clearInterval(housekeepingTimer);
+    eventsFlushed = recorder ? recorder.close().catch(() => {}) : Promise.resolve();
+  });
+  const closeServer = server.close.bind(server);
+  server.close = callback => closeServer(error => { eventsFlushed.then(() => callback?.(error)); });
+  // The database closes only after in-flight document work and event writes have finished.
   // db.close() ends the pool this server created; an injected database belongs to its caller.
-  if (ownsDatabase) server.once('close', () => { workerStopped.then(() => database?.close()).catch(() => {}); });
+  if (ownsDatabase) server.once('close', () => { Promise.all([workerStopped, eventsFlushed]).then(() => database?.close()).catch(() => {}); });
+  server.appEvents = { flush: () => recorder?.flush() ?? Promise.resolve(), stats: () => recorder?.stats() ?? null };
   server.structuring = { settle: (documentId, workflowRunId) => structuringService?.settle(documentId, workflowRunId) };
   return server;
 }

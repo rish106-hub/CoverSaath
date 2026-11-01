@@ -74,25 +74,48 @@ export function createBudgetScope(maxUsd) {
   };
 }
 
-// One project budget per process, shared by every live model path (analysis and policy structuring), so
-// ORCHESTRATION_PROJECT_BUDGET_USD caps their total. Created on first live use.
-export function createSharedProjectBudget() {
+// One project budget shared by every live model path (analysis and policy structuring), so
+// ORCHESTRATION_PROJECT_BUDGET_USD caps their total. Created on first live use. By default the budget lives in this
+// process; pass `ledger` ({ reserveBudget, settleBudget, budgetSnapshot }, see RuntimeLimitsRepository) and the cap is
+// kept in the database instead, so it holds across machines and restarts (ADR 0014). Scope methods are then async.
+export function createSharedProjectBudget({ ledger = null, scope: scopeName = 'project' } = {}) {
   let scope = null;
-  return Object.freeze({ get: maxUsd => (scope ||= createBudgetScope(maxUsd)) });
+  return Object.freeze({ get: maxUsd => (scope ||= ledger ? createLedgerScope(ledger, scopeName, maxUsd) : createBudgetScope(maxUsd)) });
+}
+
+export function createLedgerScope(ledger, scope, maxUsd) {
+  return {
+    async reserve(amount, metadata) {
+      const reservation = await ledger.reserveBudget({ scope, amountUsd: amount, maxUsd, task: metadata?.task ?? null });
+      return reservation ? { ...reservation, metadata: structuredClone(metadata) } : null;
+    },
+    async settle(reservation, actualCostUsd, { failed = false } = {}) {
+      // Same rule as the in-memory scope: a failed or unknown-cost call stays reserved, since the provider may have charged.
+      if (failed || actualCostUsd === null) return;
+      await ledger.settleBudget({ id: reservation.id, actualUsd: actualCostUsd });
+    },
+    snapshot: () => ledger.budgetSnapshot(scope, maxUsd),
+  };
 }
 
 export function createRunBudget(runMaxUsd, project) {
   const run = createBudgetScope(runMaxUsd);
   return Object.freeze({
     async reserve(amount, metadata) {
-      if (!run.canReserve(amount) || !project.canReserve(amount)) return null;
+      // The run scope is local and synchronous; the project scope may be a database ledger. A refusal by the project
+      // releases the run reservation again.
       const runReservation = run.reserve(amount, metadata);
-      const projectReservation = project.reserve(amount, metadata);
+      if (!runReservation) return null;
+      const projectReservation = await project.reserve(amount, metadata);
+      if (!projectReservation) {
+        run.settle(runReservation, 0);
+        return null;
+      }
       return { id: runReservation.id, amountUsd: amount, runReservation, projectReservation };
     },
     async settle(reservation, actualCostUsd, options = {}) {
       run.settle(reservation.runReservation, actualCostUsd, options);
-      project.settle(reservation.projectReservation, actualCostUsd, options);
+      await project.settle(reservation.projectReservation, actualCostUsd, options);
     },
     snapshot: () => run.snapshot(),
   });
@@ -416,7 +439,7 @@ function privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization,
   return { requestBuilders: Object.freeze(requestBuilders), resultAdapters: Object.freeze(resultAdapters) };
 }
 
-export function createGeminiCoverageRegistryFactory({ env = process.env, loadModel, createAgent, resolveParameterPolicy, preDispatchValidator, privacyLimits, knownIdentifierLoader, projectBudget } = {}) {
+export function createGeminiCoverageRegistryFactory({ env = process.env, loadModel, createAgent, resolveParameterPolicy, preDispatchValidator, privacyLimits, knownIdentifierLoader, projectBudget, onProviderEvent } = {}) {
   let project;
   return () => {
     const config = readConfig(env);
@@ -447,7 +470,7 @@ export function createGeminiCoverageRegistryFactory({ env = process.env, loadMod
       return modelRunner(request);
     };
     const gateway = createModelGateway({
-      mode: 'live', liveRunner: runner, budget: createRunBudget(config.runBudgetUsd, project),
+      mode: 'live', liveRunner: runner, budget: createRunBudget(config.runBudgetUsd, project), onEvent: onProviderEvent,
       limits: { maxInputBytes: config.maxInputBytes, maxOutputTokens: config.maxOutputTokens, timeoutMs: config.timeoutMs, maxRetries: 0, maxReservationUsd: config.reservationUsd, maxConcurrentCalls: config.maxConcurrentCalls },
     });
     const adapters = privacySafeAdapters({ resolveParameterPolicy, preDispatchAuthorization, privacyLimits, knownIdentifierLoader });
