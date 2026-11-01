@@ -299,16 +299,16 @@ const SCENARIO_VALIDATORS = Object.freeze({
     const items = assertObject(input.items ?? {}, 'items');
     const entries = Object.entries(items);
     if (entries.length > 200) invalid('items holds too many entries.');
-    const out = {};
+    const out = Object.create(null);
     for (const [key, entry] of entries) {
-      if (!KEY.test(key)) invalid('An item key is not valid.');
+      if (['__proto__', 'constructor', 'prototype'].includes(key) || !KEY.test(key)) invalid('An item key is not valid.');
       assertObject(entry, 'An item');
       assertKnownKeys(entry, ['status', 'value'], 'An item');
       out[key] = { status: oneOf(entry.status, ['pending', 'accepted', 'edited', 'rejected'], 'status') };
       const value = cleanText(entry.value, 'value', { max: 200 });
       if (value !== null) out[key].value = value;
     }
-    return { items: out };
+    return { items: { ...out } };
   },
 });
 

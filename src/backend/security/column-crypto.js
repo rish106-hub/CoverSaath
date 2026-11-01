@@ -178,7 +178,7 @@ export function createColumnCrypto(config = readDataEncryptionConfig()) {
 
   // Blind index for equality lookups on a sealed value (an e-mail, a phone): HMAC-SHA256 under a key derived from the current
   // data key, separated per label. It is deterministic by design, so it reveals equality and nothing else. After a key
-  // rotation old hashes no longer match until they are recomputed (scripts/backfill-adult-contacts.mjs --rehash).
+  // rotation old hashes no longer match, so the hashes must be recomputed before the old key is retired (no tool does this yet; see ADR 0015).
   const blindKey = createHmac('sha256', currentKey).update('cover-saath blind index v1').digest();
   const blindIndex = (label, value) => {
     if (typeof label !== 'string' || !label || typeof value !== 'string') throw coded('COLUMN_ENCRYPTION_CONTEXT_INVALID', 'A blind index needs a label and text.');

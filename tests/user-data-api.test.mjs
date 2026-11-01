@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { parseScenarioBody } from '../src/contracts/user-data.js';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { createColumnCrypto, readDataEncryptionConfig } from '../src/backend/security/column-crypto.js';
+import { createBackendServices } from '../src/backend/services/index.js';
 import { createApiServer } from '../src/server/server.js';
 
 // App user data (ADR 0015, migrations 025-029): sealed at rest, owned by the session adult, revisioned, minimised, erased.
@@ -409,4 +412,56 @@ test('a placeholder (invited) adult has no session, so no user-data route can be
   assert.equal(adult.status, 201);
   const row = await services.householdApp.getMember(owner.householdId, adult.data.id);
   await assert.rejects(services.auth.issueSession({ adultUserId: row.adult_user_id }), error => error.code === 'AUTH_SUBJECT_INVALID');
+});
+
+test('the purge on a request is scoped to the caller\'s household; expired rows stay unreadable and other households are untouched', opts, async t => {
+  let now = new Date('2026-03-01T10:00:00.000Z');
+  const { db, services } = await freshDatabase(t, { clock: () => now });
+  const make = async name => {
+    const adult = await services.households.createAdult({ displayName: `${name} Synthetic`, contactEmail: `${name}@example.test` });
+    const home = await services.households.createHousehold({ displayName: `${name} household`, ownerAdultId: adult.id });
+    const principal = { adultId: adult.id };
+    await services.userData.setPermission(principal, home.id, 'location', { state: 'granted', surface: 'emergency' });
+    await services.userData.setPlace(principal, home.id, 'current_location', {}, { location: GPS });
+    return { principal, home };
+  };
+  const a = await make('purgea');
+  const b = await make('purgeb');
+  now = new Date('2026-03-02T11:00:00.000Z');
+  assert.equal(await count(db, 'household_places'), 2);
+  assert.equal((await services.userData.listPlaces(a.principal, a.home.id)).places.length, 0);
+  assert.equal(await count(db, 'household_places', 'household_id = ?', [a.home.id]), 0, 'owner call purged its own');
+  assert.equal(await count(db, 'household_places', 'household_id = ?', [b.home.id]), 1, 'other household untouched by a request');
+  assert.equal((await services.userData.listPlaces(b.principal, b.home.id)).places.length, 0, 'but unreadable at once');
+});
+
+test('review_state refuses prototype keys', () => {
+  for (const key of ['__proto__', 'constructor', 'prototype']) {
+    const items = JSON.parse(`{"${key}": {"status": "pending"}}`);
+    assert.throws(() => parseScenarioBody('review_state', { inputs: { items } }), error => error.code === 'VALIDATION_ERROR' || error.statusCode === 400 || error.status === 400);
+  }
+  assert.deepEqual(parseScenarioBody('review_state', { inputs: { items: { ok_1: { status: 'accepted', value: 'x' } } } }).inputs.items, { ok_1: { status: 'accepted', value: 'x' } });
+});
+
+test('every foreign key of the user-data tables cascades from household, adult and member (no orphan can outlive its owner)', opts, async t => {
+  const { db } = await freshDatabase(t);
+  const tables = ['device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios'];
+  const fks = await db.many(`SELECT conrelid::regclass::text AS tbl, confrelid::regclass::text AS parent, confdeltype FROM pg_constraint
+    WHERE contype = 'f' AND conrelid::regclass::text = ANY(?::text[])`, [tables]);
+  assert.ok(fks.length >= 10);
+  for (const fk of fks) assert.equal(fk.confdeltype, 'c', `${fk.tbl} -> ${fk.parent}`);
+  // A real household or adult delete is not possible today: audit_events and household_roles reference them without cascade by
+  // design, and no delete flow exists (ADR 0015 D5). UserDataRepository.eraseForHousehold is the tested erasure path.
+});
+
+test('a blind-index key that differs from the one that wrote the hashes finds no adult (rotation needs a rehash first)', opts, async t => {
+  const { db } = await freshDatabase(t);
+  const crypto = key => createColumnCrypto(readDataEncryptionConfig({ DATA_ENCRYPTION_KEY_BASE64: Buffer.alloc(32, key).toString('base64') }));
+  const first = createBackendServices(db, { columnCrypto: crypto(1) });
+  const created = await first.userDataRepository.access({ displayName: 'Rotate Synthetic', contactEmail: 'rotate@example.test' });
+  assert.equal(created.returning, false);
+  assert.equal((await first.userDataRepository.access({ displayName: 'Rotate Synthetic', contactEmail: 'rotate@example.test' })).returning, true);
+  const rotated = createBackendServices(db, { columnCrypto: crypto(2) });
+  const again = await rotated.userDataRepository.access({ displayName: 'Rotate Synthetic', contactEmail: 'rotate@example.test' }).catch(error => error);
+  assert.ok(again instanceof Error || again.returning === false, 'a rotated key does not find the existing adult');
 });

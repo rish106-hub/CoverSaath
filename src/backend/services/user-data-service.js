@@ -57,7 +57,7 @@ export function createUserDataService({ access, repository, clock = () => new Da
 
     async listPlaces(principal, householdId) {
       await own(principal, householdId);
-      await repository.purgeExpiredLocations();
+      await repository.purgeExpiredLocations(householdId);
       return { householdId, places: await repository.listPlaces({ householdId, adultId: principal.adultId }) };
     },
 
@@ -69,7 +69,7 @@ export function createUserDataService({ access, repository, clock = () => new Da
       const place = parsePlaceBody(kind, body);
       const ifMatch = parseIfMatch(ifMatchHeader);
       throttle(principal.adultId);
-      await repository.purgeExpiredLocations();
+      await repository.purgeExpiredLocations(householdId);
       return repository.setPlace({ householdId, adultId: principal.adultId, memberId, place, ifMatch });
     },
 

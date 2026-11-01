@@ -2,16 +2,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
-import { assertSafeVerifyTarget, verifyUserData } from '../scripts/verify-user-data.js';
+import { assertSafeVerifyTarget, safeClientOptions, verifyUserData } from '../scripts/verify-user-data.js';
 
 // scripts/verify-user-data.js (ADR 0015): target guard and the sealed-at-rest check. Synthetic data only.
 const opts = postgresTestOptions();
 
 test('the verify target must be a loopback database other than coversaath_dev', () => {
   assert.equal(assertSafeVerifyTarget('postgres://u@localhost:54329/knowvia_p1_check'), 'knowvia_p1_check');
-  for (const bad of [undefined, '', 'not a url', 'postgres://u@db.example.test/x', 'postgres://u@localhost/coversaath_dev', 'postgres://u@localhost']) {
+  for (const bad of [undefined, '', 'not a url', 'postgres://u@db.example.test/x', 'postgres://u@localhost/coversaath_dev', 'postgres://u@localhost',
+    'postgres://u@localhost/knowvia_p1_check?host=remote.example.test', 'postgres://u@localhost/knowvia_p1_check?database=coversaath_dev', 'postgres://u@localhost/knowvia_p1_check?sslmode=disable']) {
     assert.throws(() => assertSafeVerifyTarget(bad), error => error.code === 'VERIFY_TARGET_REFUSED' && !String(error.message).includes('example.test'));
   }
+});
+
+test('the client is built from the validated host, port and database, not the raw string', () => {
+  assert.deepEqual(safeClientOptions('postgres://u:p%40ss@[::1]:54329/knowvia_p1_check'), { host: '::1', port: 54329, database: 'knowvia_p1_check', user: 'u', password: 'p@ss' });
 });
 
 test('verifyUserData passes on sealed values and fails on a plaintext ciphertext column, without printing values', opts, async t => {

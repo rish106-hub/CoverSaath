@@ -16,10 +16,20 @@ export function assertSafeVerifyTarget(databaseUrl) {
   let url;
   try { url = new URL(databaseUrl); } catch { refuse('DATABASE_URL is not a valid URL'); }
   if (!LOOPBACK.has(url.hostname.toLowerCase())) refuse('the database is not on this machine');
+  // pg-connection-string copies every query parameter (host, database, ...) over the URL parts, which would bypass this guard.
+  if (url.search || url.hash) refuse('DATABASE_URL must not carry query parameters');
   const name = decodeURIComponent(url.pathname.replace(/^\//, ''));
   if (!name) refuse('DATABASE_URL names no database');
   if (name === PROTECTED_DATABASE) refuse(`${PROTECTED_DATABASE} is protected`);
   return name;
+}
+
+/** The validated target as discrete pg options, so nothing in the original string can override the checked parts. */
+export function safeClientOptions(databaseUrl) {
+  const name = assertSafeVerifyTarget(databaseUrl);
+  const url = new URL(databaseUrl);
+  return { host: url.hostname.replace(/^\[|\]$/g, ''), port: url.port ? Number(url.port) : 5432, database: name,
+    user: decodeURIComponent(url.username) || undefined, password: decodeURIComponent(url.password) || undefined };
 }
 
 /** Runs the check on a connected pg client. Resolves { tables: [{ table, rows, ciphertextColumns: [{ column, nonNull, notSealed }] }], ok }. */
@@ -52,8 +62,9 @@ export async function verifyUserData(client) {
 async function main() {
   let client;
   try {
-    const name = assertSafeVerifyTarget(process.env.DATABASE_URL);
-    client = new pg.Client({ connectionString: process.env.DATABASE_URL, application_name: 'coversaath-verify-user-data' });
+    const options = safeClientOptions(process.env.DATABASE_URL);
+    const name = options.database;
+    client = new pg.Client({ ...options, application_name: 'coversaath-verify-user-data' });
     await client.connect();
     const report = await verifyUserData(client);
     for (const item of report.tables) {
