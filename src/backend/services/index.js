@@ -6,3 +6,4 @@ export { createPolicyStructuringService } from './policy-structuring-service.js'
 export { createDecisionCatalogueService } from './decision-catalogue-service.js';
 export { createHouseholdPreviewService } from './household-preview-service.js';
 export { createPolicyEvidenceService, evidenceEnabled, questionGrantCheck, readbackEnabled } from './policy-evidence-service.js';
+export { createHouseholdAppService, ageYears } from './household-app-service.js';

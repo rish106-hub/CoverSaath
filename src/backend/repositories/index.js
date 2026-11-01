@@ -16,3 +16,4 @@ export { AuthIdentityRepository } from './auth-identity-repository.js';
 export { ProfileAnswerRepository } from './profile-answer-repository.js';
 export { AppEventRepository } from './app-event-repository.js';
 export { RuntimeLimitsRepository } from './runtime-limits-repository.js';
+export { HouseholdAppRepository } from './household-app-repository.js';

@@ -369,6 +369,22 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       await services.auth.revokeSession({ sessionId: principal.sessionId, adultUserId: principal.adultId });
       return { status: 200, body: { status: 'revoked' } };
     }
+    // App data (plan B-A): members, policies, overview. Ownership is checked inside services.app; writes need owner or member.
+    const appMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/(members|policies|overview)(?:\/([^/]+))?$/);
+    if (appMatch) {
+      const [, householdId, resource, memberId] = appMatch;
+      if (resource === 'members' && !memberId && req.method === 'GET') return { status: 200, body: await services.app.listMembers(principal, householdId) };
+      if (resource === 'members' && !memberId && req.method === 'POST') return { status: 201, body: await services.app.addMember(principal, householdId, await readBody(req)) };
+      if (resource === 'members' && memberId && req.method === 'PATCH') return { status: 200, body: await services.app.updateMember(principal, householdId, memberId, await readBody(req)) };
+      if (resource === 'members' && memberId && req.method === 'DELETE') {
+        await services.app.removeMember(principal, householdId, memberId);
+        return { status: 200, body: { status: 'removed', memberId } };
+      }
+      if (resource === 'policies' && !memberId && req.method === 'GET') return { status: 200, body: await services.app.listPolicies(principal, householdId) };
+      if (resource === 'overview' && !memberId && req.method === 'GET') return { status: 200, body: await services.app.overview(principal, householdId) };
+    }
+    const policyMatch = url.pathname.match(/^\/api\/v1\/policies\/([^/]+)$/);
+    if (req.method === 'GET' && policyMatch) return { status: 200, body: await services.app.getPolicy(principal, policyMatch[1]) };
     const householdMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)$/);
     if (req.method === 'GET' && householdMatch) {
       return { status: 200, body: await services.access.householdMatrix(principal, householdMatch[1]) };
