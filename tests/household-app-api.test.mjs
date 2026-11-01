@@ -243,3 +243,16 @@ test('removeMember refuses the owner inside the repository transaction', opts, a
   const { services, owner } = await setup(t);
   await assert.rejects(() => services.householdApp.deleteMember({ householdId: owner.householdId, actorAdultId: owner.adultId, memberId: owner.memberId }), { code: 'MEMBER_PROTECTED', statusCode: 409 });
 });
+
+test('text validation rejects hidden control and bidi characters and stores NFC', opts, async t => {
+  const { app, owner } = await setup(t);
+  for (const bad of ['A\u007fB', 'A\u0085B', 'A\u009fB', 'A B', 'A B', 'A‮B', 'A‪B', 'A⁦B', 'A⁩B', 'A\u0000B', 'A\nB']) {
+    const r = await add(app, owner, { displayName: bad, memberKind: 'dependent' });
+    assert.equal(r.status, 400, JSON.stringify(bad));
+    assert.equal(r.data.error.code, 'INVALID_REQUEST');
+    assert.equal((await add(app, owner, { displayName: 'Fine', relationshipLabel: bad, memberKind: 'dependent' })).status, 400);
+  }
+  const composed = await add(app, owner, { displayName: 'José Synthetic', memberKind: 'dependent' });
+  assert.equal(composed.status, 201);
+  assert.equal(composed.data.displayName, 'José Synthetic');
+});

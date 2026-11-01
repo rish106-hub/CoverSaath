@@ -5,6 +5,9 @@ const MEMBER_KINDS = ['adult', 'dependent'];
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const WRITE_ROLES = ['owner', 'member'];
 
+// Control characters, DEL, C1, line/paragraph separators and bidi overrides/isolates are never valid in a name or label.
+const UNSAFE_TEXT = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/;
+
 function fail(code, message, statusCode) {
   throw Object.assign(new Error(message), { code, statusCode });
 }
@@ -17,9 +20,9 @@ function text(value, field, { max, required = false }) {
     return null;
   }
   if (typeof value !== 'string') invalid(`${field} must be text.`);
-  const trimmed = value.trim();
+  const trimmed = value.normalize('NFC').trim();
   if (!trimmed) { if (required) invalid(`${field} is required.`); return null; }
-  if (trimmed.length > max || /[\u0000-\u001f]/.test(trimmed)) invalid(`${field} is invalid.`);
+  if (trimmed.length > max || UNSAFE_TEXT.test(trimmed)) invalid(`${field} is invalid.`);
   return trimmed;
 }
 
