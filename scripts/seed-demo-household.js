@@ -1,5 +1,6 @@
 // Seeds the synthetic "Rao family" household through the backend services (never raw SQL). Local throwaway databases only:
-// it refuses unless DATABASE_URL points at loopback and the database is not `coversaath_dev`. It reads DATABASE_URL from the
+// it refuses unless NODE_ENV is not `production`, SEED_ALLOW=1 is set, DATABASE_URL points at loopback and the database is not
+// `coversaath_dev`. Usage: `SEED_ALLOW=1 npm run seed:demo-household`. It reads DATABASE_URL from the
 // process environment only (no env file is loaded), expects an already migrated database, is safe to run twice, and prints
 // ids and pass/fail only. Synthetic data: every name, number and e-mail below is invented.
 import { pathToFileURL } from 'node:url';
@@ -23,6 +24,13 @@ const POLICIES = Object.freeze([
   { insurer: 'Kaveri General', policyKind: 'top_up', policyNumberMasked: 'XXXX-KG-7710', startsOn: '2026-06-15', endsOn: '2027-06-14', members: ['owner', 'rohan', 'kabir'] },
   { insurer: 'Meridian Care', policyKind: 'personal', policyNumberMasked: 'XXXX-MC-3358', startsOn: '2026-03-14', endsOn: '2027-03-13', members: ['lalitha', 'suresh'] },
 ]);
+
+// Throws a coded error unless the environment explicitly allows seeding.
+export function assertSeedAllowed(env = {}) {
+  const refuse = reason => { throw Object.assign(new Error(`Seed refused: ${reason}.`), { code: 'SEED_TARGET_REFUSED' }); };
+  if (env.NODE_ENV === 'production') refuse('NODE_ENV is production');
+  if (env.SEED_ALLOW !== '1') refuse('set SEED_ALLOW=1 to run the demo seed');
+}
 
 // Throws a coded error unless the URL names a loopback database other than the development one. Never echoes the URL.
 export function assertSafeSeedTarget(databaseUrl) {
@@ -85,6 +93,7 @@ export async function seedDemoHousehold(database, { env = {}, clock } = {}) {
 
 async function main() {
   try {
+    assertSeedAllowed(process.env);
     assertSafeSeedTarget(process.env.DATABASE_URL);
   } catch (error) {
     process.stderr.write(`${error.message}\n`);

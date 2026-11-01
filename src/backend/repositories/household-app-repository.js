@@ -205,15 +205,18 @@ export class HouseholdAppRepository {
     return this.getPolicy(policyId);
   }
 
-  // Dev-only lookup for the demo seed. Contact e-mail is sealed with a random nonce, so it cannot be searched in SQL; this reads a
-  // bounded page of adults and compares after opening. It is not a production lookup path.
-  async findAdultByContactEmail(email, { limit = 500 } = {}) {
+  // Dev-only lookup for the demo seed. Contact e-mail is sealed with a random nonce, so it cannot be searched in SQL; this pages
+  // through every adult (offset/limit, stable order) and compares after opening, so it never misses a match. Not a production path.
+  async findAdultByContactEmail(email, { pageSize = 500 } = {}) {
     const wanted = String(email).trim().toLowerCase();
-    for (const row of await this.database.many('SELECT * FROM adult_users ORDER BY created_at, id LIMIT ?', [limit])) {
-      const adult = this.#adult(row);
-      if (String(adult.contact_email ?? '').toLowerCase() === wanted) return adult;
+    for (let offset = 0; ; offset += pageSize) {
+      const rows = await this.database.many('SELECT * FROM adult_users ORDER BY created_at, id LIMIT ? OFFSET ?', [pageSize, offset]);
+      for (const row of rows) {
+        const adult = this.#adult(row);
+        if (String(adult.contact_email ?? '').toLowerCase() === wanted) return adult;
+      }
+      if (rows.length < pageSize) return null;
     }
-    return null;
   }
 
   async ownedHouseholdId(adultId) {

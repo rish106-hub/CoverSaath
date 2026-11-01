@@ -14,7 +14,7 @@ New `/api/v1` routes on existing tables, no migration. Session bearer; household
 | `GET /policies/{policyId}` | all | same shape |
 | `GET /households/{id}/overview` | all | household, members, policies, counts and next policy end (counts and dates only) |
 
-Display names stay sealed (ADR 0013). `npm run seed:demo-household` builds the synthetic Rao family on a loopback database other than `coversaath_dev`.
+Display names stay sealed (ADR 0013). `SEED_ALLOW=1 npm run seed:demo-household` (refused when NODE_ENV is production) builds the synthetic Rao family on a loopback database other than `coversaath_dev`.
 
 ## PostgreSQL on Supabase, consent-race fixes and Fly.io deploy files (2026-10-29, branch `feat/supabase-postgres`, local, nothing pushed)
 

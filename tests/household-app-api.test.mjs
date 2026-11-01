@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
-import { assertSafeSeedTarget, seedDemoHousehold } from '../scripts/seed-demo-household.js';
+import { assertSafeSeedTarget, assertSeedAllowed, seedDemoHousehold } from '../scripts/seed-demo-household.js';
 
 const bootstrapToken = 'coversaath-test-bootstrap-token-0003';
 const opts = postgresTestOptions();
@@ -255,4 +255,22 @@ test('text validation rejects hidden control and bidi characters and stores NFC'
   const composed = await add(app, owner, { displayName: 'José Synthetic', memberKind: 'dependent' });
   assert.equal(composed.status, 201);
   assert.equal(composed.data.displayName, 'José Synthetic');
+});
+
+test('seed: refuses in production or without SEED_ALLOW=1', () => {
+  for (const env of [{}, { SEED_ALLOW: '0' }, { SEED_ALLOW: 'true' }, { SEED_ALLOW: '1', NODE_ENV: 'production' }]) {
+    assert.throws(() => assertSeedAllowed(env), { code: 'SEED_TARGET_REFUSED' }, JSON.stringify(env));
+  }
+  assert.doesNotThrow(() => assertSeedAllowed({ SEED_ALLOW: '1', NODE_ENV: 'development' }));
+  assert.doesNotThrow(() => assertSeedAllowed({ SEED_ALLOW: '1' }));
+});
+
+test('seed: finds the owner past the first page of adults, creating no duplicate', opts, async t => {
+  const { db, services } = await freshDatabase(t);
+  for (let i = 0; i < 5; i += 1) await services.households.createAdult({ displayName: `Filler ${i}`, contactEmail: `filler${i}@example.test` });
+  const first = await seedDemoHousehold(db);
+  const found = await services.householdApp.findAdultByContactEmail('meera.rao@company.com', { pageSize: 2 });
+  assert.equal(found?.id, first.ownerAdultId);
+  assert.equal((await seedDemoHousehold(db)).ownerAdultId, first.ownerAdultId);
+  assert.equal(await services.householdApp.findAdultByContactEmail('nobody@example.test', { pageSize: 2 }), null);
 });
