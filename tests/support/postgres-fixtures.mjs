@@ -37,6 +37,10 @@ const defaults = {
   fact_evidence: id => ({ id, page: 1, role: 'primary', quote_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at }),
   policies: id => ({ id, policy_kind: 'personal', verification_state: 'unverified', created_at: at, updated_at: at }),
   policy_members: () => ({ membership_state: 'stated', created_at: at }),
+  person_records: id => ({
+    id, household_id: 'household-a', subject_member_id: null, record_type: 'member_note', slot: 'main', payload_ciphertext: 'enc2.k1.AAAA.AAAA.AAAA',
+    source: 'user_typed', created_at: at, updated_at: at,
+  }),
   evidence_facts: id => ({
     id, fact_key: 'room_limit', value_json: null, epistemic_state: 'unknown', evidence_kind: 'adult_statement',
     provenance_kind: 'adult_statement', asserted_by: 'adult', observed_at: at, created_at: at,

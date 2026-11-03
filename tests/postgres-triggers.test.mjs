@@ -1029,6 +1029,22 @@ test('profile answers stay scoped to their case and household; document blobs er
   proves('document_blobs_erase_on_document_erasure');
 });
 
+test('person records stay scoped to their member and household (ADR 0018)', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const scope = 'person record must match its member and household';
+  await rejects(insert(pool, 'person_records', { id: 'prec-foreign', household_id: b.household, subject_member_id: a.member }), scope);
+  await insert(pool, 'person_records', { id: 'prec-1', household_id: a.household, subject_member_id: a.member });
+  await insert(pool, 'person_records', { id: 'prec-household', household_id: a.household, slot: 'other' });
+  await assert.rejects(insert(pool, 'person_records', { id: 'prec-dup', household_id: a.household, subject_member_id: a.member }), /duplicate key/);
+  await assert.rejects(insert(pool, 'person_records', { id: 'prec-bad-type', household_id: a.household, record_type: 'diagnosis' }), /violates check constraint/);
+  await assert.rejects(insert(pool, 'person_records', { id: 'prec-plain', household_id: a.household, slot: 'plain', payload_ciphertext: '{"note":"readable"}' }), /violates check constraint/);
+  proves('person_records_scope_insert');
+  await rejects(pool.query('UPDATE person_records SET household_id = $1 WHERE id = $2', [b.household, 'prec-1']), scope);
+  await rejects(pool.query('UPDATE person_records SET subject_member_id = $1 WHERE id = $2', [b.member, 'prec-1']), scope);
+  assert.equal((await pool.query("UPDATE person_records SET completeness = 'complete' WHERE id = 'prec-1'")).rowCount, 1, 'unrelated columns do not fire it');
+  proves('person_records_scope_update');
+});
+
 test('catalogue reviews need an active grant, stay immutable and erase with their document', postgresTestOptions(), async t => {
   const { pool, a, b } = await worlds(t);
   const scope = 'catalogue review must match an active document, case, household and active reviewer grant';
