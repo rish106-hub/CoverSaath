@@ -57,12 +57,16 @@ export class HouseholdAppRepository {
   }
 
   async listMembers(householdId) {
-    return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? AND display_name <> ? ORDER BY created_at, id LIMIT ?', [householdId, ERASED_NAME, MAX_MEMBERS_PER_HOUSEHOLD + 5]))
+    return (await this.database.many(`SELECT household_members.*, adult_users.account_status AS adult_account_status FROM household_members
+      LEFT JOIN adult_users ON adult_users.id = household_members.adult_user_id
+      WHERE household_members.household_id = ? AND household_members.display_name <> ? ORDER BY household_members.created_at, household_members.id LIMIT ?`, [householdId, ERASED_NAME, MAX_MEMBERS_PER_HOUSEHOLD + 5]))
       .map(row => this.#member(row)).filter(member => member.display_name !== ERASED_NAME);
   }
 
   async getMember(householdId, memberId) {
-    const row = await this.database.one('SELECT * FROM household_members WHERE id = ? AND household_id = ? AND display_name <> ?', [memberId, householdId, ERASED_NAME]);
+    const row = await this.database.one(`SELECT household_members.*, adult_users.account_status AS adult_account_status FROM household_members
+      LEFT JOIN adult_users ON adult_users.id = household_members.adult_user_id
+      WHERE household_members.id = ? AND household_members.household_id = ? AND household_members.display_name <> ?`, [memberId, householdId, ERASED_NAME]);
     // The opened name is checked as well: a tombstone that was ever sealed is still a tombstone.
     const member = row ? this.#member(row) : null;
     return member && member.display_name !== ERASED_NAME ? member : null;
