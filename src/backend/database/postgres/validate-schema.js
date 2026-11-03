@@ -15,6 +15,10 @@ const POSTGRES_ONLY_CRITICAL_TRIGGERS = Object.freeze([
   'policy_structuring_jobs_no_truncate',
   'policy_structuring_runs_no_truncate',
   'proposed_parameters_no_truncate',
+  // Change-log triggers (migration 046): a disabled one would silently stop logging changes.
+  ...['household_members', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios', 'device_permissions', 'policies', 'service_cases', 'document_uploads']
+    .map(table => `${table}_sync_log`),
+  ...['household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios', 'device_permissions'].map(table => `${table}_sync_touch`),
 ]);
 const requiredTriggers = Object.freeze([...criticalTriggers, ...POSTGRES_ONLY_CRITICAL_TRIGGERS]);
 
