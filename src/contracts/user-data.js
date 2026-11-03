@@ -25,6 +25,8 @@
 //   review_state    items: up to 200 entries keyed by a short id ([A-Za-z0-9_.-]{1,64}), each {status(pending|accepted|edited|rejected),
 //                   value?: text up to 200 characters}
 
+import { assertNoSensitiveIdentifier } from './sensitive-identifiers.js';
+
 export const MAX_USER_DATA_BYTES = 8 * 1024;
 
 export const DEVICE_PERMISSIONS = Object.freeze(['location', 'notifications', 'contacts', 'calendar', 'microphone', 'camera']);
@@ -82,12 +84,14 @@ export function assertKnownKeys(value, allowed, field) {
   for (const key of Object.keys(value)) if (!allowed.includes(key)) invalid(`${field} has an unknown field.`);
 }
 
-export function cleanText(value, field, { max, required = false } = {}) {
+// `identifiers: false` skips the never-collect check for fields that legitimately hold digits (an e-mail address, a phone number).
+export function cleanText(value, field, { max, required = false, identifiers = true } = {}) {
   if (value === undefined || value === null) { if (required) invalid(`${field} is required.`); return null; }
   if (typeof value !== 'string') invalid(`${field} must be text.`);
   const trimmed = value.normalize('NFC').trim();
   if (!trimmed) { if (required) invalid(`${field} is required.`); return null; }
   if (trimmed.length > max || UNSAFE_TEXT.test(trimmed)) invalid(`${field} is invalid.`);
+  if (identifiers) assertNoSensitiveIdentifier(trimmed, field);
   return trimmed;
 }
 
@@ -332,11 +336,11 @@ const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,63}$/;
 export function parseAccessBody(body) {
   assertBodySize(body);
   assertKnownKeys(body, ['displayName', 'contactEmail', 'contactPhone', 'householdName'], 'The body');
-  const email = cleanText(body.contactEmail, 'contactEmail', { max: 254, required: true }).toLowerCase();
+  const email = cleanText(body.contactEmail, 'contactEmail', { max: 254, required: true, identifiers: false }).toLowerCase();
   if (!EMAIL.test(email)) invalid('contactEmail is not valid.');
   let phone = null;
   if (body.contactPhone !== undefined && body.contactPhone !== null && body.contactPhone !== '') {
-    phone = cleanText(body.contactPhone, 'contactPhone', { max: 20 }).replace(/[\s()-]/g, '');
+    phone = cleanText(body.contactPhone, 'contactPhone', { max: 20, identifiers: false }).replace(/[\s()-]/g, '');
     if (!/^\+?[0-9]{7,15}$/.test(phone)) invalid('contactPhone is not valid.');
   }
   return {

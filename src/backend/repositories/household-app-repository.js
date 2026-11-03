@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
+import { assertMemberDetailRules } from '../../contracts/capture-registry.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 const fail = (code, message, statusCode) => { throw Object.assign(new Error(message), { code, statusCode }); };
@@ -20,9 +21,40 @@ export class HouseholdAppRepository {
     this.crypto = resolveColumnCrypto(options);
   }
 
-  #member(row) { return this.crypto.openRow('household_members', row, ['display_name', 'relationship_label', 'date_of_birth']); }
+  #member(row) { return this.crypto.openRow('household_members', row, ['display_name', 'relationship_label', 'date_of_birth', 'mobile_ciphertext', 'email_ciphertext']); }
   #policy(row) { return this.crypto.openRow('policies', row, ['policy_number_masked', 'policy_version', 'starts_on', 'ends_on']); }
   #adult(row) { return this.crypto.openRow('adult_users', row, ['display_name', 'contact_email', 'contact_phone']); }
+
+  // Detail columns for a member row (ADR 0018). The mobile is sealed (AAD household_members.mobile_ciphertext.<id>) and keyed-hashed for
+  // per-household uniqueness; plain columns are the closed enums, the bool and the member links. Returns column -> value.
+  async #detailColumns(db, householdId, memberId, details, { exceptMemberId = null } = {}) {
+    const columns = {};
+    if ('gender' in details) columns.gender = details.gender;
+    if ('ageBand' in details) columns.age_band = details.ageBand;
+    if ('preferredChannel' in details) columns.preferred_channel = details.preferredChannel;
+    if ('livesWithHousehold' in details) columns.lives_with_household = details.livesWithHousehold;
+    if ('email' in details) columns.email_ciphertext = details.email === null ? null : this.crypto.seal('household_members', 'email_ciphertext', memberId, details.email);
+    if ('mobile' in details) {
+      if (details.mobile === null) { columns.mobile_ciphertext = null; columns.mobile_hash = null; } else {
+        const hash = this.crypto.blindIndex('member_mobile', details.mobile);
+        const taken = await db.one('SELECT id FROM household_members WHERE household_id = ? AND mobile_hash = ? AND id <> ? AND deleted_at IS NULL', [householdId, hash, exceptMemberId ?? memberId]);
+        if (taken) fail('MEMBER_MOBILE_IN_USE', 'Another member of this household already has this mobile number.', 409);
+        columns.mobile_ciphertext = this.crypto.seal('household_members', 'mobile_ciphertext', memberId, details.mobile);
+        columns.mobile_hash = hash;
+      }
+    }
+    for (const [key, column, needsAdult] of [['dependentOnMemberId', 'dependent_on_member_id', false], ['guardianMemberId', 'guardian_member_id', true]]) {
+      if (!(key in details)) continue;
+      if (details[key] !== null) {
+        const target = await db.one('SELECT id, member_kind FROM household_members WHERE id = ? AND household_id = ?', [details[key], householdId]);
+        if (!target) fail('MEMBER_NOT_FOUND', 'Member not found.', 404);
+        if (target.id === memberId) fail('INVALID_REQUEST', `${key} cannot be the member itself.`, 400);
+        if (needsAdult && target.member_kind !== 'adult') fail('INVALID_REQUEST', 'guardianMemberId must be an adult member.', 400);
+      }
+      columns[column] = details[key];
+    }
+    return columns;
+  }
 
   async listMembers(householdId) {
     return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? AND display_name <> ? ORDER BY created_at, id LIMIT ?', [householdId, ERASED_NAME, MAX_MEMBERS_PER_HOUSEHOLD + 5]))
@@ -38,7 +70,7 @@ export class HouseholdAppRepository {
 
   // An adult member needs an adult_users row (schema CHECK). A not-yet-invited adult is a placeholder with account_status 'invited',
   // no contact details and no role, so it cannot sign in or read anything until an invite flow exists.
-  async createMember({ householdId, actorAdultId, displayName, memberKind, relationshipLabel = null, dateOfBirth = null }) {
+  async createMember({ householdId, actorAdultId, displayName, memberKind, relationshipLabel = null, dateOfBirth = null, details = {} }) {
     const at = this.clock().toISOString();
     const db = this.database;
     const memberId = id('member');
@@ -51,18 +83,17 @@ export class HouseholdAppRepository {
         await db.run(`INSERT INTO adult_users (id, display_name, contact_email, contact_phone, locale, account_status, created_at, updated_at)
           VALUES (?, ?, NULL, NULL, 'en-IN', 'invited', ?, ?)`, [adultId, this.crypto.seal('adult_users', 'display_name', adultId, displayName), at, at]);
       }
-      await db.run(`INSERT INTO household_members
-        (id, household_id, adult_user_id, display_name, member_kind, relationship_label, date_of_birth, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [memberId, householdId, adultId, this.crypto.seal('household_members', 'display_name', memberId, displayName), memberKind,
-        this.crypto.seal('household_members', 'relationship_label', memberId, relationshipLabel), this.crypto.seal('household_members', 'date_of_birth', memberId, dateOfBirth), at, at]);
-      await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.added', resourceType: 'household_member', resourceId: memberId, payload: { memberKind } });
+      const extra = await this.#detailColumns(db, householdId, memberId, details);
+      const names = ['id', 'household_id', 'adult_user_id', 'display_name', 'member_kind', 'relationship_label', 'date_of_birth', 'created_at', 'updated_at', ...Object.keys(extra)];
+      await db.run(`INSERT INTO household_members (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`,
+        [memberId, householdId, adultId, this.crypto.seal('household_members', 'display_name', memberId, displayName), memberKind, this.crypto.seal('household_members', 'relationship_label', memberId, relationshipLabel), this.crypto.seal('household_members', 'date_of_birth', memberId, dateOfBirth), at, at, ...Object.values(extra)]);
+      await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.added', resourceType: 'household_member', resourceId: memberId, payload: { memberKind, detailFields: Object.keys(details) } });
     }, { locks: [householdLock(householdId)] });
     return this.getMember(householdId, memberId);
   }
 
   // `changes` holds only the fields to change: displayName, relationshipLabel, dateOfBirth (null clears the last two).
-  async updateMember({ householdId, actorAdultId, memberId, changes }) {
+  async updateMember({ householdId, actorAdultId, memberId, changes, ifMatch = null, now = this.clock() }) {
     const at = this.clock().toISOString();
     const db = this.database;
     await db.transaction(async () => {
@@ -74,9 +105,17 @@ export class HouseholdAppRepository {
         const adult = await db.one('SELECT account_status FROM adult_users WHERE id = ?', [row.adult_user_id]);
         if (adult?.account_status !== 'invited') fail('MEMBER_PROTECTED', 'This adult manages their own details; they cannot be changed here.', 403);
       }
+      if (ifMatch !== null && ifMatch !== undefined && row.revision !== ifMatch) fail('REVISION_CONFLICT', 'This was changed elsewhere. Reload and try again.', 409);
+      assertMemberDetailRules({ memberKind: row.member_kind, input: changes, stored: { ageBand: row.age_band, dateOfBirth: row.date_of_birth }, now });
       const sets = [];
       const params = [];
       const fields = [];
+      const detailKeys = ['gender', 'ageBand', 'mobile', 'email', 'preferredChannel', 'livesWithHousehold', 'dependentOnMemberId', 'guardianMemberId'].filter(key => key in changes);
+      if (detailKeys.length > 0) {
+        const extra = await this.#detailColumns(db, householdId, memberId, Object.fromEntries(detailKeys.map(key => [key, changes[key]])));
+        for (const [column, value] of Object.entries(extra)) { sets.push(`${column} = ?`); params.push(value); }
+        fields.push(...detailKeys);
+      }
       if ('displayName' in changes) {
         sets.push('display_name = ?'); params.push(this.crypto.seal('household_members', 'display_name', memberId, changes.displayName)); fields.push('displayName');
         if (row.adult_user_id) {
@@ -88,7 +127,7 @@ export class HouseholdAppRepository {
       }
       if ('relationshipLabel' in changes) { sets.push('relationship_label = ?'); params.push(this.crypto.seal('household_members', 'relationship_label', memberId, changes.relationshipLabel)); fields.push('relationshipLabel'); }
       if ('dateOfBirth' in changes) { sets.push('date_of_birth = ?'); params.push(this.crypto.seal('household_members', 'date_of_birth', memberId, changes.dateOfBirth)); fields.push('dateOfBirth'); }
-      await db.run(`UPDATE household_members SET ${sets.join(', ')}, updated_at = ? WHERE id = ? AND household_id = ?`, [...params, at, memberId, householdId]);
+      await db.run(`UPDATE household_members SET ${sets.join(', ')}, updated_at = ?, revision = revision + 1 WHERE id = ? AND household_id = ?`, [...params, at, memberId, householdId]);
       await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.updated', resourceType: 'household_member', resourceId: memberId, payload: { fields } });
     }, { locks: [householdLock(householdId)] });
     return this.getMember(householdId, memberId);
@@ -123,9 +162,11 @@ export class HouseholdAppRepository {
         const links = await db.many('DELETE FROM policy_members WHERE household_member_id = ? RETURNING policy_id', [memberId]);
         // The member's addresses and saved places go with the member (ADR 0015); they are erased, not a reason to refuse.
         const places = await db.run('DELETE FROM household_places WHERE member_id = ? AND household_id = ?', [memberId, householdId]);
+        // Person records about the member (health context, nominees, notes) go with the member (ADR 0018).
+        const personRecords = await db.run('DELETE FROM person_records WHERE subject_member_id = ? AND household_id = ?', [memberId, householdId]);
         await db.run('DELETE FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
         if (placeholderAdultId) await db.run('DELETE FROM adult_users WHERE id = ?', [placeholderAdultId]);
-        await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.removed', resourceType: 'household_member', resourceId: memberId, payload: { policyLinksErased: links.length, placeholderAdultErased: Boolean(placeholderAdultId), placesErased: places.changes } });
+        await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.removed', resourceType: 'household_member', resourceId: memberId, payload: { policyLinksErased: links.length, placeholderAdultErased: Boolean(placeholderAdultId), placesErased: places.changes, personRecordsErased: personRecords.changes } });
       }, { locks: [householdLock(householdId)] });
     } catch (error) {
       // Backstop: any foreign key we did not anticipate is a coded conflict, never a raw 500.

@@ -1,7 +1,8 @@
-import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, SyncRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
+import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, SyncRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository, PersonRecordRepository } from '../repositories/index.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
+import { createPersonRecordService } from './person-record-service.js';
 import { createPolicyProfileService, policyFactsEnabled } from './policy-profile-service.js';
 import { createPolicyFactsService, POLICY_FACTS_JOB_KIND, policyFactsDedupeKey } from './policy-facts-service.js';
 import { NORMALISER_VERSION } from '../../features/policy-facts/normalisers.js';
@@ -76,8 +77,11 @@ export function createBackendServices(database, options = {}) {
   // Erasure of a case, member or household (S3). Reuses the document, run, structuring and clause erasure paths above.
   const erasure = new ErasureRepository(database, { clock: options.clock, audit, consents, documents, profileAnswers, userData: userDataRepository, appEvents, policyStructuring, clauses });
 
+  const personRecordRepository = new PersonRecordRepository(database, { ...shared, households });
+  const personRecords = createPersonRecordService({ access, repository: personRecordRepository, clock: options.clock });
+
   return {
-    erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
+    personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {
