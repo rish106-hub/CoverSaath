@@ -12,6 +12,7 @@ import { COVERAGE_ANALYSIS_WORKFLOW } from '../../features/coverage-analysis/ind
 import { INTAKE_CONNECTORS } from '../../contracts/intake-connectors.js';
 import { noticeSetView, noticeView } from '../../contracts/data-purposes.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
+import { SYNC_LIMITS } from '../../contracts/sync.js';
 import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from '../../contracts/profile-answers.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
 import { handleDataLifecycleRoute } from './data-lifecycle-routes.js';
@@ -501,6 +502,15 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       if (resource === 'scenarios' && !name && method === 'GET') return { status: 200, body: await userData.listScenarios(principal, householdId) };
       if (resource === 'scenarios' && name && method === 'GET') return { status: 200, body: await userData.getScenario(principal, householdId, name) };
       if (resource === 'scenarios' && name && method === 'PUT') return { status: 200, body: await userData.setScenario(principal, householdId, name, await readBody(req), ifMatch) };
+    }
+    // Sync (ADR 0017): change feed by cursor, paged snapshot, batched idempotent push. Ownership is proved inside services.sync.
+    const syncMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/(changes|snapshot|sync\/push)$/);
+    if (syncMatch) {
+      const [, householdId, resource] = syncMatch;
+      const query = Object.fromEntries(url.searchParams);
+      if (resource === 'changes' && req.method === 'GET') return { status: 200, body: await services.sync.changes(principal, householdId, query) };
+      if (resource === 'snapshot' && req.method === 'GET') return { status: 200, body: await services.sync.snapshot(principal, householdId, query) };
+      if (resource === 'sync/push' && req.method === 'POST') return { status: 200, body: await services.sync.push(principal, householdId, await readBody(req, { limitBytes: SYNC_LIMITS.pushBodyBytes })) };
     }
     const policyMatch = url.pathname.match(/^\/api\/v1\/policies\/([^/]+)$/);
     if (req.method === 'GET' && policyMatch) return { status: 200, body: await services.app.getPolicy(principal, policyMatch[1]) };

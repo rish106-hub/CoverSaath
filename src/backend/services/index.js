@@ -13,3 +13,4 @@ export { createUserDataService, parseIfMatch } from './user-data-service.js';
 export { createDataExportService } from './data-export-service.js';
 export { createDataLifecycleService } from './data-lifecycle-service.js';
 export { createRetentionService } from './retention-service.js';
+export { createSyncService } from './sync-service.js';
