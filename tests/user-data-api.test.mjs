@@ -336,7 +336,7 @@ test('household erasure removes every new row and leaves other households alone'
   const totals = async where => (await Promise.all(tables.map(table => count(db, table, where.replace('$', ''), [])))).reduce((a, b) => a + b, 0);
   assert.equal(await totals('1=1'), 2 * 6);
   const erased = await services.userDataRepository.eraseForHousehold({ householdId: owner.householdId });
-  assert.deepEqual({ ...erased }, { device_permissions: 1, household_places: 2, adult_preferences: 1, onboarding_progress: 1, tool_scenarios: 1 });
+  assert.deepEqual({ ...erased }, { device_permissions: 1, household_places: 2, adult_preferences: 1, onboarding_progress: 1, tool_scenarios: 1, person_records: 0 });
   assert.equal(await totals('1=1'), 6);
   for (const table of tables) assert.equal(await count(db, table, 'household_id = ?', [owner.householdId]), 0, table);
   const audit = await db.one("SELECT event_payload_json FROM audit_events WHERE action = 'user_data.erased'");

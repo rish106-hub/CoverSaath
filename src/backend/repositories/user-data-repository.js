@@ -276,7 +276,7 @@ export class UserDataRepository {
     const db = this.database;
     return db.transaction(async () => {
       const counts = {};
-      for (const table of ['device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios']) {
+      for (const table of ['device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios', 'person_records']) {
         counts[table] = (await db.run(`DELETE FROM ${table} WHERE household_id = ?`, [householdId])).changes;
       }
       await this.audit?.append({ householdId, actorType, actorId, action: 'user_data.erased', resourceType: 'household', resourceId: householdId, payload: { reasonCode, ...counts } });
