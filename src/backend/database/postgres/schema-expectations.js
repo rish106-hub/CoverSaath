@@ -21,6 +21,7 @@ export const expectedTables = Object.freeze([
   'reference_cache', 'reference_cache_leases', 'policy_profiles', 'policy_facts', 'fact_evidence',
   'auth_signing_keys', 'auth_refresh_tokens', 'auth_challenges', 'webauthn_credentials', 'devices', 'notice_acceptances',
   'household_changes', 'household_sync_state',
+  'person_records',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -71,6 +72,7 @@ export const criticalTriggers = Object.freeze([
   'profile_answers_scope_insert', 'document_blobs_erase_on_document_erasure',
   'policy_profiles_scope_insert', 'policy_profiles_update_guard', 'policy_profiles_erase_on_document_erasure',
   'policy_facts_scope_insert', 'policy_facts_immutable', 'policy_facts_erase_on_document_erasure', 'fact_evidence_scope_insert', 'fact_evidence_immutable',
+  'person_records_scope_insert', 'person_records_scope_update',
 ]);
 
 export const criticalIndexes = Object.freeze([
@@ -114,6 +116,7 @@ export const criticalIndexes = Object.freeze([
   'app_events_case_idx',
   'auth_signing_keys_one_active', 'auth_refresh_session_idx', 'auth_refresh_expiry_idx', 'api_sessions_household_idx', 'api_sessions_identity_idx',
   'household_changes_cursor_idx',
+  'person_records_unique', 'person_records_household_type_idx', 'household_members_mobile_unique',
 ]);
 
 export const requiredColumns = Object.freeze({
@@ -143,4 +146,6 @@ export const requiredColumns = Object.freeze({
   reference_cache_leases: ['key', 'owner', 'expires_at'],
   model_budget_reservations: ['scope', 'amount_micro_usd', 'state', 'actual_micro_usd'],
   evidence_claims: ['claim_hash', 'owner', 'expires_at'],
+  household_members: ['gender', 'age_band', 'mobile_ciphertext', 'mobile_hash', 'email_ciphertext', 'preferred_channel', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id', 'revision', 'deleted_at'],
+  person_records: ['household_id', 'subject_member_id', 'record_type', 'slot', 'payload_ciphertext', 'completeness', 'source', 'state', 'revision'],
 });
