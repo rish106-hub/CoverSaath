@@ -19,6 +19,7 @@ export const expectedTables = Object.freeze([
   'auth_identities', 'profile_answers', 'document_blobs', 'app_events', 'rate_limit_buckets', 'model_budget_scopes', 'model_budget_reservations', 'evidence_claims',
   'device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios', 'job_queue',
   'reference_cache', 'reference_cache_leases', 'policy_profiles', 'policy_facts', 'fact_evidence',
+  'auth_signing_keys', 'auth_refresh_tokens', 'auth_challenges', 'webauthn_credentials', 'devices', 'notice_acceptances',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -110,6 +111,7 @@ export const criticalIndexes = Object.freeze([
   'household_members_adult_idx',
   'household_roles_adult_idx',
   'app_events_case_idx',
+  'auth_signing_keys_one_active', 'auth_refresh_session_idx', 'auth_refresh_expiry_idx', 'api_sessions_household_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
@@ -130,6 +132,8 @@ export const requiredColumns = Object.freeze({
   proposed_parameters: ['redacted_at', 'redaction_reason_code', 'status'],
   policy_structuring_jobs: ['status', 'evidence_outcome', 'error_code', 'attempt', 'structuring_run_id', 'erased_at'],
   auth_identities: ['adult_user_id', 'issuer', 'subject_sha256', 'created_at', 'last_used_at', 'revoked_at'],
+  api_sessions: ['session_kind', 'household_id', 'amr', 'absolute_expires_at', 'revoked_reason'],
+  auth_refresh_tokens: ['session_id', 'token_hash', 'parent_id', 'expires_at', 'used_at'],
   app_events: ['occurred_at', 'expires_at', 'event_name', 'household_id', 'consent_grant_id', 'payload_enc', 'redacted_at'],
   rate_limit_buckets: ['key_hash', 'window_start', 'request_count'],
   model_budget_scopes: ['scope', 'reserved_micro_usd', 'spent_micro_usd'],
