@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { authIdentityLock, householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { LOCATION_TTL_MS } from '../../contracts/user-data.js';
+import { setSyncActor } from './sync-actor.js';
 
 // Everything the app collects from a person (spec docs/exec-plans/active/user-data-store-spec.md, ADR 0015): device
 // permissions, places, Settings, onboarding, per-tool scenarios, and the repeat-safe beta access. Typed values (address,
@@ -33,8 +34,10 @@ export class UserDataRepository {
 
   #now() { return this.clock().toISOString(); }
 
+  // Proves the adult belongs to the household, then names them as the actor for the change log (SET LOCAL, same transaction).
   async #actor(householdId, adultId, { write = false } = {}) {
     await this.households.requireAccess(householdId, adultId, { write });
+    await setSyncActor(this.database, adultId);
   }
 
   #record(householdId, adultId, action, resourceType, resourceId, payload) {
