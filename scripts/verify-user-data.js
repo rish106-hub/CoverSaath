@@ -8,7 +8,7 @@ import pg from 'pg';
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
 const PROTECTED_DATABASE = 'coversaath_dev';
-export const USER_DATA_TABLES = Object.freeze(['device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios', 'adult_users', 'profile_answers']);
+export const USER_DATA_TABLES = Object.freeze(['device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios', 'adult_users', 'profile_answers', 'person_records', 'household_members']);
 
 export function assertSafeVerifyTarget(databaseUrl) {
   const refuse = reason => { throw Object.assign(new Error(`Verify refused: ${reason}.`), { code: 'VERIFY_TARGET_REFUSED' }); };

@@ -61,9 +61,11 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
 
   // A date of birth is shown to the viewer when it belongs to a dependent, to themselves, or when the subject adult granted
   // field access (same rule as the household matrix). A placeholder adult cannot grant, so theirs stays withheld.
-  async function visibleField(principal, householdId, member, value, fieldKey) {
+  // `placeholderVisible`: contact details typed for a not-yet-invited adult are visible to the household that entered them.
+  async function visibleField(principal, householdId, member, value, fieldKey, { placeholderVisible = false } = {}) {
     if (!value) return null;
     if (!member.adult_user_id || member.adult_user_id === principal.adultId) return value;
+    if (placeholderVisible && member.adult_account_status === 'invited') return value;
     const allowed = await consents.canAccessField({ householdId, subjectAdultId: member.adult_user_id, viewerAdultId: principal.adultId, fieldKey });
     return allowed === true ? value : null;
   }
@@ -80,8 +82,8 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
       ageYears: ageYears(born, clock()),
       gender: member.gender ?? null,
       ageBand: member.age_band ?? null,
-      mobile: await visibleField(principal, householdId, member, member.mobile_ciphertext, 'mobile'),
-      email: await visibleField(principal, householdId, member, member.email_ciphertext, 'email'),
+      mobile: await visibleField(principal, householdId, member, member.mobile_ciphertext, 'mobile', { placeholderVisible: true }),
+      email: await visibleField(principal, householdId, member, member.email_ciphertext, 'email', { placeholderVisible: true }),
       preferredChannel: member.preferred_channel ?? null,
       livesWithHousehold: member.lives_with_household ?? null,
       dependentOnMemberId: member.dependent_on_member_id ?? null,
