@@ -5,7 +5,7 @@ const digest = token => createHash('sha256').update(token).digest('hex');
 
 // The capacity check counts every active session, so the lock that keeps it true under
 // concurrent issuance is one key for all adults.
-const SESSION_CAPACITY_KEY = 'global';
+export const SESSION_CAPACITY_KEY = 'global';
 
 // Async PostgreSQL repository (S3.2).
 export class AuthRepository {

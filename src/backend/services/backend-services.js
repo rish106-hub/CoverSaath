@@ -1,11 +1,13 @@
-import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
+import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
 import { createPolicyProfileService, policyFactsEnabled } from './policy-profile-service.js';
 import { createPolicyFactsService, POLICY_FACTS_JOB_KIND, policyFactsDedupeKey } from './policy-facts-service.js';
 import { NORMALISER_VERSION } from '../../features/policy-facts/normalisers.js';
+import { createAuthTokenService } from './auth-token-service.js';
 import { TenantAccessService } from './tenant-access-service.js';
+import { createJwtTokens, readJwtIssuer, readJwtPrivateKeys } from '../security/jwt-tokens.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 
 export function createBackendServices(database, options = {}) {
@@ -41,7 +43,17 @@ export function createBackendServices(database, options = {}) {
   const cases = new CaseRepository(database, shared);
   const workflows = new WorkflowRepository(database, shared);
   const auth = new AuthRepository(database, shared);
-  const identities = new AuthIdentityRepository(database, { ...shared, households, auth });
+  // Web sessions and JWT access tokens (ADR 0016). Inert unless KNOWVIA_JWT_ISSUER and a private key are configured;
+  // opaque bearer sessions never depend on it. `options.jwt` lets a test inject keys without touching the environment.
+  const authTokenRepository = new AuthTokenRepository(database, shared);
+  const jwtTokens = createJwtTokens({
+    issuer: options.jwt?.issuer ?? readJwtIssuer(options.env ?? {}),
+    privateKeys: options.jwt?.privateKeys ?? readJwtPrivateKeys(options.env ?? {}),
+    keyStore: { getActive: () => authTokenRepository.getActiveKey(), find: kid => authTokenRepository.findKey(kid) },
+    clock: options.clock,
+  });
+  const authTokens = createAuthTokenService({ repository: authTokenRepository, tokens: jwtTokens, clock: options.clock });
+  const identities = new AuthIdentityRepository(database, { ...shared, households, auth, authTokens: authTokenRepository });
   const ocr = new OcrRepository(database, shared);
   const profileAnswers = new ProfileAnswerRepository(database, shared);
   // Policy profile (migration 043, ADR 0024): identity of a policy and its owner confirmation. Off unless POLICY_FACTS_ENABLED=true.
@@ -51,7 +63,7 @@ export function createBackendServices(database, options = {}) {
   const policyFactsRepository = new PolicyFactsRepository(database, shared);
   const policyFacts = createPolicyFactsService({ repository: policyFactsRepository, ocr, env: options.env ?? process.env, clock: options.clock });
   const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
-  const access = new TenantAccessService(database, { auth, households, consents, env: options.env ?? {}, columnCrypto });
+  const access = new TenantAccessService(database, { auth, authTokens, households, consents, env: options.env ?? {}, columnCrypto });
   const householdApp = new HouseholdAppRepository(database, shared);
   const app = createHouseholdAppService({ access, appRepository: householdApp, consents, clock: options.clock });
   const userDataRepository = new UserDataRepository(database, { ...shared, households, auth });
@@ -60,7 +72,7 @@ export function createBackendServices(database, options = {}) {
   const erasure = new ErasureRepository(database, { clock: options.clock, audit, consents, documents, profileAnswers, userData: userDataRepository, appEvents, policyStructuring, clauses });
 
   return {
-    erasure, jobQueue, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
+    erasure, jobQueue, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {

@@ -4,7 +4,7 @@ import { isLoopbackRequest, readBinaryBody } from '../../shared/http/index.js';
 import { MAX_DOCUMENT_BYTES } from '../../features/input/index.js';
 import { toHandoff } from '../../features/decision-catalogue/index.js';
 import { LIMITS as HOUSEHOLD_PREVIEW_LIMITS } from '../../features/household-reasoning/index.js';
-import { documentDto } from '../../backend/services/index.js';
+import { amrForIssuer, documentDto } from '../../backend/services/index.js';
 import { classifyDatabaseError } from '../../backend/database/postgres/errors.js';
 import { validatePostgresSchema } from '../../backend/database/postgres/validate-schema.js';
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
@@ -273,11 +273,17 @@ async function schemaStatus(database) {
   }
 }
 
+const JWKS_PATH = '/.well-known/jwks.json';
+
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
 export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, scannerStatus = null, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, getChatService, onError, metrics }) {
-  if (!url.pathname.startsWith('/api/v1/')) return null;
+  if (!url.pathname.startsWith('/api/v1/') && url.pathname !== JWKS_PATH) return null;
   try {
+    // Public half of the access-token signing keys (ADR 0016). The Host guard already ran; nothing here is household data.
+    if (req.method === 'GET' && url.pathname === JWKS_PATH) {
+      return { status: 200, body: await services.authTokens.jwks() };
+    }
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
       return {
         status: 200,
@@ -357,13 +363,42 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       if (body.contactEmail !== undefined && body.contactEmail !== null && (typeof body.contactEmail !== 'string' || body.contactEmail.length > 320)) {
         badRequest('contactEmail is invalid.');
       }
-      const result = await services.identities.signIn({ issuer, subject: body.subject, displayName, contactEmail: body.contactEmail || null });
-      return { status: result.returning ? 200 : 201, body: result };
+      // ?format=jwt starts a revocable web session and answers with an access and a refresh token (ADR 0016). Anything else
+      // keeps the opaque bearer session and the response shape callers already rely on.
+      const format = url.searchParams.get('format');
+      if (format !== null && format !== 'jwt') badRequest('format must be jwt or omitted.');
+      if (format === 'jwt') await services.authTokens.requireSigning();
+      const result = await services.identities.signIn({
+        issuer, subject: body.subject, displayName, contactEmail: body.contactEmail || null,
+        web: format === 'jwt', amr: amrForIssuer(issuer),
+      });
+      if (format !== 'jwt') return { status: result.returning ? 200 : 201, body: result };
+      const minted = await services.authTokens.accessTokenFor({ adultId: result.adultId, householdId: result.household.id, sessionId: result.session.sessionId, amr: amrForIssuer(issuer) });
+      return { status: result.returning ? 200 : 201, body: {
+        accessToken: minted.accessToken, refreshToken: result.session.refreshToken, expiresIn: minted.expiresIn,
+        household: result.household, memberId: result.memberId, returning: result.returning,
+      } };
+    }
+
+    // The refresh token is the credential here (the access token may already have expired). It rotates on every use; a used
+    // token coming back revokes the session. Every failure is the same 401.
+    if (req.method === 'POST' && url.pathname === '/api/v1/auth/refresh') {
+      const body = await readBody(req);
+      return { status: 200, body: await services.authTokens.refresh(body.refreshToken) };
     }
 
     const principal = await services.access.authenticate(req.headers.authorization);
     // Read by the activity-event recorder after the response; carries an id only, never a credential.
     req.appContext = { adultUserId: principal.adultId };
+
+    // Session management for the signed-in adult. Ids and timestamps only; no token, hash or device detail is returned.
+    if (url.pathname.startsWith('/api/v1/auth/')) {
+      if (req.method === 'POST' && url.pathname === '/api/v1/auth/signout') return { status: 200, body: await services.authTokens.signOut(principal) };
+      if (req.method === 'POST' && url.pathname === '/api/v1/auth/signout-all') return { status: 200, body: await services.authTokens.signOutAll(principal) };
+      if (req.method === 'GET' && url.pathname === '/api/v1/auth/sessions') return { status: 200, body: await services.authTokens.listSessions(principal) };
+      const sessionMatch = url.pathname.match(/^\/api\/v1\/auth\/sessions\/([^/]+)$/);
+      if (req.method === 'DELETE' && sessionMatch) return { status: 200, body: await services.authTokens.revokeSession(principal, sessionMatch[1]) };
+    }
     const responses = createReadResponsePolicy({ database, consents: services.consents });
     // Erasure and export of a case, member or household (S3). New routes only; ownership is checked in the services.
     const lifecycle = await handleDataLifecycleRoute({ req, url, principal, services, documentUploads, responses });

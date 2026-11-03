@@ -269,6 +269,7 @@ export function createApiServer({
         // Finished queue rows hold identifiers only. Succeeded jobs go after a week; dead letters stay a month for an operator.
         services.jobQueue?.purgeSucceeded(7 * 24 * 3_600_000).catch(() => {});
         services.jobQueue?.purgeDead(30 * 24 * 3_600_000).catch(() => {});
+        services.authTokenRepository?.purgeExpired().catch(() => {});
       };
       housekeepingTimer = setInterval(sweep, 60 * 60 * 1000);
       housekeepingTimer.unref?.();
@@ -396,7 +397,7 @@ export function createApiServer({
       assertLocalRequest(req, config.network);
       await rateLimiter.check(clientRateKey(req, config.network), { shared: !/^\/api\/v1\/(?:health|live)(?:\?|$)/.test(req.url ?? '') });
       const url = new URL(req.url, 'http://127.0.0.1:8787');
-      if (url.pathname.startsWith('/api/v1/')) {
+      if (url.pathname.startsWith('/api/v1/') || url.pathname === '/.well-known/jwks.json') {
         const backend = await getBackend();
         const backendResult = await handleV1BackendRoute({ req, url, ...backend, scannerStatus, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, getChatService, onError, metrics });
         // A body refused mid-stream is never drained: close the connection after answering so the
