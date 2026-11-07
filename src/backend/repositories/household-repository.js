@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 const MEMBER_SEALED = ['display_name', 'relationship_label', 'date_of_birth'];
@@ -82,7 +83,7 @@ export class HouseholdRepository {
 
   async getAdult(adultId) { return this.#adult(await this.database.one('SELECT * FROM adult_users WHERE id = ?', [adultId])) ?? null; }
   async getHousehold(householdId) { return this.#household(await this.database.one('SELECT * FROM households WHERE id = ?', [householdId])) ?? null; }
-  async listMembers(householdId) { return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? ORDER BY created_at, id', [householdId])).map(row => this.#member(row)); }
+  async listMembers(householdId) { return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? AND display_name <> ? ORDER BY created_at, id', [householdId, ERASED_NAME])).map(row => this.#member(row)); }
 
   async getActiveRole(householdId, adultUserId) {
     const at = this.clock().toISOString();

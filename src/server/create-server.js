@@ -220,6 +220,7 @@ export function createApiServer({
       const sweep = () => {
         services.appEvents.purgeExpired().catch(() => {});
         services.runtimeLimits.purgeRequestWindows(10 * 60_000).catch(() => {});
+        services.runtimeLimits.purgeExpiredClaims().catch(() => {});
       };
       housekeepingTimer = setInterval(sweep, 60 * 60 * 1000);
       housekeepingTimer.unref?.();

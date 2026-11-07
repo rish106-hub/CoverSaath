@@ -67,6 +67,7 @@ export class CaseRepository {
   async listOpenedBy({ householdId, adultId, limit }) {
     const rows = await this.database.many(`SELECT id, trigger_type, status, emergency_mode, created_at, updated_at
       FROM service_cases WHERE household_id = ? AND opened_by_adult_id = ?
+        AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))
       ORDER BY created_at DESC, id DESC LIMIT ?`, [householdId, adultId, limit + 1]);
     return { cases: rows.slice(0, limit), truncated: rows.length > limit };
   }

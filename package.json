@@ -12,6 +12,7 @@
     "seed:demo-household": "node scripts/seed-demo-household.js",
     "verify:user-data": "node scripts/verify-user-data.js",
     "backfill:adult-contacts": "node --env-file-if-exists=.env.local scripts/backfill-adult-contacts.mjs",
+    "retention:sweep": "node --env-file-if-exists=.env.local scripts/retention-sweep.mjs",
     "eval:safety": "node scripts/run-safety-evals.mjs",
     "eval:household": "node scripts/eval-household-reasoning.mjs",
     "eval:retrieval": "node scripts/eval-retrieval-recall.mjs",
@@ -22,8 +23,8 @@
     "check": "npm run check:architecture && npm test && npm run build"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.105",
-    "ai": "^7.0.153",
+    "@ai-sdk/google": "^4.0.109",
+    "ai": "^7.0.159",
     "pdf-lib": "^1.17.1",
     "pg": "^8.23.1"
   }

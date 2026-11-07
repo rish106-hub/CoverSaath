@@ -13,6 +13,7 @@ import { INTAKE_CONNECTORS } from '../../contracts/intake-connectors.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
 import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from '../../contracts/profile-answers.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
+import { handleDataLifecycleRoute } from './data-lifecycle-routes.js';
 import {
   READ_FIELDS, analysisJobDto, analysisTaskDto, auditSummaryDto, caseSummaryDto,
   createReadResponsePolicy, sourcePackDto,
@@ -336,6 +337,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     // Read by the activity-event recorder after the response; carries an id only, never a credential.
     req.appContext = { adultUserId: principal.adultId };
     const responses = createReadResponsePolicy({ database, consents: services.consents });
+    // Erasure and export of a case, member or household (S3). New routes only; ownership is checked in the services.
+    const lifecycle = await handleDataLifecycleRoute({ req, url, principal, services, documentUploads, responses });
+    if (lifecycle) return lifecycle;
 
     if (req.method === 'GET' && url.pathname === '/api/v1/integrations') {
       return {

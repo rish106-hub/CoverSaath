@@ -114,3 +114,22 @@ test('pool options come from the environment without echoing values', () => {
     return true;
   });
 });
+
+test('the CA path must be an absolute regular file within the size cap', async t => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'cs-ca-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const good = join(dir, 'ca.pem');
+  writeFileSync(good, 'synthetic-ca-contents');
+  const big = join(dir, 'big.pem');
+  writeFileSync(big, Buffer.alloc(256 * 1024 + 1, 'a'));
+  const empty = join(dir, 'empty.pem');
+  writeFileSync(empty, '');
+  const url = 'postgres://u:p@h/db';
+  assert.deepEqual(postgresPoolOptionsFromEnv({ DATABASE_URL: url, DATABASE_SSL_CA_PATH: ` ${good} ` }), { connectionString: url, sslCa: 'synthetic-ca-contents' });
+  for (const bad of [big, empty, dir, 'relative/ca.pem', `${good}\0.pem`]) {
+    assert.throws(() => postgresPoolOptionsFromEnv({ DATABASE_URL: url, DATABASE_SSL_CA_PATH: bad }), { code: 'DATABASE_POOL_OPTION_INVALID' });
+  }
+});
