@@ -360,7 +360,7 @@ export class ConsentRepository {
           AND status <> 'superseded'`, [grantId]);
       // `auditActor` (household erasure only, never reachable from a request) names who really acted when the owner
       // erases a household that holds another adult's grant; the revocation row still names the subject adult.
-      await this.audit?.append({ householdId: grant.household_id, actorType: actor.type, actorId: actor.id, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reasonProvided: reason !== null && reason !== undefined } });
+      await this.audit?.append({ householdId: grant.household_id, actorType: actor.type, actorId: actor.id, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reason } });
     }, { locks: [householdLock(existing.household_id)] });
     return this.get(grantId);
   }

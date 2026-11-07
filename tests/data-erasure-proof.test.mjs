@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { seedErasureWorld } from './support/erasure-world.mjs';
+import { plainRows } from './support/sealed.mjs';
 import { readFileSync } from 'node:fs';
 import { DATA_STORES, ERASED_NAME } from '../src/contracts/data-lifecycle.js';
 
@@ -99,7 +100,9 @@ test('household erasure: nothing left but content-free tombstones; other househo
   await none(`consent_grants WHERE household_id = ? AND revoked_at IS NULL`, [a.household]);
   await none(`service_cases WHERE household_id = ? AND (status <> 'closed' OR subject_member_id IS NOT NULL OR stated_estimate_minor IS NOT NULL OR currency IS NOT NULL OR trigger_type <> 'user_requested_review')`, [a.household]);
   await none(`workflow_runs WHERE case_id = ? AND input_json IS NOT NULL`, [a.case]);
-  await none(`document_uploads WHERE household_id = ? AND (lifecycle_state <> 'deleted' OR original_filename <> '[deleted]')`, [a.household]);
+  // The filename is sealed at rest (D2): open it before comparing with the tombstone marker.
+  await none(`document_uploads WHERE household_id = ? AND lifecycle_state <> 'deleted'`, [a.household]);
+  assert.deepEqual((await plainRows(db, 'document_uploads', 'WHERE household_id = ?', [a.household])).filter(row => row.original_filename !== '[deleted]'), []);
   await none(`ocr_jobs WHERE document_upload_id = ? AND (result_json IS NOT NULL OR authorization_json IS NOT NULL)`, [a.document]);
   await none(`source_pages WHERE document_upload_id = ? AND (extracted_text IS NOT NULL OR blocks_json IS NOT NULL OR provenance_json IS NOT NULL)`, [a.document]);
   await none(`policies WHERE household_id = ? AND (policy_number_masked IS NOT NULL OR starts_on IS NOT NULL OR ends_on IS NOT NULL OR insurer_id IS NOT NULL OR policy_kind <> 'unknown')`, [a.household]);
@@ -242,10 +245,10 @@ test('revocation reasons are codes: free text is stored as other, never in the r
   const { db, handle, services } = await freshDatabase(t);
   const a = await seedErasureWorld(handle.pool, services, 'a');
   assert.deepEqual(await canaryHits(db, 'CANARY-a-revocation-reason'), {});
-  const rows = await db.many('SELECT reason FROM consent_revocations WHERE consent_grant_id = ?', [a.consent2]);
+  const rows = await plainRows(db, 'consent_revocations', 'WHERE consent_grant_id = ?', [a.consent2]);
   assert.deepEqual(rows.map(row => row.reason), ['other']);
   const audit = await db.many(`SELECT event_payload_json FROM audit_events WHERE action = 'consent.revoked' AND resource_id = ?`, [a.consent2]);
   assert.deepEqual(audit.map(row => JSON.parse(row.event_payload_json)), [{ reason: 'other' }]);
   await services.consents.revoke({ grantId: a.consent3, revokedByAdultId: a.adult2, reason: 'user_request' });
-  assert.equal((await db.one('SELECT reason FROM consent_revocations WHERE consent_grant_id = ?', [a.consent3])).reason, 'user_request');
+  assert.equal((await plainRows(db, 'consent_revocations', 'WHERE consent_grant_id = ?', [a.consent3]))[0].reason, 'user_request');
 });
