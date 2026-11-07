@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 const fail = (code, message, statusCode) => { throw Object.assign(new Error(message), { code, statusCode }); };
@@ -24,11 +25,11 @@ export class HouseholdAppRepository {
   #adult(row) { return this.crypto.openRow('adult_users', row, ['display_name', 'contact_email', 'contact_phone']); }
 
   async listMembers(householdId) {
-    return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? ORDER BY created_at, id LIMIT ?', [householdId, MAX_MEMBERS_PER_HOUSEHOLD + 5])).map(row => this.#member(row));
+    return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? AND display_name <> ? ORDER BY created_at, id LIMIT ?', [householdId, ERASED_NAME, MAX_MEMBERS_PER_HOUSEHOLD + 5])).map(row => this.#member(row));
   }
 
   async getMember(householdId, memberId) {
-    const row = await this.database.one('SELECT * FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
+    const row = await this.database.one('SELECT * FROM household_members WHERE id = ? AND household_id = ? AND display_name <> ?', [memberId, householdId, ERASED_NAME]);
     return row ? this.#member(row) : null;
   }
 
@@ -39,7 +40,7 @@ export class HouseholdAppRepository {
     const db = this.database;
     const memberId = id('member');
     await db.transaction(async () => {
-      const count = Number((await db.one('SELECT count(*) AS count FROM household_members WHERE household_id = ?', [householdId])).count);
+      const count = Number((await db.one('SELECT count(*) AS count FROM household_members WHERE household_id = ? AND display_name <> ?', [householdId, ERASED_NAME])).count);
       if (count >= MAX_MEMBERS_PER_HOUSEHOLD) fail('MEMBER_CAPACITY_REACHED', 'This household has reached the member limit.', 429);
       let adultId = null;
       if (memberKind === 'adult') {
@@ -96,7 +97,8 @@ export class HouseholdAppRepository {
     const db = this.database;
     try {
       await db.transaction(async () => {
-        const row = await db.one('SELECT * FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
+        // An erased member (scrubbed tombstone) is gone for every reader: 404, not a 409 about records.
+        const row = await db.one('SELECT * FROM household_members WHERE id = ? AND household_id = ? AND display_name <> ?', [memberId, householdId, ERASED_NAME]);
         if (!row) fail('MEMBER_NOT_FOUND', 'Member not found.', 404);
         const owner = await db.one(`SELECT 1 AS found FROM household_roles WHERE household_id = ? AND adult_user_id = ? AND role = 'owner'`, [householdId, row.adult_user_id]);
         if (row.adult_user_id && owner) fail('MEMBER_PROTECTED', 'The household owner cannot be removed.', 409);

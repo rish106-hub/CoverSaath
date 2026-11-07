@@ -63,8 +63,11 @@ function readNetworkConfig(env) {
 
 const BACKENDS = Object.freeze(['memory', 'database']);
 
+// Shared state defaults to the database (ADR 0014 addendum, run B1): the request limit, the model spend cap and the
+// evidence-question claim then hold across machines and restarts. 'memory' is an explicit off switch for tests and a
+// single local process; it is never the default.
 function backend(value, name) {
-  const chosen = value ?? 'memory';
+  const chosen = value ?? 'database';
   if (!BACKENDS.includes(chosen)) throw new Error(`Invalid ${name}.`);
   return chosen;
 }
@@ -75,6 +78,26 @@ function readEventsConfig(env) {
   return Object.freeze({
     enabled: env.APP_EVENTS_ENABLED !== 'false',
     retentionDays: boundedInteger(env.APP_EVENTS_RETENTION_DAYS, 30, 'APP_EVENTS_RETENTION_DAYS', 3_650),
+  });
+}
+
+// Retention periods (S3) are opt-in: an unset variable means "not scheduled" and the sweep does nothing for it. The documented
+// placeholders live in src/contracts/data-lifecycle.js (RETENTION_RULES) and docs/architecture/data-lifecycle.md and are not
+// final. FOR LEGAL REVIEW. 0 is allowed for the document tombstone rule (prune as soon as the bytes are gone).
+export function readRetentionConfig(env = process.env) {
+  const days = (name, { zeroAllowed = false } = {}) => {
+    const raw = env[name];
+    if (raw === undefined || raw === '') return null;
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < (zeroAllowed ? 0 : 1) || parsed > 36_500) throw new Error(`Invalid ${name}.`);
+    return parsed;
+  };
+  return Object.freeze({
+    closedCaseDays: days('RETENTION_CLOSED_CASE_DAYS'),
+    inactiveHouseholdDays: days('RETENTION_INACTIVE_HOUSEHOLD_DAYS'),
+    expiredSessionDays: days('RETENTION_EXPIRED_SESSION_DAYS'),
+    deletedDocumentTombstoneDays: days('RETENTION_DELETED_DOCUMENT_DAYS', { zeroAllowed: true }),
+    erasureLedgerDays: days('RETENTION_ERASURE_LEDGER_DAYS'),
   });
 }
 
@@ -116,12 +139,15 @@ export function readServerConfig(env = process.env) {
     // run. live-coverage-runtime.js reads the same variables with its own bounds.
     budgetUsd: positiveAmount(env.ORCHESTRATION_RUN_BUDGET_USD, 'ORCHESTRATION_RUN_BUDGET_USD', 1),
     projectBudgetUsd: positiveAmount(env.ORCHESTRATION_PROJECT_BUDGET_USD, 'ORCHESTRATION_PROJECT_BUDGET_USD'),
-    // 'database' shares the request limit and the model spend cap between machines and across restarts (ADR 0014).
-    // 'memory' (default) keeps both per process.
+    // 'database' (default) shares the request limit, the model spend cap and the evidence claim between machines and
+    // across restarts (ADR 0014). 'memory' keeps each per process; use it only in tests or a throwaway local run.
     rateLimitBackend: backend(env.RATE_LIMIT_BACKEND, 'RATE_LIMIT_BACKEND'),
     budgetBackend: backend(env.MODEL_BUDGET_BACKEND, 'MODEL_BUDGET_BACKEND'),
+    // Read by the policy-evidence service; validated here so a typo fails startup rather than silently weakening the claim.
+    evidenceClaimBackend: backend(env.EVIDENCE_CLAIM_BACKEND, 'EVIDENCE_CLAIM_BACKEND'),
     events: readEventsConfig(env),
     documents: readDocumentConfig(env),
     network: readNetworkConfig(env),
+    retention: readRetentionConfig(env),
   });
 }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-// Shared runtime limits in PostgreSQL (migration 023, ADR 0014): a fixed-window request counter and a model spend ledger
+// Shared runtime limits in PostgreSQL (migrations 023 and 032, ADR 0014): a fixed-window request counter and a model spend ledger
 // that several API machines (and restarts) share. Both are small atomic statements; neither stores a client address or
 // any household data.
 
@@ -26,6 +26,38 @@ export class RuntimeLimitsRepository {
   /** Deletes counters of windows that ended before `olderThanMs`. */
   async purgeRequestWindows(olderThanMs) {
     return (await this.database.run('DELETE FROM rate_limit_buckets WHERE window_start < CAST(? AS bigint)', [String(this.clock() - olderThanMs)])).changes;
+  }
+
+  /**
+   * Takes the lease for `claimHash` (a 64-hex keyed digest) for `leaseMs`, as `owner`. Returns true when taken. An
+   * unexpired lease held by another owner refuses; an expired one (a crashed holder) is taken over in the same
+   * statement, so two processes cannot both be granted it. Expiry uses database time, not the caller's clock.
+   */
+  async acquireClaim({ claimHash, owner, leaseMs }) {
+    const row = await this.database.one(
+      `INSERT INTO evidence_claims AS claim (claim_hash, owner, expires_at)
+       VALUES (?, ?, now() + (CAST(? AS bigint) * interval '1 millisecond'))
+       ON CONFLICT (claim_hash) DO UPDATE SET owner = EXCLUDED.owner, claimed_at = now(), expires_at = EXCLUDED.expires_at
+       WHERE claim.expires_at <= now()
+       RETURNING owner`, [claimHash, owner, String(leaseMs)]);
+    return row?.owner === owner;
+  }
+
+  /** Extends a lease its holder still owns. Returns false when the lease expired and was taken by another process. */
+  async renewClaim({ claimHash, owner, leaseMs }) {
+    return (await this.database.run(
+      `UPDATE evidence_claims SET expires_at = now() + (CAST(? AS bigint) * interval '1 millisecond')
+       WHERE claim_hash = ? AND owner = ?`, [String(leaseMs), claimHash, owner])).changes === 1;
+  }
+
+  /** Releases a lease only if `owner` still holds it, so a late release cannot free another process's claim. */
+  async releaseClaim({ claimHash, owner }) {
+    return (await this.database.run('DELETE FROM evidence_claims WHERE claim_hash = ? AND owner = ?', [claimHash, owner])).changes === 1;
+  }
+
+  /** Deletes expired leases (crashed holders). */
+  async purgeExpiredClaims() {
+    return (await this.database.run('DELETE FROM evidence_claims WHERE expires_at <= now()')).changes;
   }
 
   /**
