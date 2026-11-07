@@ -172,10 +172,11 @@ export class UserDataRepository {
 
   /** Deletes the current locations past their expiry, in one household when `householdId` is given (the request path) or in all
    *  (maintenance only). Counts-only audit per household. Returns the number removed. */
-  async purgeExpiredLocations(householdId = null) {
+  async purgeExpiredLocations(householdId = null, { limit = 1000 } = {}) {
     const db = this.database;
     return db.transaction(async () => {
-      const rows = await db.many(`DELETE FROM household_places WHERE kind = 'current_location' AND expires_at <= ? AND (?::text IS NULL OR household_id = ?) RETURNING household_id`, [this.#now(), householdId, householdId]);
+      const rows = await db.many(`DELETE FROM household_places WHERE id IN (SELECT id FROM household_places
+          WHERE kind = 'current_location' AND expires_at <= ? AND (?::text IS NULL OR household_id = ?) ORDER BY expires_at LIMIT ?) RETURNING household_id`, [this.#now(), householdId, householdId, limit]);
       const byHousehold = new Map();
       for (const row of rows) byHousehold.set(row.household_id, (byHousehold.get(row.household_id) ?? 0) + 1);
       for (const [householdId, count] of byHousehold) {

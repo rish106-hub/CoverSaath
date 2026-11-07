@@ -1,3 +1,4 @@
+import { opaqueClauseId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildClauses, investigate } from '../src/features/policy-evidence/index.js';
@@ -18,7 +19,7 @@ const stored = { pages: [
 ] };
 const clauses = buildClauses(stored, { documentId: 'doc-1', sourceVersion: 'v1' }).clauses;
 const byPage = page => clauses.find(clause => clause.page === page);
-const item = (page, quote, extra = {}) => ({ clause_ids: [byPage(page).clauseId], quote, subject: 'room rent', conditions: [], exceptions: [], ...extra });
+const item = (page, quote, extra = {}) => ({ clause_ids: [opaqueClauseId(byPage(page).clauseId)], quote, subject: 'room rent', conditions: [], exceptions: [], ...extra });
 const call = first => async ({ task }) => ({ json: task === 'policy_evidence_investigate' ? first : { overrides: [] }, usage: { inputTokens: 1, outputTokens: 1 } });
 const ask = (findings, question = 'What is the room rent and ambulance cover?') => investigate({ question, clauses, consentCheck: async () => {}, call: call({ findings }) });
 
@@ -99,10 +100,10 @@ test('F-B review: a covers label on a quote that states a restriction is routed 
 
 test('F-B review: a covers finding is still swept and an override moves it to limited', async () => {
   const seen = [];
-  const sweepCall = async ({ task, payload }) => {
+  const sweepCall = async ({ task, input: { payload } }) => {
     seen.push(task);
     if (task === 'policy_evidence_investigate') return { json: { findings: [item(6, 'Room Rent At Actuals', { effect: 'covers' })] } };
-    return { json: { overrides: [{ clause_ids: [byPage(9).clauseId], quote: 'capped at Rs. 40,000 per eye', effect: 'limits', target_finding_ids: ['f1'] }] } };
+    return { json: { overrides: [{ clause_ids: [opaqueClauseId(byPage(9).clauseId)], quote: 'capped at Rs. 40,000 per eye', effect: 'limits', target_finding_ids: ['f1'] }] } };
   };
   const { answer } = await investigate({ question: 'What is the room rent?', clauses, consentCheck: async () => {}, call: sweepCall });
   assert.ok(seen.includes('policy_evidence_override_sweep'));

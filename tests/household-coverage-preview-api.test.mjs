@@ -22,7 +22,7 @@ async function answerWith(app, s, documentIds) {
 }
 
 test('journey: authorised unreviewed evidence -> bounded preview -> follow-up answer -> updated preview, and nothing is written', postgresTestOptions(), async t => {
-  const app = await startApp(t);
+  const app = await startApp(t, { env: { APP_EVENTS_ENABLED: 'false' } });
   const s = await household(app, { name: 'Mine' });
   const answerId = await answerWith(app, s, s.documentIds);
   const before = await tableCounts(app.database);

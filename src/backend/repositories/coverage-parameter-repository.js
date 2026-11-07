@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { AuditRepository } from './audit-repository.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { householdLock } from '../database/postgres/locks.js';
 import {
   POLICY_PARAMETER_REGISTRY_VERSION,
@@ -95,7 +96,7 @@ function canonical(value) {
 
 const sameJson = (left, right) => JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
 
-function mapParameter(row) {
+function mapParameter(row, crypto) {
   if (!row) return null;
   return Object.freeze({
     id: row.id,
@@ -112,7 +113,7 @@ function mapParameter(row) {
     requestedAt: row.requested_at,
     receivedAt: row.received_at,
     resolutionState: row.resolution_state,
-    resolvedValue: parse(row.resolved_value_json),
+    resolvedValue: parse(crypto.open('coverage_parameter_resolutions', 'resolved_value_json', row.id, row.resolved_value_json)),
     resolvedObservationId: row.resolved_observation_id,
     resolutionReasonCode: row.resolution_reason_code,
     authority: row.transition_authority,
@@ -120,7 +121,7 @@ function mapParameter(row) {
   });
 }
 
-function mapObservation(row) {
+function mapObservation(row, crypto) {
   if (!row) return null;
   return Object.freeze({
     id: row.id,
@@ -131,7 +132,7 @@ function mapObservation(row) {
     page: row.page,
     extractionMethod: row.extraction_method,
     reviewStatus: row.review_status,
-    value: parse(row.value_json),
+    value: parse(crypto.open('coverage_parameter_observations', 'value_json', row.id, row.value_json)),
     sourceDigest: row.source_digest,
     observedAt: row.observed_at,
     recordedBy: row.recorded_by,
@@ -156,11 +157,13 @@ const parameterSelect = `SELECT parameter.*,
 // household advisory lock first (lock order: household -> workflow_runs -> workflow_tasks -> the
 // rest), so they serialise with consent revocation and derived-data erasure.
 export class CoverageParameterRepository {
-  constructor(database, { clock = () => new Date(), audit = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit = null, ...options } = {}) {
     if (typeof database?.transaction !== 'function' || typeof database?.one !== 'function') throw new TypeError('A database is required.');
     this.database = database;
     this.clock = clock;
     this.audit = audit ?? new AuditRepository(database, { clock });
+    // Observation values and resolved values are sealed (ADR 0013 addendum D2) and opened at the edge of this class.
+    this.crypto = resolveColumnCrypto(options);
   }
 
   #atomic(work) {
@@ -329,7 +332,7 @@ export class CoverageParameterRepository {
 
   async getParameter(parameterRecordId) {
     requireBounded(parameterRecordId, 'parameterRecordId');
-    return mapParameter(await this.database.one(`${parameterSelect} WHERE parameter.id = ?`, [parameterRecordId]));
+    return mapParameter(await this.database.one(`${parameterSelect} WHERE parameter.id = ?`, [parameterRecordId]), this.crypto);
   }
 
   async listForRun(workflowRunId, { limit } = {}) {
@@ -337,7 +340,7 @@ export class CoverageParameterRepository {
     const bound = requireLimit(limit, 'limit', defaultRunLimit, maximumRunLimit);
     return (await this.database.many(`${parameterSelect}
       WHERE parameter.workflow_run_id = ? ORDER BY parameter.parameter_key LIMIT ?`, [workflowRunId, bound]))
-      .map(mapParameter);
+      .map(row => mapParameter(row, this.crypto));
   }
 
   /**
@@ -449,21 +452,21 @@ export class CoverageParameterRepository {
        extraction_method, review_status, value_json, source_digest, observed_at,
        recorded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
       observationId, parameterRecordId, sourceId, documentId, version, normalizedPage,
-      extractionMethod, reviewStatus, valueJson, sourceDigest, observedAt, recordedBy, createdAt,
+      extractionMethod, reviewStatus, this.crypto.seal('coverage_parameter_observations', 'value_json', observationId, valueJson), sourceDigest, observedAt, recordedBy, createdAt,
     ]);
     return this.getObservation(observationId);
   }
 
   async getObservation(observationId) {
     requireBounded(observationId, 'observationId');
-    return mapObservation(await this.database.one('SELECT * FROM coverage_parameter_observations WHERE id = ?', [observationId]));
+    return mapObservation(await this.database.one('SELECT * FROM coverage_parameter_observations WHERE id = ?', [observationId]), this.crypto);
   }
 
   async listObservations(parameterRecordId, { limit } = {}) {
     requireBounded(parameterRecordId, 'parameterRecordId');
     const bound = requireLimit(limit, 'limit', defaultObservationLimit, maximumObservationLimit);
     return (await this.database.many(`SELECT * FROM coverage_parameter_observations
-      WHERE parameter_record_id = ? ORDER BY observed_at, id LIMIT ?`, [parameterRecordId, bound])).map(mapObservation);
+      WHERE parameter_record_id = ? ORDER BY observed_at, id LIMIT ?`, [parameterRecordId, bound])).map(row => mapObservation(row, this.crypto));
   }
 
   /**
@@ -527,7 +530,7 @@ export class CoverageParameterRepository {
       await this.database.run(`UPDATE coverage_parameter_resolutions SET resolution_state = ?,
         resolved_value_json = ?, resolved_observation_id = ?, reason_code = ?, transition_authority = ?,
         updated_by = ?, updated_at = ? WHERE parameter_record_id = ?`, [
-        state, valueJson, observationId, reasonCode, derivedAuthority, updatedBy, at, parameterRecordId,
+        state, this.crypto.seal('coverage_parameter_resolutions', 'resolved_value_json', parameterRecordId, valueJson), observationId, reasonCode, derivedAuthority, updatedBy, at, parameterRecordId,
       ]);
       await this.database.run('UPDATE coverage_parameter_records SET updated_at = ? WHERE id = ?', [at, parameterRecordId]);
       return this.getParameter(parameterRecordId);

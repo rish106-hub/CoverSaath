@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { AuditRepository } from './audit-repository.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
 
 // Reviewed facts and reviewer grants for the decision catalogue (ADR 0009 part 2, PostgreSQL 013, 014).
 // Reviews are immutable; a later review of the same fact supersedes an earlier one when read. Erasure deletes them
@@ -23,11 +24,13 @@ const str = (value, name, max = 256) => {
 
 export class CatalogueReviewRepository {
   /** @param database the async database interface (postgres/db.js createDatabase). */
-  constructor(database, { clock = () => new Date(), audit = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit = null, ...options } = {}) {
     if (!database || typeof database !== 'object') throw new TypeError('A database is required.');
     this.database = database;
     this.clock = clock;
     this.audit = audit ?? new AuditRepository(database, { clock });
+    // The reviewed fact value is sealed (ADR 0013 addendum D2) and opened in the DTO.
+    this.crypto = resolveColumnCrypto(options);
   }
 
   // The audit append inside `work` takes the same household lock again (re-entrant within one transaction).
@@ -154,7 +157,7 @@ export class CatalogueReviewRepository {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [id, householdId, caseId, grant.id, review.reviewerAdultId, authority, review.decision, review.reasonCode, key, requestDigest,
         str(review.documentId, 'documentId'), str(review.sourceVersion, 'sourceVersion', 128), JSON.stringify(review.clauseIds ?? []),
-        JSON.stringify(review.sourceDigests ?? []), str(review.factKey, 'factKey', 64), factJson, at]);
+        JSON.stringify(review.sourceDigests ?? []), str(review.factKey, 'factKey', 64), this.crypto.seal('catalogue_reviews', 'fact_json', id, factJson), at]);
       await this.audit.append({
         householdId, caseId, actorType: authority === 'independent' ? 'human_reviewer' : 'adult_user', actorId: review.reviewerAdultId, action: 'catalogue_review.recorded',
         resourceType: 'catalogue_review', resourceId: id, payload: { decision: review.decision, reasonCode: review.reasonCode, authority },
@@ -168,7 +171,7 @@ export class CatalogueReviewRepository {
       reviewId: row.id, householdId: row.household_id, caseId: row.case_id, reviewerAdultId: row.reviewer_adult_id, authority: row.authority,
       decision: row.decision, reasonCode: row.reason_code, documentId: row.document_id, sourceVersion: row.source_version,
       clauseIds: JSON.parse(row.clause_ids_json), sourceDigests: JSON.parse(row.source_digests_json), factKey: row.fact_key,
-      fact: JSON.parse(row.fact_json), createdAt: row.created_at,
+      fact: JSON.parse(this.crypto.open('catalogue_reviews', 'fact_json', row.id, row.fact_json)), createdAt: row.created_at,
     };
   }
 

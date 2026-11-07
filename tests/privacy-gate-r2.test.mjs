@@ -6,6 +6,7 @@ import { PRIVACY_GATE_SCAN_CAP_BYTES, opaqueSourceId, sanitizeEvidenceForModel }
 import { sanitizeEvidenceTextForStorage } from './support/storage-gate.mjs';
 import { RESTRICTED_PROBES } from './support/privacy-probes.mjs';
 import { setupLiveCase, startLiveServer } from './support/live-analysis-scenario.mjs';
+import { plainRows } from './support/sealed.mjs';
 
 const policy = () => ({ dataClass: 'CONFIDENTIAL', modelExtraction: { allowed: true }, registryVersion: 'policy-parameters/v1' });
 const modelInput = (text, upstream = []) => ({
@@ -85,8 +86,8 @@ test('G1 end to end: OCR identifiers never reach the provider, run input, task o
 
   const surfaces = {
     prompt: JSON.stringify(modelRequests.map(request => request.prompt)),
-    runInput: JSON.stringify(app.database.prepare('SELECT input_json FROM workflow_runs').all()),
-    taskOutput: JSON.stringify(app.database.prepare('SELECT input_json, output_json, last_error_message FROM workflow_tasks').all()),
+    runInput: JSON.stringify(plainRows(app.database, 'workflow_runs')),
+    taskOutput: JSON.stringify(plainRows(app.database, 'workflow_tasks')),
     audit: JSON.stringify(app.database.prepare('SELECT event_payload_json FROM audit_events').all()),
     response: response.raw,
   };
