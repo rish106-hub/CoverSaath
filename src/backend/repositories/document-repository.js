@@ -191,6 +191,13 @@ export class DocumentRepository {
     return latest;
   }
 
+  // Count of documents waiting for the background worker (queue-depth metric). A number only; no row is read back.
+  async countWorkDocuments() {
+    const row = await this.database.one(`SELECT count(*) AS waiting FROM document_uploads
+      WHERE lifecycle_state = 'deletion_requested' OR (lifecycle_state = 'quarantined' AND malware_status = 'pending')`);
+    return Number(row?.waiting ?? 0);
+  }
+
   // Work for the background worker. Deletion work (revocation, malware hits) always comes first
   // so a backlog of deferred scans can never starve erasure. Scans are due when next_scan_at has
   // passed; a scanner outage pushes next_scan_at forward instead of stranding the row.

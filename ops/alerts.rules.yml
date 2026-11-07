@@ -1,0 +1,65 @@
+# Prometheus-style rules for the CoverSaath API (ADR 0017, docs/runbooks/alerts.md).
+# Metrics come from GET /api/v1/metrics (bootstrap bearer; one series set per machine, label `instance` added by the scraper).
+# Thresholds here are the single source: the runbook describes them, tests/metrics.test.mjs checks that every metric used
+# below is one this service exports. Load with promtool or Grafana (Mimir/Loki ruler); `promtool check rules` is the syntax check.
+groups:
+  - name: coversaath-recording
+    interval: 30s
+    rules:
+      - record: coversaath:http_request_duration_seconds:p50
+        expr: |
+          histogram_quantile(0.50, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
+      - record: coversaath:http_request_duration_seconds:p95
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))
+      - record: coversaath:http_5xx_ratio:rate5m
+        expr: |
+          sum(rate(http_requests_total{status_class="5xx"}[5m])) / sum(rate(http_requests_total[5m]))
+
+  - name: coversaath-alerts
+    rules:
+      - alert: CoverSaathHigh5xxRate
+        # More than 2% of requests answered 5xx over 5 minutes, with enough traffic (> 3 req/min) to mean something.
+        expr: |
+          coversaath:http_5xx_ratio:rate5m > 0.02
+            and sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "More than 2% of API requests are failing with 5xx"
+          runbook: "docs/runbooks/alerts.md#coversaathhigh5xxrate"
+
+      - alert: CoverSaathModelBudgetHigh
+        # Reserved plus spent model budget above 80% of the project cap (ORCHESTRATION_PROJECT_BUDGET_USD).
+        expr: |
+          max(model_budget_used_ratio) > 0.8
+        for: 5m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Model budget is more than 80% used"
+          runbook: "docs/runbooks/alerts.md#coversaathmodelbudgethigh"
+
+      - alert: CoverSaathPrivacyRefusalSpike
+        # At least 10 gate refusals in 15 minutes and more than 3 times the 6-hour average for a 15-minute window.
+        expr: |
+          sum(increase(privacy_gate_refusals_total[15m])) >= 10
+            and sum(increase(privacy_gate_refusals_total[15m])) > 3 * (sum(increase(privacy_gate_refusals_total[6h])) / 24)
+        for: 0m
+        labels:
+          severity: warn
+        annotations:
+          summary: "Privacy-gate refusals are well above their recent baseline"
+          runbook: "docs/runbooks/alerts.md#coversaathprivacyrefusalspike"
+
+      - alert: CoverSaathDbConnectionsHigh
+        # Connections in use above 80% of the pool size on any machine, sustained for 5 minutes.
+        expr: |
+          max by (instance) (db_pool_utilisation_ratio) > 0.8
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Database pool is more than 80% in use on a machine"
+          runbook: "docs/runbooks/alerts.md#coversaathdbconnectionshigh"
