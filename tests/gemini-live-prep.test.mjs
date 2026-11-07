@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { LIVE_RUN_CEILING_USD, main, parseArgs, planRun } from '../scripts/smoke-test-gemini.mjs';
-import { SYNTHETIC_CANARIES, buildSyntheticPolicyPdf } from '../scripts/fixtures/synthetic-policy-pages.mjs';
+import { SYNTHETIC_CANARIES, buildSyntheticPolicyPdf, stripTags } from '../scripts/fixtures/synthetic-policy-pages.mjs';
 
 // B2 live-run preparation (docs/runbooks/gemini-live-run.md). Everything here is stubbed: the model driver is a
 // local fake and global fetch is replaced so that any real network call fails the test. Synthetic data only.
@@ -173,4 +173,12 @@ test('the synthetic PDF is deterministic, three pages, and banner-marked; --writ
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('stripTags removes nested and reassembled tags and keeps table cells readable', () => {
+  assert.deepEqual(stripTags('<<b>b>x'), ['x']);
+  for (const hostile of ['<scr<b>ipt>alert</scr</b>ipt>', '<scr<script>ipt>x', '<<i>script>y']) {
+    for (const line of stripTags(hostile)) assert.doesNotMatch(line, /[<>]/, hostile);
+  }
+  assert.deepEqual(stripTags('<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>'), ['A | B', 'C | D']);
 });

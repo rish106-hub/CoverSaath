@@ -53,7 +53,18 @@ export const SYNTHETIC_POLICY_PAGES = Object.freeze([
   ] },
 ]);
 
-const stripTags = text => text.replace(/<\/tr>/g, '\n').replace(/<\/t[dh]>/g, ' | ').replace(/<[^>]+>/g, '').split('\n').map(line => line.replace(/\s*\|\s*$/, '').trim()).filter(Boolean);
+// Removes tags until the text stops changing, so a fragment such as `<scr<b>ipt>` cannot reassemble into a tag.
+function removeTags(text) {
+  let previous;
+  let current = text;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]*>/g, '');
+  } while (current !== previous);
+  return current.replace(/[<>]/g, '');
+}
+
+export const stripTags = text => removeTags(text.replace(/<\/tr>/g, '\n').replace(/<\/t[dh]>/g, ' | ')).split('\n').map(line => line.replace(/\s*\|\s*$/, '').trim()).filter(Boolean);
 
 /** Deterministic PDF bytes of the same synthetic pages (banner on every page). */
 export async function buildSyntheticPolicyPdf() {
