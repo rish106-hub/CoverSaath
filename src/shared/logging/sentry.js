@@ -25,7 +25,6 @@ function createCodeCheck(extra = []) {
 }
 
 const defaultCodeCheck = createCodeCheck();
-const SAFE_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
 function safeFrames(frames) {
   if (!Array.isArray(frames)) return undefined;
@@ -55,7 +54,7 @@ function rebuildEvent(event, trustedCode) {
   if (event.exception?.values) {
     out.exception = {
       values: event.exception.values.slice(0, 5).map(item => ({
-        type: typeof item.type === 'string' && SAFE_NAME.test(item.type) && scrubText(item.type) === item.type ? item.type : 'Error',
+        type: describeError({ name: item.type }).errorType,
         value: safeMessage(item.value),
         ...(item.stacktrace ? { stacktrace: { frames: safeFrames(item.stacktrace.frames) } } : {}),
         ...(item.mechanism ? { mechanism: { type: SAFE_TAG.test(String(item.mechanism.type)) && scrubText(String(item.mechanism.type)) === String(item.mechanism.type) ? String(item.mechanism.type) : 'generic', handled: item.mechanism.handled === true } } : {}),
@@ -82,7 +81,8 @@ function rebuildEvent(event, trustedCode) {
 export function sanitizedError(error, trustedCode = defaultCodeCheck) {
   const facts = describeError(error, { frames: false });
   const stand = new Error(trustedCode(facts.errorCode) ? facts.errorCode : 'UNEXPECTED_ERROR');
-  stand.name = SAFE_NAME.test(facts.errorType) && scrubText(facts.errorType) === facts.errorType ? facts.errorType : 'Error';
+  // describeError() only returns a name from a closed list of error classes; anything else is already plain Error.
+  stand.name = facts.errorType;
   stand.stack = `${stand.name}: ${stand.message}\n${safeStackFrames(error?.stack).map(frame => `    ${frame}`).join('\n')}`;
   return stand;
 }

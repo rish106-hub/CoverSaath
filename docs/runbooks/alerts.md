@@ -1,6 +1,6 @@
 # Runbook: metrics and alerts
 
-Decision record: ADR 0017. Synthetic data only. Rules live in `ops/alerts.rules.yml`; this page explains them. Thresholds are first guesses with no measured traffic behind them (no capacity numbers exist): tune after the first hosted week.
+Decision record: ADR 0019. Synthetic data only. Rules live in `ops/alerts.rules.yml`; this page explains them. Thresholds are first guesses with no measured traffic behind them (no capacity numbers exist): tune after the first hosted week.
 
 ## Metrics endpoint
 

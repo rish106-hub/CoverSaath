@@ -51,7 +51,7 @@ function stubRepositories(db, overrides = {}) {
   const access = new TenantAccessService(db, { auth, households, consents, env: {} });
   const fail = name => async () => { throw new Error(`${name} must not be reached across households`); };
   const cases = { get: async id => db.one('SELECT * FROM service_cases WHERE id = ?', [id]), create: fail('cases.create'), transition: fail('cases.transition') };
-  const workflows = { getRun: async id => db.one('SELECT * FROM workflow_runs WHERE id = ?', [id]) };
+  const workflows = { getRun: async id => db.one('SELECT * FROM workflow_runs WHERE id = ?', [id]), listTasks: async id => db.many('SELECT * FROM workflow_tasks WHERE workflow_run_id = ? ORDER BY created_at, id', [id]) };
   return { access, auth, households, consents, audit, cases, workflows };
 }
 

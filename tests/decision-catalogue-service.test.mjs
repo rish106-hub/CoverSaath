@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { parameterAt, parameterIds, seedParameterWorld } from './support/parameter-fixtures.mjs';
+import { sharedColumnCrypto } from '../src/backend/security/column-crypto.js';
 import { AuditRepository } from '../src/backend/repositories/audit-repository.js';
 import { CatalogueReviewRepository } from '../src/backend/repositories/catalogue-review-repository.js';
 import { createDecisionCatalogueService } from '../src/backend/services/decision-catalogue-service.js';
@@ -190,4 +191,13 @@ test('review keys are server-derived: the stored fact key is the digest of the s
   const row = await w.db.one('SELECT fact_key, document_id FROM catalogue_reviews');
   assert.equal(row.fact_key, createHash('sha256').update(factId).digest('hex'));
   assert.equal(row.document_id, DOC);
+});
+
+test('review: the catalogue case read opens the sealed stated estimate and never hands out the ciphertext', postgresTestOptions(), async t => {
+  const w = await world(t);
+  await w.reviews.grantHouseholdConfirmer({ householdId: H, adultUserId: OWNER, grantedByAdultId: OWNER });
+  await w.db.run('UPDATE service_cases SET stated_estimate_ciphertext = ? WHERE id = ?', [sharedColumnCrypto().seal('service_cases', 'stated_estimate_ciphertext', CASE, '4321', { fixedSize: 64 }), CASE]);
+  const { caseRecord } = await w.catalogue.confirmerCase(owner, CASE);
+  assert.equal(caseRecord.stated_estimate_minor, 4321);
+  assert.equal('stated_estimate_ciphertext' in caseRecord, false);
 });

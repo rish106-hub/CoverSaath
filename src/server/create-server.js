@@ -134,7 +134,11 @@ export function createApiServer({
     recordEvent({
       name: 'provider_call', provider: 'google', outcome: /^[a-z0-9_.-]{1,64}$/.test(outcome) ? outcome : 'error',
       code: event.outcome === 'ok' ? null : event.outcome, durationMs: event.latencyMs,
-      payload: { task: event.task, dispatched: event.dispatched, inputTokens: event.inputTokens, outputTokens: event.outputTokens, costMicroUsd: Math.round((event.costUsd ?? 0) * 1_000_000) },
+      payload: {
+        task: event.task, dispatched: event.dispatched, inputTokens: event.inputTokens, outputTokens: event.outputTokens, costMicroUsd: Math.round((event.costUsd ?? 0) * 1_000_000),
+        // Counts-only gate summary (ADR 0017 D5): never digests, reason codes, placeholder kinds or text.
+        gateVersion: event.gateVersion, gatedSlots: event.gatedSlots, placeholders: event.placeholders, reasonCodes: event.reasonCodes, gatedBytes: event.gatedBytes,
+      },
     });
   };
   const liveRegistryFactory = createGeminiCoverageRegistryFactory({
@@ -212,6 +216,8 @@ export function createApiServer({
       onAudit: entry => logger.audit(entry),
       sessionDurationMs: config.sessionTtlMs,
       maxActiveSessions: config.maxSessions,
+      // A sealed value that cannot be decrypted on an erasure path is reported by table and column only.
+      onUnreadable: event => console.warn(JSON.stringify({ event: 'sealed_value_unreadable', table: event.table, column: event.column })),
       ...(columnCrypto ? { columnCrypto } : {}),
     });
     if (config.events.enabled && !recorder) {
@@ -229,6 +235,7 @@ export function createApiServer({
       const sweep = () => {
         services.appEvents.purgeExpired().catch(() => {});
         services.runtimeLimits.purgeRequestWindows(10 * 60_000).catch(() => {});
+        services.runtimeLimits.purgeExpiredClaims().catch(() => {});
       };
       housekeepingTimer = setInterval(sweep, 60 * 60 * 1000);
       housekeepingTimer.unref?.();
@@ -311,13 +318,17 @@ export function createApiServer({
     let errorCode = null;
     let loggedCode = null;
     // Failures are logged and (when unexpected) reported as class, code and status only, never the message.
-    const onError = (error, status) => {
+    const onError = (error, status, { unexpected = false } = {}) => {
       loggedCode = safeCode(error?.code);
-      logger.failure(error, { requestId, status });
+      // A backend that could not be built is wrapped as BACKEND_UNAVAILABLE; the cause is what an operator needs to see.
+      const wrapped = error?.code === 'BACKEND_UNAVAILABLE' && error.cause && typeof error.cause === 'object';
+      const subject = wrapped ? error.cause : error;
+      logger.failure(subject, { requestId, status });
       metrics.recordPrivacyRefusal(error?.code);
-      // Only unexpected failures are reported: a 500, or a 5xx with no application code. An expected 503 that carries a
-      // deliberate code (PROVIDER_NOT_CONFIGURED, DATABASE_UNAVAILABLE) is logged, not reported.
-      if (status === 500 || (status >= 500 && !isApplicationCode(error?.code))) errorReporter?.captureError(error, { requestId });
+      // Only unexpected failures are reported: a 500, a 5xx with no application code, an internal error that the route
+      // answered with a 4xx, or a backend that failed to build. An expected 503 that carries a deliberate code
+      // (PROVIDER_NOT_CONFIGURED, DATABASE_UNAVAILABLE) is logged, not reported.
+      if (unexpected || wrapped || status === 500 || (status >= 500 && !isApplicationCode(error?.code))) errorReporter?.captureError(subject, { requestId });
     };
     const send = (status, value) => {
       errorCode = typeof value?.error?.code === 'string' ? value.error.code : null;

@@ -1,6 +1,6 @@
 import { createMetricsRegistry, oneOf, word } from './registry.js';
 
-// The metrics this service exposes (ADR 0017, docs/runbooks/alerts.md). Callers pass only route templates, status classes and
+// The metrics this service exposes (ADR 0019, docs/runbooks/alerts.md). Callers pass only route templates, status classes and
 // closed-set names; ids, bodies, headers, error messages and free text have no way in.
 
 const METHODS = ['get', 'head', 'post', 'put', 'patch', 'delete', 'options'];

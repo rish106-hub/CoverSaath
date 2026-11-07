@@ -41,7 +41,7 @@ async function open(t) {
 // call until it resolves, so an attempt stays running for as long as a test needs it.
 function fakeModel(mode = 'answer', { gate } = {}) {
   const calls = [];
-  const call = async ({ payload }) => {
+  const call = async ({ input: { payload } }) => {
     calls.push(payload.chunks ? 'extract' : 'reconcile');
     if (gate) await gate;
     if (mode === 'hang') return new Promise(() => {});

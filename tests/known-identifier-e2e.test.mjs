@@ -14,6 +14,7 @@ import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis
 import { createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import { postgresTestOptions } from './support/pg.mjs';
 import { liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
+import { plainRow, plainRows } from './support/sealed.mjs';
 
 const KNOWN_NAME = 'Zorblax Quimby';
 const KNOWN_DEPENDENT = 'Fenwick Tolliver';
@@ -31,8 +32,8 @@ async function seedHouseholdIdentity(app, scenario) {
 
 async function everythingPersisted(database) {
   return JSON.stringify({
-    runs: await database.prepare('SELECT input_json FROM workflow_runs').all(),
-    tasks: await database.prepare('SELECT input_json, output_json, last_error_message FROM workflow_tasks').all(),
+    runs: await plainRows(database, 'workflow_runs'),
+    tasks: await plainRows(database, 'workflow_tasks'),
     audit: await database.prepare('SELECT event_payload_json FROM audit_events').all(),
   });
 }
@@ -82,7 +83,7 @@ test('K1 [awaits P0-C rebase]: the model boundary redacts known values even when
   const { job } = await service.createAnalysisRun({ caseId: scenario.caseId, consentGrantId: scenario.coverageConsentId, executionMode: 'live', modelPermission: true, idempotencyKey: 'k1-boundary' });
 
   // Simulate a stored excerpt that still names a household member (for example text stored before this fix).
-  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(job.id)).input_json);
+  const input = JSON.parse((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [job.id])).input_json);
   input.sourcePages[0].text = `Room rent limit is 5000 for ${KNOWN_NAME} and ${KNOWN_DEPENDENT}, born ${KNOWN_DOB}.`;
   await app.database.prepare('UPDATE workflow_runs SET input_json = ? WHERE id = ?').run(JSON.stringify(input), job.id);
 

@@ -249,3 +249,18 @@ test('Sentry knownCodes option adds application codes; everything else still col
   assert.ok(text.includes('CASE_NOT_READY_FOR_ANALYSIS') && text.includes('UNEXPECTED_ERROR') && !text.includes('RAVI_KUMAR_SECRET'));
   await reporter.close(1_000);
 });
+
+test('scrubValue cuts a cycle and bounds a wide shared structure', () => {
+  const loop = { name: 'x' };
+  loop.self = loop;
+  loop.list = [loop];
+  const out = scrubValue(loop);
+  assert.equal(out.self, '[CIRCULAR]');
+  assert.deepEqual(out.list, ['[CIRCULAR]']);
+  // A diamond that doubles at every level would visit 2^40 nodes without a budget.
+  let node = { leaf: 1 };
+  for (let i = 0; i < 40; i += 1) node = { a: node, b: node };
+  const started = Date.now();
+  JSON.stringify(scrubValue(node));
+  assert.ok(Date.now() - started < 1000, 'the walk is bounded');
+});

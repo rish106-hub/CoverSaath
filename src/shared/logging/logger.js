@@ -38,10 +38,19 @@ const settingOf = error => {
   return match ? match[1] : null;
 };
 
+// An error class name is logged only when it is on this closed list: a name such as "Asha" or "ASHA_SHARMA"
+// would otherwise pass a shape check and be written as errorType. Anything else is reported as plain Error.
+const ERROR_CLASSES = new Set([
+  'Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'EvalError', 'URIError', 'AggregateError', 'AbortError',
+  'TimeoutError', 'DOMException', 'SystemError', 'DatabaseError', 'AssertionError',
+  // This codebase's own classes (each sets this.name to a fixed string).
+  'CatalogueError', 'DocumentIntakeError', 'HouseholdReasoningError', 'InsuranceRulesValidationError', 'PdfSandboxError', 'PostgresDatabaseError', 'ProfileIntakeError', 'ProviderAuthorizationError', 'ProviderUnavailableError', 'UnconfiguredConnectorError', 'UnverifiedConnectorError',
+]);
+
 export function describeError(error, { frames = false } = {}) {
   const raw = error !== null && typeof error === 'object' ? error : {};
   const setting = settingOf(raw);
-  const type = typeof raw.name === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(raw.name) ? raw.name : 'Error';
+  const type = typeof raw.name === 'string' && ERROR_CLASSES.has(raw.name) ? raw.name : 'Error';
   const status = safeInt(raw.statusCode ?? raw.status, 100, 599);
   return { errorType: type, errorCode: safeCode(raw.code), ...(setting ? { setting } : {}), ...(status ? { status } : {}), ...(frames ? { frames: safeStackFrames(raw.stack) } : {}) };
 }
@@ -97,7 +106,7 @@ export function createLogger({ env = process.env, destination, level, service = 
   const write = (levelName, event, fields) => {
     const clean = {};
     for (const [key, value] of Object.entries(fields)) if (!RESERVED_KEYS.has(key)) clean[key] = value;
-    base[levelOf(levelName)]({ ...clean, event: EVENT_NAME.test(event) ? event : 'invalid_event_name' });
+    base[levelOf(levelName)]({ ...clean, event: typeof event === 'string' && EVENT_NAME.test(event) ? event : 'invalid_event_name' });
   };
   // Free-form callers (info/warn/error/debug/log): only FIELD_SHAPES keys survive.
   const emit = (levelName, event, fields) => {

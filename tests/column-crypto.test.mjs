@@ -222,3 +222,17 @@ test('blindIndex is deterministic, label-separated, key-dependent and not the pl
   assert.throws(() => a.blindIndex('', 'x'), error => error.code === 'COLUMN_ENCRYPTION_CONTEXT_INVALID');
   assert.throws(() => a.blindIndex('email', null), error => error.code === 'COLUMN_ENCRYPTION_CONTEXT_INVALID');
 });
+
+test('blindIndexes returns the index under every key of the ring, current first-class and previous included', () => {
+  const oldKey = randomBytes(32).toString('base64');
+  const k1 = createColumnCrypto(readDataEncryptionConfig({ DATA_ENCRYPTION_KEY_BASE64: oldKey, DATA_ENCRYPTION_KEY_ID: 'k1' }));
+  const k2 = createColumnCrypto(readDataEncryptionConfig({
+    DATA_ENCRYPTION_KEY_BASE64: randomBytes(32).toString('base64'), DATA_ENCRYPTION_KEY_ID: 'k2', DATA_ENCRYPTION_PREVIOUS_KEYS_JSON: JSON.stringify({ k1: oldKey }),
+  }));
+  const ring = k2.blindIndexes('doc', 'document-1');
+  assert.equal(ring.length, 2);
+  assert.ok(ring.includes(k2.blindIndex('doc', 'document-1')));
+  assert.ok(ring.includes(k1.blindIndex('doc', 'document-1')), 'the previous key index is found');
+  assert.deepEqual(k1.blindIndexes('doc', 'document-1'), [k1.blindIndex('doc', 'document-1')]);
+  assert.throws(() => k2.blindIndexes('', 'x'), error => error.code === 'COLUMN_ENCRYPTION_CONTEXT_INVALID');
+});

@@ -1,4 +1,4 @@
-# Prometheus-style rules for the CoverSaath API (ADR 0017, docs/runbooks/alerts.md).
+# Prometheus-style rules for the CoverSaath API (ADR 0019, docs/runbooks/alerts.md).
 # Metrics come from GET /api/v1/metrics (bootstrap bearer; one series set per machine, label `instance` added by the scraper).
 # Thresholds here are the single source: the runbook describes them, tests/metrics.test.mjs checks that every metric used
 # below is one this service exports. Load with promtool or Grafana (Mimir/Loki ruler); `promtool check rules` is the syntax check.

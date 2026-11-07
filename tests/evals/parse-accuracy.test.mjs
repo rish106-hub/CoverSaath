@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { extractFields } from '../../src/features/ai-analysis/eval-extractor.js';
 import { scoreFields } from '../../src/features/ai-analysis/eval-scorer.js';
-import { adjudicate, createGeminiCaller } from '../../src/features/ai-analysis/field-adjudicator.js';
+import { adjudicate } from '../../src/features/ai-analysis/field-adjudicator.js';
+import { createGeminiEvalCaller } from '../../scripts/lib/gemini-eval-caller.mjs';
 
 const enabled = process.env.RUN_PARSE_EVAL === '1';
 const skip = enabled ? false : 'set RUN_PARSE_EVAL=1 with .local/eval/sarvam-raw.json and golden.json';
@@ -54,7 +55,7 @@ test('Gemini negative control: a snippet without the value yields unknown', {
   const result = await adjudicate({
     disputes: [dispute], pages: synthetic,
     grant: { granted: true, recipient: 'gemini', documentId: 'synthetic-negative-control' },
-    call: createGeminiCaller({ apiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY, model: process.env.LLM_MODEL }),
+    call: createGeminiEvalCaller({ apiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY, model: process.env.LLM_MODEL }),
   });
   assert.equal(result.calls, 1);
   assert.equal(result.results[0].accepted, false);

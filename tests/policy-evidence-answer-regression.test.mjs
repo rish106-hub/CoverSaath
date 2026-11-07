@@ -2,6 +2,7 @@
 // labelled as an exclusion, opt-out rows in the schedule, a described-but-not-selected benefit). Synthetic only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { opaqueClauseId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
 import { INVESTIGATION_VERSION, buildClauses, investigate } from '../src/features/policy-evidence/index.js';
 import { parameterAt as at, seedParameterWorld } from './support/parameter-fixtures.mjs';
@@ -33,7 +34,7 @@ const stored = { pages: [
 ] };
 const clauses = buildClauses(stored, { documentId: 'doc-1', sourceVersion: 'v1' }).clauses;
 const textOf = needle => clauses.find(clause => clause.text.includes(needle));
-const finding = (needle, quote, extra = {}) => ({ clause_ids: [textOf(needle).clauseId], quote, subject: 'x', conditions: [], exceptions: [], ...extra });
+const finding = (needle, quote, extra = {}) => ({ clause_ids: [opaqueClauseId(textOf(needle).clauseId)], quote, subject: 'x', conditions: [], exceptions: [], ...extra });
 const ask = async (question, findings, overrides = []) => investigate({
   question, clauses, consentCheck: async () => {},
   call: async ({ task }) => ({ json: task === 'policy_evidence_investigate' ? { findings } : { overrides }, usage: {} }),
@@ -84,7 +85,7 @@ test('"Not Applicable" in another plan column does not demote real coverage', as
   const built = buildClauses({ pages: plans }, { documentId: 'doc-2', sourceVersion: 'v1' }).clauses;
   const { answer } = await investigate({
     question: 'Is maternity covered on Plan A?', clauses: built, consentCheck: async () => {},
-    call: async ({ task }) => ({ json: task === 'policy_evidence_investigate' ? { findings: [{ clause_ids: [built[0].clauseId], quote: 'Plan A: Covered after 24 months', subject: 'Maternity', effect: 'covers', conditions: [], exceptions: [] }] } : { overrides: [] }, usage: {} }),
+    call: async ({ task }) => ({ json: task === 'policy_evidence_investigate' ? { findings: [{ clause_ids: [opaqueClauseId(built[0].clauseId)], quote: 'Plan A: Covered after 24 months', subject: 'Maternity', effect: 'covers', conditions: [], exceptions: [] }] } : { overrides: [] }, usage: {} }),
   });
   assert.equal(answer.covered.length, 1);
 });
@@ -95,7 +96,7 @@ test('an opt-out inside a very long row is still honoured', async () => {
   const prose = built.find(clause => /delivery expenses/.test(clause.text));
   const { answer } = await investigate({
     question: 'Is parenthood cover included?', clauses: built, consentCheck: async () => {},
-    call: async ({ task }) => ({ json: task === 'policy_evidence_investigate' ? { findings: [{ clause_ids: [prose.clauseId], quote: 'Parenthood cover pays delivery expenses', subject: 'Parenthood', effect: 'covers', conditions: [], exceptions: [] }] } : { overrides: [] }, usage: {} }),
+    call: async ({ task }) => ({ json: task === 'policy_evidence_investigate' ? { findings: [{ clause_ids: [opaqueClauseId(prose.clauseId)], quote: 'Parenthood cover pays delivery expenses', subject: 'Parenthood', effect: 'covers', conditions: [], exceptions: [] }] } : { overrides: [] }, usage: {} }),
   });
   assert.equal(answer.covered.length, 0);
 });
@@ -116,7 +117,7 @@ test('cashless authorization time is kept as a cited condition', async () => {
 test('schedule capping room rent against product wording "At Actuals": both are shown and the answer is conditional', async () => {
   const { answer } = await ask('What is the room rent limit?',
     [finding('At Actuals', 'Room Rent | At Actuals', { subject: 'Room rent', effect: 'covers' })],
-    [{ clause_ids: [textOf('capped at Rs. 5,000').clauseId], quote: 'room rent is capped at Rs. 5,000 per day', effect: 'limits', target_finding_ids: ['f1'] }]);
+    [{ clause_ids: [opaqueClauseId(textOf('capped at Rs. 5,000').clauseId)], quote: 'room rent is capped at Rs. 5,000 per day', effect: 'limits', target_finding_ids: ['f1'] }]);
   assert.equal(answer.covered.length, 1);
   assert.equal(answer.limited_or_excluded.length, 1);
   assert.deepEqual(answer.limited_or_excluded[0].targets, ['f1']);

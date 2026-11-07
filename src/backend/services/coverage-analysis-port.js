@@ -3,6 +3,7 @@ import { GEMINI_MODEL_RECIPIENT, opaqueSourceId } from '../../features/ai-analys
 import { modelObservationCandidates } from '../../features/coverage-analysis/model-observations.js';
 import { householdLock, idempotencyLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { openIdempotencyRow, openWorkflowRun, openWorkflowTask, sealIdempotencyResponse } from '../security/sealed-records.js';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const textDigest = value => createHash('sha256').update(value, 'utf8').digest('hex');
@@ -151,7 +152,9 @@ export function createCoverageAnalysisPort({
     FROM service_cases service_case WHERE service_case.id = ?`, [caseId])) ?? null;
   // The household of a case, for the audit chain and the household lock. A missing
   // case gives null (the global chain), never a Promise.
-  const householdOfCase = async caseId => (await services.cases.get(caseId))?.household_id ?? null;
+  // Read straight from the row: the household never needs the sealed stated estimate, so an unreadable amount cannot stop a
+  // revocation, a stop or an erasure that only needs to lock the household.
+  const householdOfCase = async caseId => (await database.one('SELECT household_id FROM service_cases WHERE id = ?', [caseId]))?.household_id ?? null;
   // Pages among `sourceIds` that are eligible at `at`, as page id -> document id.
   const eligibleDocumentsBySource = async (caseId, sourceIds, at) => new Map(
     (await database.many(eligibleSourcePagesSql({ filterByPageIds: true }), [caseId, sourceIds, at, modelRecipient]))
@@ -196,8 +199,8 @@ export function createCoverageAnalysisPort({
     }
     if (sourceIds.some(id => !documentBySource.has(id))) return { decision: deny('AUTHORIZED_SOURCES_INVALID') };
 
-    const run = await database.one(`SELECT id, case_id, execution_mode, status, consent_grant_id, input_json
-      FROM workflow_runs WHERE id = ?`, [runId]);
+    const run = openWorkflowRun(columnCrypto, await database.one(`SELECT id, case_id, execution_mode, status, consent_grant_id, input_json
+      FROM workflow_runs WHERE id = ?`, [runId]));
     if (!run || run.case_id !== caseId || run.execution_mode !== 'live' || !ACTIVE_RUN_STATUSES.has(run.status)) {
       return { decision: deny('RUN_NOT_DISPATCHABLE') };
     }
@@ -298,7 +301,7 @@ export function createCoverageAnalysisPort({
   const getJob = async runId => {
     const run = await services.workflows.getRun(runId);
     if (!run) return null;
-    const tasks = await database.many('SELECT * FROM workflow_tasks WHERE workflow_run_id = ? ORDER BY created_at, id', [runId]);
+    const tasks = (await database.many('SELECT * FROM workflow_tasks WHERE workflow_run_id = ? ORDER BY created_at, id', [runId])).map(task => openWorkflowTask(columnCrypto, task));
     return { ...run, tasks };
   };
   return Object.freeze({
@@ -348,7 +351,7 @@ export function createCoverageAnalysisPort({
           seen.add(key);
           identifiers.push({ kind, value: trimmed });
         };
-        for (const member of members) { add('NAME', columnCrypto.open('household_members', 'display_name', member.id, member.display_name)); add('DOB', member.date_of_birth); }
+        for (const member of members) { add('NAME', columnCrypto.open('household_members', 'display_name', member.id, member.display_name)); add('DOB', columnCrypto.open('household_members', 'date_of_birth', member.id, member.date_of_birth)); }
         for (const adult of adults) {
           add('NAME', columnCrypto.open('adult_users', 'display_name', adult.id, adult.display_name));
           add('EMAIL', columnCrypto.open('adult_users', 'contact_email', adult.id, adult.contact_email));
@@ -368,12 +371,12 @@ export function createCoverageAnalysisPort({
     },
     async findIdempotency({ scope, key, at }) {
       await database.run(DELETE_EXPIRED_IDEMPOTENCY_SQL, [scope, key, at]);
-      return (await database.one(SELECT_IDEMPOTENCY_SQL, [scope, key])) ?? null;
+      return openIdempotencyRow(columnCrypto, await database.one(SELECT_IDEMPOTENCY_SQL, [scope, key])) ?? null;
     },
     // For ports without in-transaction idempotency. The persistent service calls it
     // only when createRunWithParameters did not record the key itself.
     async recordIdempotency({ scope, key, requestDigest, responseStatus, response, expiresAt }) {
-      await database.run(INSERT_IDEMPOTENCY_SQL, [scope, key, requestDigest, responseStatus, JSON.stringify(response), expiresAt, new Date().toISOString()]);
+      await database.run(INSERT_IDEMPOTENCY_SQL, [scope, key, requestDigest, responseStatus, sealIdempotencyResponse(columnCrypto, scope, key, JSON.stringify(response)), expiresAt, new Date().toISOString()]);
     },
     async createRunWithTasks(input) { return services.workflows.createRunWithTasks(input); },
     // Creates a run, its tasks, its registry pin and one explicit parameter
@@ -412,7 +415,7 @@ export function createCoverageAnalysisPort({
         const at = clock().toISOString();
         if (idempotency) {
           await database.run(DELETE_EXPIRED_IDEMPOTENCY_SQL, [idempotency.scope, idempotency.key, at]);
-          const existing = await database.one(SELECT_IDEMPOTENCY_SQL, [idempotency.scope, idempotency.key]);
+          const existing = openIdempotencyRow(columnCrypto, await database.one(SELECT_IDEMPOTENCY_SQL, [idempotency.scope, idempotency.key]));
           if (existing) return { existing };
         }
         // The run's own coverage_reconstruction grant is re-checked under the
@@ -478,7 +481,7 @@ export function createCoverageAnalysisPort({
         if (idempotency) {
           await database.run(INSERT_IDEMPOTENCY_SQL, [
             idempotency.scope, idempotency.key, idempotency.requestDigest, idempotency.responseStatus,
-            JSON.stringify(idempotency.response), idempotency.expiresAt, at,
+            sealIdempotencyResponse(columnCrypto, idempotency.scope, idempotency.key, JSON.stringify(idempotency.response)), idempotency.expiresAt, at,
           ]);
         }
         const created = await services.workflows.getRun(run.id);
@@ -492,7 +495,7 @@ export function createCoverageAnalysisPort({
     async verifyRunSourcesCurrent(runId) {
       let decision;
       try {
-        const run = await database.one('SELECT id, case_id, input_json FROM workflow_runs WHERE id = ?', [runId]);
+        const run = openWorkflowRun(columnCrypto, await database.one('SELECT id, case_id, input_json FROM workflow_runs WHERE id = ?', [runId]));
         const persisted = run ? parse(run.input_json) : null;
         const caseRecord = run ? await loadCaseRecord(run.case_id) : null;
         decision = (await evaluateModelDispatch({
@@ -546,11 +549,11 @@ export function createCoverageAnalysisPort({
     async getTask(taskId) { return services.workflows.getTask(taskId); },
     async claimNext(input) { return services.workflows.claimNext(input); },
     async dependencyOutputs(taskId) {
-      const rows = await database.many(`SELECT prerequisite.input_json, prerequisite.output_json
+      const rows = await database.many(`SELECT prerequisite.id, prerequisite.input_json, prerequisite.output_json
         FROM workflow_task_dependencies dependency
         JOIN workflow_tasks prerequisite ON prerequisite.id = dependency.depends_on_task_id
         WHERE dependency.workflow_task_id = ? ORDER BY prerequisite.created_at, prerequisite.id`, [taskId]);
-      return Object.fromEntries(rows.map(row => [parse(row.input_json).key, parse(row.output_json)]));
+      return Object.fromEntries(rows.map(row => openWorkflowTask(columnCrypto, row)).map(row => [parse(row.input_json).key, parse(row.output_json)]));
     },
     async completeTask(taskId, input) { return services.workflows.completeTask(taskId, input); },
     async failTask(taskId, input) { return services.workflows.failTask(taskId, input); },
@@ -569,7 +572,16 @@ export function createCoverageAnalysisPort({
     // erasure, the stop and its audit event commit together. Lock order: the run
     // row, then its tasks.
     async stopForRevocation(runId, { reason = 'consent_not_active', reasonCode = null } = {}) {
-      const run = await services.workflows.getRun(runId);
+      // A run whose input cannot be decrypted must still be stoppable and erasable: it comes back without its input, which
+      // makes the erasure below cover the whole run (nothing can be said about what it holds).
+      let run;
+      try {
+        run = await services.workflows.getRun(runId);
+      } catch (error) {
+        if (error?.code !== 'COLUMN_DECRYPTION_FAILED') throw error;
+        const row = await database.one('SELECT * FROM workflow_runs WHERE id = ?', [runId]);
+        run = row ? { ...row, input_json: null, inputUnreadable: true } : null;
+      }
       if (!run) return null;
       const householdId = await householdOfCase(run.case_id);
       const at = clock().toISOString();
@@ -649,7 +661,7 @@ export function createCoverageAnalysisPort({
       if (!located) throw Object.assign(new Error('The run was not found.'), { code: 'RUN_NOT_FOUND' });
       const householdId = await householdOfCase(located.case_id);
       return database.transaction(async () => {
-        const run = await database.one('SELECT id, case_id, input_json FROM workflow_runs WHERE id = ?', [runId]);
+        const run = openWorkflowRun(columnCrypto, await database.one('SELECT id, case_id, input_json FROM workflow_runs WHERE id = ?', [runId]));
         if (!run) throw Object.assign(new Error('The run was not found.'), { code: 'RUN_NOT_FOUND' });
         const input = parse(run.input_json);
         // Under the household lock, every source the run was built from and the

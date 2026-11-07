@@ -215,7 +215,7 @@ test('V3a: DOCUMENT_READBACK_ENABLED is off unless exactly "true"', () => {
 });
 
 test('V3a: a read document returns labelled, bounded values with page and quote, no identity, no model, no provider', pgOptions, async t => {
-  const app = await startApp(t);
+  const app = await startApp(t, { env: { APP_EVENTS_ENABLED: 'false' } });
   const s = await scenario(app);
   const providerBefore = app.providerCalls.length;
   const countsBefore = await tableCounts(app.database);

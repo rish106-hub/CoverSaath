@@ -12,6 +12,7 @@ import { GEMINI_MODEL_RECIPIENT } from '../src/features/ai-analysis/privacy-evid
 import { handleV1BackendRoute } from '../src/server/routes/v1-backend-routes.js';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { at, insert, seedWorld } from './support/postgres-fixtures.mjs';
+import { plainRow, plainRows } from './support/sealed.mjs';
 
 const pgOptions = postgresTestOptions();
 const NOW = new Date('2026-10-16T10:30:00.000Z');
@@ -46,7 +47,8 @@ function stubServices(db, { createRunDelayMs = 25 } = {}) {
         return { id };
       },
       async insertTask({ key, runId }) { calls.insertTask += 1; return { id: `${runId}:${key}` }; },
-      async getRun(runId) { return db.one('SELECT * FROM workflow_runs WHERE id = ?', [runId]); },
+      async getRun(runId) { return plainRow(db, 'workflow_runs', 'WHERE id = ?', [runId]); },
+      async listTasks(runId) { return plainRows(db, 'workflow_tasks', 'WHERE workflow_run_id = ? ORDER BY created_at, id', [runId]); },
       async getTask() { return null; },
       async claimNext() { return null; },
       async recoverExpiredLeases() { return 0; },
@@ -152,7 +154,7 @@ test('decision 1: an expired key is replaced inside the transaction', pgOptions,
   const result = await port.createRunWithParameters(runCreation(ids, { id: 'run-fresh', idempotency: idempotencyFor('expired-key-1', 'run-fresh') }));
   assert.equal(result.existing, undefined);
   assert.equal(calls.createRun, 1);
-  assert.equal(JSON.parse((await db.one('SELECT response_json FROM idempotency_keys WHERE idempotency_key = ?', ['expired-key-1'])).response_json).runId, 'run-fresh');
+  assert.equal(JSON.parse((await plainRow(db, 'idempotency_keys', 'WHERE idempotency_key = ?', ['expired-key-1'])).response_json).runId, 'run-fresh');
 });
 
 test('a failure after the run insert rolls back the run and the key together', pgOptions, async t => {
@@ -162,7 +164,7 @@ test('a failure after the run insert rolls back the run and the key together', p
   services.coverageParameters.initializeRunParameters = async () => { throw Object.assign(new Error('registry'), { code: 'PARAMETER_REGISTRY_INVALID' }); };
   const port = createCoverageAnalysisPort({ database: db, services, clock: () => NOW });
   await assert.rejects(port.createRunWithParameters(runCreation(ids, { id: 'run-rolled', idempotency: idempotencyFor('rollback-key-1', 'run-rolled') })), { code: 'PARAMETER_REGISTRY_INVALID' });
-  assert.equal(await db.one('SELECT id FROM workflow_runs WHERE id = ?', ['run-rolled']), null);
+  assert.equal(await plainRow(db, 'workflow_runs', 'WHERE id = ?', ['run-rolled']), null);
   assert.equal((await keyRow(db, 'rollback-key-1')).count, 0);
   assert.equal(db.inTransaction, false);
 });

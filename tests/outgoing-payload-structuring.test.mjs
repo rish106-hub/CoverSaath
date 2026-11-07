@@ -92,7 +92,7 @@ function capturingProvider() {
   const requests = [];
   const call = async request => {
     requests.push(JSON.stringify(request));
-    const { payload } = request;
+    const { input: { payload } } = request;
     if (!payload.chunks) return { json: { conflicts: [] }, usage: { inputTokens: 10, outputTokens: 2 } };
     const items = payload.chunks.flatMap(chunk => chunk.text.split('\n').filter(line => line.trim()).map((line, index) => ({
       chunk_id: chunk.chunk_id, proposed: { proposed_key: `synthetic_line_${index}`, category: 'unassigned', label: 'Line' },
@@ -119,7 +119,7 @@ test('positive control: the sweep finds every category in the source pages', () 
 test('every captured outgoing request has 0 sensitive-data matches in every category', async () => {
   const provider = capturingProvider();
   const result = await run(provider);
-  const kinds = provider.requests.map(body => (JSON.parse(body).payload.chunks ? 'extract' : 'reconcile'));  assert.ok(kinds.includes('extract') && kinds.includes('reconcile'), 'both call kinds were captured');
+  const kinds = provider.requests.map(body => (JSON.parse(body).input.payload.chunks ? 'extract' : 'reconcile'));  assert.ok(kinds.includes('extract') && kinds.includes('reconcile'), 'both call kinds were captured');
   for (const [index, body] of provider.requests.entries()) {
     assert.deepEqual(sweep(body), {}, `request ${index} (${kinds[index]}) leaked`);
     // Every probe class in the shared probe set as well: none of their raw values is in the body.
@@ -127,12 +127,12 @@ test('every captured outgoing request has 0 sensitive-data matches in every cate
   }
   // The registry catalog, prompt, titles and chunk text were all in the swept bodies.
   const extract = JSON.parse(provider.requests[kinds.indexOf('extract')]);
-  assert.ok(Array.isArray(extract.payload.registry) && extract.payload.registry.length > 0);
+  assert.ok(Array.isArray(extract.input.payload.registry) && extract.input.payload.registry.length > 0);
   assert.equal(typeof extract.system, 'string');
-  const titles = provider.requests.flatMap(body => JSON.parse(body).payload.chunks ?? []).map(chunk => chunk.title);
+  const titles = provider.requests.flatMap(body => JSON.parse(body).input.payload.chunks ?? []).map(chunk => chunk.title);
   assert.ok(titles.some(title => typeof title === 'string' && title.includes('<NAME_')), 'a gated title with a person placeholder was sent');
   const reconcile = JSON.parse(provider.requests[kinds.indexOf('reconcile')]);
-  assert.ok(reconcile.payload.groups.some(group => group.readings.some(reading => reading.quote.includes('<'))), 'reconcile readings carry gated table text');
+  assert.ok(reconcile.input.payload.groups.some(group => group.readings.some(reading => reading.quote.includes('<'))), 'reconcile readings carry gated table text');
   // The tab-separated table is refused by the gate and never sent.
   assert.ok(Object.values(result.extraction.chunkOutcomes).some(outcome => outcome.reason === 'privacy_gate_refused'));
   assert.equal(provider.requests.some(body => body.includes('Loading Reason')), true, 'the member table header itself is kept');

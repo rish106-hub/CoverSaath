@@ -16,7 +16,7 @@ import { createPostgresPool, postgresPoolOptionsFromEnv } from '../src/backend/d
 import { createDatabase } from '../src/backend/database/postgres/db.js';
 import { createBackendServices } from '../src/backend/services/backend-services.js';
 import { FIELD_NAMES, extractFields } from '../src/features/ai-analysis/eval-extractor.js';
-import { createGeminiCaller } from '../src/features/ai-analysis/field-adjudicator.js';
+import { createStructuringModelCallFactory } from '../src/features/ai-analysis/index.js';
 import { GEMINI_MODEL_RECIPIENT } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { getPolicyParameterDefinition } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import {
@@ -156,11 +156,11 @@ async function readStored({ database, services }) {
   const records = [];
   for (const record of await services.coverageParameters.listForRun('run-local', { limit: 500 })) {
     if (record.resolutionState === 'unknown') continue;
-    const observations = await database.many(`SELECT value_json, page FROM coverage_parameter_observations
-      WHERE parameter_record_id = ? AND redacted_at IS NULL ORDER BY created_at, id`, [record.id]);
+    // Observation values are sealed at rest (ADR 0013 addendum D2): read them through the repository, which opens them.
+    const observations = (await services.coverageParameters.listObservations(record.id, { limit: 500 })).filter(row => row.redactedAt === null);
     records.push({
       key: record.parameterKey, state: record.resolutionState, reason: record.resolutionReasonCode,
-      observations: observations.map(row => ({ value: JSON.parse(row.value_json), page: row.page })),
+      observations: observations.map(row => ({ value: row.value, page: row.page })),
     });
   }
   const stored = await services.policyStructuring.getStructuringRun({ householdId: 'household-local', workflowRunId: 'run-local', documentId: 'document-local' });
@@ -184,7 +184,6 @@ async function main() {
   }
   const at = new Date().toISOString();
   const model = process.env.LLM_MODEL;
-  const call = createGeminiCaller({ apiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY, model, timeoutMs: 240_000 });
   const backend = flags.store !== undefined ? await freshBackend(await readJson('normalized.json'), at) : null;
   // With --store the grant lives in the database and is re-checked before each call and inside the commit.
   const consentCheck = backend
@@ -194,6 +193,9 @@ async function main() {
     householdId: 'household-local', workflowRunId: 'run-local', documentId: 'document-local', sourceVersion: backend.sourceVersion,
     pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion: REGISTRY, recordedBy: 'policy-structuring', decisions, proposals, coverage, outcome, consentCheck,
   }) : null;
+  // The live call goes through the model gateway (ADR 0017): sealed input only, budget reservation, consent re-check before every
+  // call. It needs the LLM_* settings of live analysis (LLM_PROVIDER=google, LLM_MODEL, token rates, run and project budgets).
+  const call = createStructuringModelCallFactory({ env: process.env })({ consentCheck });
   const started = Date.now();
   const result = await structurePolicyDocument({
     pages, call, consentCheck, commit, knownIdentifiers: capture.knownIdentifiers, env: { ...process.env, POLICY_STRUCTURING_ENABLED: 'true' },

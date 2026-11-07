@@ -3,7 +3,10 @@ import { PolicyStructuringRepository } from './policy-structuring-repository.js'
 import { ClauseRepository } from './clause-repository.js';
 import { AppEventRepository } from './app-event-repository.js';
 import { householdLock } from '../database/postgres/locks.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { openWorkflowRun } from '../security/sealed-records.js';
 import { GEMINI_MODEL_RECIPIENT } from '../../features/ai-analysis/privacy-evidence-gate.js';
+import { normalizeRevocationReason } from '../../contracts/data-lifecycle.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 
@@ -11,7 +14,9 @@ const ERASURE_MARKER = 'consent_revoked';
 const GEMINI_RECIPIENT = GEMINI_MODEL_RECIPIENT;
 // Erasure reasons recorded on observations, evidence facts and persisted source-page excerpts.
 // Anything else is recorded as consent_revoked so an arbitrary caller value cannot become stored state.
-const OBSERVATION_ERASURE_REASONS = new Set(['consent_revoked', 'document_erasure', 'source_consent_not_current']);
+const OBSERVATION_ERASURE_REASONS = new Set(['consent_revoked', 'document_erasure', 'source_consent_not_current', 'data_subject_request', 'retention_expired']);
+// Reasons that carry their own marker and terminal code (S3). Everything else keeps the consent-stop labels.
+const OWN_MARKER_REASONS = new Set(['document_erasure', 'data_subject_request', 'retention_expired']);
 const RUN_SCAN_BATCH_SIZE = 100;
 const MAX_ERASURE_RUNS = 5_000;
 const EMPTY_TEXT_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
@@ -34,8 +39,10 @@ const notConfigured = message => Object.assign(new Error(message), { code: 'ERAS
 // workflow_tasks -> the rest. Every DB-touching method is async; a rejected query (including a
 // dropped connection) rejects the method, so every consent check fails closed.
 export class ConsentRepository {
-  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null, clauses = null, appEvents = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null, clauses = null, appEvents = null, ...options } = {}) {
     this.database = database;
+    // Revocation reasons, outbox error text and run input are sealed (ADR 0013 addendum D2).
+    this.crypto = resolveColumnCrypto(options);
     this.clock = clock;
     this.audit = audit;
     this.coverageParameters = coverageParameters;
@@ -218,13 +225,17 @@ export class ConsentRepository {
    * eraseDerivedRunData) before any task row. A grant already revoked (including by a concurrent
    * revoke that committed first) is returned unchanged: a second revoke writes nothing.
    */
-  async revoke({ id: revocationId = id('revocation'), grantId, revokedByAdultId, reason = null, downstreamDeletionDueAt = null }) {
+  async revoke({ id: revocationId = id('revocation'), grantId, revokedByAdultId, reason = null, downstreamDeletionDueAt = null, auditActor = null }) {
     const db = this.database;
     const existing = await db.one('SELECT household_id, subject_adult_id, revoked_at FROM consent_grants WHERE id = ?', [grantId]);
     if (!existing) throw new Error('Consent grant not found.');
     if (existing.subject_adult_id !== revokedByAdultId) throw new Error('Only the subject adult may revoke this consent.');
     if (existing.revoked_at) return this.get(grantId);
     const at = this.clock().toISOString();
+    // Free text is never stored (revocation row or audit payload, which cannot be erased): only a code from a fixed set.
+    reason = normalizeRevocationReason(reason);
+    // Who the nested erasure audits name: the subject for a normal revoke, the erasing owner or system for household erasure.
+    const actor = { type: auditActor?.type ?? 'adult_user', id: auditActor?.id ?? revokedByAdultId };
     await db.transaction(async () => {
       const grant = await db.one('SELECT * FROM consent_grants WHERE id = ? FOR UPDATE', [grantId]);
       if (!grant) throw new Error('Consent grant not found.');
@@ -236,9 +247,12 @@ export class ConsentRepository {
       await db.run(`INSERT INTO consent_revocations
         (id, consent_grant_id, revoked_by_adult_id, reason, revoked_at, downstream_deletion_due_at, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [revocationId, grantId, revokedByAdultId, reason, at, downstreamDeletionDueAt, at]);
-      await db.run(`UPDATE integration_outbox SET status = 'cancelled', updated_at = ?, last_error = 'Consent revoked.'
-        WHERE consent_grant_id = ? AND status IN ('pending', 'processing')`, [at, grantId]);
+      [revocationId, grantId, revokedByAdultId, this.crypto.seal('consent_revocations', 'reason', revocationId, reason === null || reason === undefined ? null : String(reason)), at, downstreamDeletionDueAt, at]);
+      for (const { id: outboxId } of await db.many(`SELECT id FROM integration_outbox
+        WHERE consent_grant_id = ? AND status IN ('pending', 'processing') ORDER BY id`, [grantId])) {
+        await db.run(`UPDATE integration_outbox SET status = 'cancelled', updated_at = ?, last_error = ? WHERE id = ?`,
+          [at, this.crypto.seal('integration_outbox', 'last_error', outboxId, 'Consent revoked.'), outboxId]);
+      }
       // Revocation deletes source documents collected under this grant. A document merely named
       // by a later derive/read scope remains owned by its uploader; the consent-authorised runs
       // are still erased below through consentGrantId.
@@ -286,7 +300,7 @@ export class ConsentRepository {
       if (this.coverageParameters) {
         for (const { id: documentId } of affectedDocuments) {
           await this.coverageParameters.redactObservationsForDocument({
-            documentId, reasonCode: 'consent_revoked', actorType: 'adult_user', actorId: revokedByAdultId, at,
+            documentId, reasonCode: 'consent_revoked', actorType: actor.type, actorId: actor.id, at,
           });
         }
       }
@@ -300,21 +314,21 @@ export class ConsentRepository {
         reason: ERASURE_MARKER,
         resourceType: 'consent_grant',
         resourceId: grantId,
-        actorType: 'adult_user',
-        actorId: revokedByAdultId,
+        actorType: actor.type,
+        actorId: actor.id,
         at,
       });
       for (const document of modelDisclosedDocuments) {
         if (!this.policyStructuring) throw notConfigured('Policy structuring erasure is not configured.');
         await this.policyStructuring.eraseDerived({
           householdId: document.household_id, documentIds: [document.id], reasonCode: ERASURE_MARKER,
-          resourceType: 'consent_grant', resourceId: grantId, actorType: 'adult_user', actorId: revokedByAdultId, at,
+          resourceType: 'consent_grant', resourceId: grantId, actorType: actor.type, actorId: actor.id, at,
         });
         // Question-time grants (ADR 0008): clauses, their FTS rows and answers citing the document go too.
         if (!this.clauses) throw notConfigured('Policy evidence erasure is not configured.');
         await this.clauses.eraseDerived({
           householdId: document.household_id, documentIds: [document.id], reasonCode: ERASURE_MARKER,
-          resourceType: 'consent_grant', resourceId: grantId, actorType: 'adult_user', actorId: revokedByAdultId,
+          resourceType: 'consent_grant', resourceId: grantId, actorType: actor.type, actorId: actor.id,
         });
       }
       // Stored OCR blocks are page text in another shape and are erased with it.
@@ -344,7 +358,9 @@ export class ConsentRepository {
       await db.run(`UPDATE coverage_graph_snapshots SET status = 'superseded'
         WHERE generated_by_run_id IN (SELECT id FROM workflow_runs WHERE consent_grant_id = ?)
           AND status <> 'superseded'`, [grantId]);
-      await this.audit?.append({ householdId: grant.household_id, actorType: 'adult_user', actorId: revokedByAdultId, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reason } });
+      // `auditActor` (household erasure only, never reachable from a request) names who really acted when the owner
+      // erases a household that holds another adult's grant; the revocation row still names the subject adult.
+      await this.audit?.append({ householdId: grant.household_id, actorType: actor.type, actorId: actor.id, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reasonProvided: reason !== null && reason !== undefined } });
     }, { locks: [householdLock(existing.household_id)] });
     return this.get(grantId);
   }
@@ -403,8 +419,9 @@ export class ConsentRepository {
     const redactionReason = OBSERVATION_ERASURE_REASONS.has(reason) ? reason : ERASURE_MARKER;
     // Existing consent-stop paths intentionally keep their stable consent_revoked excerpt marker.
     // A direct document erasure is distinct and must not be mislabeled as consent revocation.
-    const erasureMarker = redactionReason === 'document_erasure' ? 'document_erasure' : ERASURE_MARKER;
-    const terminalReason = redactionReason === 'document_erasure' ? 'DOCUMENT_DELETED' : 'CONSENT_REVOKED';
+    const erasureMarker = OWN_MARKER_REASONS.has(redactionReason) ? redactionReason : ERASURE_MARKER;
+    const terminalReason = redactionReason === 'document_erasure' ? 'DOCUMENT_DELETED'
+      : OWN_MARKER_REASONS.has(redactionReason) ? 'DATA_ERASED' : 'CONSENT_REVOKED';
     const documents = new Set(documentIds);
     const targeted = new Set(runIds);
     const candidateIds = new Set();
@@ -431,8 +448,16 @@ export class ConsentRepository {
     }
     // Lock order: every candidate run by id before any task row. The input is re-read under the
     // lock so a concurrent writer that committed first is seen.
-    const candidates = candidateIds.size === 0 ? [] : await db.many(`SELECT id, input_json FROM workflow_runs
-      WHERE id = ANY(CAST(? AS text[])) ORDER BY id FOR UPDATE`, [[...candidateIds]]);
+    // A run whose input cannot be decrypted (wrong key, damaged or moved ciphertext) must not stop an erasure: nothing can be
+    // said about what it holds, so it is erased as a whole run (input removed, run revoked) and never aborts the transaction.
+    const candidates = candidateIds.size === 0 ? [] : (await db.many(`SELECT id, input_json FROM workflow_runs
+      WHERE id = ANY(CAST(? AS text[])) ORDER BY id FOR UPDATE`, [[...candidateIds]])).map(row => {
+      try {
+        return openWorkflowRun(this.crypto, row);
+      } catch {
+        return { id: row.id, input_json: null, unreadable: true };
+      }
+    });
 
     let runs = 0;
     const erasedRunIds = [];
@@ -446,7 +471,7 @@ export class ConsentRepository {
     for (const row of candidates) {
       let input = null;
       try { input = row.input_json === null ? null : JSON.parse(row.input_json); } catch { input = null; }
-      const wholeRun = targeted.has(row.id);
+      const wholeRun = targeted.has(row.id) || row.unreadable === true;
       const referencesDocument = [
         ...(Array.isArray(input?.authorizedSources) ? input.authorizedSources : []),
         ...(Array.isArray(input?.sourcePages) ? input.sourcePages : []),
@@ -454,6 +479,7 @@ export class ConsentRepository {
       if (!wholeRun && !referencesDocument) continue;
       runs += 1;
       erasedRunIds.push(row.id);
+      if (row.unreadable) await db.run('UPDATE workflow_runs SET input_json = NULL WHERE id = ?', [row.id]);
       if (Array.isArray(input?.sourcePages)) {
         let changed = 0;
         const sourcePages = input.sourcePages.map(page => {
@@ -463,7 +489,7 @@ export class ConsentRepository {
           return { sourceId: page.sourceId, version: page.version, page: page.page, documentId: page.documentId, redacted: erasureMarker };
         });
         if (changed > 0) {
-          await db.run('UPDATE workflow_runs SET input_json = ? WHERE id = ?', [JSON.stringify({ ...input, sourcePages }), row.id]);
+          await db.run('UPDATE workflow_runs SET input_json = ? WHERE id = ?', [this.crypto.seal('workflow_runs', 'input_json', row.id, JSON.stringify({ ...input, sourcePages })), row.id]);
           pages += changed;
         }
       }
@@ -485,9 +511,17 @@ export class ConsentRepository {
           WHERE snapshot_id IN (SELECT id FROM coverage_graph_snapshots WHERE generated_by_run_id = ?)`, [row.id])).changes;
         graphNodes += (await db.run(`DELETE FROM coverage_graph_nodes
           WHERE snapshot_id IN (SELECT id FROM coverage_graph_snapshots WHERE generated_by_run_id = ?)`, [row.id])).changes;
-        graphs += (await db.run(`UPDATE coverage_graph_snapshots
-          SET status = 'superseded', graph_json = '{}'
-          WHERE generated_by_run_id = ? AND (status <> 'superseded' OR graph_json <> '{}')`, [row.id])).changes;
+        // graph_json is sealed (ADR 0013 addendum D2), so "already erased" is decided after opening: a snapshot counts as erased
+        // only when it is superseded and holds the empty marker. The marker is written sealed, bound to its own row.
+        const snapshotRows = await db.many('SELECT id, status, graph_json FROM coverage_graph_snapshots WHERE generated_by_run_id = ? ORDER BY id', [row.id]);
+        for (const snapshot of snapshotRows) {
+          let current = null;
+          try { current = this.crypto.open('coverage_graph_snapshots', 'graph_json', snapshot.id, snapshot.graph_json); } catch { current = null; }
+          if (snapshot.status === 'superseded' && current === '{}') continue;
+          await db.run("UPDATE coverage_graph_snapshots SET status = 'superseded', graph_json = ? WHERE id = ?",
+            [this.crypto.seal('coverage_graph_snapshots', 'graph_json', snapshot.id, '{}'), snapshot.id]);
+          graphs += 1;
+        }
       }
       // Parameter observations recorded by the run are derived data too: their values are
       // erased with the run (counts-only audit inside the parameter repository).

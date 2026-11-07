@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { QUESTION_CONSENT_SCOPE } from '../src/contracts/policy-evidence.js';
+import { opaqueDocumentId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { createPolicyEvidenceService } from '../src/backend/services/policy-evidence-service.js';
 
 // Synthetic stubs. Document boundaries of question-time evidence:
@@ -70,7 +71,7 @@ function harness({ documents, granted, others = [] }) {
       },
     },
   };
-  const createModelCall = () => async ({ payload }) => {
+  const createModelCall = () => async ({ input: { payload } }) => {
     state.calls += 1;
     await state.onCall?.();
     for (const clause of payload.clauses) sentDocuments.add(clause.document_id);
@@ -89,7 +90,7 @@ test('D1: only the latest active version is read; an authorised superseded versi
   const { ask, read, sentDocuments } = harness({ documents: [doc('wording-v1', 'wording', 1), doc('wording-v2', 'wording', 2)], granted: ['wording-v1', 'wording-v2'] });
   const { answer } = await ask();
   assert.deepEqual(read, ['wording-v2']);
-  assert.deepEqual([...sentDocuments], ['wording-v2'], 'no clause of the superseded version reaches the model');
+  assert.deepEqual([...sentDocuments], [opaqueDocumentId('wording-v2')], 'no clause of the superseded version reaches the model');
   assert.deepEqual(answer.completeness.documentsExcluded, [{ reason: 'superseded_version', count: 1 }]);
   assert.equal(answer.completeness.documentsAuthorised, 2);
   assert.ok(answer.unknowns.some(line => /newer version/.test(line)));

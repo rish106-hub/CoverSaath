@@ -4,6 +4,7 @@ import { AI_CONTRACT_VERSION, PROMPT_VERSION, createModelGateway } from '../src/
 import { INVESTIGATION_LIMITS, buildClauses, checklistFor, investigate } from '../src/features/policy-evidence/index.js';
 import { QUESTION_CONSENT_SCOPE } from '../src/contracts/policy-evidence.js';
 import { validateAnswer } from '../src/contracts/index.js';
+import { opaqueClauseId, opaqueDocumentId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { createPolicyEvidenceService } from '../src/backend/services/policy-evidence-service.js';
 
 // Synthetic policies only. Budgets must follow the gateway limit the call states, and nothing authorised is dropped silently.
@@ -19,7 +20,7 @@ function policy(pages, { documentId = 'doc-1', words = 40 } = {}) {
   ] })) };
   return buildClauses(stored, { documentId, sourceVersion: 'v1' }).clauses;
 }
-const wireBytes = list => list.reduce((sum, clause) => sum + bytes({ clause_id: clause.clauseId, document_id: clause.documentId, page: clause.page, kind: clause.kind, title: clause.sectionPath?.[0] ?? null, text: clause.text }) + 1, 0);
+const wireBytes = list => list.reduce((sum, clause) => sum + bytes({ clause_id: opaqueClauseId(clause.clauseId), document_id: opaqueDocumentId(clause.documentId), page: clause.page, kind: clause.kind, title: clause.sectionPath?.[0] ?? null, text: clause.text }) + 1, 0);
 
 const metadata = { contractVersion: AI_CONTRACT_VERSION, mode: 'fixture', provider: 'fixture', model: 'fixture', modelVersion: '1', promptVersion: PROMPT_VERSION, inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0, latencyMs: 0, costUsd: 0 };
 const citeFirst = ({ input }) => ({ output: { findings: [{ clause_ids: [input.payload.clauses[0].clause_id], quote: 'cataract surgery', subject: 'cataract surgery', conditions: [], exceptions: [] }] }, metadata });
@@ -29,9 +30,10 @@ function gatewayCall(maxInputBytes, { first = citeFirst, second = () => ({ outpu
   const gateway = createModelGateway({ mode: 'fixture', limits: { maxInputBytes, maxReservationUsd: 0 }, fixtures: {
     policy_evidence_investigate: first, policy_evidence_override_sweep: second,
   } });
-  return Object.assign(async ({ task, payload }) => {
+  return Object.assign(async ({ task, input }) => {
+    const { payload } = input;
     sizes.push({ task, bytes: bytes(payload), clauses: payload.clauses.length });
-    const result = await gateway.execute({ task, input: { payload }, reservationUsd: 0 });
+    const result = await gateway.execute({ task, input, reservationUsd: 0 });
     return { json: result.output, usage: { inputTokens: 0, outputTokens: 0 } };
   }, { maxInputBytes });
 }
@@ -62,7 +64,7 @@ test('S1: one byte over the first-pass budget takes the retrieved path and the g
 });
 
 test('S1: a policy between the gateway limit and the old 80 KB budget is no longer sent whole and rejected', async () => {
-  const clauses = policy(140, { words: 50 });
+  const clauses = policy(140, { words: 46 });
   const size = wireBytes(clauses);
   assert.ok(size > 64_000 && size < 80_000, `fixture size ${size} must sit in the gap`);
   const sizes = [];
@@ -74,7 +76,7 @@ test('S1: a policy between the gateway limit and the old 80 KB budget is no long
 test('S1: the sweep has its own budget; many findings shrink it, cited clauses stay and drops are reported', async () => {
   const clauses = policy(60);
   const cap = wireBytes(clauses) + INVESTIGATION_LIMITS.payloadMarginBytes + bytes(firstSkeleton);
-  const cited = clauses.slice(0, 30).map(clause => clause.clauseId);
+  const cited = clauses.slice(0, 30).map(clause => opaqueClauseId(clause.clauseId));
   const first = () => ({ output: { findings: cited.map(id => ({ clause_ids: [id], quote: 'we will pay for cataract surgery', subject: 'cataract surgery as a hospitalisation benefit for the insured member', conditions: [], exceptions: [] })) }, metadata });
   const sizes = [];
   const sent = [];
@@ -136,7 +138,8 @@ function serviceWorld({ total, granted, incomplete = new Set() }) {
     },
   };
   const payloads = [];
-  const createModelCall = () => Object.assign(async ({ task, payload }) => {
+  const createModelCall = () => Object.assign(async ({ task, input }) => {
+    const { payload } = input;
     payloads.push({ task, payload });
     if (task === 'policy_evidence_investigate') return { json: { findings: [{ clause_ids: [payload.clauses[0].clause_id], quote: 'cataract surgery', subject: 'cataract', conditions: [], exceptions: [] }] } };
     return { json: { overrides: [] } };
@@ -155,7 +158,8 @@ test('S1: several authorised documents need documentIds; 10 named documents are 
   const { answer } = await askService(Array.from({ length: 10 }, (_, index) => `doc-${index + 2}`));
   const sentDocuments = new Set(payloads[0].payload.clauses.map(clause => clause.document_id));
   assert.equal(sentDocuments.size, 10);
-  assert.ok(!sentDocuments.has('doc-0') && !sentDocuments.has('doc-1'), 'unauthorised documents are never read');
+  assert.ok(!sentDocuments.has(opaqueDocumentId('doc-0')) && !sentDocuments.has(opaqueDocumentId('doc-1')), 'unauthorised documents are never read');
+  assert.ok(!JSON.stringify(payloads).includes('doc-'), 'a stored document id never reaches the model');
   assert.equal(answer.completeness.documentsAuthorised, 12, 'unauthorised documents are not counted');
   assert.equal(answer.completeness.documentsRead, 10);
   assert.deepEqual(answer.completeness.documentsExcluded, [{ reason: 'not_named', count: 2 }]);
@@ -182,7 +186,7 @@ test('S1: investigate refuses an exclusion with an unknown reason or count', asy
 test('S1 review: findings citing more than the sweep can carry skip the sweep and report it, without failing the question', async () => {
   const clauses = policy(60);
   const cap = wireBytes(clauses) + INVESTIGATION_LIMITS.payloadMarginBytes + bytes(firstSkeleton);
-  const first = () => ({ output: { findings: clauses.map(clause => ({ clause_ids: [clause.clauseId], quote: 'we will pay for cataract surgery', subject: 'cataract surgery as a hospitalisation benefit for the insured member', conditions: [], exceptions: [] })) }, metadata });
+  const first = () => ({ output: { findings: clauses.map(clause => ({ clause_ids: [opaqueClauseId(clause.clauseId)], quote: 'we will pay for cataract surgery', subject: 'cataract surgery as a hospitalisation benefit for the insured member', conditions: [], exceptions: [] })) }, metadata });
   const sizes = [];
   const { answer } = await ask(clauses, gatewayCall(cap, { first, sizes }));
   assert.ok(!sizes.some(entry => entry.task === 'policy_evidence_override_sweep'), 'no oversized sweep is sent');

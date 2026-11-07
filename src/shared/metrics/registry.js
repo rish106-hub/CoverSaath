@@ -1,6 +1,6 @@
 import { scrubText } from '../logging/index.js';
 
-// In-process metrics registry (ADR 0017). Counters, gauges and fixed-bucket histograms, rendered in the Prometheus text
+// In-process metrics registry (ADR 0019). Counters, gauges and fixed-bucket histograms, rendered in the Prometheus text
 // format. Only numbers and low-cardinality labels can enter, enforced in layers:
 //  1. Metric and label names are fixed at registration (lower_snake). A caller cannot invent a label.
 //  2. Every label value must pass its label's validator (a closed set or a narrow pattern), match a conservative character

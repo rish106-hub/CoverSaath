@@ -115,7 +115,7 @@ test('V3b: the limit applies, and bad q or limit is 400 INVALID_REQUEST', pgOpti
 
 test('V3b: flag off answers 503 READBACK_DISABLED after the case and permission checks', pgOptions, async t => {
   for (const flag of [undefined, 'false', 'TRUE']) {
-    const app = await startApp(t, { env: { DOCUMENT_READBACK_ENABLED: flag } });
+    const app = await startApp(t, { env: { DOCUMENT_READBACK_ENABLED: flag, APP_EVENTS_ENABLED: 'false' } });
     const s = await scenario(app);
     const res = await passages(app, s);
     assert.equal(res.status, 503, `${flag}: ${JSON.stringify(res.data)}`);

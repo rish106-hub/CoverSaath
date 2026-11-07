@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
+const MEMBER_SEALED = ['display_name', 'relationship_label', 'date_of_birth'];
 const optionalText = value => (value === null || value === undefined ? null : String(value));
 
 // Async PostgreSQL interface (S3.2). Each insert and its audit event commit in one transaction
@@ -19,7 +21,7 @@ export class HouseholdRepository {
 
   #adult(row) { return this.crypto.openRow('adult_users', row, ['display_name', 'contact_email', 'contact_phone']); }
   #household(row) { return this.crypto.openRow('households', row, ['display_name']); }
-  #member(row) { return this.crypto.openRow('household_members', row, ['display_name']); }
+  #member(row) { return this.crypto.openRow('household_members', row, MEMBER_SEALED); }
 
   async createAdult({ id: adultId = id('adult'), displayName, contactEmail = null, contactPhone = null, locale = 'en-IN', accountStatus = 'active' }) {
     if (!String(displayName || '').trim()) throw new Error('Adult display name is required.');
@@ -62,7 +64,9 @@ export class HouseholdRepository {
       await db.run(`INSERT INTO household_members
         (id, household_id, adult_user_id, display_name, member_kind, relationship_label, date_of_birth, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [memberId, householdId, adultUserId, this.crypto.seal('household_members', 'display_name', memberId, optionalText(displayName)), memberKind, relationshipLabel, dateOfBirth, at, at]);
+      [memberId, householdId, adultUserId, this.crypto.seal('household_members', 'display_name', memberId, optionalText(displayName)), memberKind,
+        this.crypto.seal('household_members', 'relationship_label', memberId, optionalText(relationshipLabel)),
+        this.crypto.seal('household_members', 'date_of_birth', memberId, optionalText(dateOfBirth)), at, at]);
       await this.audit?.append({ householdId, actorType: adultUserId ? 'adult_user' : 'system', actorId: adultUserId || 'local-backend', action: 'household_member.added', resourceType: 'household_member', resourceId: memberId });
     }, { locks: [householdLock(householdId)] });
     return this.#member(await db.one('SELECT * FROM household_members WHERE id = ?', [memberId]));
@@ -79,7 +83,7 @@ export class HouseholdRepository {
 
   async getAdult(adultId) { return this.#adult(await this.database.one('SELECT * FROM adult_users WHERE id = ?', [adultId])) ?? null; }
   async getHousehold(householdId) { return this.#household(await this.database.one('SELECT * FROM households WHERE id = ?', [householdId])) ?? null; }
-  async listMembers(householdId) { return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? ORDER BY created_at, id', [householdId])).map(row => this.#member(row)); }
+  async listMembers(householdId) { return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? AND display_name <> ? ORDER BY created_at, id', [householdId, ERASED_NAME])).map(row => this.#member(row)).filter(member => member.display_name !== ERASED_NAME); }
 
   async getActiveRole(householdId, adultUserId) {
     const at = this.clock().toISOString();

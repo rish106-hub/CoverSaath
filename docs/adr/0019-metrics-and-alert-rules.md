@@ -1,4 +1,4 @@
-# ADR 0017: Metrics registry and alert rules
+# ADR 0019: Metrics registry and alert rules
 
 Status: accepted for the prototype (synthetic data only). Builds on ADR 0016.
 

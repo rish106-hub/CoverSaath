@@ -15,7 +15,7 @@ JSON, one object per line on standard output: `time`, `level`, `service`, `event
 | `provider_call` | `provider`, `task`, `outcome`, `errorCode`, `latencyMs`, `inputTokens`, `outputTokens`, `costMicroUsd` |
 | operational | `server_listening`, `rate_limit_store_unavailable`, `app_event_write_failed`, `document_*`, `pdf_inspection_*`, `policy_structuring_failed` |
 
-Latency percentiles, 5xx rate, gate refusals, spend, queue depth and pool saturation are metrics, not log fields: see `alerts.md` (ADR 0017). No percentile is computed in the process; the scraper derives p50/p95 from the histogram.
+Latency percentiles, 5xx rate, gate refusals, spend, queue depth and pool saturation are metrics, not log fields: see `alerts.md` (ADR 0019). No percentile is computed in the process; the scraper derives p50/p95 from the histogram.
 
 ## Configuration
 

@@ -13,6 +13,7 @@ import { INTAKE_CONNECTORS } from '../../contracts/intake-connectors.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
 import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from '../../contracts/profile-answers.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
+import { handleDataLifecycleRoute } from './data-lifecycle-routes.js';
 import {
   READ_FIELDS, analysisJobDto, analysisTaskDto, auditSummaryDto, caseSummaryDto,
   createReadResponsePolicy, sourcePackDto,
@@ -131,10 +132,10 @@ export function errorResponse(raised) {
   return { status, body: { error: { code, message } } };
 }
 
-async function job(database, runId) {
-  const run = await database.one('SELECT * FROM workflow_runs WHERE id = ?', [runId]);
+async function job(services, runId) {
+  const run = await services.workflows.getRun(runId);
   if (!run) return null;
-  const tasks = await database.many('SELECT * FROM workflow_tasks WHERE workflow_run_id = ? ORDER BY created_at, id', [runId]);
+  const tasks = await services.workflows.listTasks(runId);
   return analysisJobDto(run, tasks, ANALYSIS_DAG);
 }
 
@@ -172,7 +173,7 @@ async function createAnalysisRun({ req, database, services, caseId, body, config
   if (notFound) return { status: 404, body: { error: { code: 'CASE_NOT_FOUND', message: 'Case not found.' } } };
   const settled = created ? await analysis.runUntilSettled(run.id) : run;
   // Awaited before spreading: spreading a pending Promise would give {}.
-  const settledJob = await job(database, settled.id);
+  const settledJob = await job(services, settled.id);
   return {
     status: created ? 202 : 200,
     body: {
@@ -343,6 +344,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     // Read by the activity-event recorder after the response; carries an id only, never a credential.
     req.appContext = { adultUserId: principal.adultId };
     const responses = createReadResponsePolicy({ database, consents: services.consents });
+    // Erasure and export of a case, member or household (S3). New routes only; ownership is checked in the services.
+    const lifecycle = await handleDataLifecycleRoute({ req, url, principal, services, documentUploads, responses });
+    if (lifecycle) return lifecycle;
 
     if (req.method === 'GET' && url.pathname === '/api/v1/integrations') {
       return {
@@ -585,7 +589,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     // DELETE erases them all. Values are sealed before they are stored, never logged, never audited. Not evidence: no state chip.
     const profileMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/profile-answers$/);
     if (profileMatch && ['GET', 'PUT', 'DELETE'].includes(req.method)) {
-      const caseRecord = await requireDocumentCase(services, principal, profileMatch[1], { write: req.method !== 'GET' });
+      const caseRecord = await requireDocumentCase(services, principal, profileMatch[1], { write: req.method !== 'GET', tolerateUnreadable: req.method === 'DELETE' });
       await requireProfileCaseOwner(database, principal, caseRecord);
       const scope = { householdId: caseRecord.household_id, caseId: caseRecord.id };
       if (req.method === 'PUT') {
@@ -682,7 +686,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     if (req.method === 'GET' && deletionInventoryMatch) {
       // Erasure discovery is household-authorised but not consent-gated. Otherwise an expired or
       // revoked processing grant could remove the only UI path to delete the stored document.
-      const caseRecord = await requireDocumentCase(services, principal, deletionInventoryMatch[1]);
+      const caseRecord = await requireDocumentCase(services, principal, deletionInventoryMatch[1], { tolerateUnreadable: true });
       await services.access.requireHousehold(principal, caseRecord.household_id);
       const roles = (await services.households.listActiveRoles(caseRecord.household_id, principal.adultId)).map(item => item.role);
       const documents = (await documentUploads.listForDeletion(caseRecord, {
@@ -845,7 +849,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const run = await services.access.requireRun(principal, jobMatch[1]);
       const caseRecord = await services.access.requireCase(principal, run.case_id);
       await responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.analysisSummary });
-      return { status: 200, body: await job(database, jobMatch[1]) };
+      return { status: 200, body: await job(services, jobMatch[1]) };
     }
     const taskMatch = url.pathname.match(/^\/api\/v1\/tasks\/([^/]+)$/);
     if (req.method === 'GET' && taskMatch) {
@@ -859,7 +863,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
   } catch (error) {
     const response = errorResponse(error);
     // Operational visibility only: the caller logs class, code and status, never the message or any value.
-    try { onError?.(error, response.status); } catch { /* logging must not change the response */ }
+    // An uncoded (internal) error is answered as BACKEND_REQUEST_FAILED, often with a 4xx status, so the caller is told it was
+    // unexpected rather than left to infer that from the mapped status.
+    try { onError?.(error, response.status, { unexpected: response.body.error.code === 'BACKEND_REQUEST_FAILED' }); } catch { /* logging must not change the response */ }
     return response;
   }
 }

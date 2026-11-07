@@ -58,6 +58,12 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   PARAMETER_RECORDS_NOT_CONFIGURED: entry(503, 'configuration', false),
   KNOWN_IDENTIFIERS_UNAVAILABLE: entry(503, 'configuration', false),
   ERASURE_NOT_CONFIGURED: entry(503, 'configuration', false),
+  // Erasure and export (S3).
+  ERASURE_CONFIRMATION_REQUIRED: entry(400, 'request', false),
+  ERASURE_FORBIDDEN: entry(403, 'authorization', false),
+  ERASURE_REASON_INVALID: entry(400, 'request', false),
+  ERASURE_ACTOR_INVALID: entry(500, 'contract', false),
+  ERASURE_TOO_LARGE: entry(409, 'request', false),
   EXECUTION_MODE_NOT_CONFIGURED: entry(null, 'configuration', false),
   READBACK_DISABLED: entry(503, 'configuration', false),
   // Document intake (Block 1): upload route, upload service, document repository and the
@@ -142,6 +148,7 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   STORAGE_UNAVAILABLE: entry(null, 'task_failure', true),
   INVALID_STORAGE_KEY: entry(null, 'contract', false),
   DOCUMENT_DELETED: entry(null, 'terminal_reason', false),
+  DATA_ERASED: entry(null, 'terminal_reason', false),
   // Audit reason codes written when the scan worker rejects a stored document.
   MALWARE_DETECTED: entry(null, 'terminal_reason', false),
   STORAGE_INTEGRITY_FAILED: entry(null, 'terminal_reason', false),
