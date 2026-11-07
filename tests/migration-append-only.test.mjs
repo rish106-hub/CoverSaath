@@ -134,3 +134,16 @@ test('an unknown base ref fails closed', () => {
     rmSync(repo, { recursive: true, force: true });
   }
 });
+
+test('a malformed base value fails closed before git runs', () => {
+  const { repo } = makeRepo();
+  try {
+    for (const bad of ['--output=/tmp/x', 'main..HEAD', 'a b', 'x;rm -rf', '$(id)', '-n']) {
+      const result = run(repo, bad);
+      assert.equal(result.status, 2, `${bad}: ${result.stderr}`);
+      assert.match(result.stderr, /commit SHA or a plain ref name/);
+    }
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});

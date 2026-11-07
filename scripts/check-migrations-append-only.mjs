@@ -7,6 +7,8 @@ import { resolve } from 'node:path';
 const migrationsDir = 'src/backend/database/postgres/migrations';
 const newMigration = /^\d{3}_[a-z0-9_]+\.sql$/;
 const zeroSha = /^0{40}$/;
+// A base is a full commit SHA or a plain ref name. It must not start with '-' (option injection) or hold '..' / spaces.
+const safeBase = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
 
 function git(repo, args) {
   return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -22,6 +24,10 @@ const base = argValue('--base', '');
 
 if (!base) {
   process.stderr.write('migration check: --base <git-ref> is required.\n');
+  process.exit(2);
+}
+if (!safeBase.test(base) || base.includes('..')) {
+  process.stderr.write('migration check: --base must be a commit SHA or a plain ref name.\n');
   process.exit(2);
 }
 if (zeroSha.test(base)) {
