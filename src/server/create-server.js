@@ -294,12 +294,16 @@ export function createApiServer({
     let errorCode = null;
     let loggedCode = null;
     // Failures are logged and (when unexpected) reported as class, code and status only, never the message.
-    const onError = (error, status) => {
+    const onError = (error, status, { unexpected = false } = {}) => {
       loggedCode = safeCode(error?.code);
-      logger.failure(error, { requestId, status });
-      // Only unexpected failures are reported: a 500, or a 5xx with no application code. An expected 503 that carries a
-      // deliberate code (PROVIDER_NOT_CONFIGURED, DATABASE_UNAVAILABLE) is logged, not reported.
-      if (status === 500 || (status >= 500 && !isApplicationCode(error?.code))) errorReporter?.captureError(error, { requestId });
+      // A backend that could not be built is wrapped as BACKEND_UNAVAILABLE; the cause is what an operator needs to see.
+      const wrapped = error?.code === 'BACKEND_UNAVAILABLE' && error.cause && typeof error.cause === 'object';
+      const subject = wrapped ? error.cause : error;
+      logger.failure(subject, { requestId, status });
+      // Only unexpected failures are reported: a 500, a 5xx with no application code, an internal error that the route
+      // answered with a 4xx, or a backend that failed to build. An expected 503 that carries a deliberate code
+      // (PROVIDER_NOT_CONFIGURED, DATABASE_UNAVAILABLE) is logged, not reported.
+      if (unexpected || wrapped || status === 500 || (status >= 500 && !isApplicationCode(error?.code))) errorReporter?.captureError(subject, { requestId });
     };
     const send = (status, value) => {
       errorCode = typeof value?.error?.code === 'string' ? value.error.code : null;

@@ -292,8 +292,11 @@ test('the real Sentry SDK, wired with the production options, sends no identifie
     for (const gone of ['breadcrumbs', 'user', 'extra', 'server_name', 'modules']) assert.ok(!(gone in payload), `${gone} present in ${JSON.stringify(payload).slice(0, 200)}`);
     assert.ok(!payload.request?.data && !payload.request?.headers && !payload.request?.url);
   }
-  const raw = payloads.find(payload => payload.exception?.values?.[0]?.type === 'RawError');
-  assert.equal(raw.exception.values[0].value, '[message removed]');
+  // An error name outside the closed class list (RawError, DbError) is reported as plain Error, never forwarded.
+  assert.ok(!text.includes('RawError') && !text.includes('DbError'), 'an unlisted error name never reaches Sentry');
+  const raw = payloads.find(payload => payload.exception?.values?.[0]?.value === '[message removed]');
+  assert.ok(raw, 'the third-party throw lost its message');
+  assert.equal(raw.exception.values[0].type, 'Error');
   assert.ok(payloads.some(payload => payload.message === '[message removed]'), 'captureMessage text is removed');
   await reporter.close(1_000);
 });

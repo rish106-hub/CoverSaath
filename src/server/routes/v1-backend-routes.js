@@ -852,7 +852,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
   } catch (error) {
     const response = errorResponse(error);
     // Operational visibility only: the caller logs class, code and status, never the message or any value.
-    try { onError?.(error, response.status); } catch { /* logging must not change the response */ }
+    // An uncoded (internal) error is answered as BACKEND_REQUEST_FAILED, often with a 4xx status, so the caller is told it was
+    // unexpected rather than left to infer that from the mapped status.
+    try { onError?.(error, response.status, { unexpected: response.body.error.code === 'BACKEND_REQUEST_FAILED' }); } catch { /* logging must not change the response */ }
     return response;
   }
 }
