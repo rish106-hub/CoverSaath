@@ -80,7 +80,7 @@ test('the PostgreSQL migration set applies once on a fresh database and is not r
     '012_policy_evidence.sql', '013_catalogue_reviews.sql',
     '014_curated_product_workflow.sql', '015_curated_signed_actions.sql',
     '016_data_api_lockdown.sql', '017_auth_identities.sql', '018_profile_answers.sql',
-    '019_column_encryption_prep.sql', '020_document_blobs.sql', '021_sealed_column_checks.sql', '022_app_events.sql', '023_runtime_limits.sql', '024_hot_path_indexes.sql', '025_device_permissions.sql', '026_household_places.sql', '027_adult_preferences_onboarding.sql', '028_tool_scenarios.sql', '029_adult_contacts.sql',
+    '019_column_encryption_prep.sql', '020_document_blobs.sql', '021_sealed_column_checks.sql', '022_app_events.sql', '023_runtime_limits.sql', '024_hot_path_indexes.sql', '025_device_permissions.sql', '026_household_places.sql', '027_adult_preferences_onboarding.sql', '028_tool_scenarios.sql', '029_adult_contacts.sql', '030_seal_remaining_columns.sql',
   ]);
   assert.deepEqual(
     (await database.prepare('SELECT version FROM coverage_parameter_registry_versions').all()).map(row => row.version),

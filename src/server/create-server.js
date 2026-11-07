@@ -201,6 +201,8 @@ export function createApiServer({
       env,
       sessionDurationMs: config.sessionTtlMs,
       maxActiveSessions: config.maxSessions,
+      // A sealed value that cannot be decrypted on an erasure path is reported by table and column only.
+      onUnreadable: event => console.warn(JSON.stringify({ event: 'sealed_value_unreadable', table: event.table, column: event.column })),
       ...(columnCrypto ? { columnCrypto } : {}),
     });
     if (config.events.enabled && !recorder) {

@@ -6,6 +6,7 @@ import { GEMINI_MODEL_RECIPIENT } from '../src/features/ai-analysis/live-coverag
 import { COVERAGE_ANALYSIS_WORKFLOW, createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import { auditActions, liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 import { postgresTestOptions } from './support/pg.mjs';
+import { pick, plainRow, plainRows } from './support/sealed.mjs';
 
 const pgOptions = postgresTestOptions();
 
@@ -31,8 +32,8 @@ function liveService(app, modelRequests) {
 
 async function runRows(database, runId) {
   return {
-    tasks: await database.prepare('SELECT agent_name, status, last_error_code, last_error_message, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(runId),
-    run: await database.prepare('SELECT status, input_json FROM workflow_runs WHERE id = ?').get(runId),
+    tasks: await plainRows(database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [runId]),
+    run: await plainRow(database, 'workflow_runs', 'WHERE id = ?', [runId]),
   };
 }
 
@@ -111,8 +112,8 @@ test('revocation of a document grant while a model call is in flight discards th
   assert.equal(modelRequests.length, authorized.length);
   assert.ok(modelRequests.length < MODEL_TASK_KEYS.length);
   // The in-flight results were discarded and the run stopped on the revocation path.
-  const run = await app.database.prepare('SELECT status, terminal_reason FROM workflow_runs WHERE id = ?').get(response.data.id);
-  assert.deepEqual({ ...run }, { status: 'revoked', terminal_reason: 'CONSENT_REVOKED' });
+  const run = await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [response.data.id]);
+  assert.deepEqual(pick(run, 'status', 'terminal_reason'), { status: 'revoked', terminal_reason: 'CONSENT_REVOKED' });
   assert.ok((await auditActions(app.database, 'analysis.task_completed')).every(event => event.id < revokedAt.id), 'nothing may be committed after revocation');
   const stopped = await auditActions(app.database, 'analysis.revoked');
   assert.equal(stopped.length, 1);
@@ -132,7 +133,7 @@ test('source selection excludes NULL-recipient and wrong-recipient documents, so
   const response = await scenario.startLiveRun('mixed-consent');
   assert.equal(response.status, 202);
   assert.equal(response.data.tasks.filter(task => task.status === 'completed').length, 22);
-  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(response.data.id)).input_json);
+  const input = JSON.parse((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [response.data.id])).input_json);
   assert.deepEqual(input.authorizedSourceIds, [scenario.pageId]);
   assert.deepEqual(input.authorizedSources, [{ sourceId: scenario.pageId, documentId: scenario.documentId }]);
   const providerBody = JSON.stringify(modelRequests);

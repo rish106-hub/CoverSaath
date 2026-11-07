@@ -15,6 +15,7 @@ import { createCoverageAnalysisSourceInput as buildSourceInput } from '../src/fe
 // The gate needs an explicit identifier list; these tests have no household identifiers.
 const createCoverageAnalysisSourceInput = (caseRecord, pages, options = {}) => buildSourceInput(caseRecord, pages, { knownIdentifiers: [], ...options });
 import { auditActions, liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
+import { plainRow, plainRows } from './support/sealed.mjs';
 
 const caseRecord = { id: 'case-synthetic', opened_by_adult_id: 'adult-opened', trigger_type: 'renewal', stated_estimate_minor: 0, consent_grant_id: 'grant-synthetic' };
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -23,9 +24,9 @@ const page = (text, overrides = {}) => ({
   id: 'page-a', document_upload_id: 'document-a', page_number: 1, source_version: '1', document_kind: 'policy_schedule', extracted_text: text, ...overrides,
 });
 const sentText = input => input.sourcePages.map(item => item.text).join('\n');
-const runInput = async (database, runId) => JSON.parse((await database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(runId)).input_json);
-const runRow = async (database, runId) => database.prepare('SELECT status, terminal_reason, input_json FROM workflow_runs WHERE id = ?').get(runId);
-const taskRows = async (database, runId) => database.prepare('SELECT status, output_json, output_digest FROM workflow_tasks WHERE workflow_run_id = ?').all(runId);
+const runInput = async (database, runId) => JSON.parse((await plainRow(database, 'workflow_runs', 'WHERE id = ?', [runId])).input_json);
+const runRow = async (database, runId) => plainRow(database, 'workflow_runs', 'WHERE id = ?', [runId]);
+const taskRows = async (database, runId) => plainRows(database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [runId]);
 
 function liveService(app, { modelRequests = [], knownIdentifierLoader, portOverrides = {} } = {}) {
   const services = createBackendServices(app.database);
@@ -216,7 +217,7 @@ test('K1: every model request reloads the identifiers for the run\'s case server
   assert.equal(settled.tasks.filter(task => task.status === 'completed').length, 22);
   assert.equal(modelRequests.length, 5);
   assert.deepEqual(calls, Array(5).fill(scenario.caseId));
-  const stored = (await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(job.id)).input_json;
+  const stored = (await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [job.id])).input_json;
   assert.ok(!/knownIdentifiers|Synthetic owner/.test(stored), 'the household identifiers are never part of run input');
 });
 
@@ -247,7 +248,7 @@ for (const [label, loader] of [
     assert.equal(modelRequests.length, 0, 'no provider call without the redaction list');
     assert.equal((await auditActions(app.database, 'analysis.model_dispatch_authorized')).length, 0);
     assert.notEqual(settled.status, 'completed');
-    const failed = await app.database.prepare("SELECT last_error_code, last_error_message FROM workflow_tasks WHERE workflow_run_id = ? AND status = 'failed'").all(job.id);
+    const failed = await plainRows(app.database, 'workflow_tasks', "WHERE workflow_run_id = ? AND status = 'failed'", [job.id]);
     assert.ok(failed.length >= 1);
     assert.ok(failed.every(task => task.last_error_code === 'KNOWN_IDENTIFIERS_UNAVAILABLE'));
     assert.ok(failed.every(task => !String(task.last_error_message).includes('loader exploded')), 'the loader error text is not echoed');

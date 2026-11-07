@@ -198,7 +198,7 @@ export class ClauseRepository {
       await this.database.run(`INSERT INTO policy_answers
         (id, household_id, case_id, requested_by_adult_id, idempotency_key, request_digest, question, state, document_ids_json, answer_json, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
-        id, householdId, caseId, requestedByAdultId, idempotencyKey, requestDigest, question, answer.state,
+        id, householdId, caseId, requestedByAdultId, idempotencyKey, requestDigest, this.crypto.seal('policy_answers', 'question', id, question), answer.state,
         JSON.stringify(documentIds),
         this.crypto.seal('policy_answers', 'answer_json', id, JSON.stringify({ ...answer, access: { consentGrantId: access.consentGrantId, subjectAdultId: access.subjectAdultId, documentIds: [...access.documentIds] } })),
         this.clock().toISOString(),

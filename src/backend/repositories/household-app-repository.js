@@ -9,8 +9,7 @@ export const MAX_MEMBERS_PER_HOUSEHOLD = 20;
 const MAX_POLICIES = 100;
 
 // Members, insurers and policies for the app's Family, Policies and Home screens (app-data plan B-A). Existing tables only.
-// Display names are sealed (ADR 0013) and opened at the edge of this class. Relationship label and date of birth are stored as
-// the baseline schema defines them (plain text); policy fields are masked or non-personal. Every write and its counts-only audit
+// Display names are sealed (ADR 0013) and opened at the edge of this class. So are the relationship label, date of birth and the policy number, version and dates (ADR 0013 addendum D2). Every write and its counts-only audit
 // event commit in one transaction that holds the household advisory lock.
 export class HouseholdAppRepository {
   constructor(database, { clock = () => new Date(), audit, ...options } = {}) {
@@ -20,7 +19,8 @@ export class HouseholdAppRepository {
     this.crypto = resolveColumnCrypto(options);
   }
 
-  #member(row) { return this.crypto.openRow('household_members', row, ['display_name']); }
+  #member(row) { return this.crypto.openRow('household_members', row, ['display_name', 'relationship_label', 'date_of_birth']); }
+  #policy(row) { return this.crypto.openRow('policies', row, ['policy_number_masked', 'policy_version', 'starts_on', 'ends_on']); }
   #adult(row) { return this.crypto.openRow('adult_users', row, ['display_name', 'contact_email', 'contact_phone']); }
 
   async listMembers(householdId) {
@@ -50,7 +50,8 @@ export class HouseholdAppRepository {
       await db.run(`INSERT INTO household_members
         (id, household_id, adult_user_id, display_name, member_kind, relationship_label, date_of_birth, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [memberId, householdId, adultId, this.crypto.seal('household_members', 'display_name', memberId, displayName), memberKind, relationshipLabel, dateOfBirth, at, at]);
+      [memberId, householdId, adultId, this.crypto.seal('household_members', 'display_name', memberId, displayName), memberKind,
+        this.crypto.seal('household_members', 'relationship_label', memberId, relationshipLabel), this.crypto.seal('household_members', 'date_of_birth', memberId, dateOfBirth), at, at]);
       await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.added', resourceType: 'household_member', resourceId: memberId, payload: { memberKind } });
     }, { locks: [householdLock(householdId)] });
     return this.getMember(householdId, memberId);
@@ -80,8 +81,8 @@ export class HouseholdAppRepository {
           }
         }
       }
-      if ('relationshipLabel' in changes) { sets.push('relationship_label = ?'); params.push(changes.relationshipLabel); fields.push('relationshipLabel'); }
-      if ('dateOfBirth' in changes) { sets.push('date_of_birth = ?'); params.push(changes.dateOfBirth); fields.push('dateOfBirth'); }
+      if ('relationshipLabel' in changes) { sets.push('relationship_label = ?'); params.push(this.crypto.seal('household_members', 'relationship_label', memberId, changes.relationshipLabel)); fields.push('relationshipLabel'); }
+      if ('dateOfBirth' in changes) { sets.push('date_of_birth = ?'); params.push(this.crypto.seal('household_members', 'date_of_birth', memberId, changes.dateOfBirth)); fields.push('dateOfBirth'); }
       await db.run(`UPDATE household_members SET ${sets.join(', ')}, updated_at = ? WHERE id = ? AND household_id = ?`, [...params, at, memberId, householdId]);
       await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.updated', resourceType: 'household_member', resourceId: memberId, payload: { fields } });
     }, { locks: [householdLock(householdId)] });
@@ -156,14 +157,21 @@ export class HouseholdAppRepository {
   async listPolicies(householdId) {
     const policies = await this.database.many(`SELECT policies.*, insurers.legal_name AS insurer_name
       FROM policies LEFT JOIN insurers ON insurers.id = policies.insurer_id
-      WHERE policies.household_id = ? ORDER BY policies.ends_on, policies.id LIMIT ?`, [householdId, MAX_POLICIES]);
-    return this.#withMembers(policies);
+      WHERE policies.household_id = ? ORDER BY policies.created_at, policies.id LIMIT ?`, [householdId, MAX_POLICIES]);
+    // The end date is sealed, so the order by end date (nulls last) happens here, after opening.
+    const opened = policies.map(row => this.#policy(row)).sort((a, b) => {
+      if ((a.ends_on ?? null) === (b.ends_on ?? null)) return a.id < b.id ? -1 : 1;
+      if (a.ends_on == null) return 1;
+      if (b.ends_on == null) return -1;
+      return a.ends_on < b.ends_on ? -1 : 1;
+    });
+    return this.#withMembers(opened);
   }
 
   async getPolicy(policyId) {
     const row = await this.database.one(`SELECT policies.*, insurers.legal_name AS insurer_name
       FROM policies LEFT JOIN insurers ON insurers.id = policies.insurer_id WHERE policies.id = ?`, [policyId]);
-    return row ? (await this.#withMembers([row]))[0] : null;
+    return row ? (await this.#withMembers([this.#policy(row)]))[0] : null;
   }
 
   async #withMembers(policies) {
@@ -176,7 +184,7 @@ export class HouseholdAppRepository {
       members: links.filter(link => link.policy_id === policy.id).map(link => ({
         memberId: link.household_member_id,
         displayName: this.#member({ id: link.household_member_id, display_name: link.display_name }).display_name,
-        relationshipLabel: link.relationship_label,
+        relationshipLabel: this.crypto.open('household_members', 'relationship_label', link.household_member_id, link.relationship_label),
         memberKind: link.member_kind,
         membershipState: link.membership_state,
       })),
@@ -198,7 +206,9 @@ export class HouseholdAppRepository {
     const policyId = id('policy');
     await db.transaction(async () => {
       await db.run(`INSERT INTO policies (id, household_id, insurer_id, policy_kind, policy_number_masked, starts_on, ends_on, verification_state, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'unverified', ?, ?)`, [policyId, householdId, insurerId, policyKind, policyNumberMasked, startsOn, endsOn, at, at]);
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'unverified', ?, ?)`, [policyId, householdId, insurerId, policyKind,
+      this.crypto.seal('policies', 'policy_number_masked', policyId, policyNumberMasked), this.crypto.seal('policies', 'starts_on', policyId, startsOn),
+      this.crypto.seal('policies', 'ends_on', policyId, endsOn), at, at]);
       for (const memberId of memberIds) {
         await db.run(`INSERT INTO policy_members (policy_id, household_member_id, membership_state, created_at) VALUES (?, ?, 'stated', ?)`, [policyId, memberId, at]);
       }

@@ -3,6 +3,8 @@ import { PolicyStructuringRepository } from './policy-structuring-repository.js'
 import { ClauseRepository } from './clause-repository.js';
 import { AppEventRepository } from './app-event-repository.js';
 import { householdLock } from '../database/postgres/locks.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { openWorkflowRun } from '../security/sealed-records.js';
 import { GEMINI_MODEL_RECIPIENT } from '../../features/ai-analysis/privacy-evidence-gate.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
@@ -34,8 +36,10 @@ const notConfigured = message => Object.assign(new Error(message), { code: 'ERAS
 // workflow_tasks -> the rest. Every DB-touching method is async; a rejected query (including a
 // dropped connection) rejects the method, so every consent check fails closed.
 export class ConsentRepository {
-  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null, clauses = null, appEvents = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null, clauses = null, appEvents = null, ...options } = {}) {
     this.database = database;
+    // Revocation reasons, outbox error text and run input are sealed (ADR 0013 addendum D2).
+    this.crypto = resolveColumnCrypto(options);
     this.clock = clock;
     this.audit = audit;
     this.coverageParameters = coverageParameters;
@@ -236,9 +240,12 @@ export class ConsentRepository {
       await db.run(`INSERT INTO consent_revocations
         (id, consent_grant_id, revoked_by_adult_id, reason, revoked_at, downstream_deletion_due_at, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [revocationId, grantId, revokedByAdultId, reason, at, downstreamDeletionDueAt, at]);
-      await db.run(`UPDATE integration_outbox SET status = 'cancelled', updated_at = ?, last_error = 'Consent revoked.'
-        WHERE consent_grant_id = ? AND status IN ('pending', 'processing')`, [at, grantId]);
+      [revocationId, grantId, revokedByAdultId, this.crypto.seal('consent_revocations', 'reason', revocationId, reason === null || reason === undefined ? null : String(reason)), at, downstreamDeletionDueAt, at]);
+      for (const { id: outboxId } of await db.many(`SELECT id FROM integration_outbox
+        WHERE consent_grant_id = ? AND status IN ('pending', 'processing') ORDER BY id`, [grantId])) {
+        await db.run(`UPDATE integration_outbox SET status = 'cancelled', updated_at = ?, last_error = ? WHERE id = ?`,
+          [at, this.crypto.seal('integration_outbox', 'last_error', outboxId, 'Consent revoked.'), outboxId]);
+      }
       // Revocation deletes source documents collected under this grant. A document merely named
       // by a later derive/read scope remains owned by its uploader; the consent-authorised runs
       // are still erased below through consentGrantId.
@@ -344,7 +351,7 @@ export class ConsentRepository {
       await db.run(`UPDATE coverage_graph_snapshots SET status = 'superseded'
         WHERE generated_by_run_id IN (SELECT id FROM workflow_runs WHERE consent_grant_id = ?)
           AND status <> 'superseded'`, [grantId]);
-      await this.audit?.append({ householdId: grant.household_id, actorType: 'adult_user', actorId: revokedByAdultId, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reason } });
+      await this.audit?.append({ householdId: grant.household_id, actorType: 'adult_user', actorId: revokedByAdultId, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reasonProvided: reason !== null && reason !== undefined } });
     }, { locks: [householdLock(existing.household_id)] });
     return this.get(grantId);
   }
@@ -431,8 +438,16 @@ export class ConsentRepository {
     }
     // Lock order: every candidate run by id before any task row. The input is re-read under the
     // lock so a concurrent writer that committed first is seen.
-    const candidates = candidateIds.size === 0 ? [] : await db.many(`SELECT id, input_json FROM workflow_runs
-      WHERE id = ANY(CAST(? AS text[])) ORDER BY id FOR UPDATE`, [[...candidateIds]]);
+    // A run whose input cannot be decrypted (wrong key, damaged or moved ciphertext) must not stop an erasure: nothing can be
+    // said about what it holds, so it is erased as a whole run (input removed, run revoked) and never aborts the transaction.
+    const candidates = candidateIds.size === 0 ? [] : (await db.many(`SELECT id, input_json FROM workflow_runs
+      WHERE id = ANY(CAST(? AS text[])) ORDER BY id FOR UPDATE`, [[...candidateIds]])).map(row => {
+      try {
+        return openWorkflowRun(this.crypto, row);
+      } catch {
+        return { id: row.id, input_json: null, unreadable: true };
+      }
+    });
 
     let runs = 0;
     const erasedRunIds = [];
@@ -446,7 +461,7 @@ export class ConsentRepository {
     for (const row of candidates) {
       let input = null;
       try { input = row.input_json === null ? null : JSON.parse(row.input_json); } catch { input = null; }
-      const wholeRun = targeted.has(row.id);
+      const wholeRun = targeted.has(row.id) || row.unreadable === true;
       const referencesDocument = [
         ...(Array.isArray(input?.authorizedSources) ? input.authorizedSources : []),
         ...(Array.isArray(input?.sourcePages) ? input.sourcePages : []),
@@ -454,6 +469,7 @@ export class ConsentRepository {
       if (!wholeRun && !referencesDocument) continue;
       runs += 1;
       erasedRunIds.push(row.id);
+      if (row.unreadable) await db.run('UPDATE workflow_runs SET input_json = NULL WHERE id = ?', [row.id]);
       if (Array.isArray(input?.sourcePages)) {
         let changed = 0;
         const sourcePages = input.sourcePages.map(page => {
@@ -463,7 +479,7 @@ export class ConsentRepository {
           return { sourceId: page.sourceId, version: page.version, page: page.page, documentId: page.documentId, redacted: erasureMarker };
         });
         if (changed > 0) {
-          await db.run('UPDATE workflow_runs SET input_json = ? WHERE id = ?', [JSON.stringify({ ...input, sourcePages }), row.id]);
+          await db.run('UPDATE workflow_runs SET input_json = ? WHERE id = ?', [this.crypto.seal('workflow_runs', 'input_json', row.id, JSON.stringify({ ...input, sourcePages })), row.id]);
           pages += changed;
         }
       }
@@ -485,9 +501,17 @@ export class ConsentRepository {
           WHERE snapshot_id IN (SELECT id FROM coverage_graph_snapshots WHERE generated_by_run_id = ?)`, [row.id])).changes;
         graphNodes += (await db.run(`DELETE FROM coverage_graph_nodes
           WHERE snapshot_id IN (SELECT id FROM coverage_graph_snapshots WHERE generated_by_run_id = ?)`, [row.id])).changes;
-        graphs += (await db.run(`UPDATE coverage_graph_snapshots
-          SET status = 'superseded', graph_json = '{}'
-          WHERE generated_by_run_id = ? AND (status <> 'superseded' OR graph_json <> '{}')`, [row.id])).changes;
+        // graph_json is sealed (ADR 0013 addendum D2), so "already erased" is decided after opening: a snapshot counts as erased
+        // only when it is superseded and holds the empty marker. The marker is written sealed, bound to its own row.
+        const snapshotRows = await db.many('SELECT id, status, graph_json FROM coverage_graph_snapshots WHERE generated_by_run_id = ? ORDER BY id', [row.id]);
+        for (const snapshot of snapshotRows) {
+          let current = null;
+          try { current = this.crypto.open('coverage_graph_snapshots', 'graph_json', snapshot.id, snapshot.graph_json); } catch { current = null; }
+          if (snapshot.status === 'superseded' && current === '{}') continue;
+          await db.run("UPDATE coverage_graph_snapshots SET status = 'superseded', graph_json = ? WHERE id = ?",
+            [this.crypto.seal('coverage_graph_snapshots', 'graph_json', snapshot.id, '{}'), snapshot.id]);
+          graphs += 1;
+        }
       }
       // Parameter observations recorded by the run are derived data too: their values are
       // erased with the run (counts-only audit inside the parameter repository).

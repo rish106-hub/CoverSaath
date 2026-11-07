@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { POLICY_STRUCTURING_VERSION, documentGrantCheck, structurePolicyDocument } from '../src/features/policy-structuring/index.js';
 import { parameterAt as at, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { plainRows } from './support/sealed.mjs';
 
 // Fake-caller journey (plan acceptance 2): block pages in, real sectioner, privacy gate, extractor,
 // reconciler and decisions, stored through the repository. Synthetic insurer and values only.
@@ -87,8 +88,7 @@ test('fake-caller journey stores observations and proposals and accounts for eve
     .map(item => [item.proposedKey, item.status]), [['synthetic_daily_cash', 'pending_review']]);
   assert.equal(JSON.stringify(result.report).includes('Individual'), false, 'the coverage report carries counts, not text');
 
-  const stored = JSON.parse((await database.prepare(`SELECT value_json FROM coverage_parameter_observations
-    WHERE recorded_by = 'policy-structuring' AND value_json LIKE '%Individual%'`).get()).value_json);
+  const stored = JSON.parse((await plainRows(database, 'coverage_parameter_observations', "WHERE recorded_by = 'policy-structuring'")).find(row => row.value_json?.includes('Individual')).value_json);
   assert.deepEqual([stored.evidenceQuote, Number.isInteger(stored.blockIndex)], ['Policy type | Individual', true], 'quote and block kept for review');
 
   const again = await structurePolicyDocument({ pages, call: fakeGemini().call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled });
