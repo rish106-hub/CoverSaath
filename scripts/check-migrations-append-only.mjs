@@ -5,7 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 const migrationsDir = 'src/backend/database/postgres/migrations';
-const newMigration = /^\d{3}_[a-z0-9_]+\.sql$/;
+// Non-empty alphanumeric segments joined by single underscores (no `030_.sql`, no `030__x.sql`).
+const newMigration = /^(\d{3})_[a-z0-9]+(?:_[a-z0-9]+)*\.sql$/;
 const zeroSha = /^0{40}$/;
 // A base is a full commit SHA or a plain ref name. It must not start with '-' (option injection) or hold '..' / spaces.
 const safeBase = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
@@ -42,8 +43,16 @@ try {
   process.exit(2);
 }
 
+// A new migration must sort after every migration already in the base tree, or it could run before schema it depends on.
+let highestBase = 0;
+for (const line of git(repo, ['ls-tree', '--name-only', base, `${migrationsDir}/`]).split('\n').filter(Boolean)) {
+  const match = line.slice(migrationsDir.length + 1).match(/^(\d{3})_/);
+  if (match) highestBase = Math.max(highestBase, Number(match[1]));
+}
+
+// Endpoints are compared directly (not merge-base): after a force-push the previous tip may not be an ancestor of HEAD.
 // --no-renames turns a rename into a delete plus an add, so a moved migration is caught as a delete.
-const diff = git(repo, ['diff', '--no-renames', '--name-status', `${base}...HEAD`, '--', migrationsDir]);
+const diff = git(repo, ['diff', '--no-renames', '--name-status', base, 'HEAD', '--', migrationsDir]);
 const violations = [];
 let appended = 0;
 
@@ -54,6 +63,8 @@ for (const line of diff.split('\n').filter(Boolean)) {
     violations.push(`${path}: ${status === 'M' ? 'edited' : status === 'D' ? 'deleted' : `changed (${status})`}. Migrations are append-only; add a new file instead.`);
   } else if (!newMigration.test(name)) {
     violations.push(`${path}: new migration must be named NNN_snake_case.sql.`);
+  } else if (Number(name.slice(0, 3)) <= highestBase) {
+    violations.push(`${path}: new migration number must be higher than the highest existing migration (${String(highestBase).padStart(3, '0')}).`);
   } else {
     appended += 1;
   }

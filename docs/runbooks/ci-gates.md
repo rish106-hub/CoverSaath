@@ -12,9 +12,9 @@ updating the repository ruleset.
 | Safety evals | `CI / verify`, `npm run eval:safety` | none | Safety evaluation dataset passes its threshold |
 | Node 25 permissions | `CI / node25-permissions` | Node 25, `npm ci` | PDF child sandbox denies permissions on Node 25 |
 | Dependency review | `Dependency Review / dependency-review` | repo dependency graph enabled | No new dependency with high or critical advisory |
-| Whitespace | `CI / hygiene`, `git diff --check <base>...HEAD` | full history | No whitespace errors in the change |
-| Migrations append-only | `CI / hygiene`, `scripts/check-migrations-append-only.mjs` | full history, base SHA | Migrations under `src/backend/database/postgres/migrations/` are only added (named `NNN_snake_case.sql`). Edits, renames and deletes fail. |
-| Secret scan | `CI / secret-scan`, `gitleaks git` with `.gitleaks.toml` | full history, gitleaks 8.30.1 (downloaded, sha256 pinned in the workflow) | No secret in any commit reachable from HEAD |
+| Whitespace | `CI / hygiene`, `git diff --check <base> HEAD` | full history | No whitespace errors in the change |
+| Migrations append-only | `CI / hygiene`, `scripts/check-migrations-append-only.mjs` | full history, base SHA | Migrations under `src/backend/database/postgres/migrations/` are only added (named `NNN_snake_case.sql`, numbered above the highest migration in the base). Edits, renames, deletes, a number that is not higher and a name with empty segments fail. |
+| Secret scan | `CI / secret-scan`, `gitleaks git` with `.gitleaks.toml` | full history, gitleaks 8.30.1 (downloaded, sha256 pinned in the workflow) | No secret in any commit reachable from HEAD. The allowlist is read from the base revision, so a change to `.gitleaks.toml` applies after it merges. |
 
 Base SHA for `hygiene`: pull request base tip (`github.event.pull_request.base.sha`), or the
 previous tip on push. An all-zero base (first push of a branch) skips the diff and migration
@@ -25,7 +25,7 @@ Local runs:
 ```sh
 node --test tests/migration-append-only.test.mjs
 node scripts/check-migrations-append-only.mjs --base origin/main
-git diff --check origin/main...HEAD
+git diff --check origin/main HEAD   # rebase first: this compares endpoints
 gitleaks git --config .gitleaks.toml --redact --no-banner --exit-code 1 .
 ```
 
@@ -37,13 +37,12 @@ confirm the job is green on that branch first.
 
 | Gate | Command to add at merge | Brought by |
 | --- | --- | --- |
-| Column audit (encryption coverage of sealed columns) | `node --test tests/<column-audit file>.test.mjs` | Not found by name on any local or origin branch. Owner to confirm the branch before merge. |
-| Gate corpus (privacy-gate fixture corpus) | `node --test <gate corpus test file>` | Not found by name on any local or origin branch. Owner to confirm. |
 | Analytics allow-list (events and fields allowed to leave the app) | `node --test <analytics allow-list test file>` | Not found by name on any local or origin branch. Owner to confirm. |
-| RLS coverage | `node --test tests/rls-coverage.test.mjs` | Already on main. Runs inside `npm test`, so no new step. Any further RLS test files come from their owning branch. |
 
-Only the RLS coverage test is on main today. The other three names are placeholders until the
-owning branch is identified.
+Already on main and run inside `npm test` (no new step): `tests/rls-coverage.test.mjs`,
+`tests/column-encryption-at-rest.test.mjs` (column encryption) and the `tests/privacy-gate-*.test.mjs`
+files (privacy-gate corpus). The analytics allow-list test was not found by name on main; its name is a
+placeholder until the owning branch is identified.
 
 ## Making the new checks required
 

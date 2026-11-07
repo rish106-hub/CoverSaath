@@ -147,3 +147,51 @@ test('a malformed base value fails closed before git runs', () => {
     rmSync(repo, { recursive: true, force: true });
   }
 });
+
+test('a new migration numbered at or below the highest existing one fails', () => {
+  const { repo, base } = makeRepo();
+  try {
+    writeFileSync(join(repo, dirName, '002_late_change.sql'), 'create table late (id int);\n');
+    writeFileSync(join(repo, dirName, '001_later.sql'), 'create table later (id int);\n');
+    commitAll(repo, 'late');
+    const result = run(repo, base);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /002_late_change\.sql: new migration number must be higher/);
+    assert.match(result.stderr, /001_later\.sql: new migration number must be higher/);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('migration names with empty underscore segments fail', () => {
+  const { repo, base } = makeRepo();
+  try {
+    writeFileSync(join(repo, dirName, '003_.sql'), '-- x\n');
+    writeFileSync(join(repo, dirName, '004__policy.sql'), '-- x\n');
+    commitAll(repo, 'bad segments');
+    const result = run(repo, base);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /003_\.sql: new migration must be named/);
+    assert.match(result.stderr, /004__policy\.sql: new migration must be named/);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('a base that is not an ancestor of HEAD is compared by endpoints', () => {
+  const { repo } = makeRepo();
+  try {
+    git(repo, ['checkout', '-q', '-b', 'side']);
+    writeFileSync(join(repo, dirName, '003_side.sql'), 'create table s (id int);\n');
+    commitAll(repo, 'side');
+    const sideTip = git(repo, ['rev-parse', 'HEAD']).trim();
+    git(repo, ['checkout', '-q', '-B', 'work', 'HEAD~1']);
+    writeFileSync(join(repo, dirName, '003_work.sql'), 'create table w (id int);\n');
+    commitAll(repo, 'work');
+    const result = run(repo, sideTip);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /003_side\.sql: deleted/);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
