@@ -24,9 +24,10 @@ const INSERT_EVENT = `
 // the previous hash and inserts, so concurrent appends cannot fork the chain. Callers that also lock rows must take the household lock first (lock
 // order, design section 3); the advisory lock is re-entrant within one transaction.
 export class AuditRepository {
-  constructor(database, { clock = () => new Date() } = {}) {
+  constructor(database, { clock = () => new Date(), onAudit } = {}) {
     this.database = database;
     this.clock = clock;
+    this.onAudit = onAudit;
   }
 
   #event({ householdId, caseId, actorType, actorId, action, resourceType, resourceId, payload }, previous) {
@@ -42,7 +43,7 @@ export class AuditRepository {
     const input = { householdId, caseId, actorType, actorId, action, resourceType, resourceId, payload };
     requireFields(input);
     const db = this.database;
-    return db.transaction(async () => {
+    const result = await db.transaction(async () => {
       // Untyped `? IS NULL` fails on PostgreSQL (42P18), so the NULL chain has its own query.
       const previousRow = input.householdId === null
         ? await db.one('SELECT event_hash FROM audit_events WHERE household_id IS NULL ORDER BY id DESC LIMIT 1')
@@ -52,6 +53,9 @@ export class AuditRepository {
       const { rows: [row] } = await db.query(`${INSERT_EVENT} RETURNING id`, params);
       return { id: row.id, eventHash, previousEventHash: previous, occurredAt };
     }, { locks: [householdLock(input.householdId)] });
+    // Metadata only (no payload, no actor id). A hook failure never affects the audit write.
+    try { this.onAudit?.({ action, resourceType, resourceId, actorType, householdId, caseId }); } catch { /* telemetry only */ }
+    return result;
   }
 
   listForCase(caseId) {
