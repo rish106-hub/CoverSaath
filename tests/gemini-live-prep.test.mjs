@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 import { PDFDocument } from 'pdf-lib';
 import { LIVE_RUN_CEILING_USD, main, parseArgs, planRun } from '../scripts/smoke-test-gemini.mjs';
-import { SYNTHETIC_CANARIES, buildSyntheticPolicyPdf, stripTags } from '../scripts/fixtures/synthetic-policy-pages.mjs';
+import { SYNTHETIC_BANNER, SYNTHETIC_CANARIES, SYNTHETIC_POLICY_PAGES, buildSyntheticPolicyPdf, stripTags } from '../scripts/fixtures/synthetic-policy-pages.mjs';
 
 // B2 live-run preparation (docs/runbooks/gemini-live-run.md). Everything here is stubbed: the model driver is a
 // local fake and global fetch is replaced so that any real network call fails the test. Synthetic data only.
@@ -115,6 +116,9 @@ test('bad arguments are rejected before anything runs', async () => {
   assert.deepEqual(parseArgs(['--live', '--dry-run']), { error: 'LIVE_AND_DRY_RUN' });
   assert.deepEqual(parseArgs(['--consent=gemini']), { error: 'UNKNOWN_ARGUMENT' });
   assert.deepEqual(parseArgs(['--write-pdf']), { error: 'WRITE_PDF_NEEDS_PATH' });
+  assert.deepEqual(parseArgs(['--live=']), { error: 'FLAG_TAKES_NO_VALUE' });
+  assert.deepEqual(parseArgs(['--live=no']), { error: 'FLAG_TAKES_NO_VALUE' });
+  assert.deepEqual(parseArgs(['--dry-run=']), { error: 'FLAG_TAKES_NO_VALUE' });
   const { exitCode, driver } = await run(['--live', '--dry-run'], liveEnv);
   assert.equal(exitCode, 2);
   assert.equal(driver.prompts.length, 0);
@@ -130,7 +134,8 @@ test('stubbed live run: the gate precedes every provider call, output stays unve
   }
   assert.match(driver.prompts[0].prompt, /<NAME_\d+>/, 'known names are replaced by placeholders');
   assert.equal(report.run.passed, true);
-  assert.ok(report.run.pass.insideRunBudget && report.run.pass.outputStatesAllowed && report.run.pass.gateClean);
+  assert.ok(Object.values(report.run.pass).every(Boolean), JSON.stringify(report.run.pass));
+  assert.equal(report.run.pass.allCallsOk, true);
   assert.ok(report.run.decisionStates.length > 0);
   assert.ok(report.run.decisionStates.every(state => ['extracted_unverified', 'conflicting', 'unknown'].includes(state)));
   assert.ok(report.run.spentUsd <= report.run.runCapUsd);
@@ -146,8 +151,10 @@ test('the run budget cap stops further paid calls', async () => {
   assert.ok(report.run.callOutcomes.includes('budget_refused'));
   assert.ok(report.run.spentUsd <= 0.06);
   assert.equal(report.run.pass.insideRunBudget, true);
+  assert.equal(report.run.pass.allCallsOk, false);
   assert.notEqual(report.run.outcome.evidenceOutcome, 'complete', 'a budget-stopped run is never complete');
-  assert.equal(exitCode, 0);
+  assert.equal(report.run.passed, false, 'a run with a refused call never passes');
+  assert.equal(exitCode, 1);
 });
 
 test('a leaking gate fails closed: no live run', async () => {
@@ -162,6 +169,13 @@ test('the synthetic PDF is deterministic, three pages, and banner-marked; --writ
   const bytes = await buildSyntheticPolicyPdf();
   assert.deepEqual(Buffer.from(bytes), Buffer.from(await buildSyntheticPolicyPdf()));
   assert.equal((await PDFDocument.load(bytes)).getPageCount(), 3);
+  // Content streams are Flate-compressed and pdf-lib writes text as hex strings: inflate each stream and count the banner drawn on every page (top and bottom).
+  const raw = Buffer.from(bytes).toString('latin1');
+  let banners = 0;
+  for (const match of raw.matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)) {
+    try { banners += inflateSync(Buffer.from(match[1], 'latin1')).toString('latin1').split(`<${Buffer.from(SYNTHETIC_BANNER, 'latin1').toString('hex').toUpperCase()}>`).length - 1; } catch { /* not a content stream */ }
+  }
+  assert.equal(banners, 3 * 2, 'banner drawn at the top and bottom of every page');
   const dir = await mkdtemp(join(tmpdir(), 'coversaath-b2-'));
   try {
     const target = join(dir, 'synthetic.pdf');
@@ -170,6 +184,7 @@ test('the synthetic PDF is deterministic, three pages, and banner-marked; --writ
     const again = await run([`--write-pdf=${target}`], {});
     assert.equal(again.exitCode, 1);
     assert.match(again.output, /WRITE_PDF_FAILED/);
+    assert.deepEqual(Buffer.from(await readFile(target)), Buffer.from(bytes), 'the existing file is untouched');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -180,4 +195,41 @@ test('stripTags removes nested and reassembled tags and keeps table cells readab
     for (const line of stripTags(hostile)) assert.doesNotMatch(line, /[<>]/, hostile);
   }
   assert.deepEqual(stripTags('<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>'), ['A | B', 'C | D']);
+});
+
+test('a live run where no call succeeds does not pass', async () => {
+  const failing = stubDriver();
+  failing.createAgent = () => ({ generate: async () => { throw Object.assign(new Error('provider down'), { code: 'provider_error' }); } });
+  const { exitCode, report } = await run(['--live'], liveEnv, failing);
+  assert.equal(exitCode, 1);
+  assert.equal(report.run.pass.allCallsOk, false);
+  assert.equal(report.run.passed, false);
+});
+
+test('a failure inside the run carries the spend and call counts to the printed report', async () => {
+  const { runLive } = await import('../scripts/smoke-test-gemini.mjs');
+  const plan = { ...planRun({ env: liveEnv }), pagesInput: [{ page: 1, blocks: 'not-an-array' }] };
+  const driver = stubDriver();
+  const error = await runLive(plan, { loadModel: driver.loadModel, createAgent: driver.createAgent }).then(() => null, caught => caught);
+  assert.ok(error, 'the malformed input makes the run throw');
+  assert.deepEqual(error.smokeSpend, { providerCalls: 0, callsOk: 0, spentUsd: 0 });
+}
+
+);
+
+test('the preflight input limit is measured on the gateway prompt contract, not on chunk text alone', async () => {
+  const plan = planRun({ env: liveEnv });
+  const largest = plan.estimate.largestPromptBytes;
+  assert.ok(largest > 0);
+  assert.equal(planRun({ env: { ...liveEnv, STRUCTURING_MAX_INPUT_BYTES: String(largest) } }).problems.includes('PROMPT_EXCEEDS_INPUT_LIMIT'), false);
+  assert.equal(planRun({ env: { ...liveEnv, STRUCTURING_MAX_INPUT_BYTES: String(largest - 1) } }).problems.includes('PROMPT_EXCEEDS_INPUT_LIMIT'), true);
+  // At exactly that cap the real gateway accepts every extraction prompt: no input_limit refusal.
+  const { report } = await run(['--live'], { ...liveEnv, STRUCTURING_MAX_INPUT_BYTES: String(largest) });
+  assert.ok(!report.run.callOutcomes.includes('input_limit'));
+});
+
+test('the synthetic fixture is deeply frozen', () => {
+  assert.ok(Object.isFrozen(SYNTHETIC_POLICY_PAGES[0]));
+  assert.ok(Object.isFrozen(SYNTHETIC_POLICY_PAGES[0].blocks));
+  assert.ok(Object.isFrozen(SYNTHETIC_POLICY_PAGES[0].blocks[0]));
 });

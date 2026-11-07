@@ -27,8 +27,9 @@ synthetic block pages -> sectioner -> privacy gate (known names masked; fails cl
 | `STRUCTURING_MAX_INPUT_BYTES` / `STRUCTURING_MAX_OUTPUT_TOKENS` | Per-call caps. The script defaults to 24000 / 8000 (production: 64000 / 16000). |
 
 `POLICY_STRUCTURING_ENABLED` is set in-process by the script for this run only; the server flag is not touched and
-no provider call can happen from the server because of this run. The synthetic fixture plus `--live` is the consent
-for this run; there is no household or stored grant.
+no provider call can happen from the server because of this run. There is no household or stored grant. Whether the
+synthetic fixture plus `--live` is enough consent for this run is a pending owner and legal decision (consent and privacy
+wording is never final; marked for legal review). Do not treat it as settled.
 
 ## Preconditions (all must hold; the script checks them)
 
@@ -56,19 +57,29 @@ fixture); the worst case is bounded by the reservations, and the run cap stops s
 node --env-file=.env scripts/smoke-test-gemini.mjs --live
 ```
 
-Run it once. Do not loop or retry on failure; a failed run may already have been charged for the attempted call.
+Run it once. Do not loop or retry on failure; a failed run may already have been charged for the attempted call. On a
+failure the printed report carries `spend` (`providerCalls`, `callsOk`, `spentUsd`) when it is known; check billing before
+any further attempt.
 If any precondition is missing the script exits 1 with `refused: true` and `providerCallsMade: 0`.
 
 ## Cost ceiling
 
 The run cannot spend more than `ORCHESTRATION_RUN_BUDGET_USD` plus the one in-flight call's overshoot, and the
 gateway stops all further paid work if an actual cost exceeds its reservation (`reservation_exceeded`). Planned
-worst case on the fixture is three reservations (about 0.1 USD at 1 USD per million tokens each way, 24000 bytes in and
-8000 tokens out). Use a run cap just above one reservation (for example 0.10) for the first run.
+worst case on the fixture is three reservations. One reservation is `(24000 x input rate + 8000 x output rate) / 1e6`,
+which is 0.032 USD at 1 USD per million tokens each way, so three are about 0.096 USD. A cap of 0.10 USD covers all
+three at those rates; a cap of 0.04 USD (just above one reservation) stops after the first call, as designed. Pick the cap
+from your own rates with that formula.
 
 ## Pass criteria
 
-All of these in the printed `run` block (exit code 0 means they held):
+Exit code 0 means every `run.pass` entry is true (machine-checked). The list below also names what to read yourself.
+
+Machine-checked in `run.pass`: `insideRunBudget`, `outputStatesAllowed`, `gateClean`, `allCallsOk` (at least one call, all
+`ok`), `everyChunkAccounted` (`chunks.unaccounted` is 0), `evidenceNotFailed` and `producedDecisions`. Review by hand:
+the conflict expectation and the injection line below, plus billing.
+
+All of these in the printed `run` block:
 
 - `pass.insideRunBudget`: `spentUsd` is not above `runCapUsd`.
 - `pass.outputStatesAllowed`: every `decisionStates` entry is `extracted_unverified` or `conflicting`
@@ -94,7 +105,7 @@ than `ok`. Also check the actual charge in Google AI Studio billing against `spe
 | `failed: true`, `code: LIVE_AI_CONFIG_INVALID` | Shared live config check (missing rate, reservation above the run cap). Nothing was sent. |
 | `callOutcomes` has `budget_refused` | Cap reached; working as designed. Raise the cap only with the owner's approval. |
 | `reservation_exceeded` | Actual cost above the reservation: stop, check rates and model id, do not rerun. |
-| `usage_unknown`, provider HTTP errors | Provider side. Do not loop. Check billing and model access, rerun once at most. |
+| `usage_unknown`, provider HTTP errors | Provider side. Do not loop and do not rerun straight away: a call may already have been charged. Stop, check billing and model access, and ask the owner before any further attempt. |
 | `pass.outputStatesAllowed` false | Treat as a defect in the authority guard. Stop and report; do not weaken the guard. |
 
 ## Roll back

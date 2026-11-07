@@ -21,7 +21,15 @@ export const SYNTHETIC_CANARIES = Object.freeze([
 
 const table = rows => `<table>${rows.map((row, index) => `<tr>${row.map(cell => (index === 0 ? `<th>${cell}</th>` : `<td>${cell}</td>`)).join('')}</tr>`).join('')}</table>`;
 
-export const SYNTHETIC_POLICY_PAGES = Object.freeze([
+const deepFreeze = value => {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+};
+
+export const SYNTHETIC_POLICY_PAGES = deepFreeze([
   { page: 1, blocks: [
     { text: 'Zephyr Mutual Health (synthetic)', tag: 'header' },
     { text: 'Policy Schedule', tag: 'headline' },

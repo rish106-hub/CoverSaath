@@ -11,6 +11,8 @@
  * this script at another document. The OCR step is skipped: the fixture already has the shape Sarvam produces.
  * Path: sectioner -> privacy gate (fails closed on a leak) -> model gateway (reservation per call, run and project
  * budget) -> extractor/reconciler -> deterministic decisions. Nothing is stored; output is counts only.
+ * Exit 0 needs: spend inside the cap, only allowed states, a clean gate, every call ok (at least one), every chunk accounted
+ * for, an evidence outcome that is not `failed`, and at least one decision.
  *
  * --live is refused unless ALL hold: the flag is given; ORCHESTRATION_RUN_BUDGET_USD and ORCHESTRATION_PROJECT_BUDGET_USD
  * are set explicitly (not defaulted) and the run cap is at most LIVE_RUN_CEILING_USD; a Gemini key, LLM_MODEL and both
@@ -19,7 +21,7 @@
  */
 import { writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { createStructuringModelCallFactory } from '../src/features/ai-analysis/index.js';
+import { STRUCTURING_EXTRACT_TASK, STRUCTURING_RECONCILE_TASK, buildPromptContract, createStructuringModelCallFactory } from '../src/features/ai-analysis/index.js';
 import { POLICY_PARAMETER_REGISTRY_VERSION } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import {
   STRUCTURING_LIMITS, gateChunks, registryCatalog, sectionDocument, structurePolicyDocument,
@@ -47,6 +49,8 @@ export function parseArgs(argv) {
   for (const arg of argv) {
     const match = /^--([a-z-]+)(?:=(.*))?$/.exec(arg);
     if (!match || !ALLOWED_FLAGS.has(match[1])) return { error: 'UNKNOWN_ARGUMENT' };
+    // --live and --dry-run are switches: `--live=` or `--live=no` must not be read as a quiet dry run.
+    if (match[2] !== undefined && match[1] !== 'write-pdf') return { error: 'FLAG_TAKES_NO_VALUE' };
     flags[match[1]] = match[2] ?? true;
   }
   if (flags.live && flags['dry-run']) return { error: 'LIVE_AND_DRY_RUN' };
@@ -79,9 +83,20 @@ export function planRun({
   const sentText = gated.sent.map(chunk => `${chunk.title ?? ''}\n${chunk.text}`).join('\n');
   const leaked = canaries.filter(value => sentText.includes(value));
 
-  const catalogBytes = Buffer.byteLength(JSON.stringify(registryCatalog(POLICY_PARAMETER_REGISTRY_VERSION)), 'utf8');
+  const catalog = registryCatalog(POLICY_PARAMETER_REGISTRY_VERSION);
   const batches = batchesOf(gated.sent);
-  const batchBytes = batches.map(batch => catalogBytes + Buffer.byteLength(JSON.stringify(batch.map(chunk => chunk.text)), 'utf8'));
+  // Measured with the gateway's own prompt contract and the same payload shape the extractor sends, so the input limit
+  // here is the one the gateway enforces at run time (contract.evidence is what it measures).
+  const evidenceBytes = (task, payload) => Buffer.byteLength(buildPromptContract(task, { payload }).evidence, 'utf8');
+  const batchBytes = batches.map(batch => evidenceBytes(STRUCTURING_EXTRACT_TASK, {
+    registry: catalog,
+    chunks: batch.map(chunk => ({ chunk_id: chunk.id, page: chunk.page, block_indexes: chunk.blockIndexes, kind: chunk.kind, title: chunk.title, text: chunk.text })),
+  }));
+  // The reconcile call is made only when readings differ. Upper bound: every sent chunk text as a quote of one group
+  // (a quote is a substring of one chunk), so the real payload is expected to be smaller.
+  const reconcileBytes = evidenceBytes(STRUCTURING_RECONCILE_TASK, {
+    groups: [{ group_id: 'g', target: 'f.example', subject: 'policyholder', readings: gated.sent.map(chunk => ({ value: chunk.text.slice(0, 200), quote: chunk.text, page: chunk.page })) }],
+  });
   // Extraction calls plus one possible reconcile call (made only when readings of one key differ).
   const plannedCalls = batches.length + 1;
 
@@ -96,9 +111,10 @@ export function planRun({
   const reservationUsd = caps.maxInputBytes && caps.maxOutputTokens && rates.input && rates.output
     ? (caps.maxInputBytes * rates.input + caps.maxOutputTokens * rates.output) / 1_000_000 : null;
 
-  const inputBytesTotal = batchBytes.reduce((sum, bytes) => sum + bytes, 0);
+  const inputBytesTotal = batchBytes.reduce((sum, bytes) => sum + bytes, 0) + (batches.length ? reconcileBytes : 0);
   const estimate = {
     plannedCalls,
+    largestPromptBytes: Math.max(0, ...batchBytes, ...(batches.length ? [reconcileBytes] : [])),
     inputTokensExpected: Math.ceil(inputBytesTotal / 4),
     inputTokensCeiling: inputBytesTotal, // one token is at least one byte
     outputTokensCeiling: plannedCalls * (caps.maxOutputTokens ?? 0),
@@ -119,7 +135,7 @@ export function planRun({
     ? (number(env.LLM_MAX_INPUT_BYTES ?? 48_000) * rates.input + number(env.LLM_MAX_OUTPUT_TOKENS ?? 1_500) * rates.output) / 1_000_000 : null;
   if (budget.runUsd !== null && [reservationUsd, baseReservationUsd].some(value => value !== null && value > budget.runUsd)) problems.push('RESERVATION_EXCEEDS_RUN_BUDGET');
   if (caps.maxInputBytes === null || caps.maxOutputTokens === null) problems.push('CALL_CAPS_INVALID');
-  else if (batchBytes.some(bytes => bytes > caps.maxInputBytes)) problems.push('PROMPT_EXCEEDS_INPUT_LIMIT');
+  else if ([...batchBytes, ...(batches.length ? [reconcileBytes] : [])].some(bytes => bytes > caps.maxInputBytes)) problems.push('PROMPT_EXCEEDS_INPUT_LIMIT');
   if (!batches.length) problems.push('NOTHING_TO_SEND');
   if (leaked.length) problems.push('PRIVACY_GATE_LEAK');
 
@@ -158,9 +174,15 @@ export async function runLive(plan, { loadModel, createAgent } = {}) {
   const events = [];
   const create = createStructuringModelCallFactory({ env: plan.liveEnv, loadModel, createAgent })({ consentCheck, onCall: event => events.push(event) });
   const call = ({ task, payload }) => create({ task, payload });
-  const result = await structurePolicyDocument({
-    pages: plan.pagesInput, call, consentCheck, knownIdentifiers: plan.knownIdentifiers, env: { ...plan.liveEnv, POLICY_STRUCTURING_ENABLED: 'true' },
-  });
+  let result;
+  try {
+    result = await structurePolicyDocument({
+      pages: plan.pagesInput, call, consentCheck, knownIdentifiers: plan.knownIdentifiers, env: { ...plan.liveEnv, POLICY_STRUCTURING_ENABLED: 'true' },
+    });
+  } catch (error) {
+    // A paid call may have settled before the failure: attach what was spent so the operator can see it.
+    throw Object.assign(error, { smokeSpend: { providerCalls: events.length, callsOk: events.filter(event => event.outcome === 'ok').length, spentUsd: round(events.reduce((sum, event) => sum + (event.costUsd ?? 0), 0)) } });
+  }
   const spentUsd = round(events.reduce((sum, event) => sum + (event.costUsd ?? 0), 0));
   const states = [...new Set(result.decisions.map(decision => decision.state))].sort();
   const dispatched = events.filter(event => event.outcome === 'ok').length;
@@ -168,6 +190,11 @@ export async function runLive(plan, { loadModel, createAgent } = {}) {
     insideRunBudget: spentUsd <= plan.budget.runCapUsd,
     outputStatesAllowed: states.every(state => ALLOWED_STATES.has(state)),
     gateClean: plan.gate.status === 'pass',
+    // A run where no call succeeded, or any call was refused or failed, never passes (an empty list is not success).
+    allCallsOk: events.length > 0 && dispatched === events.length,
+    everyChunkAccounted: result.report.chunks.unaccounted === 0,
+    evidenceNotFailed: result.outcome.evidenceOutcome !== 'failed',
+    producedDecisions: result.decisions.length > 0,
   };
   return {
     providerCalls: events.length, callsOk: dispatched, callOutcomes: events.map(event => event.outcome),
@@ -207,8 +234,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, { pr
     return { exitCode: run.passed ? 0 : 1, report: { ...report, run } };
   } catch (error) {
     // Codes only: never the message, which could echo provider detail.
-    print(JSON.stringify({ ...report, failed: true, code: error?.code ?? 'ERROR' }, null, 2));
-    return { exitCode: 1, report: { ...report, failed: true, code: error?.code ?? 'ERROR' } };
+    const failure = { ...report, failed: true, code: error?.code ?? 'ERROR', ...(error?.smokeSpend ? { spend: error.smokeSpend } : {}) };
+    print(JSON.stringify(failure, null, 2));
+    return { exitCode: 1, report: failure };
   }
 }
 
