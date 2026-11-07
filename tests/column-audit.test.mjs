@@ -34,6 +34,7 @@ const PLAIN = {
   },
   auth_identities: { 'identity provider issuer URL, public': ['issuer'] },
   case_participants: { 'closed vocabulary': ['participant_role'] },
+  evidence_claims: { 'random per-process owner id (16-64 chars), no content': ['owner'] },
   catalogue_reviewer_grants: { 'closed vocabulary and curator ids': ['kind', 'status', 'granted_by'] },
   catalogue_reviews: {
     'closed vocabulary': ['authority', 'decision', 'reason_code', 'source_version'],
