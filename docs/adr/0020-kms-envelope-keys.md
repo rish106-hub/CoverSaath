@@ -1,4 +1,4 @@
-# ADR 0019: AWS KMS as the root of trust for data keys (envelope encryption)
+# ADR 0020: AWS KMS as the root of trust for data keys (envelope encryption)
 
 - Status: Proposed (2026-11-07). Design only: no code, no migration, no cloud resource has been created. Owner decisions pending (see Open questions).
 - Synthetic data only. Every statement below about legal duties (DPDP Act, CERT-In, data residency, erasure promises in a notice) is an engineering reading and is **FOR LEGAL REVIEW**.
