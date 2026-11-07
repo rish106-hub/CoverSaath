@@ -27,10 +27,17 @@ if (!base) {
   process.stderr.write('migration check: --base <git-ref> is required.\n');
   process.exit(2);
 }
-if (!safeBase.test(base) || base.includes('..')) {
+const isSha = /^[0-9a-f]{40}([0-9a-f]{24})?$/.test(base);
+let validRef = safeBase.test(base) && !base.includes('..');
+if (validRef && !isSha) {
+  // Git's own rules for ref names (no '//', '/.', '@{', trailing '.lock' and so on). The value cannot start with '-'.
+  try { execFileSync('git', ['check-ref-format', '--allow-onelevel', base], { stdio: 'ignore' }); } catch { validRef = false; }
+}
+if (!validRef) {
   process.stderr.write('migration check: --base must be a commit SHA or a valid git ref name.\n');
   process.exit(2);
 }
+
 try {
   git(repo, ['rev-parse', '--verify', '--quiet', `${base}^{commit}`]);
 } catch {

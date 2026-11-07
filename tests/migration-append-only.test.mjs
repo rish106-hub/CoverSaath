@@ -138,6 +138,19 @@ test('two new migrations with the same number fail', () => {
   }
 });
 
+test('ref names git itself rejects fail closed before git runs', () => {
+  const { repo } = makeRepo();
+  try {
+    for (const bad of ['foo//bar', 'foo/.bar', 'foo@{1}', 'foo.lock', 'foo bar']) {
+      const result = run(repo, bad);
+      assert.equal(result.status, 2, bad);
+      assert.match(result.stderr, /valid git ref name/, bad);
+    }
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
 test('a ref name containing + is accepted', () => {
   const { repo } = makeRepo();
   try {
