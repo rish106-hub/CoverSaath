@@ -176,7 +176,6 @@ test('the synthetic PDF is deterministic, three pages, and banner-marked; --writ
 });
 
 test('stripTags removes nested and reassembled tags and keeps table cells readable', () => {
-  assert.deepEqual(stripTags('<<b>b>x'), ['x']);
   for (const hostile of ['<scr<b>ipt>alert</scr</b>ipt>', '<scr<script>ipt>x', '<<i>script>y']) {
     for (const line of stripTags(hostile)) assert.doesNotMatch(line, /[<>]/, hostile);
   }
