@@ -14,9 +14,9 @@ Rows that must stay are **content-free tombstones**, for two reasons that exist 
 1. `audit_events` is append-only and has foreign keys to `households` and `service_cases`. Those two rows (and the adult row a case tombstone names) cannot be deleted without dropping those foreign keys.
 2. Append-only tables (`evidence_facts`, parameter observations, structuring runs and jobs, proposed parameters, registry pins) cannot be deleted. Their content is redacted in place through the narrow update their triggers allow. Rows they point at (document, page, policy, member, run, grant) stay as scrubbed tombstones.
 
-A tombstone holds ids, enumerations, digests and timestamps. The proof test checks that every remaining row is content-free and that no canary string appears in any column of any table.
+A tombstone holds ids, enumerations, digests and timestamps. The proof test checks the documented residue fields of the remaining rows and that no fixture canary string appears in any column of any table. It is evidence for those fields and canaries, not a proof that every remaining row is content-free.
 
-**Open decision for the owner (ADR needed, not done here):** drop the two audit foreign keys so household, case and adult tombstones can be deleted too. That changes an audit-adjacent schema and needs an independent review. Until then the residue above is the floor.
+**Open decision for the owner (ADR needed, not done here):** drop the two audit foreign keys so household and case tombstones can be deleted too. That alone does not make adult tombstones deletable: retained case tombstones still name an adult through `service_cases.opened_by_adult_id`, and other adult references may remain, so the adult-reference decision is separate. Either change touches an audit-adjacent schema and needs an independent review. Until then the residue above is the floor.
 
 ## Operations
 
@@ -28,7 +28,7 @@ A tombstone holds ids, enumerations, digests and timestamps. The proof test chec
 | Export | any household role, own data | `GET .../households/{id}/export`, `.../cases/{id}/export`, `.../members/{memberId}/export` | see Export |
 | Retention sweep | operator script, not an HTTP route | `npm run retention:sweep [-- --apply]` | dry run by default |
 
-Erasure does not need current processing consent: a person must always be able to erase their data. A foreign or missing id answers 404. Bytes in document storage are removed after the transaction by the document worker; until then the status is `erasure_pending_storage` (HTTP 202), then the tombstones are pruned. A second call is 404.
+Erasure does not need current processing consent: a person must always be able to erase their data. A foreign or missing id answers 404. Bytes in document storage are removed after the transaction by the document worker; until then the status is `erasure_pending_storage` (HTTP 202), then the tombstones are pruned. A second call with a session that still exists is 404; after household erasure the owner's own session is gone, so a retry with the same token is 401.
 
 ## Table-by-table map
 
@@ -121,11 +121,13 @@ Retention is configuration. An unset variable means not scheduled and the sweep 
 | `RETENTION_DELETED_DOCUMENT_DAYS` | document tombstones whose bytes are gone | delete the tombstone when nothing refers to it | 0 days |
 | `RETENTION_ERASURE_LEDGER_DAYS` | deletion ledger rows | reported only (never deleted by the sweep) | 1825 days |
 
-Always on, from values stored on each row: expired activity events (`APP_EVENTS_RETENTION_DAYS`, default 30), expired idempotency keys, expired current locations. The sweep is bounded (100 per rule per run), idempotent, acts as the system actor `retention-sweep` and reports counts only. It never deletes the ledger. Open question for legal: statutory retention of consent and processing logs may require keeping more than the counts-only audit chain.
+Always on, from values stored on each row: expired activity events (`APP_EVENTS_RETENTION_DAYS`, default 30), expired idempotency keys, expired current locations. The sweep is bounded per run and idempotent: 100 cases or households per rule (each its own transaction), 1000 rows for sessions, idempotency keys and expired locations, 5000 telemetry events, and document tombstones pruned for at most 500 households per run. The dry run reports the whole backlog; repeat the apply for a larger one. The sweep acts as the system actor `retention-sweep` and reports counts only. It never deletes the ledger. Open question for legal: statutory retention of consent and processing logs may require keeping more than the counts-only audit chain.
 
 ## Known gaps
 
-- Free-text consent revocation reasons are stored in `consent_revocations.reason` and in the `consent.revoked` audit payload by the existing revoke route. Erasure clears the table column; the audit payload is append-only and stays. Follow-up: restrict the route to a reason code.
+- Revocation reasons are normalised to a fixed code before they are stored or audited (`REVOCATION_REASONS`). Audit rows written before that change can still hold a person's own words and cannot be erased; the export therefore releases only whitelisted code-shaped audit values.
+- The marker `[erased]` is reserved: the app refuses it as a member name. Legacy plaintext rows written before that check (migration 019 allowed plaintext until the backfill) could in theory already hold it; such a row would be read as erased. No such row is known; check before the backfill if in doubt.
+- `app_events` has no index on `case_id`, so a case erasure scans that table. Add one in a migration when telemetry volume warrants it (not done here: migration numbers are shared with other open branches).
 - Account-holder self-erasure (one adult leaving one household) is not built. Household erasure covers adults who belong to no other household.
 - Backups and provider-side copies (Supabase backups, Sarvam or Gemini retention) are outside this code. Needs a runbook and legal input.
 - No migration was needed: the deletion ledger reuses `retention_records`, and the sentinel name `[erased]` (never a sealed value) marks scrubbed members.

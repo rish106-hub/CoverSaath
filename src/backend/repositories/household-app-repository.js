@@ -25,12 +25,15 @@ export class HouseholdAppRepository {
   #adult(row) { return this.crypto.openRow('adult_users', row, ['display_name', 'contact_email', 'contact_phone']); }
 
   async listMembers(householdId) {
-    return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? AND display_name <> ? ORDER BY created_at, id LIMIT ?', [householdId, ERASED_NAME, MAX_MEMBERS_PER_HOUSEHOLD + 5])).map(row => this.#member(row));
+    return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? AND display_name <> ? ORDER BY created_at, id LIMIT ?', [householdId, ERASED_NAME, MAX_MEMBERS_PER_HOUSEHOLD + 5]))
+      .map(row => this.#member(row)).filter(member => member.display_name !== ERASED_NAME);
   }
 
   async getMember(householdId, memberId) {
     const row = await this.database.one('SELECT * FROM household_members WHERE id = ? AND household_id = ? AND display_name <> ?', [memberId, householdId, ERASED_NAME]);
-    return row ? this.#member(row) : null;
+    // The opened name is checked as well: a tombstone that was ever sealed is still a tombstone.
+    const member = row ? this.#member(row) : null;
+    return member && member.display_name !== ERASED_NAME ? member : null;
   }
 
   // An adult member needs an adult_users row (schema CHECK). A not-yet-invited adult is a placeholder with account_status 'invited',
@@ -63,8 +66,9 @@ export class HouseholdAppRepository {
     const at = this.clock().toISOString();
     const db = this.database;
     await db.transaction(async () => {
-      const row = await db.one('SELECT * FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
-      if (!row) fail('MEMBER_NOT_FOUND', 'Member not found.', 404);
+      // An erased member (scrubbed tombstone) cannot be updated or revived: 404, as for any reader.
+      const row = await db.one('SELECT * FROM household_members WHERE id = ? AND household_id = ? AND display_name <> ?', [memberId, householdId, ERASED_NAME]);
+      if (!row || this.#member(row).display_name === ERASED_NAME) fail('MEMBER_NOT_FOUND', 'Member not found.', 404);
       // A real adult (not an invited placeholder) owns their row: others cannot change it here, matching the consent-gated reads.
       if (row.adult_user_id && row.adult_user_id !== actorAdultId) {
         const adult = await db.one('SELECT account_status FROM adult_users WHERE id = ?', [row.adult_user_id]);

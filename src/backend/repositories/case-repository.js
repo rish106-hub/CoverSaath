@@ -59,7 +59,8 @@ export class CaseRepository {
   }
 
   async get(caseId) {
-    const record = openCaseRecord(this.crypto, await this.database.one('SELECT * FROM service_cases WHERE id = ?', [caseId]));
+    // A case erased through the deletion ledger is gone for every reader (S3).
+    const record = openCaseRecord(this.crypto, await this.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId]));
     return record ? { ...record, revision: record.updated_at, emergencyInstruction: emergencyInstruction(record.trigger_type) } : null;
   }
 

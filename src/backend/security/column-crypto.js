@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
+import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
 
 // Application-level column encryption (ADR 0013). Sensitive text columns hold an envelope string
 //
@@ -150,6 +151,8 @@ export function createColumnCrypto(config = readDataEncryptionConfig()) {
   function open(table, column, rowId, stored) {
     if (stored === null || stored === undefined) return null;
     if (typeof stored !== 'string') throw failed();
+    // The erased-name tombstone is stored as plain text on purpose (readers match it literally); it is never a sealed value.
+    if (stored === ERASED_NAME) return stored;
     const padded = stored.startsWith(ENVELOPE_PREFIX);
     if (!padded && !stored.startsWith(LEGACY_ENVELOPE_PREFIX)) {
       if (allowLegacyPlaintext) return stored;

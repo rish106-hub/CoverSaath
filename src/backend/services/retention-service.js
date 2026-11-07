@@ -2,12 +2,14 @@ import { ERASURE_REASONS } from '../../contracts/data-lifecycle.js';
 
 // Retention sweep (S3). Applies the configured retention periods (readRetentionConfig): a period that is null is not scheduled
 // and does nothing. DRY RUN IS THE DEFAULT: without `apply: true` nothing is changed and the result reports candidate counts.
-// The sweep is idempotent and bounded (a batch per rule per run), runs as the system actor 'retention-sweep', erases through
+// The sweep is idempotent and bounded (a batch per rule per run: 100 cases or households, 1000 plain rows, 5000 telemetry events;
+// document tombstones are pruned per household with a limit of 500 households), runs as the system actor 'retention-sweep', erases through
 // the same code as an erasure request, and reports counts only: no id, name or value is returned or logged.
 // Periods are engineering placeholders and are not legal advice. FOR LEGAL REVIEW.
 
 const DAY_MS = 86_400_000;
-const BATCH = 100;
+const BATCH = 100; // cases and households per run (each erasure is its own transaction)
+const BATCH_ROWS = 1000; // plain rows per run for the delete-only rules (sessions, idempotency keys, expired locations)
 const SYSTEM = Object.freeze({ type: 'system', id: 'retention-sweep' });
 const ERASED_CASE = `EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`;
 
@@ -40,6 +42,9 @@ export function createRetentionService({ database, erasure, lifecycle = null, ap
         return applied;
       });
 
+      // Activity is deliberately generous: any session of an adult with a role in the household counts, even one the adult also
+      // uses elsewhere. Reads are not audited and telemetry can be off, so no household-only signal exists, and erring towards
+      // keeping a household is the safe side of an irreversible erasure.
       await rule('inactiveHouseholds', retention.inactiveHouseholdDays, async before => database.many(`SELECT households.id FROM households
         WHERE households.status = 'active'
           AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'household' AND resource_id = households.id AND deletion_state IN ('deleted', 'verified'))
@@ -59,9 +64,11 @@ export function createRetentionService({ database, erasure, lifecycle = null, ap
         return applied;
       });
 
+      // A batch per run, like the other rules: the dry run reports the whole backlog, an apply deletes at most BATCH_ROWS of it.
       await rule('expiredSessions', retention.expiredSessionDays, async before => (await database.one(
         `SELECT count(*) AS count FROM api_sessions WHERE expires_at < CAST(? AS text) OR revoked_at < CAST(? AS text)`, [before, before])).count,
-      async before => (await database.run('DELETE FROM api_sessions WHERE expires_at < CAST(? AS text) OR revoked_at < CAST(? AS text)', [before, before])).changes);
+      async before => (await database.run(`DELETE FROM api_sessions WHERE id IN (SELECT id FROM api_sessions
+        WHERE expires_at < CAST(? AS text) OR revoked_at < CAST(? AS text) ORDER BY id LIMIT ?)`, [before, before, BATCH_ROWS])).changes);
 
       await rule('deletedDocumentTombstones', retention.deletedDocumentTombstoneDays, async before => (await database.one(
         `SELECT count(*) AS count FROM document_uploads WHERE lifecycle_state = 'deleted' AND deleted_at < CAST(? AS text)`, [before])).count,
@@ -77,10 +84,10 @@ export function createRetentionService({ database, erasure, lifecycle = null, ap
         appEvents: dryRun ? Number((await database.one('SELECT count(*) AS count FROM app_events WHERE expires_at < now()')).count) : await appEvents.purgeExpired({ limit: 5000 }),
         idempotencyKeys: dryRun
           ? Number((await database.one('SELECT count(*) AS count FROM idempotency_keys WHERE julianday(expires_at) <= julianday(CAST(? AS text))', [clock().toISOString()])).count)
-          : await documents.purgeExpiredIdempotency(clock().toISOString()),
+          : await documents.purgeExpiredIdempotency(clock().toISOString(), { limit: BATCH_ROWS }),
         expiredLocations: dryRun
           ? Number((await database.one(`SELECT count(*) AS count FROM household_places WHERE kind = 'current_location' AND expires_at <= ?`, [clock().toISOString()])).count)
-          : await userData.purgeExpiredLocations(),
+          : await userData.purgeExpiredLocations(null, { limit: BATCH_ROWS }),
       };
       return { dryRun, ranAt: clock().toISOString(), rules, housekeeping };
     },

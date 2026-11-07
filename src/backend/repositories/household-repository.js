@@ -83,7 +83,7 @@ export class HouseholdRepository {
 
   async getAdult(adultId) { return this.#adult(await this.database.one('SELECT * FROM adult_users WHERE id = ?', [adultId])) ?? null; }
   async getHousehold(householdId) { return this.#household(await this.database.one('SELECT * FROM households WHERE id = ?', [householdId])) ?? null; }
-  async listMembers(householdId) { return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? AND display_name <> ? ORDER BY created_at, id', [householdId, ERASED_NAME])).map(row => this.#member(row)); }
+  async listMembers(householdId) { return (await this.database.many('SELECT * FROM household_members WHERE household_id = ? AND display_name <> ? ORDER BY created_at, id', [householdId, ERASED_NAME])).map(row => this.#member(row)).filter(member => member.display_name !== ERASED_NAME); }
 
   async getActiveRole(householdId, adultUserId) {
     const at = this.clock().toISOString();

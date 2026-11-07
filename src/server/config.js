@@ -88,6 +88,8 @@ export function readRetentionConfig(env = process.env) {
   const days = (name, { zeroAllowed = false } = {}) => {
     const raw = env[name];
     if (raw === undefined || raw === '') return null;
+    // Number(' ') is 0: a blank value must not become "delete at once" for the tombstone rule.
+    if (String(raw).trim() === '') throw new Error(`Invalid ${name}.`);
     const parsed = Number(raw);
     if (!Number.isInteger(parsed) || parsed < (zeroAllowed ? 0 : 1) || parsed > 36_500) throw new Error(`Invalid ${name}.`);
     return parsed;

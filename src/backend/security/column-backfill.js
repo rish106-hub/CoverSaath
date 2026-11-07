@@ -9,6 +9,7 @@
 // triggers that block an UPDATE of this table); rowId (row -> the id used as additional authenticated data, default row[key[0]]);
 // select (extra columns the rowId function reads); since ('D2' for the columns added by migration 030); unwritten (true when no application code writes the column yet, so the at-rest test cannot expect a value there).
 
+import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
 import { compositeRowId, documentIdOfUploadResponse, documentIdempotencyIndex, idempotencyRowId } from './sealed-records.js';
 
 // An idempotency record of a document upload also carries a keyed index of its document id (ADR 0013 addendum D2). It is derived
@@ -123,7 +124,8 @@ async function sealTable({ database, crypto, entry, dryRun, rotate, unseal, batc
   const derive = unseal ? null : entry.derive ?? null;
   const selectColumns = [...new Set([...key, ...columns, ...(derive ? [derive.column] : []), ...(entry.legacy ? [entry.legacy.column] : [])])];
   const selectList = selectColumns.map(quote).join(', ');
-  const needs = value => value !== null && value !== undefined
+  // The erased-name marker is a plaintext tombstone that readers match literally: sealing it would hide it from that match.
+  const needs = value => value !== null && value !== undefined && value !== ERASED_NAME
     && (unseal ? crypto.isSealed(value) : (!crypto.isSealed(value) || (rotate && crypto.needsRotation(value))));
   // Selects candidates in SQL so a finished table is a cheap scan.
   const candidate = columns.map(column => {
@@ -131,8 +133,8 @@ async function sealTable({ database, crypto, entry, dryRun, rotate, unseal, batc
     if (unseal) return `(${c} ~ '^enc[12][.]')`;
     return rotate
       // enc1 (unpadded) and other-key values are re-sealed by --rotate; any enc1 or enc2 value counts as sealed otherwise.
-      ? `(${c} IS NOT NULL AND (${c} !~ '^enc2[.]' OR split_part(${c}, '.', 2) <> ?))`
-      : `(${c} IS NOT NULL AND ${c} !~ '^enc[12][.]')`;
+      ? `(${c} IS NOT NULL AND ${c} <> '${ERASED_NAME}' AND (${c} !~ '^enc2[.]' OR split_part(${c}, '.', 2) <> ?))`
+      : `(${c} IS NOT NULL AND ${c} <> '${ERASED_NAME}' AND ${c} !~ '^enc[12][.]')`;
   });
   // A legacy plain column (the stated estimate's bigint) moves into its sealed text column.
   if (entry.legacy && !unseal) candidate.push(`(${quote(entry.legacy.column)} IS NOT NULL)`);
