@@ -18,7 +18,9 @@ test('gateText returns a frozen, branded object whose text equals the storage ga
 
 test('the brand is not enumerable, not serialised and not cloneable', () => {
   const g = gateText(PLAIN, { knownIdentifiers: [] });
-  assert.equal(Object.keys(g).some(key => typeof key === 'symbol'), false);
+  // Object.keys() never lists symbols, so the symbols themselves are checked: any own symbol must be non-enumerable.
+  for (const symbol of Object.getOwnPropertySymbols(g)) assert.equal(Object.getOwnPropertyDescriptor(g, symbol).enumerable, false);
+  assert.equal(Object.entries(g).some(([key]) => typeof key === 'symbol'), false);
   assert.deepEqual(Object.getOwnPropertyNames(g).filter(key => /gated/i.test(key)), []);
   assert.equal(JSON.stringify(g).includes('gatedText'), false);
   assert.equal(isGatedText(structuredClone(g)), false);

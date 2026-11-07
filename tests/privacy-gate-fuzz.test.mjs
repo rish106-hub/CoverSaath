@@ -141,7 +141,8 @@ function runSeed(seed, count, { allowed, exploratory }) {
   return { failures, leaked, refused, run };
 }
 
-// On a failure, retry with each mutator removed in turn and name the smallest failing set.
+// On a failure, retry with each mutator removed in turn. A mutator whose removal stops the leak is REQUIRED to reproduce it;
+// the list returned names those required mutators.
 function shrink(failure) {
   const row = CORPUS.find(candidate => candidate.id === failure.id);
   const set = [];
@@ -152,7 +153,7 @@ function shrink(failure) {
       const { input } = mutate(row, prng(failure.seed + attempt), remaining);
       try { outcomes.push(leaks(gateText(input, { knownIdentifiers: row.knownIdentifiers }).text, row.mustNotContain) > 0); } catch { outcomes.push(false); }
     }
-    if (outcomes.some(Boolean)) set.push(`without ${dropped}`);
+    if (!outcomes.some(Boolean)) set.push(dropped);
   }
   return set;
 }
@@ -174,7 +175,7 @@ test('fuzz: enforced mutators leak nothing and fail closed', t => {
     failures.push(...result.failures);
   }
   t.diagnostic(`enforced fuzz: mutations=${total} refusals=${refused} failures=${failures.length}`);
-  const report = failures.slice(0, 10).map(failure => `seed=${failure.seed} iteration=${failure.iteration} row=${failure.id} mutators=${failure.applied.join('+')} smallest=${shrink(failure).join('|') || 'n/a'} ${failure.error ?? ''}`);
+  const report = failures.slice(0, 10).map(failure => `seed=${failure.seed} iteration=${failure.iteration} row=${failure.id} mutators=${failure.applied.join('+')} required=${shrink(failure).join('|') || 'n/a'} ${failure.error ?? ''}`);
   assert.deepEqual(report, []);
   assert.ok(total >= 5_000, `only ${total} mutations applied`);
 });

@@ -144,7 +144,8 @@ const GENERIC_TARGET = 'proposed_item';
 function gateTarget(key, knownIdentifiers) {
   const regate = value => gateText(value, { knownIdentifiers, regate: true });
   try {
-    const spaced = String(key).replace(/[_.]/g, ' ');
+    // Underscores, dots, hyphens and camelCase boundaries become spaces, so "RaviCover" is read as the words "Ravi Cover".
+    const spaced = String(key).replace(/([\p{Ll}\p{Nd}])(\p{Lu})/gu, '$1 $2').replace(/[_.-]+/g, ' ');
     return regate(spaced).text === spaced ? regate(String(key)) : regate(GENERIC_TARGET);
   } catch { return regate(GENERIC_TARGET); }
 }

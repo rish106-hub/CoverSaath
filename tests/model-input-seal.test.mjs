@@ -300,3 +300,25 @@ test('review P2-2: group and finding ids have a strict shape', () => {
     assert.throws(() => sealModelInput('policy_evidence_override_sweep', broken), notAllowed, findingId);
   }
 });
+
+test('policy_structuring_extract: a registry entry the registry forbids a model to extract is refused by the seal', () => {
+  const draft = validDraft('policy_structuring_extract');
+  for (const entry of [
+    { key: 'a.contract_and_member_identifiers', label: 'Policy, certificate, member and e-card numbers', valueType: 'identifier' },
+    { key: 'c.named_insured_members', label: 'Named insured members', valueType: 'list' },
+  ]) {
+    const forbidden = cloneDraft(draft);
+    forbidden.payload.registry = [entry];
+    assert.throws(() => sealModelInput('policy_structuring_extract', forbidden), notAllowed, entry.key);
+  }
+  const allowedCatalog = cloneDraft(draft);
+  allowedCatalog.payload.registry = [...registryCatalog(POLICY_PARAMETER_REGISTRY_VERSION)];
+  assert.doesNotThrow(() => sealModelInput('policy_structuring_extract', allowedCatalog), 'the catalog the extractor sends is accepted');
+});
+
+test('the investigation checklist vocabulary stays inside the clause kinds', async () => {
+  const { CLAUSE_KINDS } = await import('../src/contracts/policy-evidence.js');
+  const { INVESTIGATION_BASE_KINDS, INVESTIGATION_CHECKLIST_KINDS } = await import('../src/features/ai-analysis/structuring-contract.js');
+  assert.deepEqual([...INVESTIGATION_BASE_KINDS, 'procedure', 'other'].sort(), [...CLAUSE_KINDS].sort(), 'a new clause kind must be added to the checklist allow-list on purpose');
+  for (const kind of INVESTIGATION_CHECKLIST_KINDS) assert.ok(CLAUSE_KINDS.includes(kind), kind);
+});

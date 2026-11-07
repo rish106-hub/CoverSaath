@@ -7,7 +7,7 @@ import { ADJUDICATOR_LIMITS } from '../../src/features/ai-analysis/field-adjudic
 
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
 
-// Plain generateContent call: temperature 0, JSON schema output. The key never leaves this function.
+// Plain generateContent call: temperature 0, JSON schema output. The key is sent to Gemini over HTTPS in the x-goog-api-key header and is never logged or returned.
 export function createGeminiEvalCaller({ apiKey, model, fetchImpl = fetch, timeoutMs = ADJUDICATOR_LIMITS.timeoutMs }) {
   if (!apiKey || !model) fail('ADJUDICATOR_CONFIG', 'Gemini key and model are required.');
   return async ({ system, payload, schema }) => {

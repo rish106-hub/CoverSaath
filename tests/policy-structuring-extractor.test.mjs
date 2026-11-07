@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { gateText } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { MAX_CHUNK_BLOCK_INDEXES } from '../src/features/ai-analysis/structuring-contract.js';
 import { EXTRACTION_SCHEMA, extractChunks, registryCatalog, STRUCTURING_LIMITS } from '../src/features/policy-structuring/extractor.js';
 
 // Synthetic only: fictional insurer and numbers. `call` is a fake provider.
@@ -107,6 +108,15 @@ test('unknown chunk ids, item cap, duplicates and overflow proposals', async () 
   const withProposal = await extractChunks({ chunks: [first, second], registryVersion, call: roomy.call, consentCheck: consent() });
   assert.deepEqual(withProposal.proposals.map(item => [item.proposedKey, item.category]), [['synthetic_floater_note', 'unassigned']]);
   assert.deepEqual(withProposal.chunkOutcomes[second.id], { status: 'no_items', reason: 'none_returned' });
+});
+
+test('a chunk with more blocks than the wire allows is skipped with a reason; the rest of the document still goes out', async () => {
+  const { call, log } = fakeCall(echo);
+  const wide = chunk('p21-b0', 21, 'Sum insured: 500000', Array.from({ length: MAX_CHUNK_BLOCK_INDEXES + 1 }, (_, index) => index));
+  const result = await extractChunks({ chunks: [chunks[0], wide], registryVersion, call, consentCheck: consent() });
+  assert.deepEqual(result.chunkOutcomes[wide.id], { status: 'skipped', reason: 'chunk_too_large' });
+  assert.equal(log.length, 1);
+  assert.deepEqual(log[0].input.payload.chunks.map(sent => sent.chunk_id), [chunks[0].id]);
 });
 
 test('chunk text travels only in the payload; oversize chunks are skipped; inputs are validated', async () => {

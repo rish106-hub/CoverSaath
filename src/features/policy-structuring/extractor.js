@@ -4,7 +4,7 @@
 import { getPolicyParameterRegistry } from '../coverage-analysis/policy-parameter-registry.js';
 import { comparisonKey, validateExtractedItems } from './validator.js';
 import {
-  EXTRACTION_SCHEMA, STRUCTURING_EXTRACT_TASK, STRUCTURING_INSTRUCTIONS,
+  EXTRACTION_SCHEMA, MAX_CHUNK_BLOCK_INDEXES, STRUCTURING_EXTRACT_TASK, STRUCTURING_INSTRUCTIONS,
 } from '../ai-analysis/structuring-contract.js';
 import { sealModelInput } from '../ai-analysis/privacy-evidence-gate.js';
 
@@ -43,7 +43,8 @@ function plan(chunks, limits, outcomes) {
   let current = [];
   let chars = 0;
   for (const chunk of chunks) {
-    if (chunk.text.length > limits.maxCharsPerCall) { outcomes[chunk.id] = { status: 'skipped', reason: 'chunk_too_large' }; continue; }
+    // A chunk with more blocks than the wire allows is skipped with a reason, not sealed (a seal refusal would fail the whole document).
+    if (chunk.text.length > limits.maxCharsPerCall || (chunk.blockIndexes?.length ?? 0) > MAX_CHUNK_BLOCK_INDEXES) { outcomes[chunk.id] = { status: 'skipped', reason: 'chunk_too_large' }; continue; }
     if (current.length && (current.length >= limits.maxChunksPerCall || chars + chunk.text.length > limits.maxCharsPerCall)) {
       batches.push(current); current = []; chars = 0;
     }

@@ -27,7 +27,8 @@ export function leaksFragment(output, fragment) {
   // A short fragment (a leftover OCR letter and digit) counts only as a whole token, so "i" is not found in "item".
   if (target.length < 4 ? new RegExp(`(?<![\\p{L}\\p{N}])${target.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'u').test(text) : text.includes(target)) return true;
   const targetDigits = digitSkeleton(fragment);
-  if (targetDigits.length >= 4 && /\d/.test(target) && !/\p{L}/u.test(target.replace(/[xX*]/g, ''))) {
+  // Alphanumeric identifiers (a PAN: ABCDE1234F) are covered too: their digit group is checked even when OCR spacing splits the letters from it.
+  if (targetDigits.length >= 4 && /\d/.test(target)) {
     // Digit groups join across spaces and punctuation only; a letter ends a run, so the digits of two words never merge.
     const outputRuns = text.replace(/(\d)[\s.\-‐-―/·]+(?=\d)/g, '$1').match(/\d+/g) ?? [];
     // A window needs three different digits: "0000" is in every round amount and says nothing about the secret.

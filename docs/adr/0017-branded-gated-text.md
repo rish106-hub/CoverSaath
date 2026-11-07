@@ -61,7 +61,7 @@ These were handled correctly: Devanagari digits under `आधार`, masked Aad
 Add the following to `src/features/ai-analysis/privacy-evidence-gate.js`. It is the only module allowed to mint the brand.
 
 ```js
-const GATED = Symbol('coversaath.gatedText');      // module-private; never exported
+const GATED = Symbol('knowvia.gatedText');      // module-private; never exported
 const GATED_TEXT = new WeakSet();                  // authority for GatedText
 const SEALED = new WeakMap();                      // authority for sealed inputs: object -> { task, gateVersion, counts }
 

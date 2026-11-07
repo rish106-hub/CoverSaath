@@ -3,5 +3,9 @@
 import { sanitizeEvidenceTextForStorage } from '../../src/features/ai-analysis/privacy-evidence-gate.js';
 
 export function RESTRICTED_PATTERNS_PROBE(text) {
-  try { sanitizeEvidenceTextForStorage(text, { knownIdentifiers: [], maxBytes: 16_000 }); return false; } catch (error) { return error?.code === 'RESTRICTED_EVIDENCE'; }
+  try { sanitizeEvidenceTextForStorage(text, { knownIdentifiers: [], maxBytes: 16_000 }); return false; } catch (error) {
+    // Only the restricted-evidence refusal is an answer; any other failure (empty text, over the intake limit) is a bad corpus row and must surface.
+    if (error?.code === 'RESTRICTED_EVIDENCE') return true;
+    throw error;
+  }
 }

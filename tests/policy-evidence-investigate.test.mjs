@@ -178,3 +178,11 @@ test('B3: the sweep runs its own retrieval and sees a clause the first pass cont
   assert.ok(!firstIds.includes(opaqueClauseId(exclusion.clauseId)) && sweepIds.includes(opaqueClauseId(exclusion.clauseId)));
   assert.ok(answer.limited_or_excluded.some(entry => entry.clauseIds.includes(exclusion.clauseId)));
 });
+
+test('a model-written finding subject is gated before it reaches the answer', async () => {
+  const injected = 'Insured Asha Example PAN ABCPE1234F phone 9876543210';
+  const first = { findings: [finding(12, 'cataract surgery as a hospitalisation benefit', { effect: 'covers', subject: injected })] };
+  const { answer } = await run({ call: fixture({ first, second: { overrides: [] } }), knownIdentifiers: [{ kind: 'NAME', value: 'Asha Example' }] });
+  const text = JSON.stringify(answer);
+  for (const leak of ['Asha Example', 'ABCPE1234F', '9876543210']) assert.equal(text.includes(leak), false, `the answer must not carry ${leak}`);
+});

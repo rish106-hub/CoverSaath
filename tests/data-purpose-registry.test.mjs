@@ -17,8 +17,10 @@ const read = path => readFileSync(new URL(path, root), 'utf8');
 const MIGRATIONS = 'src/backend/database/postgres/migrations/';
 
 // Personal-data fields with no erasure function in the code base today. The list may only shrink; each entry is a finding
-// reported to the owner, not an erasure function invented here.
-const KNOWN_ERASURE_GAPS = Object.freeze(['db:adult_users.phone_ciphertext']);
+// reported to the owner, not an erasure function invented here. The three adult-account contact columns share one gap (no
+// household-level erasure of an adult account row). The ceiling below is a reviewed constant: raising it shows up in a diff.
+const KNOWN_ERASURE_GAPS = Object.freeze(['db:adult_users.phone_ciphertext', 'db:adult_users.phone_hash', 'db:adult_users.contact_email_hash']);
+const ERASURE_GAP_CEILING = 3;
 
 function ciphertextColumns() {
   const found = new Set();
@@ -69,6 +71,16 @@ test('R2: every *_ciphertext column of the migrations is registered as sealed', 
   assert.deepEqual(registered.sort(), columns.sort(), 'no registered ciphertext column is missing from the migrations');
 });
 
+test('R2b: non-ciphertext personal columns of the migrations (contact hashes) are registered too', () => {
+  const found = new Set();
+  for (const file of readdirSync(new URL(MIGRATIONS, root)).filter(name => name.endsWith('.sql'))) {
+    for (const match of read(`${MIGRATIONS}${file}`).matchAll(/ALTER TABLE\s+(?:public\.)?(\w+)\s+ADD COLUMN(?: IF NOT EXISTS)?\s+(phone_hash|contact_email_hash)\b/gi)) found.add(`db:${match[1]}.${match[2]}`);
+  }
+  assert.ok(found.size >= 2, `found ${found.size}`);
+  for (const field of found) assert.equal(purposeEntry(field).personal, true, field);
+  assert.equal(purposeEntry('db:policy_clauses.text').sealed, true, 'clause text is sealed by clause-repository.js');
+});
+
 test('R3: model-eligible entries are exactly the gated slots of MODEL_INPUT_FIELDS', () => {
   const slots = gatedSlotPaths();
   assert.ok(slots.length >= 25);
@@ -88,7 +100,7 @@ test('R4: personal entries name at least one real consent purpose', () => {
   }
 });
 
-test('R5: every named erasure path is exported and exercised by a test that names it', async () => {
+test('R5: every named erasure path is exported and its test file names it', async () => {
   for (const item of DATA_PURPOSE_REGISTRY.filter(candidate => candidate.erasure)) {
     const { module, fn, test: testFile } = item.erasure;
     const exported = await import(new URL(module, root).href);
@@ -97,13 +109,18 @@ test('R5: every named erasure path is exported and exercised by a test that name
     if (method) assert.equal(typeof exported[owner].prototype[method], 'function', `${item.field}: ${owner} has no ${method}`);
     assert.ok(existsSync(new URL(testFile, root)), `${item.field}: ${testFile} is missing`);
     assert.ok(read(testFile).includes(method ?? owner), `${item.field}: ${testFile} never mentions ${method ?? owner}`);
+    // A factory names its product: the method that erases must exist in the module and be called by name in the test.
+    if (item.erasure.member) {
+      assert.match(read(module), new RegExp(`async ${item.erasure.member}\\(`), `${item.field}: ${module} has no ${item.erasure.member}()`);
+      assert.ok(read(testFile).includes(`.${item.erasure.member}(`), `${item.field}: ${testFile} never calls .${item.erasure.member}(`);
+    }
   }
 });
 
 test('R6: personal stored fields have an erasure path or are listed as a known gap that only shrinks', () => {
   const missing = DATA_PURPOSE_REGISTRY.filter(item => item.personal && item.field.startsWith('db:') && item.erasure === null).map(item => item.field);
   assert.deepEqual(missing.sort(), [...KNOWN_ERASURE_GAPS].sort());
-  assert.ok(KNOWN_ERASURE_GAPS.length <= 1, 'the erasure gap list may not grow');
+  assert.ok(KNOWN_ERASURE_GAPS.length <= ERASURE_GAP_CEILING, 'the erasure gap list may not grow');
 });
 
 test('R7: every entry requires legal review and nothing in the file claims finality', () => {

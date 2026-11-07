@@ -12,7 +12,7 @@ import { CLAUSE_KINDS } from '../../contracts/policy-evidence.js';
 import { POLICY_PARAMETER_REGISTRY_VERSION, POLICY_PARAMETER_VALUE_TYPES, getPolicyParameterRegistry } from '../coverage-analysis/policy-parameter-registry.js';
 import {
   EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, INVESTIGATION_CHECKLIST_KINDS, STRUCTURING_CHUNK_KINDS,
-  STRUCTURING_EXTRACT_TASK, STRUCTURING_RECONCILE_TASK,
+  MAX_CHUNK_BLOCK_INDEXES, STRUCTURING_EXTRACT_TASK, STRUCTURING_RECONCILE_TASK,
 } from './structuring-contract.js';
 
 const gated = Object.freeze({ type: 'gated' });
@@ -27,10 +27,13 @@ const object = (fields, allowed = null) => Object.freeze({ type: 'object', field
 // registry key) of the registry version in force: membership, not a shape that text could satisfy or a gate check that cannot know
 // the household's names. A new registry version means a new entry here.
 const REGISTRY = getPolicyParameterRegistry(POLICY_PARAMETER_REGISTRY_VERSION).parameters;
-const registryKey = Object.freeze({ type: 'enum', values: Object.freeze(REGISTRY.map(entry => entry.key)) });
+// Only entries the registry allows a model to extract (modelExtraction.allowed) may be sent: a restricted entry such as a
+// contract identifier or named members must be refused by the seal, exactly as registryCatalog() leaves it out.
+const MODEL_REGISTRY = REGISTRY.filter(entry => entry.modelExtraction.allowed);
+const registryKey = Object.freeze({ type: 'enum', values: Object.freeze(MODEL_REGISTRY.map(entry => entry.key)) });
 // A registry entry is sent only as the registry spells it: key, label and value type together, never a mix of two entries.
-const REGISTRY_ENTRIES = new Set(REGISTRY.map(entry => JSON.stringify({ key: entry.key, label: entry.label, valueType: entry.valueType })));
-const staticLabel = Object.freeze({ type: 'static', values: Object.freeze([...new Set(REGISTRY.map(entry => entry.label))]) });
+const REGISTRY_ENTRIES = new Set(MODEL_REGISTRY.map(entry => JSON.stringify({ key: entry.key, label: entry.label, valueType: entry.valueType })));
+const staticLabel = Object.freeze({ type: 'static', values: Object.freeze([...new Set(MODEL_REGISTRY.map(entry => entry.label))]) });
 
 // Opaque aliases for database record ids (ADR 0017 Phase 3): a model never sees a raw clause or document id.
 export const CLAUSE_ALIAS_PATTERN = /^clause_[0-9a-f]{24}$/;
@@ -70,7 +73,7 @@ export const MODEL_INPUT_FIELDS = Object.freeze({
       registry: array(object({ key: registryKey, label: staticLabel, valueType: enumOf(POLICY_PARAMETER_VALUE_TYPES) }, REGISTRY_ENTRIES), 0, 500),
       chunks: array(object({
         chunk_id: id(/^p[1-9]\d{0,4}-b\d{1,5}(?:-part\d{1,3})?$/), page: int(1, MAX_PAGE),
-        block_indexes: array(int(0, 100_000), 1, 500), kind: enumOf(STRUCTURING_CHUNK_KINDS), title: gatedOrNull, text: gated,
+        block_indexes: array(int(0, 100_000), 1, MAX_CHUNK_BLOCK_INDEXES), kind: enumOf(STRUCTURING_CHUNK_KINDS), title: gatedOrNull, text: gated,
       }), 1, 500),
     }),
   }),

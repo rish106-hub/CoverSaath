@@ -11,6 +11,8 @@ export const EVIDENCE_SWEEP_TASK = 'policy_evidence_override_sweep';
 // Closed vocabularies that appear in model payloads. They live here so the model-input allow-list (model-input-fields.js)
 // and the code that builds payloads share one copy without ai-analysis importing policy-structuring or policy-evidence.
 export const STRUCTURING_CHUNK_KINDS = Object.freeze(['text', 'table']);
+// The most block indexes one chunk may carry on the wire. The extractor skips a larger chunk before sealing it; the seal refuses one.
+export const MAX_CHUNK_BLOCK_INDEXES = 500;
 export const INVESTIGATION_BASE_KINDS = Object.freeze(['benefit', 'limit', 'waiting_period', 'exclusion', 'definition', 'endorsement', 'schedule_fact', 'condition']);
 export const INVESTIGATION_CHECKLIST_KINDS = Object.freeze([...INVESTIGATION_BASE_KINDS, 'procedure']);
 

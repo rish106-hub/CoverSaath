@@ -468,6 +468,15 @@ export async function investigate({ question, clauses, search = () => [], call, 
   if (!first || typeof first !== 'object' || !Array.isArray(first.findings)) fail('INVESTIGATION_MALFORMED', 'The investigation returned an unusable response.');
   const parsed = parseFindings({ ...first, findings: first.findings.map(item => (item && typeof item === 'object' ? { ...item, clause_ids: fromAliases(item.clause_ids) } : item)) }, clauseText, caps);
 
+  // The subject is model-written free text (the quote is checked against the clause, the subject is not), and it is copied into the
+  // answer. Gate it like any other model-written string (ADR 0017 T3); a subject the gate refuses becomes empty.
+  const gatedSubject = value => {
+    if (!value) return '';
+    const gated = gateValue(value, knownIdentifiers, true);
+    return gated ? gated.text : '';
+  };
+  parsed.findings = parsed.findings.map(finding => ({ ...finding, subject: gatedSubject(finding.subject) }));
+
   // Mandatory override sweep. A failed sweep never hides the first pass: it is reported as an unknown.
   let overrides = [];
   let sweepRejected = 0;
@@ -502,7 +511,7 @@ export async function investigate({ question, clauses, search = () => [], call, 
       const second = sweepOverBudget ? null : await run(EVIDENCE_SWEEP_TASK, sweepPayload, { questions: questionDraft, findings: sweepDraftFindings, clauses: sweepContext.clauses.map(toDraft) }, SWEEP_SCHEMA);
       if (second && Array.isArray(second.overrides)) {
         const result = parseOverrides({ ...second, overrides: second.overrides.map(item => (item && typeof item === 'object' ? { ...item, clause_ids: fromAliases(item.clause_ids) } : item)) }, sweepText, new Set(shown.map(finding => finding.findingId)), caps);
-        overrides = result.overrides;
+        overrides = result.overrides.map(override => ({ ...override, subject: gatedSubject(override.subject) }));
         sweepRejected += result.rejected;
         sweepCompleted = true;
         for (const override of overrides) {

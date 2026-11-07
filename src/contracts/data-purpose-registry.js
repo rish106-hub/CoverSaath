@@ -21,14 +21,15 @@ const GEMINI_SCOPE = Object.freeze({ resourceType: 'document', action: 'derive',
 const QUESTION_SCOPE = Object.freeze({ resourceType: 'document', action: 'derive', dataCategory: 'insurance_question', recipient: GEMINI });
 const SARVAM_SCOPE = Object.freeze({ resourceType: 'document', action: 'derive', dataCategory: 'insurance_document', recipient: 'sarvam' });
 
-const erasure = (module, fn, test) => Object.freeze({ module, fn, test });
+// `member`: for a factory (fn names the factory), the method of the returned object that does the erasing; tests check it by name.
+const erasure = (module, fn, test, member = null) => Object.freeze({ module, fn, test, member });
 const ERASE = Object.freeze({
   userData: erasure('src/backend/repositories/user-data-repository.js', 'UserDataRepository.eraseForHousehold', 'tests/user-data-api.test.mjs'),
   profileAnswers: erasure('src/backend/repositories/profile-answer-repository.js', 'ProfileAnswerRepository.eraseForHousehold', 'tests/profile-answers-api.test.mjs'),
   appEvents: erasure('src/backend/repositories/app-event-repository.js', 'AppEventRepository.eraseForHousehold', 'tests/app-events.test.mjs'),
   clauses: erasure('src/backend/repositories/clause-repository.js', 'ClauseRepository.eraseDerived', 'tests/revocation-concurrency.test.mjs'),
   structuring: erasure('src/backend/repositories/policy-structuring-repository.js', 'PolicyStructuringRepository.eraseDerived', 'tests/policy-structuring-persistence.test.mjs'),
-  documentBytes: erasure('src/features/input/encrypted-database-storage.js', 'createEncryptedDatabaseByteStorage', 'tests/document-blobs.test.mjs'),
+  documentBytes: erasure('src/features/input/encrypted-database-storage.js', 'createEncryptedDatabaseByteStorage', 'tests/document-blobs.test.mjs', 'remove'),
   derivedRun: erasure('src/backend/repositories/consent-repository.js', 'ConsentRepository.eraseDerivedRunData', 'tests/revocation-concurrency.test.mjs'),
   memberDelete: erasure('src/backend/repositories/household-app-repository.js', 'HouseholdAppRepository.deleteMember', 'tests/household-app-api.test.mjs'),
 });
@@ -38,7 +39,7 @@ const ERASE = Object.freeze({
  *   field: string, personal: boolean, dataClass: 'PUBLIC'|'INTERNAL'|'CONFIDENTIAL'|'RESTRICTED',
  *   category: string, purposes: readonly string[], consentScope: object|null, recipients: readonly string[],
  *   modelEligible: boolean, sealed: boolean, retention: string,
- *   erasure: Readonly<{ module: string, fn: string, test: string }>|null,
+ *   erasure: Readonly<{ module: string, fn: string, test: string, member: string|null }>|null,
  *   childData: 'possible'|'no', crossBorder: 'possible'|'no', legalReview: 'required',
  * }>} PurposeEntry
  */
@@ -78,7 +79,7 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   }),
   table('policy_clauses.text', {
     category: 'insurance_document', purposes: ['document_processing', 'coverage_reconstruction'], recipients: ['none'], retention: 'until_revocation',
-    childData: 'possible', erasure: ERASE.clauses,
+    childData: 'possible', sealed: true, erasure: ERASE.clauses, // clause-repository.js seals the text column on write and opens it on read
   }),
   table('policy_structuring_runs.*', {
     category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], retention: 'until_revocation', childData: 'possible',
@@ -101,6 +102,15 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   modelText('model:policy_evidence_override_sweep.payload.clauses[].title', { purposes: ['coverage_reconstruction'], scope: GEMINI_SCOPE }),
   modelText('model:policy_evidence_override_sweep.payload.clauses[].text', { purposes: ['coverage_reconstruction'], scope: GEMINI_SCOPE }),
   ...coverageSlots,
+
+  // Contact columns of an adult account: keyed HMACs of the phone and the e-mail (migration 029). A hash of an identifier is still
+  // personal data. Same gap as the phone ciphertext: no household-level erasure of an adult account row exists today.
+  table('adult_users.phone_hash', {
+    category: 'contact', purposes: ['profile_intake'], retention: 'until_account_deleted', erasure: null,
+  }),
+  table('adult_users.contact_email_hash', {
+    category: 'contact', purposes: ['profile_intake'], retention: 'until_account_deleted', erasure: null,
+  }),
 
   // Sealed user-data columns (every *_ciphertext column of the migrations; R2).
   table('adult_users.phone_ciphertext', {

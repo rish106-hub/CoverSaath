@@ -20,6 +20,14 @@ test('P2-3: a split PAN is still found, labelled in any holder type or bare for 
   }
 });
 
+test('P2-3 review: a split PAN whose digit group looks like a year is still redacted', () => {
+  for (const text of ['ABCPE 1945 K', 'ABCPE-2007-K', 'ABCPE2007 K', 'ABCPE 1999 Z']) {
+    const out = gate(text);
+    assert.match(out, /<PAN_\d+>/, text);
+    assert.equal(leaks(out, ['ABC', '1945', '2007', '1999']), 0, text);
+  }
+});
+
 test('P2-4: an ABHA number split into other groups is found, with or without a label', () => {
   const groupings = [[2, 4, 4, 4], [4, 4, 4, 2], [5, 5, 4], [3, 4, 4, 3], [14]];
   for (const shape of groupings) {
@@ -29,7 +37,8 @@ test('P2-4: an ABHA number split into other groups is found, with or without a l
     for (const text of [groups.join(' '), groups.join('-'), `ABHA ${groups.join(' ')}`, `Card ${groups.join(' ')} issued`]) {
       const out = gate(text);
       assert.match(out, /<HEALTH_ID_\d+>/, text);
-      assert.equal(leaks(out, ['9123', '5678', '8901']), 0, text);
+      // Every four-digit window of the number, not a sample: a partial redaction must not pass.
+      assert.equal(leaks(out, Array.from({ length: digits.length - 3 }, (_, at) => digits.slice(at, at + 4))), 0, text);
     }
   }
 });
@@ -47,5 +56,6 @@ test('P2-5: a labelled phone broken by a blank line does not keep its tail', () 
     assert.equal(leaks(out, ['98765', '43210']), 0, text);
   }
   // A blank line after a complete number ends the value; the next paragraph is wording.
-  assert.equal(gate('Ph: 98765 43210\n\nSum insured 500000').includes('500000'), true);
+  const blankLineBoundary = gate('Ph: 98765 43210\n\nSum insured 500000');
+  assert.match(blankLineBoundary, /^Ph: <PHONE_\d+>\n\nSum insured 500000$/);
 });

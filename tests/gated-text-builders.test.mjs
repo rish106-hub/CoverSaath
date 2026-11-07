@@ -237,6 +237,18 @@ test('reconcile: group ids are opaque aliases and a model-written key is gated b
   assert.ok(inputs[0].input.payload.groups.some(group => group.target === 'd.co_pay_general'));
 });
 
+test('reconcile: a camelCase model-written key that carries a known name is replaced by the generic target', async () => {
+  const accepted = [
+    proposal('RaviSyntheticCover', '10%', 'Cover of 10% applies.', 3, 'p3-b0'), proposal('RaviSyntheticCover', '20%', 'Cover of 20% applies.', 4, 'p4-b0'),
+  ];
+  const inputs = [];
+  const call = async request => { inputs.push(request); return { json: { conflicts: [] }, usage: {} }; };
+  await reconcile({ accepted, call, consentCheck: () => {}, knownIdentifiers: KNOWN });
+  const wire = JSON.stringify(inputs[0].input).toLowerCase();
+  assert.equal(wire.includes('ravi'), false, 'a glued camelCase key does not hide a known name from the gate');
+  assert.ok(inputs[0].input.payload.groups.some(group => group.target === 'proposed_item'));
+});
+
 test('reconcile: a conflict the model reports comes back through the opaque group id', async () => {
   const accepted = [reading('d.co_pay_general', '10%', 'Co-pay of 10% applies.', 5, 'p5-b0'), reading('d.co_pay_general', '20%', 'Co-pay of 20% applies.', 6, 'p6-b0')];
   const call = async request => ({ json: { conflicts: [{ group_id: request.input.payload.groups[0].group_id, quotes: ['Co-pay of 10% applies.', 'Co-pay of 20% applies.'] }] }, usage: {} });

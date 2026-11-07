@@ -721,10 +721,10 @@ const UNLABELLED_RULES = Object.freeze([
   [/(?<![A-Za-z0-9])[A-Za-z][1-9][0-9]{6}(?![A-Za-z0-9])/g, 'PASSPORT', 'DIRECT_IDENTIFIER_PASSPORT'],
   [/(?<![A-Za-z0-9])[A-Za-z]{4}0[A-Za-z0-9]{6}(?![A-Za-z0-9])/g, 'BANK', 'DIRECT_IDENTIFIER_BANK'],
   [/(?<![A-Za-z0-9])[A-Za-z]{5}\d{4}[A-Za-z](?![A-Za-z0-9])/g, 'PAN', 'DIRECT_IDENTIFIER_PAN'],
-  // A PAN split by spaces or dashes, with no label. Individual PANs only (fourth letter P), upper case, and the digit group is not a
-  // year: "Table 1500 A shows limits", "Total 2024 B" and "Annex 2026 B" are wording, not identifiers. A labelled split PAN is
-  // caught by the PAN label rule instead, which accepts every holder type.
-  [/(?<![A-Za-z0-9])[A-Z]{3}P[A-Z][ -](?!(?:19|20)\d{2}(?!\d))\d{4}[ -]?[A-Z](?![A-Za-z0-9])|(?<![A-Za-z0-9])[A-Z]{3}P[A-Z](?!(?:19|20)\d{2}(?!\d))\d{4}[ -][A-Z](?![A-Za-z0-9])/g, 'PAN', 'DIRECT_IDENTIFIER_PAN'],
+  // A PAN split by spaces or dashes, with no label. Individual PANs only (fourth letter P) and upper case. The digit group is NOT
+  // exempted when it looks like a year: a real PAN can carry 1945 or 2007, and a missed identifier costs more than a redacted
+  // all-caps heading. A labelled split PAN is caught by the PAN label rule instead, which accepts every holder type.
+  [/(?<![A-Za-z0-9])[A-Z]{3}P[A-Z][ -]\d{4}[ -]?[A-Z](?![A-Za-z0-9])|(?<![A-Za-z0-9])[A-Z]{3}P[A-Z]\d{4}[ -][A-Z](?![A-Za-z0-9])/g, 'PAN', 'DIRECT_IDENTIFIER_PAN'],
   [/(?<![A-Za-z0-9])[A-Za-z]{3}\d{7}(?![A-Za-z0-9])/g, 'GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID'],
   // Indian driving licence: state code, RTO, issue year, seven digits.
   [/(?<![A-Za-z0-9])[A-Za-z]{2}[ -]?\d{2}[ -]?(?:19|20)\d{2}[ -]?\d{7}(?![A-Za-z0-9])/g, 'GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID'],
@@ -1668,7 +1668,7 @@ export function sanitizeEvidenceTextForStorage(text, { maxBytes = 4_000, knownId
 // The authority for "this text went through the gate" is membership in a module-private WeakSet, not the symbol:
 // Object.getOwnPropertySymbols exposes a symbol, so it could be copied onto a forged object. Nothing outside this
 // module can add to GATED_TEXT, SEALED or SAFE_STRUCTURED, and none of them is exported.
-const GATED = Symbol('coversaath.gatedText');
+const GATED = Symbol('knowvia.gatedText');
 const GATED_TEXT = new WeakSet();
 const SEALED = new WeakMap();
 const SAFE_STRUCTURED = new WeakSet();

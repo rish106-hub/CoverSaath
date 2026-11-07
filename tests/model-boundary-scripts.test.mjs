@@ -17,7 +17,7 @@ test('structure-policy.mjs reaches Gemini only through the structuring call fact
 
 test('no module under src/ builds a direct provider request', () => {
   const walk = directory => readdirSync(new URL(directory, root), { withFileTypes: true }).flatMap(entry => (entry.isDirectory() ? walk(`${directory}${entry.name}/`) : [`${directory}${entry.name}`]));
-  const offenders = walk('src/').filter(path => path.endsWith('.js') && !path.startsWith('src/integrations/'))
+  const offenders = walk('src/').filter(path => /\.m?js$/.test(path) && !path.startsWith('src/integrations/'))
     .filter(path => /generativelanguage\.googleapis\.com|\bfetch\s*\(/.test(read(path)));
   assert.deepEqual(offenders, []);
 });
