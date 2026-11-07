@@ -68,7 +68,7 @@ Point the staging app (`knowvia-api-staging`, `sin`) at the Mumbai database. Run
 ### 7. Cutover (OWNER APPROVAL REQUIRED)
 
 1. Announce a short window. Synthetic data only, so no user impact is expected.
-2. Set the production secret to the Mumbai URL: `fly secrets set DATABASE_URL='<Mumbai transaction pooler URL>' -a knowvia-api`. A rolling restart would serve from two databases at once (one machine still writing Sydney, another writing Mumbai), so freeze first: `fly scale count 0 -a knowvia-api` (OWNER APPROVAL REQUIRED), set the secret, then `fly scale count 2 -a knowvia-api` so both machines start on the Mumbai URL together.
+2. Stage the production secret without restarting: `fly secrets set --stage DATABASE_URL='<Mumbai transaction pooler URL>' -a knowvia-api`. A plain `fly secrets set` rolls the machines one by one, so one machine would still write Sydney while another writes Mumbai. Stop both machines first (`fly machine stop <id> -a knowvia-api` for each id from `fly status`, OWNER APPROVAL REQUIRED; the machines are kept, so nothing is destroyed and no scale-from-zero is needed), then run `fly deploy --strategy immediate -a knowvia-api` so both machines are replaced together and start on the Mumbai URL. Never use `fly scale count 0`: it destroys the machines.
 3. Verify: `fly status` shows both machines passing, `GET /api/v1/ready` is 200, then one synthetic household create and read.
 4. Update the website BFF and any other consumer that connects to the database directly, in its own repository (none should; the backend is the only writer to `public`).
 
@@ -82,7 +82,7 @@ Only after the owner is satisfied and a backup exists. Pause the Sydney project 
 
 ## Rollback
 
-- Before Step 9: stop both machines the same way as in Step 7, set `DATABASE_URL` back to the Sydney pooler URL with `fly secrets set` (**OWNER APPROVAL REQUIRED**). Writes made on Mumbai after cutover are not copied back; with synthetic data that loss is accepted, with real data it is not, so with real data take a dump of Mumbai first and plan a reverse restore.
+- Before Step 9: repeat Step 7 with the Sydney pooler URL: stop both machines, `fly secrets set --stage DATABASE_URL=...`, then `fly deploy --strategy immediate` (**OWNER APPROVAL REQUIRED**), and confirm `fly status` shows two passing machines. Writes made on Mumbai after cutover are not copied back; with synthetic data that loss is accepted, with real data it is not, so with real data take a dump of Mumbai first and plan a reverse restore.
 - After Step 9 the Sydney data is gone unless a backup was kept; restore from the backup into a new Sydney project.
 
 ## Open questions for the owner

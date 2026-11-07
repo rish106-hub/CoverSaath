@@ -26,7 +26,7 @@ The API stored state changes in the `audit_events` hash chain but nothing about 
 - Hard to reverse: event rows once written (deleted only by retention or erasure). Everything else is a flag or an additive table; rollback is `APP_EVENTS_ENABLED=false`, `RATE_LIMIT_BACKEND=memory`, `MODEL_BUDGET_BACKEND=memory` and leaving the tables unused.
 - Rate-limit and event traffic adds one database write per request when both are on. Not yet measured under load; no capacity claim is made.
 - Retention length and the statement that events contain no personal data are for legal review. Route templates are derived from the path; unknown slugs pass through up to 8 segments and 120 characters.
-- Not covered: the scan worker and evidence idempotency claim are still per process (duplicate work only), and OCR provider calls are not yet events.
+- Not covered: the scan worker and evidence idempotency claim are still per process (duplicate work, and for evidence a second paid model call on another machine), and OCR provider calls are not yet events.
 
 ## Merge note with run E1 (ADR 0013)
 
