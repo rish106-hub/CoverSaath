@@ -206,7 +206,7 @@ test('a live run where no call succeeds does not pass', async () => {
   assert.equal(report.run.passed, false);
 });
 
-test('a failure inside the run carries the spend and call counts to the printed report', async () => {
+test('a failure inside runLive attaches the spend and call counts to the thrown error (main prints them as `spend`)', async () => {
   const { runLive } = await import('../scripts/smoke-test-gemini.mjs');
   const plan = { ...planRun({ env: liveEnv }), pagesInput: [{ page: 1, blocks: 'not-an-array' }] };
   const driver = stubDriver();
@@ -223,7 +223,8 @@ test('the preflight input limit is measured on the gateway prompt contract, not 
   assert.ok(largest > 0);
   assert.equal(planRun({ env: { ...liveEnv, STRUCTURING_MAX_INPUT_BYTES: String(largest) } }).problems.includes('PROMPT_EXCEEDS_INPUT_LIMIT'), false);
   assert.equal(planRun({ env: { ...liveEnv, STRUCTURING_MAX_INPUT_BYTES: String(largest - 1) } }).problems.includes('PROMPT_EXCEEDS_INPUT_LIMIT'), true);
-  // At exactly that cap the real gateway accepts every extraction prompt: no input_limit refusal.
+  // At exactly that cap the stubbed run produces no input_limit outcome (the stub does not enforce the real gateway limit;
+  // the preflight above is what measures the prompt contract).
   const { report } = await run(['--live'], { ...liveEnv, STRUCTURING_MAX_INPUT_BYTES: String(largest) });
   assert.ok(!report.run.callOutcomes.includes('input_limit'));
 });
