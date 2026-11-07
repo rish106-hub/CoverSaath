@@ -248,7 +248,7 @@ test('revocation reasons are codes: free text is stored as other, never in the r
   const rows = await plainRows(db, 'consent_revocations', 'WHERE consent_grant_id = ?', [a.consent2]);
   assert.deepEqual(rows.map(row => row.reason), ['other']);
   const audit = await db.many(`SELECT event_payload_json FROM audit_events WHERE action = 'consent.revoked' AND resource_id = ?`, [a.consent2]);
-  assert.deepEqual(audit.map(row => JSON.parse(row.event_payload_json)), [{ reason: 'other' }]);
+  assert.deepEqual(audit.map(row => JSON.parse(row.event_payload_json)), [{ reasonProvided: true }]); // D2: the audit trail records that a reason was given, never the reason
   await services.consents.revoke({ grantId: a.consent3, revokedByAdultId: a.adult2, reason: 'user_request' });
   assert.equal((await plainRows(db, 'consent_revocations', 'WHERE consent_grant_id = ?', [a.consent3]))[0].reason, 'user_request');
 });
