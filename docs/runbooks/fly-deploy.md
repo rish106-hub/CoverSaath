@@ -101,16 +101,17 @@ Dockerfile build, entrypoint behaviour without a volume, live health, ready and 
 
 ## Operate
 
-- Two machines is the supported shape. Do not scale past two before the evidence claim guard and the scan worker move to the database.
+- Two machines is the supported shape. Do not scale past two before the scan worker moves to the database (the request limit, model budget and evidence claim guard are already shared through the database, migrations 023 and 032).
 - Enable the scanner: 2 GB machines, `DOCUMENT_SCAN_MODE=clamd`, `CLAMD_HOST=127.0.0.1` (**OWNER APPROVAL REQUIRED**, costs more).
 - Rotate the Supabase password (it was pasted into chat twice), update `DATABASE_URL` in `.env.local` and with `fly secrets set` (**OWNER APPROVAL REQUIRED**), then move the runtime to a least-privilege role.
 - Abandon: `fly apps destroy knowvia-api` removes the app, volume and secrets. Destructive; needs explicit owner approval.
 
 ## Activity events and shared limits (ADR 0014)
 
-- Production (`NODE_ENV=production` in the Dockerfile) needs the secret `DATA_ENCRYPTION_KEY_BASE64` (32 bytes, base64; name only) because activity events seal their payloads. Without it the server stops at startup. To boot without events set `APP_EVENTS_ENABLED=false`.
+- Production (`NODE_ENV=production` in the Dockerfile) needs the secret `DATA_ENCRYPTION_KEY_BASE64` (32 bytes, base64; name only) because activity events seal their payloads. Without it the server stops at startup. To boot without it, set both `APP_EVENTS_ENABLED=false` and `RATE_LIMIT_BACKEND=memory` (the database rate limiter also needs the key).
 - `APP_EVENTS_RETENTION_DAYS` (default 30) sets how long events live; the server purges expired rows hourly. Retention is a draft for legal review.
-- `RATE_LIMIT_BACKEND=database` and `MODEL_BUDGET_BACKEND=database` are now set in `fly.toml` (migration 023), so the limit holds across both machines and restarts. Remaining per-process items are listed under State.
+- `RATE_LIMIT_BACKEND`, `MODEL_BUDGET_BACKEND` and `EVIDENCE_CLAIM_BACKEND` default to `database` (migrations 023 and 032, ADR 0014 addendum): the request limit, the model spend cap and the evidence-question claim (an expiring lease) hold across machines and restarts. `memory` turns one off and is for tests only. The scan worker and the user-data write limiter are still per process (duplicate work, not corruption).
+- Run `npm run db:init` against the hosted database before the first deploy that includes migrations 022 to 024, then check `GET /api/v1/ready`.
 
 ## Rollback
 

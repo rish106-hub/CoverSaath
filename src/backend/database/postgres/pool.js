@@ -134,3 +134,20 @@ export function postgresPoolOptionsFromEnv(env = process.env) {
   const sslCa = readSslCaFile(caPath);
   return { connectionString, sslCa };
 }
+
+// db:init and scripts/postgres-migrate.mjs connect as the migrator role (S1, docs/runbooks/db-roles.md) when
+// MIGRATION_DATABASE_URL is set, and as DATABASE_URL otherwise. Other owner-only scripts (encrypt-existing-rows,
+// backfill-adult-contacts) still read DATABASE_URL only. The running API never reads MIGRATION_DATABASE_URL.
+// Errors name the variable that was set, never its value.
+export function migrationPoolOptionsFromEnv(env = process.env) {
+  const migrationUrl = env.MIGRATION_DATABASE_URL;
+  if (typeof migrationUrl === 'string' && migrationUrl.trim() !== '') {
+    try {
+      sanitizedConnectionString(migrationUrl);
+    } catch (error) {
+      throw new PostgresDatabaseError(error.code ?? 'DATABASE_URL_INVALID', 'MIGRATION_DATABASE_URL must be a postgres:// or postgresql:// URL.');
+    }
+    return postgresPoolOptionsFromEnv({ ...env, DATABASE_URL: migrationUrl });
+  }
+  return postgresPoolOptionsFromEnv(env);
+}

@@ -280,7 +280,7 @@ export class DocumentRepository {
     }, householdId);
   }
 
-  async requestDeletion(documentId, { actorAdultId }) {
+  async requestDeletion(documentId, { actorAdultId, actorType = 'adult_user' }) {
     const existing = await this.getDocument(documentId);
     if (!existing) return null;
     if (existing.lifecycleState === 'deleted') return { state: 'deleted', document: existing };
@@ -300,7 +300,7 @@ export class DocumentRepository {
       const observationCounts = await this.coverageParameters.redactObservationsForDocument({
         documentId,
         reasonCode: 'document_erasure',
-        actorType: 'adult_user',
+        actorType,
         actorId: actorAdultId,
         at,
       });
@@ -311,7 +311,7 @@ export class DocumentRepository {
         resourceType: 'document',
         resourceId: documentId,
         caseId: current.caseId,
-        actorType: 'adult_user',
+        actorType,
         actorId: actorAdultId,
         at,
       });
@@ -346,7 +346,7 @@ export class DocumentRepository {
       await this.audit.append({
         householdId: current.householdId,
         caseId: current.caseId,
-        actorType: 'adult_user',
+        actorType,
         actorId: actorAdultId,
         action: 'document.deletion_requested',
         resourceType: 'document',

@@ -31,3 +31,19 @@ The API stored state changes in the `audit_events` hash chain but nothing about 
 ## Merge note with run E1 (ADR 0013)
 
 E1 is merged into local main (PR #53). `src/backend/security/column-crypto.js` here is a verbatim copy so this branch ran standalone; on merge take main's file (this branch uses only `readDataEncryptionConfig`, `createColumnCrypto`, `sealJson`, `openJson`). One difference: the development key seed text said `coversaath`, which `tests/product-contract.test.mjs` forbids in `src`; this branch changed it to `cover-saath` (dev-only key), so main needs the same one-line fix. Migrations 018 to 020 are E1's, 021 is reserved for an E1 review fix, and this work uses 022 to 024.
+
+## Addendum (run B1): shared limits on by default, evidence claim as a database lease
+
+Status: accepted for the prototype. Supersedes D4's "opt-in" and the "Not covered" line about the evidence claim.
+
+**D7. Defaults flip to the database.** `RATE_LIMIT_BACKEND`, `MODEL_BUDGET_BACKEND` and the new `EVIDENCE_CLAIM_BACKEND` default to `database`. `memory` is the explicit off switch, meant for tests and a throwaway local process, never for a deployment with more than one machine. A typo in any of the three fails startup. Behaviour when the database is unavailable is unchanged: the request limiter falls back to the per-process count (an outage never blocks the API); the model budget fails closed (no database, no reservation, no paid call); the evidence claim needs the database for the rest of the question anyway.
+
+**D8. Evidence claim lease (migration 032, `evidence_claims`).** One row per in-flight question, keyed by a SHA-256 of (household, case, idempotency key) (the idempotency key is client text and is not stored; an HMAC with the document key is not used because that key is random per process in development and every machine must derive the same hash). Acquire is one `INSERT ... ON CONFLICT DO UPDATE ... WHERE expires_at <= now()`, so of any number of racing processes exactly one is granted a free or expired lease. The holder renews every third of the lease term (default 120 s) and releases in `finally`; release and renew match on a random owner token, so a process that was slow or paused cannot free or extend a lease another process now holds. A crashed holder stops renewing and the lease expires; the next `ask` takes it over, and an hourly sweep deletes expired rows. Expiry uses database time, so machine clock skew does not matter. The per-process set stays as the fast path and the only guard when the backend is `memory`.
+
+Failure mode worth knowing: a holder paused longer than the lease term loses the claim, and a second process may run the same question. That costs a duplicate model call, never a duplicate answer, because `saveAnswer` is idempotent on the key. The in-flight cap (`MAX_IN_FLIGHT = 4`) stays per process on purpose: it protects one process's memory and concurrency, not money.
+
+Data and erasure: the table holds a hash, a random token and times, no household content, and a row lives at most one lease term beyond the work. It is deleted on release, taken over or purged on expiry, so it needs no revocation path; nothing derived from a document is stored in it.
+
+Rollback: set the three variables to `memory` (behaviour of D4 defaults). Migration 032 is additive and can stay unused.
+
+Still per process after B1: the scan worker, the user-data write limiter (`user-data-service.js`), the PDF child processes, and the in-flight cap above.

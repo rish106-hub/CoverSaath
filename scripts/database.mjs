@@ -1,13 +1,14 @@
-// db:init: applies the PostgreSQL migrations to DATABASE_URL, then validates the schema.
+// db:init: applies the PostgreSQL migrations, then validates the schema. It connects with MIGRATION_DATABASE_URL (the
+// migrator role, docs/runbooks/db-roles.md) when that is set, otherwise with DATABASE_URL.
 // DATABASE_SSL_CA_PATH optionally names a PEM CA for a hosted database. Output never contains
 // the connection string or driver text.
 import {
-  createPostgresPool, postgresPoolOptionsFromEnv, runPostgresMigrations, validatePostgresSchema,
+  createPostgresPool, migrationPoolOptionsFromEnv, runPostgresMigrations, validatePostgresSchema,
 } from '../src/backend/database/postgres/index.js';
 
 let options;
 try {
-  options = postgresPoolOptionsFromEnv(process.env);
+  options = migrationPoolOptionsFromEnv(process.env);
 } catch (error) {
   process.stderr.write(`${error.code === 'DATABASE_URL_REQUIRED'
     ? 'DATABASE_URL is required: set it to a postgres:// URL before running db:init.'
