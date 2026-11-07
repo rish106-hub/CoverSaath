@@ -13,6 +13,7 @@ import { INTAKE_CONNECTORS } from '../../contracts/intake-connectors.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
 import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from '../../contracts/profile-answers.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
+import { handleDataLifecycleRoute } from './data-lifecycle-routes.js';
 import {
   READ_FIELDS, analysisJobDto, analysisTaskDto, auditSummaryDto, caseSummaryDto,
   createReadResponsePolicy, sourcePackDto,
@@ -267,7 +268,7 @@ async function schemaStatus(database) {
 
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
-export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, onError }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -336,6 +337,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     // Read by the activity-event recorder after the response; carries an id only, never a credential.
     req.appContext = { adultUserId: principal.adultId };
     const responses = createReadResponsePolicy({ database, consents: services.consents });
+    // Erasure and export of a case, member or household (S3). New routes only; ownership is checked in the services.
+    const lifecycle = await handleDataLifecycleRoute({ req, url, principal, services, documentUploads, responses });
+    if (lifecycle) return lifecycle;
 
     if (req.method === 'GET' && url.pathname === '/api/v1/integrations') {
       return {
@@ -850,7 +854,12 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     }
     return { status: 404, body: { error: { code: 'ROUTE_NOT_FOUND', message: 'Versioned backend route not found.' } } };
   } catch (error) {
-    return errorResponse(error);
+    const response = errorResponse(error);
+    // Operational visibility only: the caller logs class, code and status, never the message or any value.
+    // An uncoded (internal) error is answered as BACKEND_REQUEST_FAILED, often with a 4xx status, so the caller is told it was
+    // unexpected rather than left to infer that from the mapped status.
+    try { onError?.(error, response.status, { unexpected: response.body.error.code === 'BACKEND_REQUEST_FAILED' }); } catch { /* logging must not change the response */ }
+    return response;
   }
 }
 

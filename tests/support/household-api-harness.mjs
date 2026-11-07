@@ -77,9 +77,11 @@ export async function eventually(check, { timeoutMs = 3000 } = {}) {
   }
 }
 
-export async function startApp(t, { env: extraEnv = {} } = {}) {
+// `database` (optional) is a test database facade to use instead of a fresh superuser clone, for example one opened as the
+// least-privilege runtime role (tests/db-roles.test.mjs).
+export async function startApp(t, { env: extraEnv = {}, database: suppliedDatabase } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-household-'));
-  const { db: database } = await freshDatabase(t);
+  const database = suppliedDatabase ?? (await freshDatabase(t)).db;
   const requests = [];
   const env = {
     KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, DOCUMENT_STORAGE_PATH: join(directory, 'documents'), DOCUMENT_ENCRYPTION_KEY_BASE64: randomBytes(32).toString('base64'),

@@ -40,6 +40,13 @@ export class ProfileAnswerRepository {
     return rows.map(row => this.#shape(row)).sort((a, b) => order.get(a.fieldKey) - order.get(b.fieldKey));
   }
 
+  /** The answers one adult entered in one household, for their own export. Bounded; opened here and nowhere else. */
+  async listAuthoredBy({ householdId, adultUserId, limit = 500 }) {
+    text(householdId, 'householdId'); text(adultUserId, 'adultUserId');
+    const rows = await this.database.many('SELECT * FROM profile_answers WHERE household_id = ? AND adult_user_id = ? ORDER BY case_id, field_key LIMIT ?', [householdId, adultUserId, limit]);
+    return rows.map(row => ({ caseId: row.case_id, ...this.#shape(row) }));
+  }
+
   /**
    * `answers` is Map(fieldKey -> value | null) from parseProfileAnswers. A value sets or replaces the answer (a repeat with
    * the same value changes nothing), null removes it. Resolves { set, removed, unchanged } counts.
