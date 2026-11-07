@@ -117,3 +117,14 @@ export function postgresPoolOptionsFromEnv(env = process.env) {
   }
   return { connectionString, sslCa };
 }
+
+// db:init and the other owner-only scripts connect as the migrator role (S1, docs/runbooks/db-roles.md) when
+// MIGRATION_DATABASE_URL is set, and as DATABASE_URL otherwise. The running API never reads
+// MIGRATION_DATABASE_URL. Errors name the variable, never its value.
+export function migrationPoolOptionsFromEnv(env = process.env) {
+  const migrationUrl = env.MIGRATION_DATABASE_URL;
+  if (typeof migrationUrl === 'string' && migrationUrl.trim() !== '') {
+    return postgresPoolOptionsFromEnv({ ...env, DATABASE_URL: migrationUrl });
+  }
+  return postgresPoolOptionsFromEnv(env);
+}

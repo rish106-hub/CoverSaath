@@ -1,8 +1,8 @@
-// Applies pending PostgreSQL migrations to DATABASE_URL and validates the schema.
+// Applies pending PostgreSQL migrations and validates the schema, as MIGRATION_DATABASE_URL when set, else DATABASE_URL.
 // Run with a direct or session-mode connection: the runner holds a session advisory lock.
-import { createPostgresPool, postgresPoolOptionsFromEnv, runPostgresMigrations, validatePostgresSchema } from '../src/backend/database/postgres/index.js';
+import { createPostgresPool, migrationPoolOptionsFromEnv, runPostgresMigrations, validatePostgresSchema } from '../src/backend/database/postgres/index.js';
 
-const pool = createPostgresPool(postgresPoolOptionsFromEnv());
+const pool = createPostgresPool(migrationPoolOptionsFromEnv());
 try {
   const applied = await runPostgresMigrations(pool);
   const schema = await validatePostgresSchema(pool);
