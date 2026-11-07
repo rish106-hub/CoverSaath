@@ -141,7 +141,7 @@ test('an acknowledged upgrade makes one provider call, attaches blocks to the sa
   // Structuring now starts.
   const structuring = createPolicyStructuringService({
     services, loadKnownIdentifiers: async () => [], env: { POLICY_STRUCTURING_ENABLED: 'true' },
-    createModelCall: () => async ({ payload }) => (payload.chunks ? { json: { items: [] }, usage: {} } : { json: { conflicts: [] }, usage: {} }),
+    createModelCall: () => async ({ input: { payload } }) => (payload.chunks ? { json: { items: [] }, usage: {} } : { json: { conflicts: [] }, usage: {} }),
   });
   const owned = { id: document, householdId: household, caseId: 'case-parameters' };
   assert.equal((await structuring.start({ document: owned, workflowRunId: run, consentGrantId: 'consent-parameters', subjectAdultId: 'adult-parameters' })).status, 'running');

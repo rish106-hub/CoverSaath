@@ -7,6 +7,7 @@ import { createBackendServices, createCoverageAnalysisPort } from '../src/backen
 import { createGeminiCoverageRegistryFactory, createMemoryBudget, createModelGateway } from '../src/features/ai-analysis/index.js';
 import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
+import { sealedCoverageInput } from './support/sealed-input.mjs';
 import { postgresTestOptions } from './support/pg.mjs';
 import { liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 
@@ -23,13 +24,13 @@ test('R3-1: a call refused before dispatch releases its reservation; a dispatche
     budget: refusedBudget,
     liveRunner: async () => { throw Object.assign(new Error('refused before dispatch'), { modelDispatched: false }); },
   });
-  await assert.rejects(refused.execute({ task: 'profile_extraction', input: gatewayInput(), reservationUsd: 0.01 }), /refused before dispatch/);
+  await assert.rejects(refused.execute({ task: 'profile_extraction', input: sealedCoverageInput('profile_extraction', gatewayInput()), reservationUsd: 0.01 }), /refused before dispatch/);
   assert.equal(refusedBudget.snapshot().reservedUsd, 0);
   assert.equal(refusedBudget.snapshot().spentUsd, 0);
 
   const dispatchedBudget = createMemoryBudget(0.02);
   const dispatched = createModelGateway({ mode: 'live', budget: dispatchedBudget, liveRunner: async () => { throw new Error('provider timeout'); } });
-  await assert.rejects(dispatched.execute({ task: 'profile_extraction', input: gatewayInput(), reservationUsd: 0.01 }), /provider timeout/);
+  await assert.rejects(dispatched.execute({ task: 'profile_extraction', input: sealedCoverageInput('profile_extraction', gatewayInput()), reservationUsd: 0.01 }), /provider timeout/);
   assert.equal(dispatchedBudget.snapshot().reservedUsd, 0.01);
 });
 

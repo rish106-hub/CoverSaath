@@ -76,10 +76,10 @@ function batchesOf(chunks) {
 
 /** Offline plan: sections and gates the fixture, sizes the calls, reads (never prints) the env. Makes no network call. */
 export function planRun({
-  env = process.env, pages = SYNTHETIC_POLICY_PAGES, knownIdentifiers = SYNTHETIC_KNOWN_IDENTIFIERS, canaries = SYNTHETIC_CANARIES, sanitize,
+  env = process.env, pages = SYNTHETIC_POLICY_PAGES, knownIdentifiers = SYNTHETIC_KNOWN_IDENTIFIERS, canaries = SYNTHETIC_CANARIES,
 } = {}) {
   const sectioned = sectionDocument(pages);
-  const gated = gateChunks(sectioned.chunks, { knownIdentifiers, ...(sanitize ? { sanitize } : {}) });
+  const gated = gateChunks(sectioned.chunks, { knownIdentifiers });
   const sentText = gated.sent.map(chunk => `${chunk.title ?? ''}\n${chunk.text}`).join('\n');
   const leaked = canaries.filter(value => sentText.includes(value));
 
@@ -173,7 +173,8 @@ export async function runLive(plan, { loadModel, createAgent } = {}) {
   const consentCheck = async () => {}; // --live on the built-in synthetic fixture is the grant; there is no household here
   const events = [];
   const create = createStructuringModelCallFactory({ env: plan.liveEnv, loadModel, createAgent })({ consentCheck, onCall: event => events.push(event) });
-  const call = ({ task, payload }) => create({ task, payload });
+  // The factory takes the extractor's own request (task, system, sealed input, schema); nothing is rebuilt from a raw payload here.
+  const call = request => create(request);
   let result;
   try {
     result = await structurePolicyDocument({

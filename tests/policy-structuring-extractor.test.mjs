@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
+import { gateText } from '../src/features/ai-analysis/privacy-evidence-gate.js';
+import { MAX_CHUNK_BLOCK_INDEXES } from '../src/features/ai-analysis/structuring-contract.js';
 import { EXTRACTION_SCHEMA, extractChunks, registryCatalog, STRUCTURING_LIMITS } from '../src/features/policy-structuring/extractor.js';
 
 // Synthetic only: fictional insurer and numbers. `call` is a fake provider.
-const chunk = (id, page, text, blockIndexes = [0]) => ({ id, page, blockIndexes, kind: 'text', title: null, text });
+// Chunks as gateChunks returns them: gated plain text plus the branded values the model-input seal requires.
+const chunk = (id, page, text, blockIndexes = [0]) => ({ id, page, blockIndexes, kind: 'text', title: null, text, gated: gateText(text, { knownIdentifiers: [] }), gatedTitle: null });
 const chunks = Array.from({ length: 10 }, (_, at) => chunk(`p${at + 1}-b0`, at + 1, `Sum Insured: Rs. ${at + 1},00,000 under Zephyr Mutual Health (synthetic).`));
 const sumItem = c => ({ chunk_id: c.id, registry_key: 'd.sum_insured', value: c.text.match(/Rs\. [\d,]+/)[0], subject: 'policy', evidence_quote: c.text.match(/Sum Insured: Rs\. [\d,]+/)[0], page: c.page, block_index: 0 });
 
@@ -16,7 +19,7 @@ function fakeCall(respond) {
   };
   return { call, log };
 }
-const echo = ({ payload }) => ({ json: { items: payload.chunks.map(c => sumItem({ id: c.chunk_id, page: c.page, text: c.text })) }, usage: { inputTokens: 100, outputTokens: 20 } });
+const echo = ({ input: { payload } }) => ({ json: { items: payload.chunks.map(c => sumItem({ id: c.chunk_id, page: c.page, text: c.text })) }, usage: { inputTokens: 100, outputTokens: 20 } });
 const consent = () => { const check = () => { check.count += 1; }; check.count = 0; return check; };
 
 test('registry catalog lists only model-extractable keys and the schema has no state field', () => {
@@ -32,7 +35,7 @@ test('batches by chunk count and char limit, checks consent before every call, a
   const { call, log } = fakeCall(echo);
   const consentCheck = consent();
   const result = await extractChunks({ chunks, registryVersion, call, consentCheck, limits: { maxChunksPerCall: 4 } });
-  assert.deepEqual(log.map(request => request.payload.chunks.length), [4, 4, 2]);
+  assert.deepEqual(log.map(request => request.input.payload.chunks.length), [4, 4, 2]);
   assert.equal(consentCheck.count, 3);
   assert.equal(result.calls, 3);
   assert.deepEqual(result.usage, { inputTokens: 300, outputTokens: 60 });
@@ -41,7 +44,7 @@ test('batches by chunk count and char limit, checks consent before every call, a
   assert.ok(log.every(request => !JSON.stringify(request.system).includes('Zephyr')));
   const byChars = fakeCall(echo);
   await extractChunks({ chunks, registryVersion, call: byChars.call, consentCheck: consent(), limits: { maxCharsPerCall: chunks[0].text.length * 3 } });
-  assert.ok(byChars.log.every(request => request.payload.chunks.length <= 3));
+  assert.ok(byChars.log.every(request => request.input.payload.chunks.length <= 3));
 });
 
 test('call cap and token cap skip the remaining chunks with reasons', async () => {
@@ -107,6 +110,15 @@ test('unknown chunk ids, item cap, duplicates and overflow proposals', async () 
   assert.deepEqual(withProposal.chunkOutcomes[second.id], { status: 'no_items', reason: 'none_returned' });
 });
 
+test('a chunk with more blocks than the wire allows is skipped with a reason; the rest of the document still goes out', async () => {
+  const { call, log } = fakeCall(echo);
+  const wide = chunk('p21-b0', 21, 'Sum insured: 500000', Array.from({ length: MAX_CHUNK_BLOCK_INDEXES + 1 }, (_, index) => index));
+  const result = await extractChunks({ chunks: [chunks[0], wide], registryVersion, call, consentCheck: consent() });
+  assert.deepEqual(result.chunkOutcomes[wide.id], { status: 'skipped', reason: 'chunk_too_large' });
+  assert.equal(log.length, 1);
+  assert.deepEqual(log[0].input.payload.chunks.map(sent => sent.chunk_id), [chunks[0].id]);
+});
+
 test('chunk text travels only in the payload; oversize chunks are skipped; inputs are validated', async () => {
   const { call, log } = fakeCall(echo);
   const big = chunk('p20-b0', 20, 'y'.repeat(STRUCTURING_LIMITS.maxCharsPerCall + 1));
@@ -114,7 +126,7 @@ test('chunk text travels only in the payload; oversize chunks are skipped; input
   assert.deepEqual(result.chunkOutcomes[big.id], { status: 'skipped', reason: 'chunk_too_large' });
   assert.equal(log.length, 1);
   assert.ok(!log[0].system.includes(chunks[0].text));
-  assert.equal(log[0].payload.chunks[0].text, chunks[0].text);
+  assert.equal(log[0].input.payload.chunks[0].text, chunks[0].text);
   await assert.rejects(extractChunks({ chunks, registryVersion, call }), { code: 'STRUCTURING_INPUT_INVALID' });
   await assert.rejects(extractChunks({ chunks, registryVersion, consentCheck: consent() }), { code: 'STRUCTURING_INPUT_INVALID' });
   await assert.rejects(extractChunks({ chunks: [chunks[0], chunks[0]], registryVersion, call, consentCheck: consent() }), { code: 'STRUCTURING_INPUT_INVALID' });

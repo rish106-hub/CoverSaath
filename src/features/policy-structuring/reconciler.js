@@ -9,6 +9,7 @@ import { comparisonKey } from './validator.js';
 import {
   RECONCILE_SCHEMA, STRUCTURING_INSTRUCTIONS, STRUCTURING_RECONCILE_TASK,
 } from '../ai-analysis/structuring-contract.js';
+import { gateText, sealModelInput } from '../ai-analysis/privacy-evidence-gate.js';
 
 export { RECONCILE_SCHEMA };
 
@@ -108,6 +109,25 @@ function quotesOf(group, limit) {
   return [...new Set(group.items.map(item => item.evidenceQuote))].slice(0, limit);
 }
 
+// The model quotes what it was sent (the re-gated text) and names a group by its opaque wire id; the grounded forms are the
+// original quote and the stored group id. Two original quotes can gate to one string (they differed only by a name the gate
+// removed); the one quote the model returns then stands for both, so a real conflict is not dropped as ungrounded.
+function translateCandidate(candidate, wire) {
+  if (!candidate || typeof candidate !== 'object') return candidate;
+  const entry = typeof candidate.group_id === 'string' ? wire.get(candidate.group_id) : undefined;
+  // Only a group alias the provider was shown names a group; a stored group id, which it never saw, is unknown.
+  if (!entry) return { ...candidate, group_id: null };
+  const originals = quote => (typeof quote === 'string' ? entry.quoteBack.get(quote.trim()) ?? [quote] : [quote]);
+  const selected = originals(candidate.selected_quote);
+  return {
+    ...candidate,
+    group_id: entry.groupId,
+    quotes: Array.isArray(candidate.quotes) ? candidate.quotes.flatMap(originals) : candidate.quotes,
+    // An ambiguous selection (one sent quote, several originals) selects nothing.
+    selected_quote: selected.length === 1 ? selected[0] : '',
+  };
+}
+
 function acceptModelConflict(candidate, sent) {
   const group = candidate && typeof candidate === 'object' && typeof candidate.group_id === 'string' ? sent.get(candidate.group_id) : undefined;
   if (!group) return { reason: 'unknown_group', groupId: null };
@@ -118,7 +138,41 @@ function acceptModelConflict(candidate, sent) {
   return { group, selectedQuote: selected && allowed.has(selected) ? selected : null, ungroundedSelection: Boolean(selected) && !allowed.has(selected) };
 }
 
-export async function reconcile({ accepted = [], proposals = [], call, consentCheck, limits = {}, budgetStopped = false } = {}) {
+// A model-written key (a proposed key can embed any word the model chose) goes out as gated text. The key is spaced out so the
+// gate can read a name inside it; if the gate would change it, a generic label is sent instead.
+const GENERIC_TARGET = 'proposed_item';
+function gateTarget(key, knownIdentifiers) {
+  const regate = value => gateText(value, { knownIdentifiers, regate: true });
+  try {
+    // Underscores, dots, hyphens and camelCase boundaries become spaces, so "RaviCover" is read as the words "Ravi Cover".
+    const spaced = String(key).replace(/([\p{Ll}\p{Nd}])(\p{Lu})/gu, '$1 $2').replace(/[_.-]+/g, ' ');
+    return regate(spaced).text === spaced ? regate(String(key)) : regate(GENERIC_TARGET);
+  } catch { return regate(GENERIC_TARGET); }
+}
+
+// Model-written strings (a reading's value, subject, quote and key) are gated again before they go back to the model
+// (ADR 0017 T3): the model that wrote them is untrusted, and a quote or value is not guaranteed to be verbatim gated text.
+// A reading the gate refuses is dropped and counted as privacy_gate_refused; it is never sent raw. The group goes out under an
+// opaque alias (`wireId`), because the stored group id embeds the model-written key.
+function gateGroupForModel(group, wireId, knownIdentifiers) {
+  const regate = value => gateText(String(value), { knownIdentifiers, regate: true });
+  let subject;
+  try { subject = regate(group.subject); } catch { return { refused: group.items.length, group: null }; }
+  const readings = [];
+  const quoteBack = new Map();
+  let refused = 0;
+  for (const item of group.items.filter(candidate => group.quotes.includes(candidate.evidenceQuote))) {
+    try {
+      const quote = regate(item.evidenceQuote);
+      const value = regate(item.value.text);
+      quoteBack.set(quote.text, [...new Set([...(quoteBack.get(quote.text) ?? []), item.evidenceQuote])]);
+      readings.push({ value, quote, page: item.page });
+    } catch { refused += 1; }
+  }
+  return { refused, quoteBack, group: readings.length ? { group_id: wireId, target: gateTarget(group.target.key, knownIdentifiers), subject, readings } : null };
+}
+
+export async function reconcile({ accepted = [], proposals = [], call, consentCheck, limits = {}, budgetStopped = false, knownIdentifiers } = {}) {
   const caps = { ...RECONCILER_LIMITS, ...limits };
   const groups = groupItems(accepted, proposals);
   const conflicts = deterministicConflicts(groups);
@@ -134,19 +188,30 @@ export async function reconcile({ accepted = [], proposals = [], call, consentCh
   }
   if (typeof call !== 'function' || typeof consentCheck !== 'function') fail('STRUCTURING_INPUT_INVALID', 'A provider call and consent check are required.');
   const sent = new Map(sendable.map(group => [group.groupId, { ...group, quotes: quotesOf(group, caps.maxQuotesPerGroup) }]));
-  const payload = { groups: [...sent.values()].map(group => ({
-    group_id: group.groupId, target: group.target.key, subject: group.subject,
-    readings: group.items.filter(item => group.quotes.includes(item.evidenceQuote)).map(item => ({ value: item.value.text, quote: item.evidenceQuote, page: item.page })),
-  })) };
+  if (!Array.isArray(knownIdentifiers)) fail('STRUCTURING_INPUT_INVALID', 'The known identifiers list (empty when none) is required to gate model-written text.');
+  const wire = new Map();
+  const draftGroups = [];
+  for (const group of sent.values()) {
+    const wireId = `g${wire.size + 1}`;
+    const gatedGroup = gateGroupForModel(group, wireId, knownIdentifiers);
+    for (let count = 0; count < gatedGroup.refused; count += 1) out.skipped.push({ groupId: group.groupId, reason: 'privacy_gate_refused' });
+    // A group needs two readings to be worth asking about; a single survivor is not sent.
+    if (gatedGroup.group && gatedGroup.group.readings.length >= 2) {
+      draftGroups.push(gatedGroup.group);
+      wire.set(wireId, { groupId: group.groupId, quoteBack: gatedGroup.quoteBack });
+    } else sent.delete(group.groupId);
+  }
+  if (!draftGroups.length) return out;
+  const input = sealModelInput(STRUCTURING_RECONCILE_TASK, { payload: { groups: draftGroups } });
   // The reconcile call counts against the document's remaining input-token budget.
-  if (Number.isFinite(caps.maxInputTokens) && Math.ceil(JSON.stringify(payload).length / 4) > caps.maxInputTokens) {
+  if (Number.isFinite(caps.maxInputTokens) && Math.ceil(JSON.stringify(input.payload).length / 4) > caps.maxInputTokens) {
     out.skipped.push({ groupId: null, reason: 'token_cap' });
     return out;
   }
   await consentCheck();
   let response;
   out.calls = 1;
-  try { response = await call({ task: STRUCTURING_RECONCILE_TASK, system: STRUCTURING_INSTRUCTIONS[STRUCTURING_RECONCILE_TASK], payload, schema: RECONCILE_SCHEMA }); } catch (error) {
+  try { response = await call({ task: STRUCTURING_RECONCILE_TASK, system: STRUCTURING_INSTRUCTIONS[STRUCTURING_RECONCILE_TASK], input, schema: RECONCILE_SCHEMA }); } catch (error) {
     out.skipped.push({ groupId: null, reason: errorReason(error) });
     return out;
   }
@@ -157,7 +222,7 @@ export async function reconcile({ accepted = [], proposals = [], call, consentCh
     return out;
   }
   for (const candidate of response.json.conflicts) {
-    const result = acceptModelConflict(candidate, sent);
+    const result = acceptModelConflict(translateCandidate(candidate, wire), sent);
     if (!result.group) { out.skipped.push({ groupId: result.groupId, reason: result.reason }); continue; }
     if (result.ungroundedSelection) out.skipped.push({ groupId: result.group.groupId, reason: 'ungrounded_selection' });
     let existing = conflicts.find(conflict => conflict.groupId === result.group.groupId);

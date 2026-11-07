@@ -28,7 +28,7 @@ const pages = [
 // Answers from the text it was sent, so every quote is a literal substring of the gated chunk.
 function fakeGemini() {
   const calls = [];
-  const call = async ({ payload }) => {
+  const call = async ({ input: { payload } }) => {
     calls.push(payload.chunks ? 'extract' : 'reconcile');
     if (!payload.chunks) return { json: { conflicts: [] }, usage: { inputTokens: 10, outputTokens: 2 } };
     const items = [];
@@ -109,7 +109,7 @@ test('section titles are privacy-gated like chunk text before any call', async (
     { text: 'Daily cash is Rs. 500 per day.', tag: 'paragraph' },
   ] }];
   const sent = [];
-  const call = async ({ payload }) => { sent.push(JSON.stringify(payload)); return { json: payload.chunks ? { items: [] } : { conflicts: [] }, usage: {} }; };
+  const call = async ({ input: { payload } }) => { sent.push(JSON.stringify(payload)); return { json: payload.chunks ? { items: [] } : { conflicts: [] }, usage: {} }; };
   await structurePolicyDocument({ pages: leaky, call, consentCheck: () => {}, knownIdentifiers: [], env: enabled });
   assert.ok(sent.length > 0);
   for (const payload of sent) {
@@ -131,7 +131,7 @@ test('consent withdrawn between extraction and commit stores nothing', pgOptions
   const { database, services } = await open(t);
   let allowed = true;
   const check = () => { if (!allowed) throw Object.assign(new Error('revoked'), { code: 'CONSENT_REQUIRED' }); return grantCheck(services)(); };
-  const call = async args => { const answer = await fakeGemini().call(args); if (!args.payload.chunks) allowed = false; return answer; };
+  const call = async args => { const answer = await fakeGemini().call(args); if (!args.input.payload.chunks) allowed = false; return answer; };
   await assert.rejects(structurePolicyDocument({ pages, call, consentCheck: check, commit: commitWith(services, check), knownIdentifiers: [], env: enabled }), { code: 'CONSENT_REQUIRED' });
   assert.equal((await database.prepare("SELECT count(*) AS count FROM coverage_parameter_observations WHERE recorded_by = 'policy-structuring'").get()).count, 0);
   assert.equal((await database.prepare('SELECT count(*) AS count FROM proposed_parameters').get()).count, 0);

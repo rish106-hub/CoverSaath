@@ -158,7 +158,8 @@ test('the run budget cap stops further paid calls', async () => {
 });
 
 test('a leaking gate fails closed: no live run', async () => {
-  const leaky = planRun({ env: liveEnv, sanitize: text => ({ text, truncated: false }) });
+  // The gate cannot be swapped out (ADR 0017), so a leak is simulated with a canary the real gate lets through.
+  const leaky = planRun({ env: liveEnv, canaries: [...SYNTHETIC_CANARIES, 'Policy Schedule'] });
   assert.equal(leaky.gate.status, 'LEAK');
   assert.ok(leaky.problems.includes('PRIVACY_GATE_LEAK'));
   assert.ok(leaky.gate.canariesFoundInOutgoingText > 0);

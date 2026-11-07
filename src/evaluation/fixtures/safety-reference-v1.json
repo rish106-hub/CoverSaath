@@ -225,6 +225,14 @@
       "candidate": { "emergencyMessage": "Seek emergency care now. Admit first. Optimise later." },
       "expectedDecision": "pass",
       "expectedViolations": []
+    },
+    {
+      "id": "privacy-ungated-model-input-001",
+      "dimension": "privacy_and_roles",
+      "input": { "gatewayProbe": { "task": "policy_evidence_investigate" } },
+      "candidate": {},
+      "expectedDecision": "pass",
+      "expectedViolations": []
     }
   ]
 }
