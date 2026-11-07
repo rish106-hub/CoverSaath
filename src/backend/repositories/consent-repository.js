@@ -4,6 +4,7 @@ import { ClauseRepository } from './clause-repository.js';
 import { AppEventRepository } from './app-event-repository.js';
 import { householdLock } from '../database/postgres/locks.js';
 import { GEMINI_MODEL_RECIPIENT } from '../../features/ai-analysis/privacy-evidence-gate.js';
+import { normalizeRevocationReason } from '../../contracts/data-lifecycle.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 
@@ -11,7 +12,9 @@ const ERASURE_MARKER = 'consent_revoked';
 const GEMINI_RECIPIENT = GEMINI_MODEL_RECIPIENT;
 // Erasure reasons recorded on observations, evidence facts and persisted source-page excerpts.
 // Anything else is recorded as consent_revoked so an arbitrary caller value cannot become stored state.
-const OBSERVATION_ERASURE_REASONS = new Set(['consent_revoked', 'document_erasure', 'source_consent_not_current']);
+const OBSERVATION_ERASURE_REASONS = new Set(['consent_revoked', 'document_erasure', 'source_consent_not_current', 'data_subject_request', 'retention_expired']);
+// Reasons that carry their own marker and terminal code (S3). Everything else keeps the consent-stop labels.
+const OWN_MARKER_REASONS = new Set(['document_erasure', 'data_subject_request', 'retention_expired']);
 const RUN_SCAN_BATCH_SIZE = 100;
 const MAX_ERASURE_RUNS = 5_000;
 const EMPTY_TEXT_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
@@ -218,13 +221,17 @@ export class ConsentRepository {
    * eraseDerivedRunData) before any task row. A grant already revoked (including by a concurrent
    * revoke that committed first) is returned unchanged: a second revoke writes nothing.
    */
-  async revoke({ id: revocationId = id('revocation'), grantId, revokedByAdultId, reason = null, downstreamDeletionDueAt = null }) {
+  async revoke({ id: revocationId = id('revocation'), grantId, revokedByAdultId, reason = null, downstreamDeletionDueAt = null, auditActor = null }) {
     const db = this.database;
     const existing = await db.one('SELECT household_id, subject_adult_id, revoked_at FROM consent_grants WHERE id = ?', [grantId]);
     if (!existing) throw new Error('Consent grant not found.');
     if (existing.subject_adult_id !== revokedByAdultId) throw new Error('Only the subject adult may revoke this consent.');
     if (existing.revoked_at) return this.get(grantId);
     const at = this.clock().toISOString();
+    // Free text is never stored (revocation row or audit payload, which cannot be erased): only a code from a fixed set.
+    reason = normalizeRevocationReason(reason);
+    // Who the nested erasure audits name: the subject for a normal revoke, the erasing owner or system for household erasure.
+    const actor = { type: auditActor?.type ?? 'adult_user', id: auditActor?.id ?? revokedByAdultId };
     await db.transaction(async () => {
       const grant = await db.one('SELECT * FROM consent_grants WHERE id = ? FOR UPDATE', [grantId]);
       if (!grant) throw new Error('Consent grant not found.');
@@ -286,7 +293,7 @@ export class ConsentRepository {
       if (this.coverageParameters) {
         for (const { id: documentId } of affectedDocuments) {
           await this.coverageParameters.redactObservationsForDocument({
-            documentId, reasonCode: 'consent_revoked', actorType: 'adult_user', actorId: revokedByAdultId, at,
+            documentId, reasonCode: 'consent_revoked', actorType: actor.type, actorId: actor.id, at,
           });
         }
       }
@@ -300,21 +307,21 @@ export class ConsentRepository {
         reason: ERASURE_MARKER,
         resourceType: 'consent_grant',
         resourceId: grantId,
-        actorType: 'adult_user',
-        actorId: revokedByAdultId,
+        actorType: actor.type,
+        actorId: actor.id,
         at,
       });
       for (const document of modelDisclosedDocuments) {
         if (!this.policyStructuring) throw notConfigured('Policy structuring erasure is not configured.');
         await this.policyStructuring.eraseDerived({
           householdId: document.household_id, documentIds: [document.id], reasonCode: ERASURE_MARKER,
-          resourceType: 'consent_grant', resourceId: grantId, actorType: 'adult_user', actorId: revokedByAdultId, at,
+          resourceType: 'consent_grant', resourceId: grantId, actorType: actor.type, actorId: actor.id, at,
         });
         // Question-time grants (ADR 0008): clauses, their FTS rows and answers citing the document go too.
         if (!this.clauses) throw notConfigured('Policy evidence erasure is not configured.');
         await this.clauses.eraseDerived({
           householdId: document.household_id, documentIds: [document.id], reasonCode: ERASURE_MARKER,
-          resourceType: 'consent_grant', resourceId: grantId, actorType: 'adult_user', actorId: revokedByAdultId,
+          resourceType: 'consent_grant', resourceId: grantId, actorType: actor.type, actorId: actor.id,
         });
       }
       // Stored OCR blocks are page text in another shape and are erased with it.
@@ -344,7 +351,9 @@ export class ConsentRepository {
       await db.run(`UPDATE coverage_graph_snapshots SET status = 'superseded'
         WHERE generated_by_run_id IN (SELECT id FROM workflow_runs WHERE consent_grant_id = ?)
           AND status <> 'superseded'`, [grantId]);
-      await this.audit?.append({ householdId: grant.household_id, actorType: 'adult_user', actorId: revokedByAdultId, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reason } });
+      // `auditActor` (household erasure only, never reachable from a request) names who really acted when the owner
+      // erases a household that holds another adult's grant; the revocation row still names the subject adult.
+      await this.audit?.append({ householdId: grant.household_id, actorType: actor.type, actorId: actor.id, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reason } });
     }, { locks: [householdLock(existing.household_id)] });
     return this.get(grantId);
   }
@@ -403,8 +412,9 @@ export class ConsentRepository {
     const redactionReason = OBSERVATION_ERASURE_REASONS.has(reason) ? reason : ERASURE_MARKER;
     // Existing consent-stop paths intentionally keep their stable consent_revoked excerpt marker.
     // A direct document erasure is distinct and must not be mislabeled as consent revocation.
-    const erasureMarker = redactionReason === 'document_erasure' ? 'document_erasure' : ERASURE_MARKER;
-    const terminalReason = redactionReason === 'document_erasure' ? 'DOCUMENT_DELETED' : 'CONSENT_REVOKED';
+    const erasureMarker = OWN_MARKER_REASONS.has(redactionReason) ? redactionReason : ERASURE_MARKER;
+    const terminalReason = redactionReason === 'document_erasure' ? 'DOCUMENT_DELETED'
+      : OWN_MARKER_REASONS.has(redactionReason) ? 'DATA_ERASED' : 'CONSENT_REVOKED';
     const documents = new Set(documentIds);
     const targeted = new Set(runIds);
     const candidateIds = new Set();
