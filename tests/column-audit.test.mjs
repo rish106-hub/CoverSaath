@@ -138,7 +138,7 @@ const PLAIN_NUMBERS = {
   integration_outbox: { 'retry counter': ['attempt_count'] },
   model_budget_reservations: { 'cost in micro-USD, no content': ['amount_micro_usd', 'actual_micro_usd'] },
   model_budget_scopes: { 'cost in micro-USD, no content': ['reserved_micro_usd', 'spent_micro_usd'] },
-  job_queue: { 'attempt counters': ['attempts', 'max_attempts'] },
+  job_queue: { 'attempt counters and the due time of a job, no content': ['attempts', 'max_attempts', 'run_after'] },
   ocr_jobs: { 'retry counter': ['attempt_count'] },
   onboarding_progress: { 'row revision counter': ['revision'] },
   policy_clauses: { 'page number': ['page'] },
