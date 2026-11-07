@@ -105,7 +105,7 @@ function gatedModel() {
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   const calls = [];
-  const call = async ({ payload }) => {
+  const call = async ({ input: { payload } }) => {
     calls.push(payload.chunks ? 'extract' : 'reconcile');
     await gate;
     return payload.chunks ? { json: { items: [] }, usage: { inputTokens: 1, outputTokens: 1 } } : { json: { conflicts: [] }, usage: { inputTokens: 1, outputTokens: 1 } };
@@ -148,8 +148,8 @@ test('a second instance interrupts only expired-lease jobs, never another live i
 
   // A is alive far past its first lease window because it heartbeats: instance C still leaves it alone.
   advance(HEARTBEAT_MS * 3);
-  mock.timers.tick(HEARTBEAT_MS);
-  const beaten = await until(() => jobRows(database), rows => rows[0].updated_at !== started);
+  // Tick on every poll: a slow runner may register the heartbeat timer after the first tick, so one tick can be lost.
+  const beaten = await until(async () => { mock.timers.tick(HEARTBEAT_MS); return jobRows(database); }, rows => rows[0].updated_at !== started);
   assert.equal(beaten[0].updated_at, stamp(), 'the heartbeat refreshed the lease');
   const instanceC = instance(services, gatedModel());
   assert.equal((await instanceC.result({ document: owned, workflowRunId: run })).status, 'running');

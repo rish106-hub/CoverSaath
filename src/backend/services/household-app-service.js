@@ -1,6 +1,8 @@
 // Members, policies and the Home overview for the app (app-data plan B-A). Authorisation lives here: every method checks
 // household ownership first, and writes need the owner or member role (a viewer reads only). Derived numbers are counts and
 // day differences computed in this file; no model output and no stored aggregate is involved.
+import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
+
 const MEMBER_KINDS = ['adult', 'dependent'];
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 const WRITE_ROLES = ['owner', 'member'];
@@ -22,7 +24,8 @@ function text(value, field, { max, required = false }) {
   if (typeof value !== 'string') invalid(`${field} must be text.`);
   const trimmed = value.normalize('NFC').trim();
   if (!trimmed) { if (required) invalid(`${field} is required.`); return null; }
-  if (trimmed.length > max || UNSAFE_TEXT.test(trimmed)) invalid(`${field} is invalid.`);
+  // The erased-member marker is reserved: a real name equal to it would read as an erased tombstone.
+  if (trimmed.length > max || UNSAFE_TEXT.test(trimmed) || trimmed === ERASED_NAME) invalid(`${field} is invalid.`);
   return trimmed;
 }
 

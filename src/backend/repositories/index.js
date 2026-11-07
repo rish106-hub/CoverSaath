@@ -19,3 +19,4 @@ export { RuntimeLimitsRepository } from './runtime-limits-repository.js';
 export { HouseholdAppRepository } from './household-app-repository.js';
 export { UserDataRepository } from './user-data-repository.js';
 export { JobQueueRepository } from './job-queue-repository.js';
+export { ErasureRepository } from './erasure-repository.js';

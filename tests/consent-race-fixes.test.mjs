@@ -14,6 +14,7 @@ import { createApiServer } from '../src/server/server.js';
 import { liveEnv, setupLiveCase, stubModelDriver } from './support/live-analysis-scenario.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
+import { plainRows } from './support/sealed.mjs';
 
 const pgOptions = postgresTestOptions();
 const MARKER = 'wombat heron synthetic';
@@ -67,7 +68,7 @@ const liveRun = (scenario, idempotencyKey) => ({
 });
 
 async function caseRuns(database, caseId) {
-  return database.many('SELECT id, status, input_json FROM workflow_runs WHERE case_id = ? ORDER BY id', [caseId]);
+  return plainRows(database, 'workflow_runs', 'WHERE case_id = ? ORDER BY id', [caseId]);
 }
 
 // A session outside the pool under test that holds `lockSql` until released.
@@ -134,7 +135,7 @@ test('stopping a run whose own coverage grant is revoked erases its excerpts', p
   const [run] = await caseRuns(app.database, scenario.caseId);
   assert.ok(!run.input_json.includes(MARKER), 'run input keeps no excerpt');
   for (const sourcePage of JSON.parse(run.input_json).sourcePages) assert.equal(sourcePage.redacted, 'consent_revoked');
-  const outputs = await app.database.many('SELECT output_json FROM workflow_tasks WHERE workflow_run_id = ?', [job.id]);
+  const outputs = await plainRows(app.database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [job.id]);
   assert.ok(outputs.every(task => task.output_json === null));
   assert.equal((await app.database.one("SELECT count(*) AS count FROM audit_events WHERE action = 'analysis.derived_data_erased'")).count, 1);
 });

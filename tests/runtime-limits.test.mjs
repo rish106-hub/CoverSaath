@@ -7,6 +7,7 @@ import { createRateLimiter } from '../src/shared/http/index.js';
 import { createSharedRateLimiter } from '../src/server/http/shared-rate-limiter.js';
 import { createRunBudget, createSharedProjectBudget } from '../src/features/ai-analysis/live-coverage-runtime.js';
 import { createMemoryBudget, createModelGateway } from '../src/features/ai-analysis/index.js';
+import { sealedCoverageInput } from './support/sealed-input.mjs';
 import { createApiServer } from '../src/server/server.js';
 
 // ADR 0014: request limit and model spend cap shared through PostgreSQL. Synthetic values only.
@@ -88,9 +89,9 @@ test('the gateway reports metadata-only provider events and a throwing listener 
   const events = [];
   const input = { context: { caseId: 'case-1', subjectId: 'adult-1', purpose: 'Extract requested cover facts.', requestedFields: ['room_rent_limit'] }, sources: [{ id: 'policy:v1:p3', version: 'v1', page: 3, text: 'Room rent applicability is unresolved.', status: 'unknown' }], upstream: [] };
   const refused = createModelGateway({ mode: 'live', budget: createMemoryBudget(0.001), liveRunner: async () => {}, onEvent: event => events.push(event) });
-  await assert.rejects(refused.execute({ task: 'profile_extraction', input, reservationUsd: 0.01 }), { code: 'budget_refused' });
+  await assert.rejects(refused.execute({ task: 'profile_extraction', input: sealedCoverageInput('profile_extraction', input), reservationUsd: 0.01 }), { code: 'budget_refused' });
   const failing = createModelGateway({ mode: 'live', budget: createMemoryBudget(0.05), liveRunner: async () => { throw new Error('synthetic provider failure'); }, onEvent: event => { events.push(event); throw new Error('listener failure'); } });
-  await assert.rejects(failing.execute({ task: 'profile_extraction', input, reservationUsd: 0.01 }), /synthetic provider failure/);
+  await assert.rejects(failing.execute({ task: 'profile_extraction', input: sealedCoverageInput('profile_extraction', input), reservationUsd: 0.01 }), /synthetic provider failure/);
   assert.deepEqual(events.map(event => [event.outcome, event.dispatched]), [['budget_refused', false], ['error', true]]);
   assert.ok(events.every(event => !JSON.stringify(event).includes('synthetic provider failure')), 'no error text or prompt in an event');
   assert.ok(events.every(event => Number.isFinite(event.latencyMs) && event.costUsd === 0));

@@ -119,6 +119,10 @@ export class AppEventRepository {
     return (await this.database.run('DELETE FROM app_events WHERE household_id = ?', [householdId])).changes;
   }
 
+  async eraseForCase(caseId) {
+    return (await this.database.run('DELETE FROM app_events WHERE case_id = ?', [caseId])).changes;
+  }
+
   async eraseForAdult(adultUserId) {
     return (await this.database.run('DELETE FROM app_events WHERE adult_user_id = ?', [adultUserId])).changes;
   }

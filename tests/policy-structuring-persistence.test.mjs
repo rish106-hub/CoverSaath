@@ -86,6 +86,12 @@ test('commit records observations, resolutions and proposals in one transaction 
   const { database, services, structuring } = await open(t);
   const result = await structuring.commitStructuring(input(services));
   assert.equal(result.replayed, false);
+  // D2: proposal labels and values, observation values and resolved values are sealed at rest.
+  for (const [table, column] of [['proposed_parameters', 'label'], ['proposed_parameters', 'value_json'], ['coverage_parameter_observations', 'value_json'], ['coverage_parameter_resolutions', 'resolved_value_json']]) {
+    const stored = await database.many(`SELECT ${column} AS value FROM ${table} WHERE ${column} IS NOT NULL`);
+    assert.ok(stored.length > 0, `${table}.${column} holds a value`);
+    assert.ok(stored.every(row => /^enc2\./.test(row.value)), `${table}.${column} holds ciphertext only`);
+  }
   assert.deepEqual({ ...result, structuringRunId: undefined }, {
     replayed: false, structuringRunId: undefined, observations: 3, parameters: 2, conflicting: 1, skippedKeys: 2, proposals: 2,
   });

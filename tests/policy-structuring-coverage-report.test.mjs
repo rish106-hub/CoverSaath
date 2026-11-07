@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { sectionDocument } from '../src/features/policy-structuring/sectioner.js';
 import { extractChunks } from '../src/features/policy-structuring/extractor.js';
+import { gateChunks } from '../src/features/policy-structuring/index.js';
 import { decideStates, reconcile } from '../src/features/policy-structuring/reconciler.js';
 import { buildCoverageReport, scoreStructuring } from '../src/features/policy-structuring/coverage-report.js';
 
@@ -38,13 +39,13 @@ const answers = {
 };
 
 async function journey() {
-  const call = async ({ payload }) => {
+  const call = async ({ input: { payload } }) => {
     if (payload.chunks.some(chunk => chunk.chunk_id === 'p4-b0')) throw Object.assign(new Error('x'), { code: 'PROVIDER_TIMEOUT' });
     return { json: { items: payload.chunks.flatMap(chunk => answers[chunk.chunk_id](chunk)) }, usage: { inputTokens: 40, outputTokens: 10 } };
   };
   const consentCheck = () => {};
-  const extraction = await extractChunks({ chunks: sectioned.chunks, registryVersion, call, consentCheck, limits: { maxChunksPerCall: 4 } });
-  const reconciliation = await reconcile({ ...extraction, call: async () => ({ json: { conflicts: [] }, usage: { inputTokens: 7, outputTokens: 3 } }), consentCheck });
+  const extraction = await extractChunks({ chunks: gateChunks(sectioned.chunks, { knownIdentifiers: [] }).sent, registryVersion, call, consentCheck, limits: { maxChunksPerCall: 4 } });
+  const reconciliation = await reconcile({ knownIdentifiers: [], ...extraction, call: async () => ({ json: { conflicts: [] }, usage: { inputTokens: 7, outputTokens: 3 } }), consentCheck });
   return { extraction, reconciliation, decisions: decideStates({ accepted: extraction.accepted, conflicts: reconciliation.conflicts }) };
 }
 

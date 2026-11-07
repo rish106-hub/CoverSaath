@@ -1,6 +1,7 @@
 import { ToolLoopAgent, Output, isStepCount, jsonSchema } from 'ai';
 import { PROMPT_VERSION } from './prompts.js';
 import { AI_CONTRACT_VERSION } from './responsibility-matrix.js';
+import { isGatewayRequest } from './model-gateway.js';
 
 function rate(value, label) {
   if (!Number.isFinite(value) || value <= 0) throw new TypeError(`${label} must be a verified positive rate.`);
@@ -15,7 +16,11 @@ export function createAiSdkRunner({ loadModel, provider, model, modelVersion, in
   const inputRate = rate(inputUsdPerMillion, 'inputUsdPerMillion');
   const outputRate = rate(outputUsdPerMillion, 'outputUsdPerMillion');
 
-  return async function runWithAiSdk({ task, prompt, outputSchema, maxOutputTokens, maxRetries, abortSignal }) {
+  return async function runWithAiSdk(request) {
+    // A provider call is made only for a request the gateway built after its sealed-input check (ADR 0017). Handing the
+    // runner a hand-made request, from any module that managed to build one, fails here before the model is loaded.
+    if (!isGatewayRequest(request)) throw Object.assign(new Error('Model input did not come from the privacy gate.'), { code: 'ungated_model_input', modelDispatched: false });
+    const { task, prompt, outputSchema, maxOutputTokens, maxRetries, abortSignal } = request;
     const startedAt = Date.now();
     const languageModel = await loadModel({ provider, model, modelVersion });
     const agent = createAgent({

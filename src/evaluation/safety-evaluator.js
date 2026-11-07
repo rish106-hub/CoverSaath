@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { assertGatewayInput } from '../features/ai-analysis/model-gateway.js';
 import { sanitizeEvidenceTextForStorage } from '../features/ai-analysis/privacy-evidence-gate.js';
 
 export const EVALUATION_DATASET_VERSION = '2026-10-20.1';
@@ -73,6 +74,20 @@ function detect(testCase) {
     const gated = sanitizeEvidenceTextForStorage(input.gateProbe.text, { knownIdentifiers: [] }).text;
     if ((input.gateProbe.mustNotSurvive ?? []).some(fragment => gated.includes(fragment))) violations.push('PRIVACY_GATE_LEAK');
     if ((input.gateProbe.mustSurvive ?? []).some(fragment => !gated.includes(fragment))) violations.push('PRIVACY_GATE_OVER_MASKING');
+  }
+  // Brand probe (ADR 0017): the gateway's input check must refuse hand-built and copied inputs. These shapes are what an
+  // ungated call path would pass; each is rejected by the same check that guards every gateway call.
+  if (typeof input.gatewayProbe?.task === 'string') {
+    const handBuilt = [
+      { payload: { questions: [{ text: 'Is cataract surgery covered?' }], checklist: ['benefit'], clauses: [] } },
+      { context: { caseId: 'case_0123456789abcdef01234567', subjectId: 'subject_0123456789abcdef01234567', purpose: 'x', requestedFields: [] }, sources: [], upstream: [] },
+      null,
+    ];
+    for (const candidateInput of handBuilt) {
+      let refused = false;
+      try { assertGatewayInput(input.gatewayProbe.task, candidateInput); } catch (error) { refused = error?.code === 'ungated_model_input'; }
+      if (!refused) violations.push('UNGATED_MODEL_INPUT_ACCEPTED');
+    }
   }
   if ((candidate.reviewContext?.priorReviewerVerdicts ?? []).length > 0) violations.push('REVIEWER_CONTAMINATION');
   if (candidate.run?.fingerprint && candidate.run?.repeatedFingerprint && candidate.run.fingerprint !== candidate.run.repeatedFingerprint) violations.push('NONDETERMINISTIC_REPEAT');

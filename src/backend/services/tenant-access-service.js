@@ -1,4 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { openCaseRecord, openWorkflowRun, openWorkflowTask } from '../security/sealed-records.js';
 
 function fail(code, message, statusCode) {
   throw Object.assign(new Error(message), { code, statusCode });
@@ -17,8 +19,10 @@ function sameSecret(left, right) {
 }
 
 export class TenantAccessService {
-  constructor(database, { auth, households, consents, env = {} }) {
+  constructor(database, { auth, households, consents, env = {}, ...options }) {
     this.database = database;
+    // Case, run and task rows carry sealed columns (ADR 0013 addendum D2); they are opened here so callers see plain values.
+    this.crypto = resolveColumnCrypto(options);
     this.auth = auth;
     this.households = households;
     this.consents = consents;
@@ -64,27 +68,32 @@ export class TenantAccessService {
   }
 
   async requireCase(principal, caseId, options) {
-    const caseRecord = await this.database.one('SELECT * FROM service_cases WHERE id = ?', [caseId]);
-    if (!caseRecord) fail('CASE_NOT_FOUND', 'Case not found.', 404);
-    await this.requireHousehold(principal, caseRecord.household_id, options);
-    return caseRecord;
+    // options.tolerateUnreadable: erasure routes, which never use the stated estimate, may proceed when it cannot be decrypted.
+    // A case erased through the deletion ledger is gone for every reader (S3).
+    const row = await this.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (
+      SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId]);
+    if (!row) fail('CASE_NOT_FOUND', 'Case not found.', 404);
+    // The household check comes before anything is decrypted, so a caller outside the household gets not-found whatever the
+    // stored amount looks like (no existence oracle through a decryption error).
+    await this.requireHousehold(principal, row.household_id, options);
+    return openCaseRecord(this.crypto, row, { tolerateUnreadable: options?.tolerateUnreadable === true });
   }
 
   async requireRun(principal, runId) {
-    const record = await this.database.one(`SELECT workflow_runs.*, service_cases.household_id
+    const record = openWorkflowRun(this.crypto, await this.database.one(`SELECT workflow_runs.*, service_cases.household_id
       FROM workflow_runs JOIN service_cases ON service_cases.id = workflow_runs.case_id
-      WHERE workflow_runs.id = ?`, [runId]);
+      WHERE workflow_runs.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [runId]));
     if (!record) fail('JOB_NOT_FOUND', 'Job not found.', 404);
     await this.requireHousehold(principal, record.household_id);
     return record;
   }
 
   async requireTask(principal, taskId) {
-    const record = await this.database.one(`SELECT workflow_tasks.*, service_cases.household_id
+    const record = openWorkflowTask(this.crypto, await this.database.one(`SELECT workflow_tasks.*, service_cases.household_id
       FROM workflow_tasks
       JOIN workflow_runs ON workflow_runs.id = workflow_tasks.workflow_run_id
       JOIN service_cases ON service_cases.id = workflow_runs.case_id
-      WHERE workflow_tasks.id = ?`, [taskId]);
+      WHERE workflow_tasks.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [taskId]));
     if (!record) fail('TASK_NOT_FOUND', 'Task not found.', 404);
     await this.requireHousehold(principal, record.household_id);
     return record;
@@ -102,8 +111,9 @@ export class TenantAccessService {
         viewerAdultId: principal.adultId,
         fieldKey: 'date_of_birth',
       })) === true;
-      const latestCase = (await this.database.one(`SELECT id, status, trigger_type, updated_at
+      let latestCase = (await this.database.one(`SELECT id, status, trigger_type, updated_at
         FROM service_cases WHERE household_id = ? AND subject_member_id = ?
+          AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))
         ORDER BY updated_at DESC LIMIT 1`, [householdId, member.id])) ?? null;
       const caseSubjectAdultId = member.adult_user_id ?? (latestCase
         ? (await this.database.one('SELECT opened_by_adult_id FROM service_cases WHERE id = ?', [latestCase.id]))?.opened_by_adult_id
@@ -121,6 +131,9 @@ export class TenantAccessService {
       const policyCount = (await this.database.one(`SELECT count(*) AS count
         FROM policy_members JOIN policies ON policies.id = policy_members.policy_id
         WHERE household_member_id = ? AND policies.household_id = ?`, [member.id, householdId])).count;
+      // An erasure can commit between the reads above and this point: look the case up in the ledger once more before it is
+      // put in the response, so an erased case is never returned.
+      if (latestCase && await this.database.one(`SELECT 1 AS found FROM retention_records WHERE resource_type = 'case' AND resource_id = ? AND deletion_state IN ('deleted', 'verified')`, [latestCase.id])) latestCase = null;
       members.push({
         id: member.id,
         displayName: member.display_name,
@@ -132,7 +145,7 @@ export class TenantAccessService {
           immediateIssue: canReadImmediateIssue ? 'granted' : 'withheld',
         },
         policiesFound: policyCount,
-        immediateIssue: canReadImmediateIssue
+        immediateIssue: canReadImmediateIssue && latestCase
           ? { caseId: latestCase.id, status: latestCase.status, triggerType: latestCase.trigger_type }
           : null,
       });

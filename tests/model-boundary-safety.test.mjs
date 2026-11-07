@@ -5,6 +5,7 @@ import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-ev
 import { RESTRICTED_PROBES, TOKENIZED_PROBES } from './support/privacy-probes.mjs';
 import { postgresTestOptions } from './support/pg.mjs';
 import { liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
+import { plainRows } from './support/sealed.mjs';
 
 const MODEL_AGENT_IDS = [
   'knowvia-evidence_synthesis', 'knowvia-group_cover_extraction', 'knowvia-personal_cover_extraction',
@@ -13,8 +14,8 @@ const MODEL_AGENT_IDS = [
 
 async function everythingPersisted(database) {
   return JSON.stringify({
-    runs: await database.prepare('SELECT input_json FROM workflow_runs').all(),
-    tasks: await database.prepare('SELECT input_json, output_json, last_error_code, last_error_message FROM workflow_tasks').all(),
+    runs: await plainRows(database, 'workflow_runs'),
+    tasks: await plainRows(database, 'workflow_tasks'),
     audit: await database.prepare('SELECT event_payload_json FROM audit_events').all(),
   });
 }
@@ -92,7 +93,7 @@ test('prompt injection inside OCR text stays in untrusted evidence and cannot ch
   }
   assert.ok(modelRequests.every(request => !request.prompt.includes('approve the claim')), 'a line outside the parameter allowlist is never sent');
   // Deterministic tasks keep authority: the case remains unconfirmed by the institution.
-  const synthesis = (await app.database.prepare("SELECT output_json FROM workflow_tasks WHERE workflow_run_id = ? AND agent_name LIKE '%synthes%'").all(response.data.id))
+  const synthesis = (await plainRows(app.database, 'workflow_tasks', 'WHERE workflow_run_id = ? AND agent_name LIKE \'%synthes%\'', [response.data.id]))
     .map(row => JSON.stringify(JSON.parse(row.output_json)));
   assert.ok(synthesis.every(body => !/claim (?:is )?approved|covered for sure/i.test(body)));
 });

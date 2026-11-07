@@ -9,6 +9,8 @@
 
 import { randomBytes } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { documentIdempotencyIndex, documentIdempotencyIndexes, openIdempotencyRow, sealIdempotencyResponse } from '../security/sealed-records.js';
 
 const DOCUMENT_COLUMNS = `id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
   original_filename, storage_path, content_sha256, mime_type, byte_size, malware_status,
@@ -21,8 +23,27 @@ function coded(code, message, statusCode) {
   return Object.assign(new Error(message), { code, statusCode });
 }
 
-function toRecord(row) {
+// The original filename is sealed. Every read of a document row through this repository tolerates a filename that cannot be
+// decrypted (wrong key, damaged, moved), because the same reads serve erasure (the DELETE route, the deletion worker, the
+// inventory) and an erasure must never stop on it: the name comes back as null with originalFilenameUnreadable set, and the
+// lifecycle, household and case fields stay usable. Each such read is counted (unreadableFilenames) and reported through the
+// optional onUnreadable hook with the table and column only, never the filename or the ciphertext.
+function readFilename(row, crypto, reporter) {
+  try {
+    return { filename: crypto.open('document_uploads', 'original_filename', row.id, row.original_filename), unreadable: false };
+  } catch (error) {
+    if (error?.code !== 'COLUMN_DECRYPTION_FAILED') throw error;
+    if (reporter) {
+      reporter.unreadableFilenames += 1;
+      try { reporter.onUnreadable?.({ table: 'document_uploads', column: 'original_filename' }); } catch { /* a reporting hook never changes the read */ }
+    }
+    return { filename: null, unreadable: true };
+  }
+}
+
+function toRecord(row, crypto, reporter = null) {
   if (!row) return null;
+  const name = readFilename(row, crypto, reporter);
   return {
     id: row.id,
     householdId: row.household_id,
@@ -33,7 +54,8 @@ function toRecord(row) {
     version: Number(row.source_version),
     sourceVersion: row.source_version,
     documentKind: row.document_kind,
-    originalFilename: row.original_filename,
+    originalFilename: name.filename,
+    originalFilenameUnreadable: name.unreadable,
     mimeType: row.mime_type,
     byteSize: row.byte_size,
     contentSha256: row.content_sha256,
@@ -49,8 +71,12 @@ function toRecord(row) {
 }
 
 export class DocumentRepository {
-  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, consents = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, consents = null, onUnreadable = null, ...options } = {}) {
     this.database = database;
+    this.onUnreadable = typeof onUnreadable === 'function' ? onUnreadable : null;
+    this.unreadableFilenames = 0;
+    // The original filename and upload idempotency responses are sealed (ADR 0013 addendum D2).
+    this.crypto = resolveColumnCrypto(options);
     this.clock = clock;
     this.audit = audit;
     this.coverageParameters = coverageParameters;
@@ -94,17 +120,17 @@ export class DocumentRepository {
   async findByHash(householdId, contentSha256) {
     return toRecord(await this.database.one(`SELECT ${DOCUMENT_COLUMNS} FROM document_uploads
       WHERE household_id = ? AND content_sha256 = ? AND lifecycle_state NOT IN ('deleted', 'deletion_requested')
-      ORDER BY uploaded_at LIMIT 1`, [householdId, contentSha256]));
+      ORDER BY uploaded_at LIMIT 1`, [householdId, contentSha256]), this.crypto, this);
   }
 
   async findVersion(householdId, logicalDocumentId, version) {
     return toRecord(await this.database.one(`SELECT ${DOCUMENT_COLUMNS} FROM document_uploads
       WHERE household_id = ? AND logical_document_id = ? AND source_version = ? LIMIT 1`,
-    [householdId, logicalDocumentId, String(version)]));
+    [householdId, logicalDocumentId, String(version)]), this.crypto, this);
   }
 
   async getDocument(documentId) {
-    return toRecord(await this.database.one(`SELECT ${DOCUMENT_COLUMNS} FROM document_uploads WHERE id = ?`, [documentId]));
+    return toRecord(await this.database.one(`SELECT ${DOCUMENT_COLUMNS} FROM document_uploads WHERE id = ?`, [documentId]), this.crypto, this);
   }
 
   // The intake service's generic update path is not used by the persistent runtime: every
@@ -116,7 +142,7 @@ export class DocumentRepository {
   async findIdempotency(scope, key, at = this.clock().toISOString()) {
     await this.database.run(`DELETE FROM idempotency_keys
       WHERE scope = ? AND idempotency_key = ? AND julianday(expires_at) <= julianday(CAST(? AS text))`, [scope, key, at]);
-    return (await this.database.one('SELECT * FROM idempotency_keys WHERE scope = ? AND idempotency_key = ?', [scope, key])) ?? null;
+    return openIdempotencyRow(this.crypto, await this.database.one('SELECT * FROM idempotency_keys WHERE scope = ? AND idempotency_key = ?', [scope, key])) ?? null;
   }
 
   // context: { actorAdultId, idempotency?: { scope, key, requestDigest, expiresAt, response(record) } }
@@ -129,7 +155,7 @@ export class DocumentRepository {
          uploaded_at, deleted_at, logical_document_id, source_version)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'quarantined', ?, NULL, ?, ?)`, [
         record.id, record.householdId, record.caseId, record.uploadedByAdultId, record.consentGrantId,
-        record.documentKind, record.originalFilename, record.storageKey, record.contentSha256, record.mimeType,
+        record.documentKind, this.crypto.seal('document_uploads', 'original_filename', record.id, record.originalFilename), record.storageKey, record.contentSha256, record.mimeType,
         record.byteSize, record.malwareStatus, record.encryptionStatus, at, record.logicalDocumentId,
         String(record.version),
       ]);
@@ -147,10 +173,11 @@ export class DocumentRepository {
       if (idempotency) {
         const stored = await this.getDocument(record.id);
         await this.database.run(`INSERT INTO idempotency_keys
-          (scope, idempotency_key, request_digest, response_status, response_json, expires_at, created_at)
-          VALUES (?, ?, ?, 201, ?, ?, ?)`, [
+          (scope, idempotency_key, request_digest, response_status, response_json, document_index, expires_at, created_at)
+          VALUES (?, ?, ?, 201, ?, ?, ?, ?)`, [
           idempotency.scope, idempotency.key, idempotency.requestDigest,
-          JSON.stringify(idempotency.response(stored)), idempotency.expiresAt, at,
+          sealIdempotencyResponse(this.crypto, idempotency.scope, idempotency.key, JSON.stringify(idempotency.response(stored))),
+          documentIdempotencyIndex(this.crypto, record.id), idempotency.expiresAt, at,
         ]);
       }
       return this.getDocument(record.id);
@@ -170,7 +197,7 @@ export class DocumentRepository {
   async listForCase(caseId, householdId, limit = 200) {
     return (await this.database.many(`SELECT ${DOCUMENT_COLUMNS} FROM document_uploads
       WHERE case_id = ? AND household_id = ? AND lifecycle_state <> 'deleted'
-      ORDER BY uploaded_at, id LIMIT ?`, [caseId, householdId, limit])).map(toRecord);
+      ORDER BY uploaded_at, id LIMIT ?`, [caseId, householdId, limit])).map(row => toRecord(row, this.crypto, this));
   }
 
   // Highest active version per logical document across the household: a newer version may sit in another case.
@@ -224,9 +251,11 @@ export class DocumentRepository {
   }
 
   // Removes expired idempotency records for every scope (the per-key purge only runs on lookup).
-  async purgeExpiredIdempotency(at = this.clock().toISOString()) {
+  // `limit` bounds one call (the retention sweep passes it); repeat the call for a larger backlog.
+  async purgeExpiredIdempotency(at = this.clock().toISOString(), { limit = 1000 } = {}) {
     return (await this.database.run(`DELETE FROM idempotency_keys
-      WHERE julianday(expires_at) <= julianday(CAST(? AS text))`, [at])).changes;
+      WHERE (scope, idempotency_key) IN (SELECT scope, idempotency_key FROM idempotency_keys
+        WHERE julianday(expires_at) <= julianday(CAST(? AS text)) ORDER BY expires_at LIMIT ?)`, [at, limit])).changes;
   }
 
   // Storage keys of every row whose bytes may still exist, for the orphan sweep.
@@ -280,7 +309,7 @@ export class DocumentRepository {
     }, householdId);
   }
 
-  async requestDeletion(documentId, { actorAdultId }) {
+  async requestDeletion(documentId, { actorAdultId, actorType = 'adult_user' }) {
     const existing = await this.getDocument(documentId);
     if (!existing) return null;
     if (existing.lifecycleState === 'deleted') return { state: 'deleted', document: existing };
@@ -300,7 +329,7 @@ export class DocumentRepository {
       const observationCounts = await this.coverageParameters.redactObservationsForDocument({
         documentId,
         reasonCode: 'document_erasure',
-        actorType: 'adult_user',
+        actorType,
         actorId: actorAdultId,
         at,
       });
@@ -311,7 +340,7 @@ export class DocumentRepository {
         resourceType: 'document',
         resourceId: documentId,
         caseId: current.caseId,
-        actorType: 'adult_user',
+        actorType,
         actorId: actorAdultId,
         at,
       });
@@ -346,7 +375,7 @@ export class DocumentRepository {
       await this.audit.append({
         householdId: current.householdId,
         caseId: current.caseId,
-        actorType: 'adult_user',
+        actorType,
         actorId: actorAdultId,
         action: 'document.deletion_requested',
         resourceType: 'document',
@@ -375,18 +404,31 @@ export class DocumentRepository {
     return this.transaction(async () => {
       const at = this.clock().toISOString();
       const { changes } = await this.database.run(`UPDATE document_uploads
-        SET lifecycle_state = 'deleted', deleted_at = ?, original_filename = '[deleted]',
+        SET lifecycle_state = 'deleted', deleted_at = ?, original_filename = ?,
           content_sha256 = ?, storage_path = ?
         WHERE id = ? AND lifecycle_state = 'deletion_requested'`,
       // The tombstone keeps no content fingerprint (no confirmation that a known file was held)
       // and no usable storage reference.
-      [at, randomBytes(32).toString('hex'), `deleted-${randomBytes(16).toString('hex')}`, documentId]);
+      [at, this.crypto.seal('document_uploads', 'original_filename', documentId, '[deleted]'), randomBytes(32).toString('hex'), `deleted-${randomBytes(16).toString('hex')}`, documentId]);
       if (changes !== 1) return false;
       // Upload idempotency records carry a digest over the filename and content hash; drop them
       // with the document so no fingerprint outlives it.
+      // Sealed upload responses cannot be searched, so the record is found through its keyed index; a record written before
+      // migration 030 (still plain JSON) is matched on the document id inside it.
+      const documentIndexes = documentIdempotencyIndexes(this.crypto, documentId);
       await this.database.run(`DELETE FROM idempotency_keys
-        WHERE scope LIKE 'document-upload:%' AND (CAST(response_json AS jsonb) #>> '{document,id}') = ?`, [documentId]);
-      await this.appendSystemAudit(documentId, 'document.bytes_deleted', {});
+        WHERE scope LIKE 'document-upload:%'
+          AND (document_index = ANY(CAST(? AS text[])) OR CASE WHEN response_json LIKE 'enc%' THEN NULL ELSE (CAST(response_json AS jsonb) #>> '{document,id}') END = ?)`,
+      [documentIndexes, documentId]);
+      // A sealed upload record that no index names (written before the index existed, or whose response cannot be decrypted)
+      // cannot be tied to this document. Those of the same uploader and case are counted, never read, and the count (only) goes
+      // into the audit event so the leftover is visible; they expire with their idempotency window.
+      const uploaded = await this.database.one('SELECT uploaded_by_adult_id, case_id FROM document_uploads WHERE id = ?', [documentId]);
+      const leftover = uploaded
+        ? Number((await this.database.one(`SELECT count(*) AS count FROM idempotency_keys
+          WHERE scope = ? AND document_index IS NULL AND response_json LIKE 'enc%'`, [`document-upload:${uploaded.uploaded_by_adult_id}:${uploaded.case_id}`])).count)
+        : 0;
+      await this.appendSystemAudit(documentId, 'document.bytes_deleted', leftover > 0 ? { unattributedUploadRecords: leftover } : {});
       return true;
     }, householdId);
   }
