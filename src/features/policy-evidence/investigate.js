@@ -2,8 +2,8 @@
 // quote, runs a mandatory override sweep, and assembles the answer. Nothing here decides coverage or does arithmetic.
 // Every clause sent to a model passes the privacy gate first, consent is re-checked before each call, and the
 // provider call is injected (no SDK or fetch is imported here).
-import { sanitizeEvidenceTextForStorage } from '../ai-analysis/privacy-evidence-gate.js';
-import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, FINDING_EFFECTS, INVESTIGATE_SCHEMA, STRUCTURING_INSTRUCTIONS, SWEEP_SCHEMA } from '../ai-analysis/structuring-contract.js';
+import { gateText, opaqueClauseId, opaqueDocumentId, sealModelInput } from '../ai-analysis/privacy-evidence-gate.js';
+import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, FINDING_EFFECTS, INVESTIGATE_SCHEMA, INVESTIGATION_BASE_KINDS, STRUCTURING_INSTRUCTIONS, SWEEP_SCHEMA } from '../ai-analysis/structuring-contract.js';
 import { validateAnswer, validateFinding } from '../../contracts/policy-evidence.js';
 import { classifyClause } from './clauses.js';
 import { RETRIEVAL_TUNING, shapeQuery } from './retrieval-terms.js';
@@ -17,7 +17,7 @@ export const INVESTIGATION_LIMITS = Object.freeze({
 });
 const GATE_MAX_BYTES = 16_000;
 const OVERRIDE_EFFECTS = new Set(['limits', 'excludes', 'waives', 'overrides', 'conditions']);
-const BASE_KINDS = Object.freeze(['benefit', 'limit', 'waiting_period', 'exclusion', 'definition', 'endorsement', 'schedule_fact', 'condition']);
+const BASE_KINDS = INVESTIGATION_BASE_KINDS;
 
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
 
@@ -30,27 +30,31 @@ export function checklistFor(question) {
 
 const bytes = value => Buffer.byteLength(typeof value === 'string' ? value : JSON.stringify(value), 'utf8');
 
-function gate(text, knownIdentifiers) {
-  try {
-    const gated = sanitizeEvidenceTextForStorage(text, { maxBytes: GATE_MAX_BYTES, knownIdentifiers });
-    return gated.truncated ? null : gated.text;
-  } catch { return null; }
+// A GatedText, or null when the gate refuses or would truncate (never raw text).
+function gateValue(text, knownIdentifiers, regate = false) {
+  try { return gateText(text, { maxBytes: GATE_MAX_BYTES, knownIdentifiers, regate }); } catch { return null; }
 }
 
-/** Gates every clause; a refused or truncated clause is withheld, never sent raw. */
+/**
+ * Gates every clause; a refused or truncated clause is withheld, never sent raw. A sent clause keeps `text` and `title`
+ * as plain gated strings and carries the branded values (`gated`, `gatedTitle`) the model-input seal requires.
+ */
 export function gateClauses(clauses, knownIdentifiers) {
   const sent = [];
   const withheld = [];
   for (const clause of clauses) {
-    const text = gate(clause.text, knownIdentifiers);
-    if (text === null) { withheld.push(clause.clauseId); continue; }
-    const title = clause.sectionPath?.[0] ? gate(clause.sectionPath[0], knownIdentifiers) : null;
-    sent.push({ ...clause, text, title });
+    const gated = gateValue(clause.text, knownIdentifiers);
+    if (gated === null) { withheld.push(clause.clauseId); continue; }
+    const gatedTitle = clause.sectionPath?.[0] ? gateValue(clause.sectionPath[0], knownIdentifiers) : null;
+    sent.push({ ...clause, text: gated.text, title: gatedTitle?.text ?? null, gated, gatedTitle });
   }
   return { sent, withheld };
 }
 
-const toWire = clause => ({ clause_id: clause.clauseId, document_id: clause.documentId, page: clause.page, kind: clause.kind, title: clause.title, text: clause.text });
+// Clause and document ids reach the model only as opaque aliases (ADR 0017 Phase 3). The plain wire form measures the
+// payload; the draft form carries the branded text for sealModelInput. Both have the same strings.
+const toWire = clause => ({ clause_id: opaqueClauseId(clause.clauseId), document_id: opaqueDocumentId(clause.documentId), page: clause.page, kind: clause.kind, title: clause.title, text: clause.text });
+const toDraft = clause => ({ ...toWire(clause), title: clause.gatedTitle ?? null, text: clause.gated });
 // One clause's share of the serialised payload, including the comma that separates it in the clauses array.
 const clauseBytes = clause => bytes(toWire(clause)) + 1;
 
@@ -408,8 +412,9 @@ export async function investigate({ question, clauses, search = () => [], call, 
   if (typeof question !== 'string' || !question.trim() || question.length > caps.maxQuestionChars) fail('INVESTIGATION_INPUT_INVALID', 'A question of reasonable length is required.');
   if (!Array.isArray(clauses) || clauses.length === 0) fail('INVESTIGATION_NO_EVIDENCE', 'The case has no stored policy clauses.');
   if (typeof call !== 'function' || typeof consentCheck !== 'function') fail('INVESTIGATION_INPUT_INVALID', 'A provider call and a consent check are required.');
-  const gatedQuestion = gate(question.trim(), knownIdentifiers);
-  if (gatedQuestion === null) fail('INVESTIGATION_QUESTION_REFUSED', 'The question contains restricted data and cannot be sent.');
+  const questionValue = gateValue(question.trim(), knownIdentifiers);
+  if (questionValue === null) fail('INVESTIGATION_QUESTION_REFUSED', 'The question contains restricted data and cannot be sent.');
+  const gatedQuestion = questionValue.text;
   const checklist = checklistFor(question);
   // Kinds are recomputed from the stored text so clauses stored under an older classifier route like new ones.
   const current = clauses.map(clause => ({ ...clause, kind: classifyClause(clause.sectionPath?.[0] ?? null, clause.text) }));
@@ -417,37 +422,60 @@ export async function investigate({ question, clauses, search = () => [], call, 
   if (!sent.length) fail('INVESTIGATION_NO_EVIDENCE', 'No clause could be released to the model.');
   // The fallback FTS search returns stored (ungated) clauses; only clauses that passed the gate are used.
   const questions = [{ text: gatedQuestion }];
+  const questionDraft = [{ text: questionValue }];
+  // Model citations come back as aliases; this maps each alias to the stored clause id. An alias that is not here
+  // names no clause and is rejected by the finding validator.
+  const aliasToClause = new Map();
+  for (const clause of sent) {
+    const alias = opaqueClauseId(clause.clauseId);
+    if (aliasToClause.has(alias)) fail('INVESTIGATION_INPUT_INVALID', 'Clause ids must be unique.');
+    aliasToClause.set(alias, clause.clauseId);
+  }
+  // Only an alias the provider was shown names a clause. A stored id, or anything else, maps to a value no clause has, so
+  // the validator drops the finding.
+  const fromAliases = ids => (Array.isArray(ids) ? ids.map(id => (typeof id === 'string' && aliasToClause.has(id) ? aliasToClause.get(id) : '\u0000not-an-alias')) : ids);
   const firstBudget = clauseBudget({ questions, checklist, clauses: [] }, caps);
   if (firstBudget <= 0) fail('INVESTIGATION_BUDGET_EXCEEDED', 'The question leaves no room for policy text within the model input limit.');
   const context = await selectContext({ gated: sent, checklist, question: gatedQuestion, search, budgetBytes: firstBudget, maxClauses: caps.maxClausesPerCall });
   const clauseText = new Map(context.clauses.map(clause => [clause.clauseId, clause.text]));
   const wire = context.clauses.map(toWire);
   const usage = { inputTokens: 0, outputTokens: 0, calls: 0 };
-  const run = async (task, payload, schema) => {
+  // `draft` carries the branded text; it is sealed (ADR 0017) before consent is checked or anything is reserved.
+  const run = async (task, payload, draft, schema) => {
     // Budgets are derived so this never fires; if it does, it is a defect, reported as such rather than as a provider error.
     if (bytes(payload) > caps.maxInputBytes) fail('INVESTIGATION_BUDGET_EXCEEDED', 'The model payload exceeds the input limit.');
+    const input = sealModelInput(task, { payload: draft });
     await consentCheck();
     usage.calls += 1;
-    const response = await call({ task, system: STRUCTURING_INSTRUCTIONS[task], payload, schema });
+    const response = await call({ task, system: STRUCTURING_INSTRUCTIONS[task], input, schema });
     usage.inputTokens += Number.isFinite(response?.usage?.inputTokens) ? response.usage.inputTokens : 0;
     usage.outputTokens += Number.isFinite(response?.usage?.outputTokens) ? response.usage.outputTokens : 0;
     return response?.json;
   };
 
   // Coded budget defects and consent refusals keep their codes; everything else is a provider failure.
-  const passThrough = error => error?.code === 'INVESTIGATION_BUDGET_EXCEEDED' || /^CONSENT_/.test(String(error?.code));
+  const passThrough = error => error?.code === 'INVESTIGATION_BUDGET_EXCEEDED' || error?.code === 'MODEL_INPUT_NOT_ALLOWED' || /^CONSENT_/.test(String(error?.code));
   // Nothing retrieved means nothing to ask: no model call, and the answer says the evidence is insufficient.
   let first = { findings: [] };
   if (wire.length) {
     try {
-      first = await run(EVIDENCE_INVESTIGATE_TASK, { questions, checklist, clauses: wire }, INVESTIGATE_SCHEMA);
+      first = await run(EVIDENCE_INVESTIGATE_TASK, { questions, checklist, clauses: wire }, { questions: questionDraft, checklist, clauses: context.clauses.map(toDraft) }, INVESTIGATE_SCHEMA);
     } catch (error) {
       if (passThrough(error)) throw error;
       throw Object.assign(new Error('The investigation could not be completed.'), { code: 'INVESTIGATION_PROVIDER_ERROR', statusCode: 502, cause: error?.code });
     }
   }
   if (!first || typeof first !== 'object' || !Array.isArray(first.findings)) fail('INVESTIGATION_MALFORMED', 'The investigation returned an unusable response.');
-  const parsed = parseFindings(first, clauseText, caps);
+  const parsed = parseFindings({ ...first, findings: first.findings.map(item => (item && typeof item === 'object' ? { ...item, clause_ids: fromAliases(item.clause_ids) } : item)) }, clauseText, caps);
+
+  // The subject is model-written free text (the quote is checked against the clause, the subject is not), and it is copied into the
+  // answer. Gate it like any other model-written string (ADR 0017 T3); a subject the gate refuses becomes empty.
+  const gatedSubject = value => {
+    if (!value) return '';
+    const gated = gateValue(value, knownIdentifiers, true);
+    return gated ? gated.text : '';
+  };
+  parsed.findings = parsed.findings.map(finding => ({ ...finding, subject: gatedSubject(finding.subject) }));
 
   // Mandatory override sweep. A failed sweep never hides the first pass: it is reported as an unknown.
   let overrides = [];
@@ -457,19 +485,34 @@ export async function investigate({ question, clauses, search = () => [], call, 
   let sweepOverBudget = false;
   if (parsed.findings.length) {
     try {
-      const sweepFindings = parsed.findings.map(finding => ({ finding_id: finding.findingId, subject: finding.subject, quote: finding.quote, clause_ids: finding.clauseIds }));
+      // The model wrote each finding's subject and quote, so both are gated again before the sweep (ADR 0017 T3). A finding
+      // the gate refuses is left out of the sweep and counted as rejected; it is never sent raw.
+      const sweepFindings = [];
+      const sweepDraftFindings = [];
+      const shown = [];
+      for (const finding of parsed.findings) {
+        const subject = gateValue(finding.subject || 'unspecified', knownIdentifiers, true);
+        const quote = gateValue(finding.quote, knownIdentifiers, true);
+        if (!subject || !quote) { sweepRejected += 1; continue; }
+        const clauseIds = finding.clauseIds.map(opaqueClauseId);
+        sweepFindings.push({ finding_id: finding.findingId, subject: subject.text, quote: quote.text, clause_ids: clauseIds });
+        sweepDraftFindings.push({ finding_id: finding.findingId, subject, quote, clause_ids: clauseIds });
+        shown.push(finding);
+      }
+      if (!sweepFindings.length) throw Object.assign(new Error('No finding can be swept.'), { code: 'SWEEP_NOT_RUN' });
       const sweepBudget = clauseBudget({ questions, findings: sweepFindings, clauses: [] }, caps);
-      sweepContext = await selectSweepContext({ context, gated: sent, findings: parsed.findings, search, budgetBytes: sweepBudget, maxClauses: caps.maxClausesPerCall });
+      // Only the findings the sweep is shown pick its context and can be named as override targets.
+      sweepContext = await selectSweepContext({ context, gated: sent, findings: shown, search, budgetBytes: sweepBudget, maxClauses: caps.maxClausesPerCall });
       const sweepText = new Map(sweepContext.clauses.map(clause => [clause.clauseId, clause.text]));
       const sweepPayload = { questions, findings: sweepFindings, clauses: sweepContext.clauses.map(toWire) };
       // Cited clauses are never dropped, so findings that cite more than fits make the sweep impossible: it is skipped
       // and reported as not completed rather than failing the whole question.
       sweepOverBudget = bytes(sweepPayload) > caps.maxInputBytes || sweepPayload.clauses.length > caps.maxClausesPerCall;
-      const second = sweepOverBudget ? null : await run(EVIDENCE_SWEEP_TASK, sweepPayload, SWEEP_SCHEMA);
+      const second = sweepOverBudget ? null : await run(EVIDENCE_SWEEP_TASK, sweepPayload, { questions: questionDraft, findings: sweepDraftFindings, clauses: sweepContext.clauses.map(toDraft) }, SWEEP_SCHEMA);
       if (second && Array.isArray(second.overrides)) {
-        const result = parseOverrides(second, sweepText, new Set(parsed.findings.map(finding => finding.findingId)), caps);
-        overrides = result.overrides;
-        sweepRejected = result.rejected;
+        const result = parseOverrides({ ...second, overrides: second.overrides.map(item => (item && typeof item === 'object' ? { ...item, clause_ids: fromAliases(item.clause_ids) } : item)) }, sweepText, new Set(shown.map(finding => finding.findingId)), caps);
+        overrides = result.overrides.map(override => ({ ...override, subject: gatedSubject(override.subject) }));
+        sweepRejected += result.rejected;
         sweepCompleted = true;
         for (const override of overrides) {
           for (const target of override.targets) parsed.findings.find(finding => finding.findingId === target)?.overrides.push(...override.clauseIds);

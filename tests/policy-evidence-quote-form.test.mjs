@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { investigate } from '../src/features/policy-evidence/index.js';
+import { opaqueClauseId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 
 // Synthetic. The model only sees privacy-gated text, so a quote can carry placeholders such as <NAME_1>. Such a quote
 // cites the right clause and page but is not verbatim source text; every source says which form it is.
@@ -11,14 +12,14 @@ const clauses = [
 ];
 
 test('sources are marked verbatim or privacy-redacted against the stored text', async () => {
-  const call = Object.assign(async ({ payload }) => {
+  const call = Object.assign(async ({ input: { payload } }) => {
     if (!payload.findings) {
-      const schedule = payload.clauses.find(clause => clause.clause_id === 'd:p1');
+      const schedule = payload.clauses.find(clause => clause.clause_id === opaqueClauseId('d:p1'));
       const quote = schedule.text.match(/Policy issued to .* for the period/)[0];
       assert.ok(/<NAME_\d+>/.test(quote), 'the model sees a placeholder, never the name');
       return { json: { findings: [
-        { clause_ids: ['d:p1'], quote, subject: 'policy period', conditions: [], exceptions: [] },
-        { clause_ids: ['d:p2'], quote: 'Room rent is capped at 1% of sum insured per day.', subject: 'room rent', conditions: [], exceptions: [] },
+        { clause_ids: [opaqueClauseId('d:p1')], quote, subject: 'policy period', conditions: [], exceptions: [] },
+        { clause_ids: [opaqueClauseId('d:p2')], quote: 'Room rent is capped at 1% of sum insured per day.', subject: 'room rent', conditions: [], exceptions: [] },
       ] } };
     }
     return { json: { overrides: [] } };
@@ -31,7 +32,7 @@ test('sources are marked verbatim or privacy-redacted against the stored text', 
 });
 
 test('reading the whole policy never reports a clause kind as absent; the retrieved path says what was not read', async () => {
-  const call = Object.assign(async ({ payload }) => (payload.findings ? { json: { overrides: [] } } : { json: { findings: [] } }), { maxInputBytes: 64_000 });
+  const call = Object.assign(async ({ input: { payload } }) => (payload.findings ? { json: { overrides: [] } } : { json: { findings: [] } }), { maxInputBytes: 64_000 });
   const whole = await investigate({ question: 'Is there a room rent limit?', clauses, call, consentCheck: async () => {} });
   assert.equal(whole.answer.contextPath, 'whole_policy');
   assert.ok(!whole.answer.unknowns.some(line => /clause was found/.test(line)), 'classifier labels are hints, not evidence of absence');

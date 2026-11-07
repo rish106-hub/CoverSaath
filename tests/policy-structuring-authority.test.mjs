@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { POLICY_STRUCTURING_VERSION, documentGrantCheck, structurePolicyDocument } from '../src/features/policy-structuring/index.js';
+import { viaWire } from './support/reconcile-wire.mjs';
 import { parameterAt as at, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 
@@ -21,7 +22,7 @@ const pages = [{ page: 2, blocks: [
 
 // Extracts two contradicting PED readings and selects the first in reconciliation.
 function selectingGemini(events = []) {
-  const call = async ({ payload }) => {
+  const call = viaWire(async ({ input: { payload } }) => {
     events.push(payload.chunks ? 'extract' : 'reconcile');
     if (!payload.chunks) {
       return { json: { conflicts: [{ group_id: 'registry:f.ped_waiting_period|policy', quotes: ['after 3 Years', 'waiting period: 36 months'], selected_quote: 'after 3 Years' }] }, usage: {} };
@@ -33,7 +34,7 @@ function selectingGemini(events = []) {
       }
     }
     return { json: { items }, usage: { inputTokens: 50, outputTokens: 10 } };
-  };
+  });
   return call;
 }
 

@@ -62,7 +62,8 @@ async function main() {
   if (command === 'digitise') return digitise(positional[0]);
   const { draftCandidates, extractFields, flattenBlock } = await import('../src/features/ai-analysis/eval-extractor.js');
   const { scoreFields, adjudicationMetrics } = await import('../src/features/ai-analysis/eval-scorer.js');
-  const { selectDisputes, adjudicate, createGeminiCaller, ADJUDICATOR_LIMITS } = await import('../src/features/ai-analysis/field-adjudicator.js');
+  const { selectDisputes, adjudicate, ADJUDICATOR_LIMITS } = await import('../src/features/ai-analysis/field-adjudicator.js');
+  const { createGeminiEvalCaller } = await import('./lib/gemini-eval-caller.mjs');
   const pages = rawPages(await readJson('sarvam-raw.json'));
   if (command === 'draft') {
     await writeJson('golden.draft.json', draftCandidates(pages));
@@ -83,7 +84,7 @@ async function main() {
       .filter(([, truth]) => truth.confirmed === true && truth.value !== 'unknown' && truth.page).map(([field, truth]) => [field, truth.page]));
     const disputes = selectDisputes(extracted, pageHints);
     if (disputes.length && consent.has('gemini')) {
-      const call = createGeminiCaller({ apiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY, model: process.env.LLM_MODEL });
+      const call = createGeminiEvalCaller({ apiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_GENERATIVE_AI_API_KEY, model: process.env.LLM_MODEL });
       adjudication = await adjudicate({ disputes, pages, call, grant: { recipient: 'gemini', documentId: 'eval-real-policy', granted: true } });
       after = scoreFields(golden, extracted, adjudication.results, { grounded });
     }

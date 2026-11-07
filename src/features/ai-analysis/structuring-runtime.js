@@ -7,8 +7,8 @@ import { isStructuringTask } from './structuring-contract.js';
 // Live model calls for policy structuring (ADR 0006) go only through the model gateway: task allowlist,
 // prompt contract, input cap, budget reservation per call, concurrency, timeout and output shape check.
 // Every call is preceded by the caller's document-specific consent check; a refused check is marked as
-// never dispatched so its reservation is released. Chunk text reaches this module already privacy-gated
-// (policy-structuring gateChunks); quotes are checked against that gated text by the validator.
+// never dispatched so its reservation is released. Chunk text reaches this module as a sealed model input
+// (sealModelInput, ADR 0017): the gateway refuses anything else. Quotes are checked against the gated text by the validator.
 export const STRUCTURING_GATEWAY_LIMITS = Object.freeze({
   maxInputBytes: 64_000, maxOutputTokens: 16_000, timeoutMs: 240_000, maxConcurrentCalls: 1,
 });
@@ -27,7 +27,7 @@ function readStructuringConfig(env) {
 }
 
 /**
- * Returns createCall({ consentCheck, onCall }) => call({ task, payload }) => { json, usage, costUsd }, with
+ * Returns createCall({ consentCheck, onCall }) => call({ task, input }) => { json, usage, costUsd }, with
  * call.maxInputBytes set to the gateway input limit.
  * One run budget per createCall (one document run); the project budget is shared with live analysis when
  * `projectBudget` (createSharedProjectBudget) is passed, else one per factory. onCall receives
@@ -62,11 +62,12 @@ export function createStructuringModelCallFactory({ env = process.env, loadModel
       },
     });
     // maxInputBytes is stated on the call so callers derive their payload budgets from the real gateway limit.
-    return Object.assign(async ({ task, payload }) => {
+    return Object.assign(async ({ task, input }) => {
       if (!isStructuringTask(task)) throw Object.assign(new Error('Not a structuring task.'), { code: 'unsupported_ai_task' });
       let result;
       try {
-        result = await gateway.execute({ task, input: { payload }, reservationUsd: config.reservationUsd });
+        // `input` is the sealed { payload } envelope from sealModelInput, passed on untouched: re-wrapping would drop the seal.
+        result = await gateway.execute({ task, input, reservationUsd: config.reservationUsd });
       } catch (error) {
         onCall({ task, outcome: error?.code ?? 'error', inputTokens: 0, outputTokens: 0, costUsd: 0 });
         throw error;
