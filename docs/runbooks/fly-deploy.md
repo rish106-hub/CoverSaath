@@ -25,7 +25,7 @@ Two different URLs, two different jobs.
 
 | Job | Connection | Why |
 | --- | --- | --- |
-| API runtime (`DATABASE_URL` Fly secret) | Supabase transaction pooler, port **6543**, user `postgres.<project_ref>` | Two machines with a pool of 10 each (`pool.js` default) stay well under direct-connection limits. |
+| API runtime (`DATABASE_URL` Fly secret) | Supabase transaction pooler, port **6543**, user `postgres.<project_ref>` | Two machines with a pool of 10 each (`pool.js` default) is 20 pooler client connections; the Supabase plan limit is not measured. |
 | Migrations (`npm run db:init`) | Direct host, or the session pooler on port **5432** | `migrate.js` takes a session-level `pg_advisory_lock` and runs `set_config(..., false)`; both break on a transaction pooler. The direct host is IPv6-only (ADR 0011 D3), so from an IPv4-only machine use the session pooler. |
 
 Why the runtime may use the transaction pooler: every runtime advisory lock is `pg_advisory_xact_lock` inside a transaction (`locks.js`, `db.js`), the pool uses no named prepared statements, no `LISTEN` or `NOTIFY`, and no session state. ADR 0011 D3 required session mode because of earlier lock designs; the migration lock is now the only session lock.
@@ -55,7 +55,14 @@ Aim: prove the Dockerfile, the two-machine behaviour, the pooler and the k6 scri
 1. Separate Fly app `knowvia-api-staging`, region `sin`, a copy of `fly.toml` kept outside git or as `fly.staging.toml` with only these differences: `app`, `PUBLIC_HOSTS = "knowvia-api-staging.fly.dev"`, the health check `Host` header, and `API_RATE_LIMIT_PER_MINUTE = "6000"` so the 50 requests per second k6 run is not answered 429 (default is 600 per client address).
 2. Separate database, never the production one: a second database in the same Supabase project created like `coversaath` (libc `C` collation, ADR 0011 D2), for example `coversaath_staging`, or a separate project. Same project is cheaper but shares pooler and compute with production; separate is safer. Owner chooses.
 3. Separate secrets, generated fresh: `DATABASE_URL`, `DOCUMENT_ENCRYPTION_KEY_BASE64`, `DATA_ENCRYPTION_KEY_BASE64`, `KNOWVIA_BOOTSTRAP_TOKEN`. Never reuse a production secret.
-4. Deploy staging with the command below (`-a knowvia-api-staging -c fly.staging.toml`), run Verify, run the pooler probe, then the k6 script (`scripts/load/k6-50rps.js`, Q2).
+4. Deploy staging, then run Verify, the pooler probe and the k6 script (`scripts/load/k6-50rps.js`, Q2). Staging deploy command (never the production one below):
+
+   ```bash
+   # OWNER APPROVAL REQUIRED (creates two machines; a paid resource)
+   ~/.fly/bin/fly deploy --remote-only -a knowvia-api-staging -c fly.staging.toml
+   ```
+
+   Run Verify, run the pooler probe, then the k6 script (`scripts/load/k6-50rps.js`, Q2).
 5. Destroy or stop staging machines when idle: `fly apps destroy` is destructive and needs explicit approval.
 
 ## Deploy
@@ -65,7 +72,7 @@ Aim: prove the Dockerfile, the two-machine behaviour, the pooler and the k6 scri
 ~/.fly/bin/fly deploy --remote-only -a knowvia-api
 ```
 
-Do not pass `--ha=false`: the first deploy then creates one machine and `min_machines_running = 2` is not met. Check `fly status` afterwards for exactly two machines in `sin`. On a 5xx from the Fly API wait about 60 s and retry once. If it fails the same way twice, stop and report the error. Edit the Dockerfile or `fly.toml` only for a build failure, and only after reading the exact error.
+Do not pass `--ha=false`: the first deploy then creates one machine and `min_machines_running = 2` is not met. `min_machines_running` does not create machines while auto-stop is off, so check `fly status` afterwards for exactly two machines in `sin`, and run `fly scale count 2 -a knowvia-api` (OWNER APPROVAL REQUIRED) if there are fewer. On a 5xx from the Fly API wait about 60 s and retry once. If it fails the same way twice, stop and report the error. Edit the Dockerfile or `fly.toml` only for a build failure, and only after reading the exact error.
 
 The remaining step to change region: no machine exists, so nothing moves. The `syd` volume `coversaath_data` is unused; removing it (`fly volumes destroy`, **OWNER APPROVAL REQUIRED**, destructive) is optional and should wait until document upload to the database has been verified.
 

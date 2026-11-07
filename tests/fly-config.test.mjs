@@ -71,10 +71,11 @@ test('fly.toml [env] is accepted by the server configuration reader', () => {
   assert.equal(config.network.trustFlyClientIp, true);
 });
 
-test('fly.toml carries no secret values', () => {
+test('fly.toml carries no secret-looking names or values', () => {
   const env = sec('env');
-  for (const name of Object.keys(env)) {
+  for (const [name, value] of Object.entries(env)) {
     assert.doesNotMatch(name, /TOKEN|KEY|SECRET|PASSWORD|DATABASE_URL|API_KEY/);
+    assert.doesNotMatch(String(value), /^(?:sk-|AIza|ghp_|xox[bp]-|AKIA|eyJ)/);
   }
   assert.doesNotMatch(text, /postgres(?:ql)?:\/\//);
 });

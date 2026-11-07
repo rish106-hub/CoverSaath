@@ -68,7 +68,7 @@ Point the staging app (`knowvia-api-staging`, `sin`) at the Mumbai database. Run
 ### 7. Cutover (OWNER APPROVAL REQUIRED)
 
 1. Announce a short window. Synthetic data only, so no user impact is expected.
-2. Set the production secret to the Mumbai URL: `fly secrets set DATABASE_URL='<Mumbai transaction pooler URL>' -a knowvia-api`. Fly restarts the machines; with two machines a rolling restart keeps one serving.
+2. Set the production secret to the Mumbai URL: `fly secrets set DATABASE_URL='<Mumbai transaction pooler URL>' -a knowvia-api`. A rolling restart would serve from two databases at once (one machine still writing Sydney, another writing Mumbai), so freeze first: `fly scale count 0 -a knowvia-api` (OWNER APPROVAL REQUIRED), set the secret, then `fly scale count 2 -a knowvia-api` so both machines start on the Mumbai URL together.
 3. Verify: `fly status` shows both machines passing, `GET /api/v1/ready` is 200, then one synthetic household create and read.
 4. Update the website BFF and any other consumer that connects to the database directly, in its own repository (none should; the backend is the only writer to `public`).
 
@@ -82,7 +82,7 @@ Only after the owner is satisfied and a backup exists. Pause the Sydney project 
 
 ## Rollback
 
-- Before Step 9: set `DATABASE_URL` back to the Sydney pooler URL with `fly secrets set` (**OWNER APPROVAL REQUIRED**). Writes made on Mumbai after cutover are not copied back; with synthetic data that loss is accepted, with real data it is not, so with real data take a dump of Mumbai first and plan a reverse restore.
+- Before Step 9: stop both machines the same way as in Step 7, set `DATABASE_URL` back to the Sydney pooler URL with `fly secrets set` (**OWNER APPROVAL REQUIRED**). Writes made on Mumbai after cutover are not copied back; with synthetic data that loss is accepted, with real data it is not, so with real data take a dump of Mumbai first and plan a reverse restore.
 - After Step 9 the Sydney data is gone unless a backup was kept; restore from the backup into a new Sydney project.
 
 ## Open questions for the owner

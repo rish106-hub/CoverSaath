@@ -12,7 +12,8 @@ primary_region = "sin"
   PORT = "8080"
   # Document bytes are encrypted in the application and stored in PostgreSQL (ADR 0013 D8). No volume, no file path.
   DOCUMENT_STORAGE_BACKEND = "database"
-  # Two machines share state through the database, not through process memory.
+  # The request limit and the model spend cap are shared through the database across both machines (per-process state
+  # remains: see the [[vm]] note).
   RATE_LIMIT_BACKEND = "database"
   MODEL_BUDGET_BACKEND = "database"
   # Scanner off: every upload stays quarantined. To enable it, use a 2 GB machine and set
@@ -25,7 +26,8 @@ primary_region = "sin"
 # Secrets (never in this file): fly secrets set DATABASE_URL=... DOCUMENT_ENCRYPTION_KEY_BASE64=... DATA_ENCRYPTION_KEY_BASE64=...
 # KNOWVIA_BOOTSTRAP_TOKEN=..., KNOWVIA_IDENTITY_TOKEN=... and IDENTITY_ISSUERS=... (website sign-in), and, when those features
 # are enabled, GEMINI_API_KEY, SARVAM_API_KEY.
-# DATABASE_URL is the Supabase transaction pooler (port 6543) for the API. Migrations (npm run db:init) must use the direct
+# DATABASE_URL is the Supabase transaction pooler (port 6543) for the API, but use port 6543 only after
+# scripts/probe-pooler.mjs reports ok: true (not yet run); until then use the session pooler (port 5432). Migrations (npm run db:init) must use the direct
 # host or the session pooler (port 5432), never this URL. See docs/runbooks/fly-deploy.md.
 
 [http_service]
@@ -33,6 +35,8 @@ primary_region = "sin"
   force_https = true
   auto_stop_machines = "off"
   auto_start_machines = false
+  # min_machines_running does not create machines while auto-stop is off: scale to two explicitly and check `fly status`
+  # after every deploy (docs/runbooks/fly-deploy.md).
   min_machines_running = 2
 
   # Fly proxy load-balances and sheds load above the hard limit (free, built in). Limits are per machine.
@@ -51,7 +55,7 @@ primary_region = "sin"
       Host = "knowvia-api.fly.dev"
 
 # Two machines in sin. Run claims for the evidence service and the document scan worker are still per process (duplicate
-# work, not corruption); the request limit, the model spend cap and document bytes are in PostgreSQL. clamd needs about
+# work and, for the evidence service, a second paid model call on another machine; the request limit, the model spend cap and document bytes are in PostgreSQL. clamd needs about
 # 1 GB or more of RAM on its own, so it stays off on this size.
 [[vm]]
   size = "shared-cpu-1x"
