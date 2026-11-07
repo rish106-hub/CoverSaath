@@ -1,0 +1,77 @@
+// Fails when a PostgreSQL migration is edited, renamed or deleted instead of appended.
+// Usage: node scripts/check-migrations-append-only.mjs --base <git-ref> [--repo <dir>]
+// An all-zero base (GitHub push that has no previous commit) skips the check.
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
+
+const migrationsDir = 'src/backend/database/postgres/migrations';
+// Non-empty alphanumeric segments joined by single underscores (no `030_.sql`, no `030__x.sql`).
+const newMigration = /^(\d{3})_[a-z0-9]+(?:_[a-z0-9]+)*\.sql$/;
+const zeroSha = /^0{40}$/;
+// A base is a full commit SHA or a plain ref name. It must not start with '-' (option injection) or hold '..' / spaces.
+const safeBase = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
+
+function git(repo, args) {
+  return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+function argValue(name, fallback) {
+  const index = process.argv.indexOf(name);
+  return index > 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
+}
+
+const repo = resolve(argValue('--repo', '.'));
+const base = argValue('--base', '');
+
+if (!base) {
+  process.stderr.write('migration check: --base <git-ref> is required.\n');
+  process.exit(2);
+}
+if (!safeBase.test(base) || base.includes('..')) {
+  process.stderr.write('migration check: --base must be a commit SHA or a plain ref name.\n');
+  process.exit(2);
+}
+if (zeroSha.test(base)) {
+  process.stdout.write('migration check: no previous commit (all-zero base); nothing to compare.\n');
+  process.exit(0);
+}
+
+try {
+  git(repo, ['rev-parse', '--verify', '--quiet', `${base}^{commit}`]);
+} catch {
+  process.stderr.write(`migration check: base ref "${base}" not found. Fetch full history (fetch-depth: 0).\n`);
+  process.exit(2);
+}
+
+// A new migration must sort after every migration already in the base tree, or it could run before schema it depends on.
+let highestBase = 0;
+for (const line of git(repo, ['ls-tree', '--name-only', base, `${migrationsDir}/`]).split('\n').filter(Boolean)) {
+  const match = line.slice(migrationsDir.length + 1).match(/^(\d{3})_/);
+  if (match) highestBase = Math.max(highestBase, Number(match[1]));
+}
+
+// Endpoints are compared directly (not merge-base): after a force-push the previous tip may not be an ancestor of HEAD.
+// --no-renames turns a rename into a delete plus an add, so a moved migration is caught as a delete.
+const diff = git(repo, ['diff', '--no-renames', '--name-status', base, 'HEAD', '--', migrationsDir]);
+const violations = [];
+let appended = 0;
+
+for (const line of diff.split('\n').filter(Boolean)) {
+  const [status, path] = line.split('\t');
+  const name = path.slice(migrationsDir.length + 1);
+  if (status !== 'A') {
+    violations.push(`${path}: ${status === 'M' ? 'edited' : status === 'D' ? 'deleted' : `changed (${status})`}. Migrations are append-only; add a new file instead.`);
+  } else if (!newMigration.test(name)) {
+    violations.push(`${path}: new migration must be named NNN_snake_case.sql.`);
+  } else if (Number(name.slice(0, 3)) <= highestBase) {
+    violations.push(`${path}: new migration number must be higher than the highest existing migration (${String(highestBase).padStart(3, '0')}).`);
+  } else {
+    appended += 1;
+  }
+}
+
+if (violations.length > 0) {
+  process.stderr.write(`migration check failed:\n${violations.map(v => `  ${v}`).join('\n')}\n`);
+  process.exit(1);
+}
+process.stdout.write(`migration check passed: ${appended} migration(s) appended, none edited.\n`);
