@@ -53,3 +53,20 @@ export function requestEventName({ status, method, route }) {
   if (status >= 500) return 'server_error';
   return JOURNEY_EVENTS.get(`${method} ${route}`) ?? 'http_request';
 }
+
+// Route words that may appear literally in a LOGGED route. routeTemplate() above keeps any short lowercase slug, which
+// would let an unknown path such as /api/v1/asha-sharma be written to a log; the log uses this closed set instead and
+// shows everything else as :x. tests/logging-leak-review.test.mjs fails if the routes file gains a word missing here.
+export const KNOWN_ROUTE_SEGMENTS = new Set([
+  'api', 'v1', 'access', 'analysis-runs', 'audit-events', 'cases', 'catalogue-reviewers', 'consents', 'coverage-preview',
+  'curated-products', 'current', 'decision-catalogue', 'deletion-inventory', 'documents', 'fields', 'health', 'households',
+  'identity-sessions', 'integrations', 'jobs', 'live', 'members', 'ocr-jobs', 'onboarding', 'passages', 'permissions',
+  'overview', 'places', 'policies', 'preferences', 'profile-answers', 'questions', 'read-facts', 'ready', 'refresh', 'reviews', 'revoke',
+  'runs', 'scenarios', 'sessions', 'source-pack', 'structuring-runs', 'tasks', 'transitions',
+]);
+
+export function knownRouteTemplate(pathname) {
+  const template = routeTemplate(pathname);
+  if (template === '/other') return template;
+  return template.split('/').map(segment => (segment === '' || segment === ':id' || KNOWN_ROUTE_SEGMENTS.has(segment) ? segment : ':x')).join('/');
+}
