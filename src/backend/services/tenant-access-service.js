@@ -1,4 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { openCaseRecord, openWorkflowRun, openWorkflowTask } from '../security/sealed-records.js';
 
 function fail(code, message, statusCode) {
   throw Object.assign(new Error(message), { code, statusCode });
@@ -17,8 +19,10 @@ function sameSecret(left, right) {
 }
 
 export class TenantAccessService {
-  constructor(database, { auth, households, consents, env = {} }) {
+  constructor(database, { auth, households, consents, env = {}, ...options }) {
     this.database = database;
+    // Case, run and task rows carry sealed columns (ADR 0013 addendum D2); they are opened here so callers see plain values.
+    this.crypto = resolveColumnCrypto(options);
     this.auth = auth;
     this.households = households;
     this.consents = consents;
@@ -64,29 +68,32 @@ export class TenantAccessService {
   }
 
   async requireCase(principal, caseId, options) {
+    // options.tolerateUnreadable: erasure routes, which never use the stated estimate, may proceed when it cannot be decrypted.
     // A case erased through the deletion ledger is gone for every reader (S3).
-    const caseRecord = await this.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (
+    const row = await this.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (
       SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId]);
-    if (!caseRecord) fail('CASE_NOT_FOUND', 'Case not found.', 404);
-    await this.requireHousehold(principal, caseRecord.household_id, options);
-    return caseRecord;
+    if (!row) fail('CASE_NOT_FOUND', 'Case not found.', 404);
+    // The household check comes before anything is decrypted, so a caller outside the household gets not-found whatever the
+    // stored amount looks like (no existence oracle through a decryption error).
+    await this.requireHousehold(principal, row.household_id, options);
+    return openCaseRecord(this.crypto, row, { tolerateUnreadable: options?.tolerateUnreadable === true });
   }
 
   async requireRun(principal, runId) {
-    const record = await this.database.one(`SELECT workflow_runs.*, service_cases.household_id
+    const record = openWorkflowRun(this.crypto, await this.database.one(`SELECT workflow_runs.*, service_cases.household_id
       FROM workflow_runs JOIN service_cases ON service_cases.id = workflow_runs.case_id
-      WHERE workflow_runs.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [runId]);
+      WHERE workflow_runs.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [runId]));
     if (!record) fail('JOB_NOT_FOUND', 'Job not found.', 404);
     await this.requireHousehold(principal, record.household_id);
     return record;
   }
 
   async requireTask(principal, taskId) {
-    const record = await this.database.one(`SELECT workflow_tasks.*, service_cases.household_id
+    const record = openWorkflowTask(this.crypto, await this.database.one(`SELECT workflow_tasks.*, service_cases.household_id
       FROM workflow_tasks
       JOIN workflow_runs ON workflow_runs.id = workflow_tasks.workflow_run_id
       JOIN service_cases ON service_cases.id = workflow_runs.case_id
-      WHERE workflow_tasks.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [taskId]);
+      WHERE workflow_tasks.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [taskId]));
     if (!record) fail('TASK_NOT_FOUND', 'Task not found.', 404);
     await this.requireHousehold(principal, record.household_id);
     return record;

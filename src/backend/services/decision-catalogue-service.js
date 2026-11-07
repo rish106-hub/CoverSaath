@@ -1,4 +1,6 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { openCaseRecord } from '../security/sealed-records.js';
 import { CONTRACTUAL_SOURCES, isIsoDate } from '../../features/decision-catalogue/contracts.js';
 import { CURATED_OFFICIAL_SOURCES, CURATED_PRODUCT_RECORDS, loadCuratedProducts, answerToCandidates, associateDocuments, buildDecisionCatalogue, typedTwins } from '../../features/decision-catalogue/index.js';
 
@@ -146,7 +148,10 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   }
 
   const activeHousehold = async householdId => (await services.households?.getHousehold(householdId))?.status === 'active';
-  const readCase = async caseId => (typeof caseId === 'string' ? services.access.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId]) : null);
+  // The stated estimate is sealed (ADR 0013 addendum D2): the row is opened here, so callers never see the ciphertext.
+  // A case erased through the deletion ledger is not readable (S3).
+  const caseCrypto = services.columnCrypto ?? resolveColumnCrypto({});
+  const readCase = async caseId => (typeof caseId === 'string' ? openCaseRecord(caseCrypto, await services.access.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId])) ?? null : null);
 
   /** Who may review: a household confirmer who still holds a household role, or (when enabled) an independent reviewer. */
   async function reviewerCase(principal, caseId) {

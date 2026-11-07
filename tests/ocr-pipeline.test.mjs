@@ -8,6 +8,7 @@ import {
 } from '../src/features/input/index.js';
 import { createSarvamOcrProvider } from '../src/integrations/index.js';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { plainRows } from './support/sealed.mjs';
 
 const pgOptions = postgresTestOptions();
 
@@ -96,7 +97,7 @@ test('fixture OCR persists versioned structured output and page provenance with 
   assert.equal(provider.health().calls, 0);
   assert.equal(provider.health().accuracyMeasured, false);
 
-  const stored = await context.database.prepare('SELECT * FROM source_pages ORDER BY page_number').all();
+  const stored = await plainRows(context.database, 'source_pages', 'ORDER BY page_number');
   assert.equal(stored.length, 2);
   assert.equal(stored[0].output_contract_version, 'knowvia.ocr.v1');
   assert.equal(JSON.parse(stored[0].provenance_json).contentSha256, SHA);

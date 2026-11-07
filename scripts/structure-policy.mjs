@@ -156,11 +156,11 @@ async function readStored({ database, services }) {
   const records = [];
   for (const record of await services.coverageParameters.listForRun('run-local', { limit: 500 })) {
     if (record.resolutionState === 'unknown') continue;
-    const observations = await database.many(`SELECT value_json, page FROM coverage_parameter_observations
-      WHERE parameter_record_id = ? AND redacted_at IS NULL ORDER BY created_at, id`, [record.id]);
+    // Observation values are sealed at rest (ADR 0013 addendum D2): read them through the repository, which opens them.
+    const observations = (await services.coverageParameters.listObservations(record.id, { limit: 500 })).filter(row => row.redactedAt === null);
     records.push({
       key: record.parameterKey, state: record.resolutionState, reason: record.resolutionReasonCode,
-      observations: observations.map(row => ({ value: JSON.parse(row.value_json), page: row.page })),
+      observations: observations.map(row => ({ value: row.value, page: row.page })),
     });
   }
   const stored = await services.policyStructuring.getStructuringRun({ householdId: 'household-local', workflowRunId: 'run-local', documentId: 'document-local' });

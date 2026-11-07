@@ -94,6 +94,8 @@ export const requiredColumns = Object.freeze({
   document_uploads: ['logical_document_id', 'source_version', 'scan_attempts', 'next_scan_at'],
   evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status', 'redacted_at', 'redaction_reason_code'],
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],
+  service_cases: ['stated_estimate_ciphertext'],
+  idempotency_keys: ['document_index'],
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],
   ocr_jobs: ['contract_version', 'authorization_json', 'result_json', 'result_digest', 'updated_at'],
   source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json', 'blocks_json', 'blocks_upgrade_job_id'],

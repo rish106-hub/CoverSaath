@@ -7,6 +7,7 @@ import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
+import { plainRow } from './support/sealed.mjs';
 
 const pgOptions = postgresTestOptions();
 
@@ -285,7 +286,7 @@ test('v9 review: the stored question and answer carry the gated question, never 
   const question = `What is the room rent limit for ${OWNER_NAME}, mobile 98765 43210?`;
   const answered = await ask(app, s, { question });
   assert.equal(answered.status, 201, JSON.stringify(answered.data));
-  const stored = await app.database.prepare('SELECT question, answer_json FROM policy_answers').get();
+  const stored = await plainRow(app.database, 'policy_answers');
   for (const text of [stored.question, stored.answer_json, JSON.stringify(answered.data)]) {
     assert.ok(!text.includes('98765') && !text.includes('43210') && !text.includes('Ishaan'), text);
   }

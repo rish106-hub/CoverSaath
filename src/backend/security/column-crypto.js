@@ -188,9 +188,18 @@ export function createColumnCrypto(config = readDataEncryptionConfig()) {
     return createHmac('sha256', blindKey).update(`${label}\0${value}`).digest('hex');
   };
 
+  // The same index under every key of the ring (current and previous). An erasure matches on all of them, so a record whose index
+  // was made under a previous key is still found between a key change and the end of --rotate.
+  const blindIndexes = (label, value) => {
+    if (typeof label !== 'string' || !label || typeof value !== 'string') throw coded('COLUMN_ENCRYPTION_CONTEXT_INVALID', 'A blind index needs a label and text.');
+    return [...new Set([...keys.values()].map(key => createHmac('sha256', createHmac('sha256', key).update('cover-saath blind index v1').digest())
+      .update(`${label}\0${value}`).digest('hex')))];
+  };
+
   return Object.freeze({
     keyId: currentId,
     blindIndex,
+    blindIndexes,
     developmentKey: config.developmentKey === true,
     allowLegacyPlaintext,
     seal,

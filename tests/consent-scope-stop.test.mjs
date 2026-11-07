@@ -9,6 +9,7 @@ import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis
 import { createPersistentCoverageAnalysisService } from '../src/features/coverage-analysis/index.js';
 import { liveEnv, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 import { postgresTestOptions } from './support/pg.mjs';
+import { plainRow } from './support/sealed.mjs';
 
 const pgOptions = postgresTestOptions();
 const MARKER = 'wombat heron synthetic';
@@ -69,7 +70,7 @@ test('a source withdrawn mid-run stops the run as revoked and erases its derived
   assert.deepEqual(stopAudits, [{ reason: 'source_consent_not_current', reasonCode: 'SOURCE_CONSENT_NOT_CURRENT' }]);
 
   // Derived data is erased: the excerpt is gone from the run input and no observation was committed.
-  const run = await app.database.one('SELECT input_json FROM workflow_runs WHERE id = ?', [job.id]);
+  const run = await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [job.id]);
   assert.ok(!run.input_json.includes(MARKER), 'run input keeps no excerpt');
   assert.ok(JSON.parse(run.input_json).sourcePages.every(page => page.redacted !== undefined && page.text === undefined), 'every source page is redacted');
   assert.equal((await app.database.one('SELECT count(*) AS count FROM coverage_parameter_observations WHERE value_json IS NOT NULL')).count, 0);

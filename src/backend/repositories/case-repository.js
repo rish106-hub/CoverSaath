@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { caseCapacityLock, householdLock } from '../database/postgres/locks.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { openCaseRecord, sealStatedEstimate } from '../security/sealed-records.js';
 import { assertCaseTransition, emergencyInstruction } from '../state/case-state-machine.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
@@ -26,7 +28,11 @@ function staleRevision() {
 // Async PostgreSQL repository (S3.2). Each write and its audit event commit in one transaction
 // that takes the household advisory lock first (lock order, design section 3).
 export class CaseRepository {
-  constructor(database, { clock = () => new Date(), audit } = {}) { this.database = database; this.clock = clock; this.audit = audit; }
+  constructor(database, { clock = () => new Date(), audit, ...options } = {}) {
+    this.database = database; this.clock = clock; this.audit = audit;
+    // The user-stated estimate is sealed (ADR 0013 addendum D2); records come back with stated_estimate_minor as before.
+    this.crypto = resolveColumnCrypto(options);
+  }
 
   async create({ id: caseId = id('case'), householdId, subjectMemberId = null, openedByAdultId, triggerType, statedEstimateMinor = null, currency = null, maxActiveCases = null }) {
     if (maxActiveCases !== null && (!Number.isSafeInteger(maxActiveCases) || maxActiveCases < 0)) {
@@ -44,9 +50,9 @@ export class CaseRepository {
       }
       await this.database.run(`INSERT INTO service_cases
         (id, household_id, subject_member_id, opened_by_adult_id, trigger_type, status, emergency_mode,
-         stated_estimate_minor, currency, created_at, updated_at)
+         stated_estimate_ciphertext, currency, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?)`,
-      [caseId, householdId, subjectMemberId, openedByAdultId, triggerType, emergency, statedEstimateMinor, currency, at, at]);
+      [caseId, householdId, subjectMemberId, openedByAdultId, triggerType, emergency, sealStatedEstimate(this.crypto, caseId, statedEstimateMinor), currency, at, at]);
       await this.audit?.append({ householdId, caseId, actorType: 'adult_user', actorId: openedByAdultId, action: 'case.created', resourceType: 'case', resourceId: caseId, payload: { triggerType, emergencyInstruction: emergencyInstruction(triggerType) } });
       return this.get(caseId);
     }, { locks: [...(maxActiveCases !== null ? [caseCapacityLock(CASE_CAPACITY_KEY)] : []), householdLock(householdId)] });
@@ -54,7 +60,7 @@ export class CaseRepository {
 
   async get(caseId) {
     // A case erased through the deletion ledger is gone for every reader (S3).
-    const record = await this.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId]);
+    const record = openCaseRecord(this.crypto, await this.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId]));
     return record ? { ...record, revision: record.updated_at, emergencyInstruction: emergencyInstruction(record.trigger_type) } : null;
   }
 
