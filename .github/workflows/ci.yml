@@ -71,7 +71,7 @@ jobs:
     permissions:
       contents: read
     env:
-      # PR: base branch tip. Push: previous tip (all zeros on a first push, which the script skips).
+      # PR: base branch tip. Push: previous tip (all zeros on a first push, which the step skips).
       BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - name: Check out repository with full history
@@ -96,7 +96,13 @@ jobs:
           git diff --check "$BASE_SHA" HEAD
 
       - name: Require migrations to be appended, never edited
-        run: node scripts/check-migrations-append-only.mjs --base "$BASE_SHA"
+        run: |
+          set -euo pipefail
+          if [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            echo "No previous commit; skipping migration check."
+            exit 0
+          fi
+          node scripts/check-migrations-append-only.mjs --base "$BASE_SHA"
 
   secret-scan:
     name: secret-scan
@@ -140,7 +146,9 @@ jobs:
             cp .gitleaks.toml "$config"
             echo "No base config; using the checked-out .gitleaks.toml."
           fi
-          gitleaks git --config "$config" --redact --no-banner --exit-code 1 .
+          # Scan the history reachable from this checkout. Without --log-opts gitleaks walks every ref, so an unrelated
+          # branch fetched by fetch-depth 0 could fail this job.
+          gitleaks git --config "$config" --redact --no-banner --exit-code 1 --log-opts="HEAD" .
 
   node25-permissions:
     name: node25-permissions

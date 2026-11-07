@@ -113,12 +113,37 @@ test('changes outside the migrations directory are ignored', () => {
   }
 });
 
-test('an all-zero base skips the check', () => {
+test('an all-zero base is an unknown ref and fails closed (the workflow skips that case itself)', () => {
   const { repo } = makeRepo();
   try {
     const result = run(repo, '0'.repeat(40));
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /not found/);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('two new migrations with the same number fail', () => {
+  const { repo, base } = makeRepo();
+  try {
+    writeFileSync(join(repo, dirName, '003_one.sql'), 'create table c (id int);\n');
+    writeFileSync(join(repo, dirName, '003_two.sql'), 'create table d (id int);\n');
+    commitAll(repo, 'dup');
+    const result = run(repo, base);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /another new migration already uses number 003/);
+  } finally {
+    rmSync(repo, { recursive: true, force: true });
+  }
+});
+
+test('a ref name containing + is accepted', () => {
+  const { repo } = makeRepo();
+  try {
+    git(repo, ['branch', 'release+candidate']);
+    const result = run(repo, 'release+candidate');
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /nothing to compare/);
   } finally {
     rmSync(repo, { recursive: true, force: true });
   }
@@ -141,7 +166,7 @@ test('a malformed base value fails closed before git runs', () => {
     for (const bad of ['--output=/tmp/x', 'main..HEAD', 'a b', 'x;rm -rf', '$(id)', '-n']) {
       const result = run(repo, bad);
       assert.equal(result.status, 2, `${bad}: ${result.stderr}`);
-      assert.match(result.stderr, /commit SHA or a plain ref name/);
+      assert.match(result.stderr, /commit SHA or a valid git ref name/);
     }
   } finally {
     rmSync(repo, { recursive: true, force: true });
