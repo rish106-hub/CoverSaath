@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { types } from 'node:util';
+import { MODEL_INPUT_FIELDS } from './model-input-fields.js';
 
 // v2: Unicode normalisation before scanning, per-request indexed placeholders
 // (no value-derived hashes), shape-based payment-card detection, a per-call scan
@@ -11,7 +13,11 @@ import { createHash } from 'node:crypto';
 // closed on ID-shaped cells and whole-cell dates. Headers split over two rows are
 // read as one header; tab-separated tables (two or more tab rows) are refused as
 // restricted, because collapsing tabs loses the cell boundaries a header needs.
-export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v9';
+// v10: ABHA numbers (14 digits, labelled or not) become <HEALTH_ID_n>; confusable letters OCR puts inside an Aadhaar, ABHA or
+// phone number are folded to digits before the rules run; combining marks after a digit and a hyphen at a line end inside a
+// number are normalised; labelled Aadhaar and phone values accept every Unicode hyphen and one line break; a PAN split by
+// spaces or dashes is found.
+export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v10';
 export const EVIDENCE_DATA_CLASSES = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
 // The consent-scope recipient that names the live model provider. A document's
 // derive scope must name this exact recipient before its evidence may be sent
@@ -76,6 +82,15 @@ export function opaqueSourceId(rawId) {
   return opaqueId('source', boundedText(rawId, 200, 'source id'));
 }
 
+// Opaque aliases for stored clause and document record ids (ADR 0017 Phase 3). A model never sees the raw database id;
+// code maps a cited alias back to the clause it names, deterministically and without a lookup table in the payload.
+export function opaqueClauseId(rawId) {
+  return opaqueId('clause', boundedText(rawId, 200, 'clause id'));
+}
+export function opaqueDocumentId(rawId) {
+  return opaqueId('doc', boundedText(rawId, 200, 'document id'));
+}
+
 // ---------------------------------------------------------------------------
 // Normalisation and bounding
 // ---------------------------------------------------------------------------
@@ -108,9 +123,14 @@ function asciiDigit(character) {
 const LINE_BREAK = /\r\n?|[\u2028\u2029]/g;
 const INLINE_WHITESPACE_RUN = /[^\S\n]+/g;
 
+// A combining mark right after a digit is OCR noise on that digit. A hyphen at a line end between two digits is a
+// hyphenated number, so the break goes ("97331-\n34546" reads as "97331-34546").
+const MARK_AFTER_DIGIT = /(?<=\p{N})\p{M}+/gu;
+const HYPHENATED_NUMBER = /(?<=\p{N})([‐-―-])\n(?=\p{N})/gu;
+
 function normalizeText(value) {
-  return value.normalize('NFKC').replace(FORMAT_CHARACTERS, '').replace(NON_ASCII_DIGIT, asciiDigit)
-    .replace(LINE_BREAK, '\n').replace(INLINE_WHITESPACE_RUN, ' ');
+  return value.normalize('NFKC').replace(FORMAT_CHARACTERS, '').replace(MARK_AFTER_DIGIT, '').replace(NON_ASCII_DIGIT, asciiDigit)
+    .replace(LINE_BREAK, '\n').replace(INLINE_WHITESPACE_RUN, ' ').replace(HYPHENATED_NUMBER, '$1');
 }
 
 // A tab-separated table is two or more lines that each hold two or more
@@ -414,7 +434,7 @@ function identifierRuns(text) {
   const runs = new Set();
   for (const match of text.matchAll(DIGIT_RUN)) {
     const groups = match[2].split(GROUP_SEPARATOR);
-    if (isIndianPhone(match[1], groups) || isGovernmentId(groups)) runs.add(match[0]);
+    if (isIndianPhone(match[1], groups) || isGovernmentId(groups) || isAbhaNumber(groups)) runs.add(match[0]);
   }
   return runs;
 }
@@ -466,7 +486,7 @@ const LABEL_END = '(?![\\p{L}\\p{M}\\p{N}_])';
 // Label separators: ':' / '=' (optionally spaced), or a spaced dash.
 const STRICT_SEP = '(\\s*[:=]\\s*|\\s+[\\u2013\\u2014-]+\\s*|\\s*[\\u2013\\u2014-]+\\s+)';
 // Also accepts bare whitespace or '#', for labels whose value has a strict shape.
-const LOOSE_SEP = '(\\s*[:=#]\\s*|\\s*[\\u2013\\u2014-]+\\s*|\\s+)';
+const LOOSE_SEP = '(\\s*[:=#]\\s*|\\s*[\\u2010-\\u2015-]+\\s*|\\s+)';
 // A capitalised personal name of one to four words; single-letter initials may
 // carry a full stop ("A. K. Example").
 const NAME_WORD = "(?:\\p{Lu}\\.|\\p{Lu}[\\p{L}\\p{M}'\\u2019-]*)";
@@ -479,16 +499,17 @@ const ADDRESS_CLAUSE = '((?:[^\\n;.<]|\\.(?=\\S)|(?<=(?:^|[\\s,(])\\p{L}{1,3})\\
 // Health values keep internal full stops ("E11.9") but stop at a sentence end.
 const HEALTH_VALUE = '((?:[^\\n,;.<]|\\.(?=\\S)){2,120})';
 const HONORIFIC_ONLY = /^(?:mrs|mr|ms|miss|mx|dr|shri|sri|smt|kumari)$/i;
-const DATE_VALUE ='(\\d{1,4}[\\/. \\u2013\\u2014-]\\d{1,2}[\\/. \\u2013\\u2014-]\\d{1,4}|\\d{1,2}(?:st|nd|rd|th)?[ -]*\\p{L}{3,9}\\.?,?[ -]*\\d{2,4}|\\p{L}{3,9}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{2,4})';
-const PHONE_VALUE = '(\\+?\\d(?:[\\d()\\u2013\\u2014-]|[ ._/\\u00b7](?=[\\d(]))*\\d)';
+const DATE_VALUE ='(\\d{1,4}[\\/. \\u00b7\\u2010-\\u2015-]\\d{1,2}[\\/. \\u00b7\\u2010-\\u2015-]\\d{1,4}|\\d{1,2}(?:st|nd|rd|th)?[ -]*\\p{L}{3,9}\\.?,?[ -]*\\d{2,4}|\\p{L}{3,9}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?,?\\s+\\d{2,4})';
+const PHONE_VALUE = '(\\+?\\d(?:[\\d()\\u2010-\\u2015-]|[ ._/\\u00b7\\n]{1,6}(?=[\\d(]))*\\d)';
 const ID_VALUE = '([A-Za-z0-9][A-Za-z0-9\\/._\\u2013\\u2014-]{0,39})';
-const GOV_ID_VALUE = '([\\dXx*\\u2022](?:[\\dXx*\\u2022]|[ .\\u2013\\u2014-](?=[\\dXx*\\u2022])){7,24})';
+const GOV_ID_VALUE = '([\\dXx*\\u2022](?:[\\dXx*\\u2022]|[ .\\n/_\\u00b7\\u2010-\\u2015-](?=[\\dXx*\\u2022])){7,24})';
 
 const labelPattern = (labels, separator, value, flags = 'giu') => new RegExp(`${LABEL_START}(${labels})${LABEL_END}${separator}${value}`, flags);
 
 const NUMBER_SUFFIX = '(?:\\s*(?:no\\.?|number|num|#))?';
 const PHONE_LABELS = `(?:mobile|mob|cell\\s*phone|cell|telephone|tel|phone|ph|contact|whatsapp|landline|मोबाइल|फ़ोन|फोन)${NUMBER_SUFFIX}`;
 const EMAIL_LABELS = '(?:e-?mail(?:\\s*(?:id|address))?|ईमेल)';
+const ABHA_LABELS = `(?:abha(?:\\s+(?:number|no\\.?|num|id))?|health\\s+id(?:\\s+(?:number|no\\.?))?|आभा(?:\\s*(?:नंबर|संख्या))?)`;
 const GOV_ID_LABELS = `(?:aadhaa?r|adhaar|uidai|uid|vid|virtual\\s+id|आधार)(?:\\s*card)?${NUMBER_SUFFIX}`;
 const DOB_LABELS = '(?:date\\s+of\\s+birth|d\\.?\\s?o\\.?\\s?b\\.?|birth\\s*date|born(?:\\s+on)?|जन्म\\s*तिथि)';
 const DRIVING_LICENCE_LABELS = `(?:driving\\s+licen[cs]e|driver'?s?\\s+licen[cs]e|d\\.?\\s?l\\.?)${NUMBER_SUFFIX}`;
@@ -649,6 +670,14 @@ function clauseNameSpan(value) {
 
 const notPolicyWording = value => (startsWithPolicyWording(value) ? null : value);
 const accepting = test => value => (test(value) ? value : null);
+// A labelled number may continue on the next line only while it is still short of its length; once the first line holds
+// the full number, anything after the break is not part of it.
+const numberOnFirstLine = full => value => {
+  const head = value.split('\n')[0];
+  const countOf = text => text.match(/[\dXx*•]/g)?.length ?? 0;
+  const kept = countOf(head) >= full ? head : value;
+  return countOf(kept) >= 8 ? kept : null;
+};
 const minDigits = count => accepting(value => (value.match(/\d/g)?.length ?? 0) >= count);
 
 const PASSPORT_VALUE = '([A-Za-z0-9](?:[ -]?[A-Za-z0-9]){5,9})(?![A-Za-z0-9])';
@@ -666,8 +695,12 @@ const LABELLED_RULES = Object.freeze([
   [labelPattern(HEALTH_LABELS, STRICT_SEP, HEALTH_VALUE), 'HEALTH', 'SENSITIVE_HEALTH_CONDITION', notPolicyWording],
   [labelPattern(HEALTH_PHRASES, '(\\s+)', HEALTH_VALUE), 'HEALTH', 'SENSITIVE_HEALTH_CONDITION', notPolicyWording],
   [labelPattern(EMAIL_LABELS, STRICT_SEP, '([^\\s,;<>]{3,100})'), 'EMAIL', 'DIRECT_IDENTIFIER_EMAIL'],
-  [labelPattern(PHONE_LABELS, LOOSE_SEP, PHONE_VALUE), 'PHONE', 'DIRECT_IDENTIFIER_PHONE', minDigits(5)],
-  [labelPattern(GOV_ID_LABELS, LOOSE_SEP, GOV_ID_VALUE), 'GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID', accepting(value => (value.match(/[\dXx*•]/g)?.length ?? 0) >= 8)],
+  // "PAN: ABCPE 1234 F", "Permanent Account Number ABCPE-1234-F": a labelled PAN may be split by spaces or dashes.
+  [labelPattern('pan(?:\\s+(?:no\\.?|number|card(?:\\s+no\\.?)?))?|permanent\\s+account\\s+number', LOOSE_SEP, '([A-Za-z]{5}[ -]?\\d{4}[ -]?[A-Za-z])(?![A-Za-z0-9])'), 'PAN', 'DIRECT_IDENTIFIER_PAN', accepting(value => /^[A-Za-z]{3}[PCHFATBLJGpchfatbljg]/.test(value))],
+  [labelPattern(PHONE_LABELS, LOOSE_SEP, PHONE_VALUE), 'PHONE', 'DIRECT_IDENTIFIER_PHONE', value => { const head = value.split('\n')[0]; const kept = (head.match(/\d/g)?.length ?? 0) >= 10 ? head : value; return (kept.match(/\d/g)?.length ?? 0) >= 5 ? kept : null; }],
+  [labelPattern(GOV_ID_LABELS, LOOSE_SEP, GOV_ID_VALUE), 'GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID', numberOnFirstLine(12)],
+  // ABHA number (14 digits). "ABHA address" is a handle, not digits, so this value shape never matches it.
+  [labelPattern(ABHA_LABELS, LOOSE_SEP, GOV_ID_VALUE), 'HEALTH_ID', 'DIRECT_IDENTIFIER_HEALTH_ID', numberOnFirstLine(14)],
   [labelPattern(DOB_LABELS, LOOSE_SEP, DATE_VALUE), 'DOB', 'DIRECT_IDENTIFIER_DATE_OF_BIRTH'],
   [labelPattern(DOB_LABELS, STRICT_SEP, '([^\\n,;<]{2,40})'), 'DOB', 'DIRECT_IDENTIFIER_DATE_OF_BIRTH', accepting(value => !startsWithPolicyWording(value) && !RANGE_OR_DURATION.test(value))],
   [labelPattern('pin\\s?code|pin|postal\\s+code|zip\\s?code', LOOSE_SEP, '([1-9](?:[ -]?\\d){5})(?![\\d]|[,.]\\d)'), 'ADDRESS', 'DIRECT_IDENTIFIER_ADDRESS'],
@@ -688,13 +721,17 @@ const UNLABELLED_RULES = Object.freeze([
   [/(?<![A-Za-z0-9])[A-Za-z][1-9][0-9]{6}(?![A-Za-z0-9])/g, 'PASSPORT', 'DIRECT_IDENTIFIER_PASSPORT'],
   [/(?<![A-Za-z0-9])[A-Za-z]{4}0[A-Za-z0-9]{6}(?![A-Za-z0-9])/g, 'BANK', 'DIRECT_IDENTIFIER_BANK'],
   [/(?<![A-Za-z0-9])[A-Za-z]{5}\d{4}[A-Za-z](?![A-Za-z0-9])/g, 'PAN', 'DIRECT_IDENTIFIER_PAN'],
+  // A PAN split by spaces or dashes, with no label. Individual PANs only (fourth letter P), upper case, and the digit group is not a
+  // year: "Table 1500 A shows limits", "Total 2024 B" and "Annex 2026 B" are wording, not identifiers. A labelled split PAN is
+  // caught by the PAN label rule instead, which accepts every holder type.
+  [/(?<![A-Za-z0-9])[A-Z]{3}P[A-Z][ -](?!(?:19|20)\d{2}(?!\d))\d{4}[ -]?[A-Z](?![A-Za-z0-9])|(?<![A-Za-z0-9])[A-Z]{3}P[A-Z](?!(?:19|20)\d{2}(?!\d))\d{4}[ -][A-Z](?![A-Za-z0-9])/g, 'PAN', 'DIRECT_IDENTIFIER_PAN'],
   [/(?<![A-Za-z0-9])[A-Za-z]{3}\d{7}(?![A-Za-z0-9])/g, 'GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID'],
   // Indian driving licence: state code, RTO, issue year, seven digits.
   [/(?<![A-Za-z0-9])[A-Za-z]{2}[ -]?\d{2}[ -]?(?:19|20)\d{2}[ -]?\d{7}(?![A-Za-z0-9])/g, 'GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID'],
 ]);
 
 // "+91 (987) 654-3210", "(022) 2345 6789": a bracketed group inside a phone.
-const BRACKETED_PHONE = /(?<!\p{N})(\+?)((?:\d{1,4}[ .‐-―-]?)?\(\d{1,5}\)[ .‐-―-]?\d+(?:[ .‐-―-]\d+){0,3})(?![\p{N}])/gu;
+const BRACKETED_PHONE = /(?<!\p{N})(\+?)((?:\d{1,4}[ .‐-―/·-]?)?\(\d{1,5}\)[ .‐-―/·-]?\d+(?:[ .‐-―/·-]\d+){0,3})(?![\p{N}])/gu;
 
 const isMultipleOfFive = group => Number(group) % 5 === 0;
 const isConsecutiveRun = numbers => numbers.every((number, index) => index === 0 || number === numbers[index - 1] + 1)
@@ -717,6 +754,34 @@ function isIndianPhone(plus, groups) {
   // landline (STD code + number) also qualifies.
   if (!(/^[6-9]/.test(digits) || (prefixed && /^[1-9]/.test(digits)))) return false;
   return prefixed || !allRoundAmounts(rest);
+}
+
+// ABHA number: 14 digits in any grouping of one to five groups of at least two digits (contiguous, 2-4-4-4, 4-4-4-2, 5-5-4, ...).
+// Years in ascending order and round amounts are not identifiers. A labelled 14-digit policy or receipt number is caught first
+// by its own label rule and keeps the IDENTIFIER placeholder.
+function isAbhaNumber(groups) {
+  if (groups.length > 5 || groups.some(group => group.length < 2)) return false;
+  const digits = groups.join('');
+  if (digits.length !== 14) return false;
+  return /^[1-9]/.test(digits) && !isAscendingYears(groups) && !allRoundAmounts(groups);
+}
+
+// OCR writes O, I, l, S, B or Z where a digit stood. Inside a number that is mostly digits (at least 70%) and that
+// reads as a phone, Aadhaar, virtual id or ABHA number once the letters are folded back, the folded digits replace
+// the run before the rules run, so the whole number is minimised and no fragment of it survives.
+const CONFUSABLE_DIGIT = { O: '0', o: '0', I: '1', l: '1', S: '5', B: '8', Z: '2' };
+const CONFUSABLE_RUN = /(?<![\p{L}\p{N}])(?=[0-9OoIlSBZ])[0-9OoIlSBZ]+(?:[ .\-\u2010-\u2015/·\n][0-9OoIlSBZ]+){0,7}(?![\p{L}\p{N}])/gu;
+
+function foldConfusableDigits(value) {
+  return value.replace(CONFUSABLE_RUN, run => {
+    if (!/[OoIlSBZ]/.test(run)) return run;
+    const body = run.replace(/[ .\-\u2010-\u2015/·\n]/g, '');
+    const digitCount = (body.match(/[0-9]/g) ?? []).length;
+    if (body.length < 8 || digitCount / body.length < 0.7) return run;
+    const folded = run.replace(/[OoIlSBZ]/g, letter => CONFUSABLE_DIGIT[letter]);
+    const groups = folded.split(GROUP_SEPARATOR);
+    return isIndianPhone('', groups) || isGovernmentId(groups) || isAbhaNumber(groups) ? folded : run;
+  });
 }
 
 // Aadhaar (12 digits, never starting 0/1) and its 16-digit virtual id, printed
@@ -1165,7 +1230,7 @@ function redactKnownIdentifiers(text, known, swap) {
 }
 
 function redactSegment(segment, state, reasons) {
-  let value = segment;
+  let value = foldConfusableDigits(segment);
   const swap = (kind, reason, raw) => { reasons.add(reason); return placeholder(state, kind, raw); };
   const replace = (pattern, kind, reason) => {
     value = value.replace(pattern, match => swap(kind, reason, match));
@@ -1215,6 +1280,7 @@ function redactSegment(segment, state, reasons) {
     const groups = run.split(GROUP_SEPARATOR);
     if (isIndianPhone(plus, groups)) return swap('PHONE', 'DIRECT_IDENTIFIER_PHONE', match);
     if (isGovernmentId(groups)) return `${plus}${swap('GOV_ID', 'DIRECT_IDENTIFIER_GOVERNMENT_ID', run)}`;
+    if (isAbhaNumber(groups)) return `${plus}${swap('HEALTH_ID', 'DIRECT_IDENTIFIER_HEALTH_ID', run)}`;
     const labels = runLabels(whole, offset);
     if (cardClassification(groups, labels.card, labels.identifier)) return `${plus}${swap('NUMBER', 'DIRECT_IDENTIFIER_CARD_LIKE_NUMBER', run)}`;
     return match;
@@ -1595,6 +1661,172 @@ export function sanitizeEvidenceTextForStorage(text, { maxBytes = 4_000, knownId
   });
 }
 
+// ---------------------------------------------------------------------------
+// Branded gate output and sealed model input (ADR 0017)
+// ---------------------------------------------------------------------------
+
+// The authority for "this text went through the gate" is membership in a module-private WeakSet, not the symbol:
+// Object.getOwnPropertySymbols exposes a symbol, so it could be copied onto a forged object. Nothing outside this
+// module can add to GATED_TEXT, SEALED or SAFE_STRUCTURED, and none of them is exported.
+const GATED = Symbol('coversaath.gatedText');
+const GATED_TEXT = new WeakSet();
+const SEALED = new WeakMap();
+const SAFE_STRUCTURED = new WeakSet();
+
+// Ceiling on a serialised sealed input: the gate's existing total ceiling.
+export const MODEL_INPUT_MAX_BYTES = 96_000;
+
+function notAllowed(path, reason) {
+  // The message names the slot path and the rule, never a value or an unexpected key name.
+  throw Object.assign(new Error(`Model input is not allowed at ${path}: ${reason}.`), { code: 'MODEL_INPUT_NOT_ALLOWED', statusCode: 500 });
+}
+
+function mintGated(text, { reasonCodeCount, inputBytes }) {
+  const value = {
+    text,
+    gateVersion: PRIVACY_EVIDENCE_GATE_VERSION,
+    placeholderCount: (text.match(PLACEHOLDER) ?? []).length,
+    reasonCodeCount,
+    inputBytes,
+    outputBytes: Buffer.byteLength(text, 'utf8'),
+  };
+  Object.defineProperty(value, GATED, { value: PRIVACY_EVIDENCE_GATE_VERSION, enumerable: false });
+  Object.freeze(value);
+  GATED_TEXT.add(value);
+  return value;
+}
+
+/**
+ * Gates one text value for a model slot and returns it as a frozen GatedText. Adds no redaction rule: it wraps
+ * sanitizeEvidenceTextForStorage. Fails closed: a refusal throws, and text that would be truncated throws
+ * EVIDENCE_SOURCE_LIMIT instead of being cut (a cut can split an identifier into an unrecognisable fragment).
+ * `regate: true` is only for text read back from storage or derived from gated text.
+ */
+export function gateText(text, { maxBytes = PRIVACY_GATE_SCAN_CAP_BYTES, knownIdentifiers, regate = false } = {}) {
+  const gated = sanitizeEvidenceTextForStorage(text, { maxBytes, knownIdentifiers, regate });
+  if (gated.truncated) fail('EVIDENCE_SOURCE_LIMIT', 'Evidence text exceeds its model byte limit.');
+  return mintGated(gated.text, { reasonCodeCount: gated.reasonCodes.length, inputBytes: Buffer.byteLength(text, 'utf8') });
+}
+
+/** True only for a GatedText minted by this module in this process at the current gate version. */
+export function isGatedText(value) {
+  return value !== null && typeof value === 'object' && GATED_TEXT.has(value)
+    && value[GATED] === PRIVACY_EVIDENCE_GATE_VERSION && Object.isFrozen(value);
+}
+
+function assertPlain(value, path, isArray, ancestors) {
+  if (value === null || typeof value !== 'object') notAllowed(path, isArray ? 'an array is required' : 'an object is required');
+  if (types.isProxy(value)) notAllowed(path, 'a proxy is not allowed');
+  if (isArray ? !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype : Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) {
+    notAllowed(path, isArray ? 'a plain array is required' : 'a plain object is required');
+  }
+  if (ancestors.has(value)) notAllowed(path, 'a cycle is not allowed');
+  if (Reflect.ownKeys(value).some(key => typeof key === 'symbol')) notAllowed(path, 'a symbol key is not allowed');
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (isArray && key === 'length') continue;
+    if (isArray && !(/^(?:0|[1-9]\d*)$/.test(key) && Number(key) < value.length)) notAllowed(path, 'an unexpected array property is present');
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || 'get' in descriptor || 'set' in descriptor) notAllowed(path, 'an accessor property is not allowed');
+  }
+}
+
+function deepFreeze(value) {
+  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.freeze(value);
+    for (const child of Object.values(value)) deepFreeze(child);
+  }
+  return value;
+}
+
+function sealValue(spec, value, path, counts, ancestors) {
+  switch (spec.type) {
+    case 'gated':
+    case 'gated?': {
+      if (spec.type === 'gated?' && value === null) return null;
+      if (!isGatedText(value)) notAllowed(path, 'text did not come from the privacy gate');
+      counts.gatedSlots += 1;
+      counts.placeholders += value.placeholderCount;
+      counts.reasonCodes += value.reasonCodeCount;
+      counts.gatedBytes += value.outputBytes;
+      return value.text;
+    }
+    case 'id':
+      if (typeof value !== 'string' || !spec.pattern.test(value)) notAllowed(path, 'identifier has the wrong shape');
+      return value;
+    case 'int':
+      if (value === null && spec.nullable) return null;
+      if (!Number.isInteger(value) || value < spec.min || value > spec.max) notAllowed(path, 'integer is missing or out of range');
+      return value;
+    case 'enum':
+      if (typeof value !== 'string' || !spec.values.includes(value)) notAllowed(path, 'value is not in the allowed list');
+      return value;
+    case 'static':
+      if (typeof value !== 'string' || !spec.values.includes(value)) notAllowed(path, 'static label is not allowed');
+      return value;
+    case 'structured':
+      // Only the gate's own sanitised upstream may fill this slot.
+      if (!SAFE_STRUCTURED.has(value)) notAllowed(path, 'structured evidence did not come from the privacy gate');
+      return structuredClone(value);
+    case 'array': {
+      assertPlain(value, path, true, ancestors);
+      if (value.length < spec.min || value.length > spec.max) notAllowed(path, 'array length is out of range');
+      ancestors.add(value);
+      const items = [];
+      for (let index = 0; index < value.length; index += 1) items.push(sealValue(spec.of, value[index], `${path}[${index}]`, counts, ancestors));
+      ancestors.delete(value);
+      return items;
+    }
+    case 'object': {
+      assertPlain(value, path, false, ancestors);
+      const wanted = Object.keys(spec.fields);
+      const present = Object.getOwnPropertyNames(value);
+      for (const key of wanted) if (!present.includes(key)) notAllowed(`${path}.${key}`, 'required slot is missing');
+      if (present.length !== wanted.length) notAllowed(path, 'an unexpected slot is present');
+      ancestors.add(value);
+      const output = {};
+      for (const key of wanted) output[key] = sealValue(spec.fields[key], value[key], `${path}.${key}`, counts, ancestors);
+      ancestors.delete(value);
+      if (spec.allowed && !spec.allowed.has(JSON.stringify(output))) notAllowed(path, 'entry is not one the allow-list knows');
+      return output;
+    }
+    default:
+      return notAllowed(path, 'slot type is unknown');
+  }
+}
+
+function sealAgainst(task, draft) {
+  if (typeof task !== 'string' || !Object.hasOwn(MODEL_INPUT_FIELDS, task)) notAllowed('task', 'task has no model input allow-list');
+  const counts = { gatedSlots: 0, placeholders: 0, reasonCodes: 0, gatedBytes: 0 };
+  const sealed = sealValue(MODEL_INPUT_FIELDS[task], draft, 'input', counts, new Set());
+  if (Buffer.byteLength(JSON.stringify(sealed), 'utf8') > MODEL_INPUT_MAX_BYTES) notAllowed('input', 'serialised size is over the ceiling');
+  deepFreeze(sealed);
+  SEALED.set(sealed, Object.freeze({ task, gateVersion: PRIVACY_EVIDENCE_GATE_VERSION, counts: Object.freeze(counts) }));
+  return sealed;
+}
+
+/**
+ * Builds a fresh, deep-frozen model input from a draft, validated against MODEL_INPUT_FIELDS[task]. Every free-text
+ * slot must hold a GatedText; the result is a new object graph, so mutating the draft afterwards changes nothing.
+ * Throws MODEL_INPUT_NOT_ALLOWED (a server defect, never a client error) naming the slot path and never a value.
+ */
+export function sealModelInput(task, draft) {
+  return sealAgainst(task, draft);
+}
+
+/** True only for an object returned by sealModelInput / sanitizeEvidenceForModel for this exact task and the current gate version. */
+export function isSealedModelInput(value, task) {
+  if (value === null || typeof value !== 'object') return false;
+  const entry = SEALED.get(value);
+  return Boolean(entry) && entry.task === task && entry.gateVersion === PRIVACY_EVIDENCE_GATE_VERSION && Object.isFrozen(value);
+}
+
+/** Counts-only gate summary of a sealed input (ADR 0017 D5): no digests, reason codes, placeholder kinds or text. */
+export function sealedInputCounts(value) {
+  const entry = value !== null && typeof value === 'object' ? SEALED.get(value) : undefined;
+  if (!entry) notAllowed('input', 'input is not sealed');
+  return Object.freeze({ gateVersion: entry.gateVersion, ...entry.counts });
+}
+
 function normalizeDataClass(value, label) {
   if (typeof value !== 'string') fail('PRIVACY_GATE_MALFORMED', `${label} needs a data class.`);
   const normalized = value.toUpperCase();
@@ -1750,6 +1982,7 @@ export function sanitizeEvidenceForModel(input, { task = 'model_task', resolvePa
 
   const policyClasses = policies.map(policy => policy.dataClass);
   const safeSources = [];
+  const mintedSources = [];
   const sourceAudit = [];
   const safeIds = new Set();
   for (const source of input.sources) {
@@ -1777,6 +2010,7 @@ export function sanitizeEvidenceForModel(input, { task = 'model_task', resolvePa
     if (safeIds.has(safeId)) fail('PRIVACY_GATE_MALFORMED', 'Evidence source IDs must be unique.');
     safeIds.add(safeId);
     safeSources.push({ id: safeId, version: safeVersion.text, page: source.page, text: excerpt.text, status: source.status });
+    mintedSources.push({ id: safeId, version: mintGated(safeVersion.text, { reasonCodeCount: safeVersion.reasons.length, inputBytes: Buffer.byteLength(version, 'utf8') }), page: source.page, text: mintGated(excerpt.text, { reasonCodeCount: textReasons.size, inputBytes: Buffer.byteLength(source.text, 'utf8') }), status: source.status });
     sourceAudit.push(Object.freeze({ sourceId: safeId, digest: digest(excerpt.text), dataClass, page: source.page, version: safeVersion.text, redactionReasonCodes: [...reasons].sort(), inputBytes: Buffer.byteLength(source.text, 'utf8'), outputBytes: Buffer.byteLength(excerpt.text, 'utf8') }));
   }
 
@@ -1799,6 +2033,17 @@ export function sanitizeEvidenceForModel(input, { task = 'model_task', resolvePa
   };
   const totalBytes = Buffer.byteLength(JSON.stringify(safeInput), 'utf8');
   if (totalBytes > bounded.maxTotalBytes) fail('EVIDENCE_TOTAL_LIMIT', 'Sanitized model evidence exceeds its byte limit.');
+  // A request for a known model task is sealed: free text becomes GatedText minted from the redacted values above,
+  // and the gateway refuses any input that is not sealed. Other task names (probes, tests) keep the plain clone.
+  let sealedInput = null;
+  if (Object.hasOwn(MODEL_INPUT_FIELDS, task)) {
+    SAFE_STRUCTURED.add(safeUpstream);
+    sealedInput = sealAgainst(task, {
+      context: { caseId: safeInput.context.caseId, subjectId: safeInput.context.subjectId, purpose: mintGated(safePurpose.text, { reasonCodeCount: safePurpose.reasons.length, inputBytes: Buffer.byteLength(purpose, 'utf8') }), requestedFields: parameterKeys },
+      sources: mintedSources,
+      upstream: safeUpstream,
+    });
+  }
 
   const registryVersions = [...new Set(policies.map(policy => policy.registryVersion).filter(Boolean))].sort();
   const redactionReasonCodes = [...new Set([
@@ -1817,5 +2062,5 @@ export function sanitizeEvidenceForModel(input, { task = 'model_task', resolvePa
     redactionReasonCodes: Object.freeze(redactionReasonCodes),
     totalOutputBytes: totalBytes,
   });
-  return Object.freeze({ input: structuredClone(safeInput), audit });
+  return Object.freeze({ input: sealedInput ?? structuredClone(safeInput), audit });
 }

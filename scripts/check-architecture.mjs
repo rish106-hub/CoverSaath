@@ -38,6 +38,31 @@ for (const file of sourceFiles) {
   if (/(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:node:)?sqlite['"]/.test(text)) {
     violations.push(`${relative(projectRoot, file)}: node:sqlite is not allowed under src/; PostgreSQL is the runtime.`);
   }
+  // ADR 0017 D7: the model boundary. A model call exists only behind the gateway, and only the two runtimes build one.
+  // Any mention of a factory name counts (a call, an aliased or namespace use, an import or a re-export), so renaming at the
+  // import site does not dodge the rule. The definitions and, for the gateway factory, the module index are the exceptions.
+  const relativeToSource = relative(sourceRoot, file).split(sep).join('/');
+  const gatewayOwners = ['features/ai-analysis/structuring-runtime.js', 'features/ai-analysis/live-coverage-runtime.js'];
+  const factories = [['createModelGateway', 'features/ai-analysis/model-gateway.js', ['features/ai-analysis/index.js']], ['createAiSdkRunner', 'features/ai-analysis/ai-sdk-runner.js', []]];
+  for (const [factory, definition, extra] of factories) {
+    if (new RegExp(`\\b${factory}\\b`).test(text) && ![definition, ...extra, ...gatewayOwners].includes(relativeToSource)) {
+      violations.push(`${relative(projectRoot, file)}: only structuring-runtime.js and live-coverage-runtime.js may call ${factory}( or import or re-export it.`);
+    }
+  }
+  if (!relativeToSource.startsWith('features/ai-analysis/') && /(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:@ai-sdk\/[^'"]*|ai)['"]/.test(text)) {
+    violations.push(`${relative(projectRoot, file)}: provider SDK imports (@ai-sdk/*, ai) belong to src/features/ai-analysis/ only.`);
+  }
+  // A provider request is built under src/integrations only (ADR 0017 review P1-2).
+  if (!relativeToSource.startsWith('integrations/') && /\bfetch\s*\(|generativelanguage\.googleapis\.com/.test(text)) {
+    violations.push(`${relative(projectRoot, file)}: only src/integrations may make a network call or name a provider endpoint.`);
+  }
+  if (/\bisSealedModelInput\b/.test(text) && !['features/ai-analysis/model-gateway.js', 'features/ai-analysis/privacy-evidence-gate.js'].includes(relativeToSource)) {
+    violations.push(`${relative(projectRoot, file)}: isSealedModelInput may be used only by model-gateway.js.`);
+  }
+  const registries = 'GATED_TEXT|SEALED|SAFE_STRUCTURED|GATED';
+  if (new RegExp(`export\\s+(?:const|let|var|function|class)\\s+(?:${registries})\\b|export\\s*\\{[^}]*\\b(?:${registries})\\b|export\\s+default\\s+[^;]*\\b(?:${registries})\\b|module\\.exports[^;]*\\b(?:${registries})\\b`).test(text)) {
+    violations.push(`${relative(projectRoot, file)}: the gate registries (GATED_TEXT, SEALED, SAFE_STRUCTURED, GATED) must not be exported.`);
+  }
   const imports = [...text.matchAll(/(?:from\s+|import\s*\(\s*)['"]([^'"]+)['"]/g)].map(match => match[1]);
   for (const specifier of imports) {
     if (!specifier.startsWith('.')) continue;

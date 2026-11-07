@@ -6,6 +6,7 @@ import { comparisonKey, validateExtractedItems } from './validator.js';
 import {
   EXTRACTION_SCHEMA, STRUCTURING_EXTRACT_TASK, STRUCTURING_INSTRUCTIONS,
 } from '../ai-analysis/structuring-contract.js';
+import { sealModelInput } from '../ai-analysis/privacy-evidence-gate.js';
 
 export { EXTRACTION_SCHEMA };
 
@@ -101,13 +102,17 @@ export async function extractChunks({ chunks, registryVersion, call, consentChec
     if (!stop && (usage.inputTokens + estimateTokens(batch) > caps.maxInputTokensPerDocument || usage.outputTokens >= caps.maxOutputTokensPerDocument)) stop = 'token_cap';
     if (stop) { for (const chunk of batch) outcomes[chunk.id] = { status: 'skipped', reason: stop }; continue; }
     await consentCheck();
-    const payload = {
-      registry: catalog,
-      chunks: batch.map(chunk => ({ chunk_id: chunk.id, page: chunk.page, block_indexes: chunk.blockIndexes, kind: chunk.kind, title: chunk.title, text: chunk.text })),
-    };
+    // The model only ever receives a sealed input: chunk text and titles must be GatedText (ADR 0017). A seal refusal is a
+    // server defect and propagates; it is never reported as a provider error.
+    const input = sealModelInput(STRUCTURING_EXTRACT_TASK, {
+      payload: {
+        registry: catalog,
+        chunks: batch.map(chunk => ({ chunk_id: chunk.id, page: chunk.page, block_indexes: chunk.blockIndexes, kind: chunk.kind, title: chunk.gatedTitle ?? null, text: chunk.gated })),
+      },
+    });
     let response;
     calls += 1;
-    try { response = await call({ task: STRUCTURING_EXTRACT_TASK, system: STRUCTURING_INSTRUCTIONS[STRUCTURING_EXTRACT_TASK], payload, schema: EXTRACTION_SCHEMA }); } catch (error) {
+    try { response = await call({ task: STRUCTURING_EXTRACT_TASK, system: STRUCTURING_INSTRUCTIONS[STRUCTURING_EXTRACT_TASK], input, schema: EXTRACTION_SCHEMA }); } catch (error) {
       for (const chunk of batch) outcomes[chunk.id] = { status: 'skipped', reason: errorReason(error) };
       if (isBudgetStop(error)) stop = 'budget_stop';
       continue;

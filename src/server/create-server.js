@@ -125,7 +125,11 @@ export function createApiServer({
     recordEvent({
       name: 'provider_call', provider: 'google', outcome: /^[a-z0-9_.-]{1,64}$/.test(outcome) ? outcome : 'error',
       code: event.outcome === 'ok' ? null : event.outcome, durationMs: event.latencyMs,
-      payload: { task: event.task, dispatched: event.dispatched, inputTokens: event.inputTokens, outputTokens: event.outputTokens, costMicroUsd: Math.round((event.costUsd ?? 0) * 1_000_000) },
+      payload: {
+        task: event.task, dispatched: event.dispatched, inputTokens: event.inputTokens, outputTokens: event.outputTokens, costMicroUsd: Math.round((event.costUsd ?? 0) * 1_000_000),
+        // Counts-only gate summary (ADR 0017 D5): never digests, reason codes, placeholder kinds or text.
+        gateVersion: event.gateVersion, gatedSlots: event.gatedSlots, placeholders: event.placeholders, reasonCodes: event.reasonCodes, gatedBytes: event.gatedBytes,
+      },
     });
   };
   const liveRegistryFactory = createGeminiCoverageRegistryFactory({

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { INVESTIGATION_LIMITS, buildClauses, checklistFor, investigate } from '../src/features/policy-evidence/index.js';
 import { validateAnswer } from '../src/contracts/index.js';
+import { opaqueClauseId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 
 // Synthetic policy only: fictional insurer, numbers and member.
 const stored = {
@@ -30,7 +31,8 @@ const stored = {
 };
 const clauses = buildClauses(stored, { documentId: 'doc-1', sourceVersion: 'v1' }).clauses;
 const byPage = page => clauses.find(clause => clause.page === page);
-const ids = (...pages) => pages.map(page => byPage(page).clauseId);
+// The model sees and cites opaque aliases, never stored clause ids (ADR 0017 Phase 3).
+const ids = (...pages) => pages.map(page => opaqueClauseId(byPage(page).clauseId));
 
 const finding = (page, quote, extra = {}) => ({ clause_ids: ids(page), quote, subject: 'cataract surgery', conditions: [], exceptions: [], ...extra });
 const firstPass = { findings: [
@@ -43,7 +45,7 @@ const sweep = { overrides: [
 ] };
 
 function fixture({ first = firstPass, second = sweep, payloads = [] } = {}) {
-  return async ({ task, payload }) => {
+  return async ({ task, input: { payload } }) => {
     payloads.push({ task, payload });
     if (task === 'policy_evidence_investigate') return { json: first, usage: { inputTokens: 100, outputTokens: 20 } };
     if (task === 'policy_evidence_override_sweep') { if (second instanceof Error) throw second; return { json: second, usage: { inputTokens: 100, outputTokens: 10 } }; }
@@ -169,10 +171,10 @@ test('B3: the sweep runs its own retrieval and sees a clause the first pass cont
   const budget = 700;
   const search = ({ query, kinds }) => (/waiting|exclusion/.test(query) ? clauses.filter(clause => clause.clauseId === exclusion.clauseId) : []);
   const first = { findings: [finding(12, 'cataract surgery as a hospitalisation benefit')] };
-  const second = { overrides: [{ clause_ids: [exclusion.clauseId], quote: 'waiting period of 24 months', effect: 'limits', target_finding_ids: ['f1'] }] };
+  const second = { overrides: [{ clause_ids: [opaqueClauseId(exclusion.clauseId)], quote: 'waiting period of 24 months', effect: 'limits', target_finding_ids: ['f1'] }] };
   const { answer } = await run({ call: fixture({ first, second, payloads }), search: input => (input.kinds?.length === 1 ? [byPage(12)] : search(input)), limits: { maxInputBytes: capFor(budget) } });
   const sweepIds = payloads.find(entry => entry.task === 'policy_evidence_override_sweep').payload.clauses.map(clause => clause.clause_id);
   const firstIds = payloads.find(entry => entry.task === 'policy_evidence_investigate').payload.clauses.map(clause => clause.clause_id);
-  assert.ok(!firstIds.includes(exclusion.clauseId) && sweepIds.includes(exclusion.clauseId));
+  assert.ok(!firstIds.includes(opaqueClauseId(exclusion.clauseId)) && sweepIds.includes(opaqueClauseId(exclusion.clauseId)));
   assert.ok(answer.limited_or_excluded.some(entry => entry.clauseIds.includes(exclusion.clauseId)));
 });
