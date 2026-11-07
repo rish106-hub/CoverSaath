@@ -40,7 +40,7 @@ Dockerfile build, entrypoint behaviour, live health, ready and host guard, real 
 
 - One machine only (volume, per-process claims and rate limiter). Do not run `--ha` or scale out.
 - Enable the scanner: 2 GB machine, `DOCUMENT_SCAN_MODE=clamd`, `CLAMD_HOST=127.0.0.1`.
-- Rotate the Supabase password (it was pasted into chat twice), update `DATABASE_URL` in `.env.local` and with `fly secrets set`, then move the runtime to a least-privilege role.
+- Rotate the Supabase password (it was pasted into chat twice), update `DATABASE_URL` in `.env.local` and with `fly secrets set`, then move the runtime to a least-privilege role. The prepared steps, ordered checklist and rollback are in [db-roles.md](db-roles.md); history and file secret findings are in [secret-hygiene.md](secret-hygiene.md).
 - Abandon: `fly apps destroy knowvia-api` removes the app, volume and secrets. Destructive; needs explicit owner approval.
 
 ## Activity events and shared limits (ADR 0014)
