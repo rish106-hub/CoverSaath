@@ -1,3 +1,4 @@
+import { opaqueClauseId } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 // Block 2 delta close-out, task 1: address cases the v6 tail rule did not cover.
 // Every value is synthetic. No network.
 import test from 'node:test';
@@ -8,7 +9,7 @@ import { buildClauses, investigate } from '../src/features/policy-evidence/index
 
 const storage = text => sanitizeEvidenceTextForStorage(text).text;
 
-test('gate version is v8', () => assert.equal(PRIVACY_EVIDENCE_GATE_VERSION, 'knowvia-privacy-evidence-v9'));
+test('gate version is v10', () => assert.equal(PRIVACY_EVIDENCE_GATE_VERSION, 'knowvia-privacy-evidence-v10'));
 
 const LEAKS = ['Testville', 'Sample Nagar', 'Example Heights', '560001', '560 001', 'Karnataka', 'टेस्टविले', '560-001', '5 6 0 0 0 1', '56 0001'];
 const CASES = [
@@ -91,9 +92,9 @@ test('closure: no address text reaches either outgoing model payload', async () 
   const { clauses } = buildClauses({ pages: blocks.map((block, index) => ({ page: index + 1, status: 'stored', blocks: [block] })) }, { documentId: 'doc-1', sourceVersion: 'v1' });
   const payloads = [];
   const first = clauses.find(clause => /covered hospitalisation/.test(clause.text));
-  const call = async ({ task, payload }) => {
+  const call = async ({ task, input: { payload } }) => {
     payloads.push(payload);
-    if (task === 'policy_evidence_investigate') return { json: { findings: [{ clause_ids: [first.clauseId], quote: 'Cataract surgery is a covered hospitalisation benefit', subject: 'cataract surgery', effect: 'covers', conditions: [], exceptions: [] }] }, usage: {} };
+    if (task === 'policy_evidence_investigate') return { json: { findings: [{ clause_ids: [opaqueClauseId(first.clauseId)], quote: 'Cataract surgery is a covered hospitalisation benefit', subject: 'cataract surgery', effect: 'covers', conditions: [], exceptions: [] }] }, usage: {} };
     return { json: { overrides: [] }, usage: {} };
   };
   await investigate({ question: 'Is cataract surgery covered?', clauses, consentCheck: async () => {}, call });

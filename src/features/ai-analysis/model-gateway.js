@@ -2,11 +2,25 @@ import { buildPromptContract, PROMPT_VERSION } from './prompts.js';
 import { TASK_OUTPUT_SCHEMAS, validateTaskOutput } from './schemas.js';
 import { assertModelTask } from './responsibility-matrix.js';
 import { AI_CONTRACT_VERSION } from './responsibility-matrix.js';
+import { isSealedModelInput, sealedInputCounts } from './privacy-evidence-gate.js';
 
 const DEFAULT_LIMITS = Object.freeze({ maxInputBytes: 48_000, maxOutputTokens: 1_500, timeoutMs: 30_000, maxRetries: 0, maxReservationUsd: 0.05, maxConcurrentCalls: 3 });
 
 function fail(code, message) {
   throw Object.assign(new Error(message), { code });
+}
+
+// Registry of the requests this module hands to a provider runner. Private: only `isGatewayRequest` reads it.
+const GATEWAY_REQUESTS = new WeakSet();
+
+/** True only for a request object built by the gateway's live path after the sealed-input check. */
+export function isGatewayRequest(request) {
+  return request !== null && typeof request === 'object' && GATEWAY_REQUESTS.has(request);
+}
+
+/** Throws `ungated_model_input` unless `input` was minted by the privacy gate for this exact task. The one check every gateway call makes first. */
+export function assertGatewayInput(task, input) {
+  if (!isSealedModelInput(input, task)) fail('ungated_model_input', 'Model input did not come from the privacy gate.');
 }
 
 function positiveNumber(value, label, { allowZero = false } = {}) {
@@ -41,7 +55,9 @@ function validateExecutionResult(result, request, mode) {
 }
 
 // `onEvent` (optional) hears one metadata-only event per live call: { task, outcome, latencyMs, dispatched, inputTokens,
-// outputTokens, costUsd }. It never receives prompt or output text, and a throwing listener cannot affect the call.
+// outputTokens, costUsd } plus, once the input is known to be sealed, the counts-only gate summary { gateVersion,
+// gatedSlots, placeholders, reasonCodes, gatedBytes } (ADR 0017 D5). It never receives prompt or output text, digests,
+// reason codes or placeholder kinds, and a throwing listener cannot affect the call.
 export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, limits, onEvent } = {}) {
   if (!['fixture', 'live'].includes(mode)) fail('invalid_gateway_config', 'Choose fixture or live mode explicitly.');
   if (mode === 'live' && typeof liveRunner !== 'function') fail('live_not_configured', 'Live mode needs an explicit model runner.');
@@ -76,6 +92,15 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
     limits: bounded,
     async execute({ task, input, reservationUsd, signal } = {}) {
       assertModelTask(task);
+      // ADR 0017 D3: only an input minted by the privacy gate for this exact task reaches a reservation, a prompt or a
+      // provider. Enforced in fixture mode as well, so tests prove the seal too.
+      try {
+        assertGatewayInput(task, input);
+      } catch (error) {
+        emit({ task, outcome: 'ungated_model_input', latencyMs: 0, dispatched: false, inputTokens: 0, outputTokens: 0, costUsd: 0 });
+        throw error;
+      }
+      const gate = sealedInputCounts(input);
       positiveNumber(reservationUsd, 'reservationUsd', { allowZero: mode === 'fixture' });
       if (reservationUsd > bounded.maxReservationUsd) fail('reservation_limit', 'Request exceeds the per-call cost reservation limit.');
       const contract = buildPromptContract(task, input);
@@ -85,7 +110,7 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
         if (!budget || typeof budget.reserve !== 'function' || typeof budget.settle !== 'function') fail('budget_not_configured', 'Live mode needs a reservation ledger.');
         const reservation = await budget.reserve(reservationUsd, { task, promptVersion: PROMPT_VERSION });
         if (!reservation) {
-          emit({ task, outcome: 'budget_refused', latencyMs: 0, dispatched: false, inputTokens: 0, outputTokens: 0, costUsd: 0 });
+          emit({ task, outcome: 'budget_refused', latencyMs: 0, dispatched: false, inputTokens: 0, outputTokens: 0, costUsd: 0, ...gate });
           fail('budget_refused', 'The budget ledger refused this model call.');
         }
         const startedAt = Date.now();
@@ -96,7 +121,7 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
         try {
           await acquire(abortSignal);
           acquired = true;
-          result = validateExecutionResult(await liveRunner({
+          const request = {
             task,
             input: structuredClone(input),
             prompt: contract,
@@ -105,19 +130,22 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
             maxRetries: bounded.maxRetries,
             abortSignal,
             reservation: structuredClone(reservation),
-          }), { task, input }, mode);
+          };
+          // The provider runner accepts only a request built here, after the seal check (see isGatewayRequest).
+          GATEWAY_REQUESTS.add(request);
+          result = validateExecutionResult(await liveRunner(request), { task, input }, mode);
         } catch (error) {
           // A call that never reached the provider (no concurrency slot, or the
           // runner refused it before dispatch) releases its reservation; any
           // other failure keeps it reserved, since the provider may have charged.
           const dispatched = acquired && error?.modelDispatched !== false;
-          emit({ task, outcome: error?.code ?? 'error', latencyMs: Date.now() - startedAt, dispatched, inputTokens: 0, outputTokens: 0, costUsd: 0 });
+          emit({ task, outcome: error?.code ?? 'error', latencyMs: Date.now() - startedAt, dispatched, inputTokens: 0, outputTokens: 0, costUsd: 0, ...gate });
           await budget.settle(reservation, dispatched ? null : 0, { failed: dispatched });
           throw error;
         } finally {
           if (acquired) release();
         }
-        emit({ task, outcome: 'ok', latencyMs: result.metadata.latencyMs, dispatched: true, inputTokens: result.metadata.inputTokens, outputTokens: result.metadata.outputTokens, costUsd: result.metadata.costUsd });
+        emit({ task, outcome: 'ok', latencyMs: result.metadata.latencyMs, dispatched: true, inputTokens: result.metadata.inputTokens, outputTokens: result.metadata.outputTokens, costUsd: result.metadata.costUsd, ...gate });
         await budget.settle(reservation, result.metadata.costUsd);
         if (result.metadata.costUsd > reservation.amountUsd) fail('reservation_exceeded', 'Actual model cost exceeded the reserved amount. Further paid work must stop.');
         return { ...result, reservation: structuredClone(reservation) };

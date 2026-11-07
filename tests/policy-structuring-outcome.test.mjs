@@ -43,7 +43,7 @@ const pagesFor = keys => keys.map((key, index) => ({
 // Answers every line it was sent; `fail(callNumber)` returns an error to throw for that extract call.
 function fakeGemini({ fail = () => null } = {}) {
   const calls = [];
-  const call = async ({ payload }) => {
+  const call = async ({ input: { payload } }) => {
     calls.push(payload.chunks ? 'extract' : 'reconcile');
     if (!payload.chunks) return { json: { conflicts: [] }, usage: { inputTokens: 10, outputTokens: 2 } };
     const error = fail(calls.filter(kind => kind === 'extract').length);

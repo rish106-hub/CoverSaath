@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { viaWire } from './support/reconcile-wire.mjs';
 import assert from 'node:assert/strict';
 import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { validateExtractedItems } from '../src/features/policy-structuring/validator.js';
@@ -9,7 +10,7 @@ import { decideStates, deterministicConflicts, groupItems, isConflict, reconcile
 const item = (chunk, key, value, quote, subject = 'policy') => ({ chunk_id: chunk.id, registry_key: key, value, evidence_quote: quote, subject, page: chunk.page, block_index: chunk.blockIndexes[0] });
 const valid = (chunk, raw) => validateExtractedItems(raw, { chunk, registryVersion }).accepted;
 const consent = () => () => {};
-const pickFor = (group_id, quotes, selected_quote) => async () => ({ json: { conflicts: [{ group_id, quotes, selected_quote }] }, usage: {} });
+const pickFor = (group_id, quotes, selected_quote) => viaWire(async () => ({ json: { conflicts: [{ group_id, quotes, selected_quote }] }, usage: {} }));
 const decide = (items, conflicts) => decideStates({ accepted: items, conflicts }).map(entry => [entry.parameterKey, entry.state, entry.reasonCode, entry.observations.length]);
 
 test('a normal contradiction selection is extracted_unverified and keeps every reading', async () => {
@@ -19,7 +20,7 @@ test('a normal contradiction selection is extracted_unverified and keeps every r
     ...valid(left, [item(left, 'f.ped_waiting_period', '3 Years', 'PED waiting period: 3 Years.')]),
     ...valid(right, [item(right, 'f.ped_waiting_period', '36 / 24 / 12 months', '36 / 24 / 12 months by plan')]),
   ];
-  const result = await reconcile({ accepted: items, consentCheck: consent(),
+  const result = await reconcile({ knownIdentifiers: [], accepted: items, consentCheck: consent(),
     call: pickFor('registry:f.ped_waiting_period|policy', ['PED waiting period: 3 Years.', '36 / 24 / 12 months by plan'], 'PED waiting period: 3 Years.') });
   const [decision] = decideStates({ accepted: items, conflicts: result.conflicts });
   assert.deepEqual([decision.state, decision.reasonCode, decision.selectedQuote, decision.observations.map(entry => entry.evidenceQuote)],
@@ -34,7 +35,7 @@ test('a model selection inside a context_differs group is rejected and the key s
     ...valid(schedule, [item(schedule, 'e.organ_donor', 'Covered upto sum insured', 'Covered upto sum insured')]),
     ...valid(wording, [item(wording, 'e.organ_donor', clause, clause)]),
   ];
-  const result = await reconcile({ accepted: items, consentCheck: consent(),
+  const result = await reconcile({ knownIdentifiers: [], accepted: items, consentCheck: consent(),
     call: pickFor('registry:e.organ_donor|policy', ['Covered upto sum insured', clause], 'Covered upto sum insured') });
   assert.deepEqual(result.skipped, [{ groupId: 'registry:e.organ_donor|policy', reason: 'selection_not_contradiction' }]);
   assert.equal(result.conflicts[0].selectedQuote, undefined);
@@ -51,7 +52,7 @@ test('a model selection inside a per-subject variation is rejected; the key is n
     item(sheet, 'd.sum_insured', 'Rs. 4,00,000', 'Member A: Rs. 4,00,000', 'Member A'),
     item(sheet, 'd.sum_insured', 'Rs. 5,00,000', 'Member B: Rs. 5,00,000', 'Member B'),
   ]);
-  const result = await reconcile({ accepted: items, consentCheck: consent(),
+  const result = await reconcile({ knownIdentifiers: [], accepted: items, consentCheck: consent(),
     call: pickFor('registry:d.sum_insured|member a', ['Member A: Rs. 3,00,000', 'Member A: Rs. 4,00,000'], 'Member A: Rs. 3,00,000') });
   assert.deepEqual(result.conflicts.map(entry => [entry.groupId, entry.kind]), [['registry:d.sum_insured|member a', 'conflict'], ['registry:d.sum_insured|*', 'variation']]);
   assert.deepEqual(decide(items, result.conflicts), [['d.sum_insured', 'conflicting', 'model_observations_conflict', 3]], 'the variation keeps every member value');
@@ -65,7 +66,7 @@ test('a model selection inside a per-subject variation is rejected; the key is n
     item(same, 'd.sum_insured', 'Rs. 3,00,000', 'Member A Rs. 3,00,000', 'Member A'),
     item(same, 'd.sum_insured', 'Rs. 5,00,000', 'Member B: Rs. 5,00,000', 'Member B'),
   ]);
-  const flagged = await reconcile({ accepted: agreeing, consentCheck: consent(),
+  const flagged = await reconcile({ knownIdentifiers: [], accepted: agreeing, consentCheck: consent(),
     call: pickFor('registry:d.sum_insured|member a', ['Member A: Rs. 3,00,000', 'Member A Rs. 3,00,000'], 'Member A: Rs. 3,00,000') });
   assert.deepEqual(flagged.skipped, [{ groupId: 'registry:d.sum_insured|member a', reason: 'selection_not_contradiction' }]);
   assert.equal(decide(agreeing, flagged.conflicts)[0][1], 'conflicting');
@@ -82,7 +83,7 @@ test('a model-invented subject is a contradiction, not a variation, and cannot b
     assert.deepEqual(items.map(entry => entry.subjectInSource), [false, false], `${leftSubject} / ${rightSubject} are not printed in the chunk`);
     const conflicts = deterministicConflicts(groupItems(items, []));
     assert.deepEqual(conflicts.map(entry => [entry.kind, entry.reasonCode]), [['conflict', 'model_observations_conflict']], leftSubject);
-    const result = await reconcile({ accepted: items, consentCheck: consent(),
+    const result = await reconcile({ knownIdentifiers: [], accepted: items, consentCheck: consent(),
       call: pickFor(conflicts[0].groupId, ['PED waiting 36 months', 'PED waiting 48 months'], 'PED waiting 36 months') });
     if (conflicts[0].groupId.endsWith('|*')) assert.equal(result.calls, 0, 'single-reading member groups are not sent, so the key-wide entry cannot be selected');
     else assert.equal(result.conflicts[0].selectedQuote, 'PED waiting 36 months', 'descriptive subjects group under the key, a real contradiction');
@@ -140,7 +141,7 @@ test('a selected quote that is not one of that group\'s own readings is rejected
     item(chunk, 'h.intimation_deadline', '60 days', 'within 60 days of discharge'),
   ]);
   // The quote is grounded in the document, but in another key's readings.
-  const result = await reconcile({ accepted: items, consentCheck: consent(),
+  const result = await reconcile({ knownIdentifiers: [], accepted: items, consentCheck: consent(),
     call: pickFor('registry:f.ped_waiting_period|policy', ['PED waiting period: 3 Years.', 'PED 36 months'], 'within 60 days of discharge') });
   assert.deepEqual(result.skipped, [{ groupId: 'registry:f.ped_waiting_period|policy', reason: 'ungrounded_selection' }]);
   assert.deepEqual(decide(items, result.conflicts).map(entry => entry.slice(0, 2)), [['f.ped_waiting_period', 'conflicting'], ['h.intimation_deadline', 'extracted_unverified']]);
@@ -158,9 +159,9 @@ test('in a contradiction, only a reading that takes part in it can be selected',
     item(chunk, 'd.co_pay_general', '10%', 'Co-pay 10%.'), item(chunk, 'd.co_pay_general', '20%', 'Co-pay 20%.'), item(chunk, 'd.co_pay_general', clause, clause),
   ]);
   assert.equal(items.length, 3);
-  const clauseFirst = await reconcile({ accepted: items, consentCheck: consent(), call: pickFor('registry:d.co_pay_general|policy', ['Co-pay 10%.', clause], clause) });
+  const clauseFirst = await reconcile({ knownIdentifiers: [], accepted: items, consentCheck: consent(), call: pickFor('registry:d.co_pay_general|policy', ['Co-pay 10%.', clause], clause) });
   assert.deepEqual(clauseFirst.skipped, [{ groupId: 'registry:d.co_pay_general|policy', reason: 'selection_not_contradiction' }]);
   assert.deepEqual(decide(items, clauseFirst.conflicts), [['d.co_pay_general', 'conflicting', 'model_observations_conflict', 3]]);
-  const comparable = await reconcile({ accepted: items, consentCheck: consent(), call: pickFor('registry:d.co_pay_general|policy', ['Co-pay 10%.', 'Co-pay 20%.'], 'Co-pay 20%.') });
+  const comparable = await reconcile({ knownIdentifiers: [], accepted: items, consentCheck: consent(), call: pickFor('registry:d.co_pay_general|policy', ['Co-pay 10%.', 'Co-pay 20%.'], 'Co-pay 20%.') });
   assert.deepEqual(decide(items, comparable.conflicts), [['d.co_pay_general', 'extracted_unverified', 'model_selected_from_conflict', 3]], 'every reading is kept');
 });

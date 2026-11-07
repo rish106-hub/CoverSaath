@@ -1,7 +1,7 @@
 // Whole-document policy structuring (ADR 0006). Sarvam block pages are sectioned, privacy-gated,
 // extracted and reconciled by an injected model call, then decided by deterministic code. Nothing a
 // model returns is stored above extracted_unverified or conflicting. Off unless POLICY_STRUCTURING_ENABLED.
-import { GEMINI_MODEL_RECIPIENT, sanitizeEvidenceTextForStorage } from '../ai-analysis/privacy-evidence-gate.js';
+import { GEMINI_MODEL_RECIPIENT, gateText } from '../ai-analysis/privacy-evidence-gate.js';
 import { POLICY_PARAMETER_REGISTRY_VERSION } from '../coverage-analysis/policy-parameter-registry.js';
 import { sectionDocument } from './sectioner.js';
 import { STRUCTURING_LIMITS, extractChunks } from './extractor.js';
@@ -46,26 +46,28 @@ export function documentGrantCheck({ consents, grantId, subjectAdultId, document
 
 // Every document string sent to a model passes the privacy gate first: chunk text and its section title.
 // The gated text is what the model sees and what evidence quotes are checked against. A truncated or
-// refused chunk is not sent; a refused title is dropped, never sent raw.
-export function gateChunks(chunks, { knownIdentifiers, sanitize = sanitizeEvidenceTextForStorage } = {}) {
+// refused chunk is not sent; a refused title is dropped, never sent raw. Each sent chunk keeps `text` as a plain
+// string (the gated text) and carries the branded values (`gated`, `gatedTitle`) that the model-input seal requires
+// (ADR 0017): chunk.text === chunk.gated.text always.
+export function gateChunks(chunks, { knownIdentifiers } = {}) {
   const sent = [];
   const skipped = {};
   const gateTitle = title => {
     if (typeof title !== 'string' || !title.trim()) return null;
     try {
-      const gated = sanitize(title, { maxBytes: GATE_MAX_BYTES, knownIdentifiers });
-      return gated.truncated ? null : gated.text;
+      return gateText(title, { maxBytes: GATE_MAX_BYTES, knownIdentifiers });
     } catch {
       return null;
     }
   };
   for (const chunk of chunks) {
     try {
-      const gated = sanitize(chunk.text, { maxBytes: GATE_MAX_BYTES, knownIdentifiers });
-      if (gated.truncated) skipped[chunk.id] = 'privacy_truncated';
-      else sent.push({ ...chunk, text: gated.text, title: gateTitle(chunk.title) });
-    } catch {
-      skipped[chunk.id] = 'privacy_gate_refused';
+      const gated = gateText(chunk.text, { maxBytes: GATE_MAX_BYTES, knownIdentifiers });
+      const gatedTitle = gateTitle(chunk.title);
+      sent.push({ ...chunk, text: gated.text, title: gatedTitle?.text ?? null, gated, gatedTitle });
+    } catch (error) {
+      // gateText fails closed on truncation (EVIDENCE_SOURCE_LIMIT) and on refusal; both leave the chunk unsent.
+      skipped[chunk.id] = error?.code === 'EVIDENCE_SOURCE_LIMIT' ? 'privacy_truncated' : 'privacy_gate_refused';
     }
   }
   return { sent, skipped };
@@ -94,7 +96,7 @@ export async function structurePolicyDocument({
   for (const [chunkId, reason] of Object.entries(gated.skipped)) extraction.chunkOutcomes[chunkId] = { status: 'skipped', reason };
   const caps = { ...STRUCTURING_LIMITS, ...limits };
   const reconciliation = await reconcile({
-    accepted: extraction.accepted, proposals: extraction.proposals, call, consentCheck, budgetStopped: extraction.budgetStopped,
+    accepted: extraction.accepted, proposals: extraction.proposals, call, consentCheck, budgetStopped: extraction.budgetStopped, knownIdentifiers,
     limits: { maxInputTokens: Math.max(0, caps.maxInputTokensPerDocument - extraction.usage.inputTokens) },
   });
   const decisions = decideStates({ accepted: extraction.accepted, conflicts: reconciliation.conflicts });
