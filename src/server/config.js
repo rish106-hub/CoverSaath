@@ -81,6 +81,26 @@ function readEventsConfig(env) {
   });
 }
 
+// Retention periods (S3) are opt-in: an unset variable means "not scheduled" and the sweep does nothing for it. The documented
+// placeholders live in src/contracts/data-lifecycle.js (RETENTION_RULES) and docs/architecture/data-lifecycle.md and are not
+// final. FOR LEGAL REVIEW. 0 is allowed for the document tombstone rule (prune as soon as the bytes are gone).
+export function readRetentionConfig(env = process.env) {
+  const days = (name, { zeroAllowed = false } = {}) => {
+    const raw = env[name];
+    if (raw === undefined || raw === '') return null;
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed < (zeroAllowed ? 0 : 1) || parsed > 36_500) throw new Error(`Invalid ${name}.`);
+    return parsed;
+  };
+  return Object.freeze({
+    closedCaseDays: days('RETENTION_CLOSED_CASE_DAYS'),
+    inactiveHouseholdDays: days('RETENTION_INACTIVE_HOUSEHOLD_DAYS'),
+    expiredSessionDays: days('RETENTION_EXPIRED_SESSION_DAYS'),
+    deletedDocumentTombstoneDays: days('RETENTION_DELETED_DOCUMENT_DAYS', { zeroAllowed: true }),
+    erasureLedgerDays: days('RETENTION_ERASURE_LEDGER_DAYS'),
+  });
+}
+
 const TOKEN_CHARSET = /^[A-Za-z0-9_-]+$/;
 const MAX_IDENTITY_ISSUERS = 10;
 
@@ -128,5 +148,6 @@ export function readServerConfig(env = process.env) {
     events: readEventsConfig(env),
     documents: readDocumentConfig(env),
     network: readNetworkConfig(env),
+    retention: readRetentionConfig(env),
   });
 }

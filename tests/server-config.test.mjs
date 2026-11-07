@@ -16,6 +16,7 @@ test('server configuration has explicit bounded defaults', () => {
     budgetBackend: 'database',
     evidenceClaimBackend: 'database',
     events: { enabled: true, retentionDays: 30 },
+    retention: { closedCaseDays: null, inactiveHouseholdDays: null, expiredSessionDays: null, deletedDocumentTombstoneDays: null, erasureLedgerDays: null },
     documents: {
       storageBackend: 'database',
       storagePath: '.local/documents',
