@@ -2,7 +2,6 @@ export { AI_CONTRACT_VERSION, AI_RESPONSIBILITY_MATRIX, AI_TASKS, DETERMINISTIC_
 export { TASK_OUTPUT_SCHEMAS, validateTaskInput, validateTaskOutput } from './schemas.js';
 export { PROMPT_VERSION, buildPromptContract } from './prompts.js';
 export { createMemoryBudget, createModelGateway } from './model-gateway.js';
-export { createAiSdkRunner } from './ai-sdk-runner.js';
 export { createAiEnhancedTaskRegistry, createAiTaskExecutors, RUNTIME_TO_AI_TASK } from './runtime-adapter.js';
 export { LIVE_REQUEST_BUILDERS, LIVE_RESULT_ADAPTERS, createGeminiCoverageRegistryFactory, createSharedProjectBudget } from './live-coverage-runtime.js';
 export { STRUCTURING_GATEWAY_LIMITS, createStructuringModelCallFactory } from './structuring-runtime.js';
@@ -11,6 +10,9 @@ export {
 } from './structuring-contract.js';
 export {
   PRIVACY_EVIDENCE_GATE_VERSION,
+  gateText,
+  isGatedText,
   sanitizeEvidenceForModel,
   sanitizeEvidenceTextForStorage,
+  sealModelInput,
 } from './privacy-evidence-gate.js';

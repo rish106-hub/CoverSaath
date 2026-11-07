@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from 'node:crypto';
+import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
 
 // Application-level column encryption (ADR 0013). Sensitive text columns hold an envelope string
 //
@@ -150,6 +151,8 @@ export function createColumnCrypto(config = readDataEncryptionConfig()) {
   function open(table, column, rowId, stored) {
     if (stored === null || stored === undefined) return null;
     if (typeof stored !== 'string') throw failed();
+    // The erased-name tombstone is stored as plain text on purpose (readers match it literally); it is never a sealed value.
+    if (stored === ERASED_NAME) return stored;
     const padded = stored.startsWith(ENVELOPE_PREFIX);
     if (!padded && !stored.startsWith(LEGACY_ENVELOPE_PREFIX)) {
       if (allowLegacyPlaintext) return stored;
@@ -185,9 +188,18 @@ export function createColumnCrypto(config = readDataEncryptionConfig()) {
     return createHmac('sha256', blindKey).update(`${label}\0${value}`).digest('hex');
   };
 
+  // The same index under every key of the ring (current and previous). An erasure matches on all of them, so a record whose index
+  // was made under a previous key is still found between a key change and the end of --rotate.
+  const blindIndexes = (label, value) => {
+    if (typeof label !== 'string' || !label || typeof value !== 'string') throw coded('COLUMN_ENCRYPTION_CONTEXT_INVALID', 'A blind index needs a label and text.');
+    return [...new Set([...keys.values()].map(key => createHmac('sha256', createHmac('sha256', key).update('cover-saath blind index v1').digest())
+      .update(`${label}\0${value}`).digest('hex')))];
+  };
+
   return Object.freeze({
     keyId: currentId,
     blindIndex,
+    blindIndexes,
     developmentKey: config.developmentKey === true,
     allowLegacyPlaintext,
     seal,

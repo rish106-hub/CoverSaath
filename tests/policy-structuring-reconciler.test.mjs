@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { viaWire } from './support/reconcile-wire.mjs';
 import assert from 'node:assert/strict';
 import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { validateExtractedItems } from '../src/features/policy-structuring/validator.js';
@@ -85,13 +86,13 @@ test('a clause-length description beside a schedule value is context, not a conf
 
 test('a grounded Gemini selection resolves a conflict as unverified; ungrounded or variation selections do not', async () => {
   const ped = accepted.filter(entry => entry.parameterKey === 'f.ped_waiting_period');
-  const pick = selected_quote => async () => ({ json: { conflicts: [{ group_id: 'registry:f.ped_waiting_period|policy', quotes: ['PED waiting period: 3 Years.', '36 / 24 / 12 months by plan'], selected_quote }] }, usage: {} });
-  const chosen = await reconcile({ accepted: ped, call: pick('PED waiting period: 3 Years.'), consentCheck: consent() });
+  const pick = selected_quote => viaWire(async () => ({ json: { conflicts: [{ group_id: 'registry:f.ped_waiting_period|policy', quotes: ['PED waiting period: 3 Years.', '36 / 24 / 12 months by plan'], selected_quote }] }, usage: {} }));
+  const chosen = await reconcile({ knownIdentifiers: [], accepted: ped, call: pick('PED waiting period: 3 Years.'), consentCheck: consent() });
   const [decision] = decideStates({ accepted: ped, conflicts: chosen.conflicts });
   assert.deepEqual([decision.state, decision.reasonCode, decision.selectedQuote, decision.observations.length],
     ['extracted_unverified', 'model_selected_from_conflict', 'PED waiting period: 3 Years.', 2], 'every reading is kept beside the selection');
 
-  const invented = await reconcile({ accepted: ped, call: pick('PED waiting period: 1 Year.'), consentCheck: consent() });
+  const invented = await reconcile({ knownIdentifiers: [], accepted: ped, call: pick('PED waiting period: 1 Year.'), consentCheck: consent() });
   assert.deepEqual(invented.skipped, [{ groupId: 'registry:f.ped_waiting_period|policy', reason: 'ungrounded_selection' }]);
   assert.equal(decideStates({ accepted: ped, conflicts: invented.conflicts })[0].state, 'conflicting');
 
@@ -126,23 +127,23 @@ test('model conflict is accepted only with grounded quotes; ungrounded and unkno
   const pair = [agreeing[0], twin];
   const consentCheck = consent();
   const requests = [];
-  const call = async request => { requests.push(request); return { json: { conflicts: [
+  const call = viaWire(async request => { requests.push(request); return { json: { conflicts: [
     { group_id: 'registry:f.initial_waiting_period|policy', quotes: ['Initial wait 30 days.', 'Initial wait 30 days'] },
-  ] }, usage: { inputTokens: 5, outputTokens: 2 } }; };
-  const result = await reconcile({ accepted: pair, call, consentCheck });
+  ] }, usage: { inputTokens: 5, outputTokens: 2 } }; });
+  const result = await reconcile({ knownIdentifiers: [], accepted: pair, call, consentCheck });
   assert.equal(consentCheck.count, 1);
   assert.equal(result.calls, 1);
   assert.deepEqual(result.conflicts.map(conflict => [conflict.groupId, conflict.sources, conflict.reasonCode]), [['registry:f.initial_waiting_period|policy', ['reconciler'], 'reconciler_conflict']]);
   assert.equal(decideStates({ accepted: pair, conflicts: result.conflicts })[0].reasonCode, 'reconciler_conflict');
-  assert.deepEqual(requests[0].payload.groups[0].readings.map(reading => reading.quote), ['Initial wait 30 days.', 'Initial wait 30 days']);
+  assert.deepEqual(requests[0].input.payload.groups[0].readings.map(reading => reading.quote), ['Initial wait 30 days.', 'Initial wait 30 days']);
 
-  const ungrounded = async () => ({ json: { conflicts: [
+  const ungrounded = viaWire(async () => ({ json: { conflicts: [
     { group_id: 'registry:f.initial_waiting_period|policy', quotes: ['Initial wait 30 days.', 'Initial wait 45 days'] },
     { group_id: 'registry:f.initial_waiting_period|policy', quotes: ['Initial wait 30 days.', 'Initial wait 30 days.'] },
     { group_id: 'registry:made.up|policy', quotes: ['a', 'b'] },
     'junk',
-  ] }, usage: {} });
-  const rejected = await reconcile({ accepted: pair, call: ungrounded, consentCheck: consent() });
+  ] }, usage: {} }));
+  const rejected = await reconcile({ knownIdentifiers: [], accepted: pair, call: ungrounded, consentCheck: consent() });
   assert.deepEqual(rejected.conflicts, []);
   assert.deepEqual(rejected.skipped, [
     { groupId: 'registry:f.initial_waiting_period|policy', reason: 'ungrounded_conflict' },
@@ -154,8 +155,8 @@ test('model conflict is accepted only with grounded quotes; ungrounded and unkno
 });
 
 test('model confirming a deterministic conflict adds a source, never a winner', async () => {
-  const call = async () => ({ json: { conflicts: [{ group_id: 'registry:f.ped_waiting_period|policy', quotes: ['PED waiting period: 3 Years.', '36 / 24 / 12 months by plan'] }] }, usage: {} });
-  const result = await reconcile({ accepted, call, consentCheck: consent() });
+  const call = viaWire(async () => ({ json: { conflicts: [{ group_id: 'registry:f.ped_waiting_period|policy', quotes: ['PED waiting period: 3 Years.', '36 / 24 / 12 months by plan'] }] }, usage: {} }));
+  const result = await reconcile({ knownIdentifiers: [], accepted, call, consentCheck: consent() });
   const ped = result.conflicts.find(conflict => conflict.groupId === 'registry:f.ped_waiting_period|policy');
   assert.deepEqual(ped.sources, ['deterministic', 'reconciler']);
   assert.ok(!('value' in ped));
@@ -168,7 +169,7 @@ test('provider error, timeout and malformed output still return deterministic co
     [async () => ({ json: { nope: true }, usage: {} }), 'malformed_response'],
   ];
   for (const [call, reason] of cases) {
-    const result = await reconcile({ accepted, call, consentCheck: consent() });
+    const result = await reconcile({ knownIdentifiers: [], accepted, call, consentCheck: consent() });
     assert.equal(result.conflicts.length, 3, reason);
     assert.deepEqual(result.skipped, [{ groupId: null, reason }]);
   }
@@ -176,10 +177,10 @@ test('provider error, timeout and malformed output still return deterministic co
 
 test('no call without groups of two; consent failure aborts; group cap is recorded', async () => {
   const single = accepted.filter(entry => entry.parameterKey === 'f.initial_waiting_period');
-  const quiet = await reconcile({ accepted: single, call: noCall, consentCheck: consent() });
+  const quiet = await reconcile({ knownIdentifiers: [], accepted: single, call: noCall, consentCheck: consent() });
   assert.equal(quiet.calls, 0);
   const revoked = () => { throw Object.assign(new Error('revoked'), { code: 'CONSENT_REVOKED' }); };
-  await assert.rejects(reconcile({ accepted, call: noCall, consentCheck: revoked }), { code: 'CONSENT_REVOKED' });
-  const capped = await reconcile({ accepted, call: async () => ({ json: { conflicts: [] }, usage: {} }), consentCheck: consent(), limits: { maxGroups: 1 } });
+  await assert.rejects(reconcile({ knownIdentifiers: [], accepted, call: noCall, consentCheck: revoked }), { code: 'CONSENT_REVOKED' });
+  const capped = await reconcile({ knownIdentifiers: [], accepted, call: async () => ({ json: { conflicts: [] }, usage: {} }), consentCheck: consent(), limits: { maxGroups: 1 } });
   assert.deepEqual(capped.skipped, [{ groupId: 'registry:h.intimation_deadline|policy', reason: 'group_cap' }]);
 });

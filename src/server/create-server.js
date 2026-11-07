@@ -27,8 +27,9 @@ import { INTAKE_CONNECTORS } from '../contracts/index.js';
 import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
 import { createColumnCrypto, readDataEncryptionConfig } from '../backend/security/column-crypto.js';
 import { createAppEventRecorder, deriveEventHmacKey } from '../backend/services/app-event-recorder.js';
+import { isApplicationCode, newRequestId, safeCode, silentLogger } from '../shared/logging/index.js';
 import { createSharedRateLimiter } from './http/shared-rate-limiter.js';
-import { pathAttribution, requestEventName, routeTemplate } from './http/event-context.js';
+import { knownRouteTemplate, pathAttribution, requestEventName, routeTemplate } from './http/event-context.js';
 import { readIdentityConfig, readServerConfig } from './config.js';
 import { createGeminiCoverageRegistryFactory, createSharedProjectBudget, createStructuringModelCallFactory } from '../features/ai-analysis/index.js';
 
@@ -42,6 +43,8 @@ export function createApiServer({
   analysisLiveModelDriver,
   documentScanner,
   sarvamFetch,
+  logger = silentLogger,
+  errorReporter,
 } = {}) {
   const config = readServerConfig(env);
   const identity = readIdentityConfig(env);
@@ -69,7 +72,7 @@ export function createApiServer({
     ? createSandboxedPdfInspector({
       onEvent: event => {
         if (event.type === 'pdf_inspection_busy' || (event.type === 'pdf_inspection_failed' && event.reason !== 'rejected')) {
-          console.warn(JSON.stringify({ event: event.type, reason: event.reason ?? null, exitCode: event.exitCode ?? null, signal: event.signal ?? null }));
+          logger.warn(event.type, { reason: event.reason ?? null, exitCode: event.exitCode ?? null, signal: event.signal ?? null });
         }
       },
     })
@@ -84,12 +87,14 @@ export function createApiServer({
   let recorder = null;
   let closing = false;
   const recordEvent = event => recorder?.record(event);
+  // Fixed-shape operational events ({ event, code? }). Free text never goes through here.
+  const logEvent = ({ event: name, ...fields }) => logger.warn(name, fields);
   let lastTelemetryWarning = 0;
   const warnTelemetry = event => {
     const now = Date.now();
     if (now - lastTelemetryWarning < 60_000) return;
     lastTelemetryWarning = now;
-    console.warn(JSON.stringify(event));
+    logEvent(event);
   };
   const localRateLimiter = createRateLimiter({ limit: config.rateLimitPerMinute });
   // Shared limiter: the per-process limiter still runs first and is the fallback if the database is unavailable.
@@ -121,11 +126,16 @@ export function createApiServer({
     : {});
   // Metadata-only provider events (outcome, latency, tokens, cost); never prompt or output text.
   const onProviderEvent = event => {
+    logger.provider({ provider: 'google', task: event.task, outcome: event.outcome, code: event.outcome === 'ok' ? null : event.outcome, latencyMs: event.latencyMs, inputTokens: event.inputTokens, outputTokens: event.outputTokens, costMicroUsd: Math.round((event.costUsd ?? 0) * 1_000_000) });
     const outcome = String(event.outcome ?? '').toLowerCase();
     recordEvent({
       name: 'provider_call', provider: 'google', outcome: /^[a-z0-9_.-]{1,64}$/.test(outcome) ? outcome : 'error',
       code: event.outcome === 'ok' ? null : event.outcome, durationMs: event.latencyMs,
-      payload: { task: event.task, dispatched: event.dispatched, inputTokens: event.inputTokens, outputTokens: event.outputTokens, costMicroUsd: Math.round((event.costUsd ?? 0) * 1_000_000) },
+      payload: {
+        task: event.task, dispatched: event.dispatched, inputTokens: event.inputTokens, outputTokens: event.outputTokens, costMicroUsd: Math.round((event.costUsd ?? 0) * 1_000_000),
+        // Counts-only gate summary (ADR 0017 D5): never digests, reason codes, placeholder kinds or text.
+        gateVersion: event.gateVersion, gatedSlots: event.gatedSlots, placeholders: event.placeholders, reasonCodes: event.reasonCodes, gatedBytes: event.gatedBytes,
+      },
     });
   };
   const liveRegistryFactory = createGeminiCoverageRegistryFactory({
@@ -158,7 +168,7 @@ export function createApiServer({
       loadKnownIdentifiers,
       createModelCall: createStructuringModelCall,
       env,
-      onError: event => console.warn(JSON.stringify({ event: 'policy_structuring_failed', code: event.code })),
+      onError: event => logger.warn('policy_structuring_failed', { errorCode: safeCode(event.code) }),
     });
     return structuringService;
   };
@@ -199,8 +209,12 @@ export function createApiServer({
     ensureDatabase();
     services ||= createBackendServices(database, {
       env,
+      // One metadata-only log line per audit-chain append (never the audit payload).
+      onAudit: entry => logger.audit(entry),
       sessionDurationMs: config.sessionTtlMs,
       maxActiveSessions: config.maxSessions,
+      // A sealed value that cannot be decrypted on an erasure path is reported by table and column only.
+      onUnreadable: event => console.warn(JSON.stringify({ event: 'sealed_value_unreadable', table: event.table, column: event.column })),
       ...(columnCrypto ? { columnCrypto } : {}),
     });
     if (config.events.enabled && !recorder) {
@@ -218,6 +232,7 @@ export function createApiServer({
       const sweep = () => {
         services.appEvents.purgeExpired().catch(() => {});
         services.runtimeLimits.purgeRequestWindows(10 * 60_000).catch(() => {});
+        services.runtimeLimits.purgeExpiredClaims().catch(() => {});
       };
       housekeepingTimer = setInterval(sweep, 60 * 60 * 1000);
       housekeepingTimer.unref?.();
@@ -281,13 +296,37 @@ export function createApiServer({
   const server = http.createServer(async (req, res) => {
     prepareJsonResponse(res);
     const startedAt = performance.now();
+    const requestId = newRequestId();
+    res.setHeader('X-Request-Id', requestId);
     let errorCode = null;
+    let loggedCode = null;
+    // Failures are logged and (when unexpected) reported as class, code and status only, never the message.
+    const onError = (error, status, { unexpected = false } = {}) => {
+      loggedCode = safeCode(error?.code);
+      // A backend that could not be built is wrapped as BACKEND_UNAVAILABLE; the cause is what an operator needs to see.
+      const wrapped = error?.code === 'BACKEND_UNAVAILABLE' && error.cause && typeof error.cause === 'object';
+      const subject = wrapped ? error.cause : error;
+      logger.failure(subject, { requestId, status });
+      // Only unexpected failures are reported: a 500, a 5xx with no application code, an internal error that the route
+      // answered with a 4xx, or a backend that failed to build. An expected 503 that carries a deliberate code
+      // (PROVIDER_NOT_CONFIGURED, DATABASE_UNAVAILABLE) is logged, not reported.
+      if (unexpected || wrapped || status === 500 || (status >= 500 && !isApplicationCode(error?.code))) errorReporter?.captureError(subject, { requestId });
+    };
     const send = (status, value) => {
       errorCode = typeof value?.error?.code === 'string' ? value.error.code : null;
       return sendJson(res, status, value);
     };
     // One metadata-only activity event per finished request. The route is a template (ids replaced); the client address
     // is only ever hashed; the household, case or grant id is attributed only when the request succeeded.
+    // Logged on `close`, which also fires for a request the client aborted: such a request has no complete response, so it is
+    // marked aborted and carries no status. The route is shown only from the closed set of known route words.
+    res.once('close', () => {
+      const aborted = !res.writableFinished;
+      logger.request({
+        requestId, method: req.method, route: knownRouteTemplate(String(req.url ?? '').split('?')[0]), status: aborted ? null : res.statusCode,
+        durationMs: Math.round(performance.now() - startedAt), errorCode: errorCode ?? loggedCode, aborted,
+      });
+    });
     res.once('finish', () => {
       if (!recorder) return;
       const pathname = String(req.url ?? '').split('?')[0];
@@ -307,7 +346,7 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = await getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, onError });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');
@@ -316,6 +355,7 @@ export function createApiServer({
       return send(404, { error: { code: 'ROUTE_NOT_FOUND', message: 'Use the authenticated /api/v1 API.' } });
     } catch (error) {
       const result = publicError(error);
+      onError(error, result.status);
       send(result.status, result.body);
     }
   });
@@ -325,7 +365,7 @@ export function createApiServer({
   if (documentStorage) {
     let worker = null;
     let orphanTimer = null;
-    const warn = event => console.warn(JSON.stringify(event));
+    const warn = logEvent;
     server.once('listening', async () => {
       try {
         const { documentUploads: uploads } = await getBackend();

@@ -29,11 +29,21 @@ fixture.pages = [
 const readCount = (db, name, column, where) => db.one(`SELECT count(*) AS n FROM ${name} WHERE ${column} IS NOT NULL ${where}`).then(row => row.n);
 
 // Every encrypted column has at least one non-null row and no row that is not an enc1 envelope.
+// Columns this scenario does not reach: they have their own write-path tests (column-encryption-d2.test.mjs and the suites of
+// their repositories) and are covered here for plaintext absence and by the backfill.
+const NOT_IN_SCENARIO = new Set([
+  'coverage_parameter_observations.value_json', 'coverage_parameter_resolutions.resolved_value_json', 'proposed_parameters.label', 'proposed_parameters.value_json',
+  'ocr_jobs.error_message', 'integration_outbox.payload_json', 'integration_outbox.last_error', 'catalogue_reviews.fact_json', 'consent_revocations.reason',
+  'workflow_events.event_payload_json', 'workflow_tasks.last_error_message', 'idempotency_keys.response_json', 'household_members.relationship_label',
+  'household_members.date_of_birth', 'policies.policy_number_masked', 'policies.policy_version', 'policies.starts_on', 'policies.ends_on',
+  'service_cases.stated_estimate_ciphertext', 'workflow_runs.input_json', 'workflow_tasks.input_json', 'workflow_tasks.output_json',
+]);
+
 async function assertSealedEverywhere(db, { expectPresent = true } = {}) {
-  for (const { table: name, columns } of ENCRYPTED_COLUMNS) {
+  for (const { table: name, columns, unwritten } of ENCRYPTED_COLUMNS) {
     for (const column of columns) {
       const present = await readCount(db, name, column, '');
-      if (expectPresent) assert.ok(present > 0, `${name}.${column} was never written by the test`);
+      if (expectPresent && !unwritten && !NOT_IN_SCENARIO.has(`${name}.${column}`)) assert.ok(present > 0, `${name}.${column} was never written by the test`);
       const plain = await readCount(db, name, column, `AND ${column} !~ '^enc[12][.]'`);
       assert.equal(plain, 0, `${name}.${column} holds ${plain} readable value(s)`);
     }
@@ -94,20 +104,9 @@ test('E1b: ciphertext cannot be swapped between rows (the row id is in the AAD)'
   assert.ok(a && b);
 });
 
-// Turns every sealed column back into the plaintext an older build wrote, so the legacy-read and backfill paths are real.
-async function downgrade(db, crypto) {
-  for (const { table: name, columns, triggers } of ENCRYPTED_COLUMNS) {
-    for (const trigger of triggers) await db.run(`ALTER TABLE ${name} DISABLE TRIGGER ${trigger}`);
-    const rows = await db.many(`SELECT id, ${columns.join(', ')} FROM ${name}`);
-    for (const row of rows) {
-      for (const column of columns) {
-        if (row[column] === null || !crypto.isSealed(row[column])) continue;
-        await db.run(`UPDATE ${name} SET ${column} = ? WHERE id = ?`, [crypto.open(name, column, row.id, row[column]), row.id]);
-      }
-    }
-    for (const trigger of triggers) await db.run(`ALTER TABLE ${name} ENABLE TRIGGER ${trigger}`);
-  }
-}
+// Turns every sealed column back into the plaintext an older build wrote (the backfill's reverse direction), so the legacy-read
+// and backfill paths are real.
+const downgrade = (db, crypto) => encryptExistingRows({ database: db, crypto, unseal: true, includeE1: true });
 
 test('E1b: legacy plaintext rows still read; the backfill dry run changes nothing, seals them once, and a second run changes 0 rows', pgOptions, async t => {
   const app = await startApp(t);
@@ -124,7 +123,7 @@ test('E1b: legacy plaintext rows still read; the backfill dry run changes nothin
   assert.deepEqual(await services.clauses.getAnswer({ householdId: s.householdId, caseId: s.caseId, answerId: answerBefore.answerId }), answerBefore);
   assert.equal((await services.households.getAdult(s.adultId)).display_name, HOLDER);
 
-  const snapshot = async () => JSON.stringify(await Promise.all(ENCRYPTED_COLUMNS.map(({ table: name, columns }) => app.database.many(`SELECT id, ${columns.join(', ')} FROM ${name} ORDER BY id`))));
+  const snapshot = async () => JSON.stringify(await Promise.all(ENCRYPTED_COLUMNS.map(({ table: name, key = ['id'] }) => app.database.many(`SELECT * FROM ${name} ORDER BY ${key.join(', ')}`))));
   const before = await snapshot();
   const dry = await encryptExistingRows({ database: app.database, crypto, dryRun: true });
   assert.equal(dry.dryRun, true);
@@ -145,7 +144,7 @@ test('E1b: legacy plaintext rows still read; the backfill dry run changes nothin
   assert.deepEqual((await app.call(`/api/v1/cases/${s.caseId}/passages?q=${encodeURIComponent('room rent')}`, { token: s.token })).data, passagesBefore);
   assert.deepEqual(await services.clauses.getAnswer({ householdId: s.householdId, caseId: s.caseId, answerId: answerBefore.answerId }), answerBefore);
   const triggers = await app.database.many(`SELECT tgname, tgenabled FROM pg_trigger WHERE tgname = ANY(?)`, [ENCRYPTED_COLUMNS.flatMap(item => item.triggers)]);
-  assert.equal(triggers.length, 4);
+  assert.equal(triggers.length, new Set(ENCRYPTED_COLUMNS.flatMap(item => item.triggers)).size);
   assert.ok(triggers.every(trigger => trigger.tgenabled === 'O'), 'no trigger is left disabled');
   await assert.rejects(app.database.run("UPDATE policy_clauses SET text = 'x'"), /immutable/);
   await assert.rejects(app.database.run("UPDATE evidence_facts SET value_json = 'x'"), /append only/);
@@ -191,13 +190,13 @@ test('E1b: production fails closed without a data encryption key, at server star
   assert.ok(createBackendServices(db, { env: withKey }));
 });
 
-test('E1d/E1b: migrations 018, 019 and 020 can be run again on a migrated database without error or loss', pgOptions, async t => {
+test('E1d/E1b + D2: migrations 018, 019, 020 and 030 can be run again on a migrated database without error or loss', pgOptions, async t => {
   const app = await startApp(t);
   const s = await scenario(app, { read: false });
   await app.call(`/api/v1/cases/${s.caseId}/profile-answers`, { method: 'PUT', token: s.token, body: { answers: { city: 'Pune' } } });
   const counts = async () => (await app.database.one('SELECT (SELECT count(*) FROM profile_answers) AS a, (SELECT count(*) FROM document_blobs) AS b, (SELECT count(*) FROM adult_users) AS c')).a;
   const before = await counts();
-  for (const name of ['018_profile_answers.sql', '019_column_encryption_prep.sql', '020_document_blobs.sql']) {
+  for (const name of ['018_profile_answers.sql', '019_column_encryption_prep.sql', '020_document_blobs.sql', '030_seal_remaining_columns.sql']) {
     const sql = readFileSync(join(postgresMigrationDirectory, name), 'utf8');
     await app.database.pool.query(sql);
     await app.database.pool.query(sql);
@@ -206,11 +205,13 @@ test('E1d/E1b: migrations 018, 019 and 020 can be run again on a migrated databa
   assert.deepEqual(await app.database.many(`SELECT c.relname FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r' AND NOT c.relrowsecurity`), []);
   // The sealed-length checks exist exactly once per column after repeated runs.
   const checks = await app.database.many("SELECT conname FROM pg_constraint WHERE conname LIKE '%sealed_len_check' ORDER BY conname");
+  // Migration 030 (D2) adds its own looser caps; the list is the 019 set plus those.
   assert.deepEqual(checks.map(row => row.conname), [
     'evidence_facts_value_json_sealed_len_check', 'ocr_jobs_result_json_sealed_len_check', 'policy_answers_answer_json_sealed_len_check',
-    'policy_clauses_text_sealed_len_check', 'policy_clauses_title_sealed_len_check', 'source_pages_blocks_json_sealed_len_check',
+    'policy_answers_question_sealed_len_check', 'policy_clauses_text_sealed_len_check', 'policy_clauses_title_sealed_len_check',
+    'proposed_parameters_label_sealed_len_check', 'source_pages_blocks_json_sealed_len_check',
   ]);
-  assert.ok(readdirSync(postgresMigrationDirectory).filter(name => /^0(18|19|20)_/.test(name)).length === 3);
+  assert.ok(readdirSync(postgresMigrationDirectory).filter(name => /^0(18|19|20|30)_/.test(name)).length === 4);
 });
 
 // ---- review fixes ----
@@ -227,9 +228,17 @@ test('review: migration 021 makes the JSON columns take a sealed envelope or JSO
   // Valid JSON (legacy rows) and envelopes of either version remain acceptable.
   await db.run(`INSERT INTO profile_answers (id, household_id, case_id, adult_user_id, field_key, value_ciphertext, created_at, updated_at)
     VALUES ('sealed-answer', ?, ?, ?, 'state', 'enc1.k1.AAAA.BBBB.CCCC', 't', 't')`, [s.householdId, s.caseId, s.adultId]);
-  const names = (await db.many("SELECT conname FROM pg_constraint WHERE conname LIKE '%sealed_or_json_check' OR conname = 'profile_answers_value_sealed_check' ORDER BY conname")).map(row => row.conname);
-  assert.deepEqual(names, ['evidence_facts_value_json_sealed_or_json_check', 'ocr_jobs_result_json_sealed_or_json_check', 'policy_answers_answer_json_sealed_or_json_check',
-    'profile_answers_value_sealed_check', 'source_pages_blocks_json_sealed_or_json_check']);
+  const names = (await db.many("SELECT conname FROM pg_constraint WHERE conname LIKE '%sealed_or_js%' OR conname = 'profile_answers_value_sealed_check' ORDER BY conname")).map(row => row.conname);
+  // 021's four JSON columns, profile answers, and the columns migration 030 (D2) added the same check to.
+  assert.deepEqual([...names].sort(), [
+    'catalogue_reviews_fact_json_sealed_or_json_check', 'coverage_graph_snapshots_graph_json_sealed_or_json_check',
+    'coverage_parameter_observations_value_json_sealed_or_json_check', 'coverage_parameter_resolutions_resolved_value_json_sealed_or_js' /* cut to the 63-character identifier limit */,
+    'evidence_facts_value_json_sealed_or_json_check', 'idempotency_keys_response_json_sealed_or_json_check', 'integration_outbox_payload_json_sealed_or_json_check',
+    'integration_webhook_events_payload_json_sealed_or_json_check', 'ocr_jobs_result_json_sealed_or_json_check', 'policy_answers_answer_json_sealed_or_json_check',
+    'profile_answers_value_sealed_check', 'proposed_parameters_value_json_sealed_or_json_check', 'source_pages_blocks_json_sealed_or_json_check',
+    'source_pages_provenance_json_sealed_or_json_check', 'workflow_events_event_payload_json_sealed_or_json_check', 'workflow_runs_input_json_sealed_or_json_check',
+    'workflow_tasks_input_json_sealed_or_json_check', 'workflow_tasks_output_json_sealed_or_json_check',
+  ].sort());
 });
 
 test('review: a backfill batch that fails in SQL rethrows the original error, rolls back, and leaves the trigger enabled', pgOptions, async t => {

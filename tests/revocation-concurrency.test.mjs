@@ -14,6 +14,7 @@ import { CoverageParameterRepository } from '../src/backend/repositories/coverag
 import { HouseholdRepository } from '../src/backend/repositories/household-repository.js';
 import { parameterAt as at, seedParameterWorld } from './support/parameter-fixtures.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { pick, plainRow, plainRows } from './support/sealed.mjs';
 
 const pgOptions = postgresTestOptions();
 const HOUSEHOLD = 'household-parameters';
@@ -236,8 +237,8 @@ test('task completion holding the run lock first: revocation waits, then erases 
   resume();
   assert.equal(await completing, 1);
   await revoking;
-  const task = await db.one('SELECT status, output_json FROM workflow_tasks WHERE id = ?', [TASK]);
-  assert.deepEqual({ ...task }, { status: 'revoked', output_json: null });
+  const task = await plainRow(db, 'workflow_tasks', 'WHERE id = ?', [TASK]);
+  assert.deepEqual(pick(task, 'status', 'output_json'), { status: 'revoked', output_json: null });
   await assertNothingDerivedSurvives(db);
 });
 
@@ -268,20 +269,23 @@ test('revocation erases every derived store this repository owns, audits counts 
   await record(coverageParameters);
   const grant = await revoke(consents);
   assert.ok(grant.revoked_at);
-  assert.equal((await db.one('SELECT status FROM integration_outbox WHERE id = ?', ['outbox-1'])).status, 'cancelled');
-  const runs = await db.many('SELECT id, status, terminal_reason, input_json FROM workflow_runs ORDER BY id');
+  assert.equal((await plainRow(db, 'integration_outbox', 'WHERE id = ?', ['outbox-1'])).status, 'cancelled');
+  // D2: the outbox error text is sealed at rest.
+  assert.match((await db.one('SELECT last_error FROM integration_outbox WHERE id = ?', ['outbox-1'])).last_error, /^enc2\./);
+  assert.equal((await plainRow(db, 'integration_outbox', 'WHERE id = ?', ['outbox-1'])).last_error, 'Consent revoked.');
+  const runs = await plainRows(db, 'workflow_runs', 'ORDER BY id');
   for (const run of runs) {
     assert.equal(run.status, 'revoked', run.id);
     assert.equal(run.terminal_reason, 'CONSENT_REVOKED');
     for (const page of JSON.parse(run.input_json).sourcePages) assert.equal(page.redacted, 'consent_revoked');
   }
-  assert.ok((await db.many('SELECT status, output_json FROM workflow_tasks')).every(task => task.status === 'revoked' && task.output_json === null));
-  assert.deepEqual({ ...(await db.one('SELECT status, graph_json FROM coverage_graph_snapshots')) }, { status: 'superseded', graph_json: '{}' });
+  assert.ok((await plainRows(db, 'workflow_tasks')).every(task => task.status === 'revoked' && task.output_json === null));
+  assert.deepEqual(pick(await plainRow(db, 'coverage_graph_snapshots'), 'status', 'graph_json'), { status: 'superseded', graph_json: '{}' });
   assert.equal((await db.one('SELECT count(*) AS count FROM policy_members')).count, 0);
-  assert.equal((await db.one('SELECT policy_number_masked FROM policies WHERE id = ?', ['policy-from-document'])).policy_number_masked, null);
+  assert.equal((await plainRow(db, 'policies', 'WHERE id = ?', ['policy-from-document'])).policy_number_masked, null);
   assert.equal((await db.one('SELECT epistemic_state FROM evidence_facts WHERE id = ?', ['fact-1'])).epistemic_state, 'unknown');
-  assert.ok((await db.many('SELECT lifecycle_state FROM document_uploads')).every(row => row.lifecycle_state !== 'active'));
-  assert.ok((await db.many('SELECT extracted_text FROM source_pages')).every(row => row.extracted_text === null));
+  assert.ok((await plainRows(db, 'document_uploads')).every(row => row.lifecycle_state !== 'active'));
+  assert.ok((await plainRows(db, 'source_pages')).every(row => row.extracted_text === null));
   await assertNothingDerivedSurvives(db);
   assert.deepEqual(calls.structuring.map(call => call.documentIds).flat().sort(), ['document-other', 'document-parameters']);
   assert.deepEqual(calls.clauses.map(call => call.documentIds).flat().sort(), ['document-other', 'document-parameters']);
@@ -306,7 +310,7 @@ test('a failure in a derived store rolls the whole revocation back', pgOptions, 
   await assert.rejects(revoke(failing), /synthetic store failure/);
   assert.equal((await db.one('SELECT revoked_at FROM consent_grants WHERE id = ?', [DOCUMENT_GRANT])).revoked_at, null);
   assert.equal((await db.one('SELECT count(*) AS count FROM consent_revocations')).count, 0);
-  assert.ok((await db.one('SELECT input_json FROM workflow_runs WHERE id = ?', [RUN])).input_json.includes(MARKER));
+  assert.ok((await plainRow(db, 'workflow_runs', 'WHERE id = ?', [RUN])).input_json.includes(MARKER));
   // Without injection both derived stores are built on the database: erasure always has a path.
   const defaults = new ConsentRepository(db, { clock: () => new Date(at), audit, coverageParameters });
   assert.ok(defaults.policyStructuring, 'policy structuring erasure is built by default');
@@ -318,7 +322,7 @@ test('a failure in a derived store rolls the whole revocation back', pgOptions, 
     await assert.rejects(revoke(unconfigured), { code: 'ERASURE_NOT_CONFIGURED' }, missing);
     assert.equal((await db.one('SELECT count(*) AS count FROM consent_revocations')).count, 0);
     assert.equal((await db.one('SELECT revoked_at FROM consent_grants WHERE id = ?', [DOCUMENT_GRANT])).revoked_at, null);
-    assert.ok((await db.one('SELECT input_json FROM workflow_runs WHERE id = ?', [RUN])).input_json.includes(MARKER));
+    assert.ok((await plainRow(db, 'workflow_runs', 'WHERE id = ?', [RUN])).input_json.includes(MARKER));
   }
 });
 
@@ -342,12 +346,12 @@ test('revoking the coverage grant erases the runs it authorised', pgOptions, asy
   await seedRevocationWorld(db);
   const { consents } = repositories(db);
   await revoke(consents, COVERAGE_GRANT);
-  const run = await db.one('SELECT status, input_json FROM workflow_runs WHERE id = ?', [COVERAGE_RUN]);
+  const run = await plainRow(db, 'workflow_runs', 'WHERE id = ?', [COVERAGE_RUN]);
   assert.equal(run.status, 'revoked');
   assert.ok(!run.input_json.includes(MARKER));
-  assert.equal((await db.one('SELECT output_json FROM workflow_tasks WHERE id = ?', ['task-coverage'])).output_json, null);
+  assert.equal((await plainRow(db, 'workflow_tasks', 'WHERE id = ?', ['task-coverage'])).output_json, null);
   // The document grant's run is untouched.
-  assert.ok((await db.one('SELECT input_json FROM workflow_runs WHERE id = ?', [RUN])).input_json.includes(MARKER));
+  assert.ok((await plainRow(db, 'workflow_runs', 'WHERE id = ?', [RUN])).input_json.includes(MARKER));
 });
 
 test('a model write without a lease is refused on a revoked run', pgOptions, async t => {

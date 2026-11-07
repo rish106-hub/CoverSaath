@@ -9,13 +9,14 @@ import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterRegistry } from '.
 import { auditActions, liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 import { seedParameterWorld } from './support/parameter-fixtures.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { plainRow, plainRows } from './support/sealed.mjs';
 
 const pg = postgresTestOptions();
 
 const REGISTRY_SIZE = getPolicyParameterRegistry(POLICY_PARAMETER_REGISTRY_VERSION).parameters.length;
 const PROBE_EMAIL = 'asha.synthetic@example.test';
 const count = async (database, sql, ...params) => (await database.prepare(sql).get(...params)).count;
-const runInput = async (database, runId) => JSON.parse((await database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(runId)).input_json);
+const runInput = async (database, runId) => JSON.parse((await plainRow(database, 'workflow_runs', 'WHERE id = ?', [runId])).input_json);
 
 async function acquisitionOf(database, runId) {
   return Object.fromEntries((await database.prepare(`SELECT parameter.parameter_key AS key, acquisition.acquisition_state AS state
@@ -252,7 +253,7 @@ for (const [label, revoke] of [
     const row = await app.database.prepare('SELECT status, terminal_reason FROM workflow_runs WHERE id = ?').get(run.data.id);
     assert.deepEqual({ ...row }, { status: 'revoked', terminal_reason: 'CONSENT_REVOKED' });
     // The in-flight results were not committed: nothing completed, no artifact audit, no output.
-    const tasks = await app.database.prepare('SELECT task_kind, status, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(run.data.id);
+    const tasks = await plainRows(app.database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [run.data.id]);
     assert.equal(tasks.filter(task => task.status === 'completed').length, 0);
     assert.ok(tasks.every(task => task.output_json === null));
     assert.equal((await auditActions(app.database, 'analysis.task_completed')).length, 0);
@@ -268,7 +269,7 @@ for (const [label, revoke] of [
     // No raw text in rows or audit.
     const everything = JSON.stringify({
       tasks, audit: await app.database.prepare('SELECT event_payload_json FROM audit_events').all(),
-      run: await app.database.prepare('SELECT input_json, terminal_reason FROM workflow_runs WHERE id = ?').get(run.data.id), response: run.raw,
+      run: await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [run.data.id]), response: run.raw,
     });
     assert.ok(!everything.includes(PROBE_EMAIL));
   });
@@ -372,7 +373,7 @@ test('T3: first completion inserts pages once and a mismatching job or version i
 // T4: question citations resolve to authorised sources
 // ---------------------------------------------------------------------------
 
-const outputsByKind = async (database, runId) => Object.fromEntries((await database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(runId))
+const outputsByKind = async (database, runId) => Object.fromEntries((await plainRows(database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [runId]))
   .map(row => [row.task_kind, JSON.parse(row.output_json ?? 'null')?.payload ?? null]));
 
 test('T4: question citations are the single opaque id of an authorised source, never a double hash', async t => {
@@ -471,7 +472,7 @@ test('T5: revoking a document grant redacts its observations with an explicit co
   assert.equal(await count(app.database, 'SELECT count(*) AS count FROM coverage_parameter_observations WHERE document_id = ? AND value_json IS NOT NULL', scenario.documentId), 0);
   assert.ok(!JSON.stringify(event).includes(valueProbe));
   // The explicit path ran inside the revocation: the reason is consent_revoked, not the trigger's document_erasure.
-  const rows = await app.database.prepare('SELECT value_json, redacted_at, redaction_reason_code FROM coverage_parameter_observations ORDER BY id').all();
+  const rows = await plainRows(app.database, 'coverage_parameter_observations', 'ORDER BY id');
   assert.equal(rows.length, pending.observations);
   assert.ok(rows.every(row => row.value_json === null && row.redacted_at && row.redaction_reason_code === 'consent_revoked'));
   const actor = await app.database.prepare('SELECT actor_type, actor_id FROM audit_events WHERE id = ?').get(event.id);

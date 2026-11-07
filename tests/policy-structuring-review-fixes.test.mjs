@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { POLICY_PARAMETER_REGISTRY_VERSION as registryVersion } from '../src/features/coverage-analysis/policy-parameter-registry.js';
-import { extractChunks, reconcile, validateExtractedItems } from '../src/features/policy-structuring/index.js';
+import { extractChunks, gateChunks, reconcile, validateExtractedItems } from '../src/features/policy-structuring/index.js';
 
 // Fixes from the independent W2-W4 review. Synthetic data only.
 
@@ -37,7 +37,7 @@ for (const code of ['reservation_exceeded', 'budget_refused']) {
       calls += 1;
       throw Object.assign(new Error('stop'), { code });
     };
-    const extraction = await extractChunks({ chunks, registryVersion, call, consentCheck: () => {}, limits: { maxChunksPerCall: 1 } });
+    const extraction = await extractChunks({ chunks: gateChunks(chunks, { knownIdentifiers: [] }).sent, registryVersion, call, consentCheck: () => {}, limits: { maxChunksPerCall: 1 } });
     assert.equal(calls, 1);
     assert.equal(extraction.budgetStopped, true);
     assert.ok(Object.values(extraction.chunkOutcomes).every(outcome => outcome.status === 'skipped' && outcome.reason === 'budget_stop'));
@@ -52,7 +52,7 @@ test('reconcile makes no paid call after a budget stop, and deterministic confli
     page, blockIndex: 0, chunkId: `p${page}-b0`, subjectInSource: false, state: 'extracted_unverified', note: {},
   });
   let calls = 0;
-  const result = await reconcile({
+  const result = await reconcile({ knownIdentifiers: [],
     accepted: [item('3 years', 1), item('36 months', 2)], proposals: [],
     call: async () => { calls += 1; return { json: { conflicts: [] } }; }, consentCheck: () => {}, budgetStopped: true,
   });

@@ -13,6 +13,10 @@ paths = [
   '''tests/privacy-gate-v9-rereview\.test\.mjs''',
   '''tests/ui-document-upload\.test\.mjs''',
   '''tests/p1a-execution-policy\.test\.mjs''',
+  '''tests/gated-text-builders\.test\.mjs''',
+  '''tests/support/corpus-rows\.mjs''',
   '''tests/postgres-triggers\.test\.mjs''',
+  '''tests/gated-text-builders\.test\.mjs''',
+  '''tests/support/corpus-rows\.mjs''',
   '''tests/fakes/fake-gemini-server\.mjs''',  # removed from HEAD, still in history
 ]

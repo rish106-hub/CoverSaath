@@ -16,7 +16,7 @@ export const expectedTables = Object.freeze([
   'coverage_parameter_resolutions', 'coverage_parameter_observation_rules',
   'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs', 'policy_clauses', 'policy_answers', 'catalogue_reviewer_grants', 'catalogue_reviews',
   'source_curator_grants', 'curated_source_archives', 'curated_product_submissions', 'curated_action_nonces',
-  'auth_identities', 'profile_answers', 'document_blobs', 'app_events', 'rate_limit_buckets', 'model_budget_scopes', 'model_budget_reservations',
+  'auth_identities', 'profile_answers', 'document_blobs', 'app_events', 'rate_limit_buckets', 'model_budget_scopes', 'model_budget_reservations', 'evidence_claims',
   'device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios',
 ]);
 
@@ -76,7 +76,7 @@ export const criticalIndexes = Object.freeze([
   'integration_outbox_consent_status_idx', 'idempotency_keys_expiry_idx',
   'audit_events_household_chain_idx',
   'app_events_time_idx', 'app_events_name_time_idx', 'app_events_household_idx', 'app_events_expiry_idx', 'rate_limit_buckets_window_idx',
-  'model_budget_reservations_scope_idx', 'document_uploads_consent_grant_idx', 'consent_grants_household_subject_idx',
+  'model_budget_reservations_scope_idx', 'evidence_claims_expiry_idx', 'document_uploads_consent_grant_idx', 'consent_grants_household_subject_idx',
   'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'consent_scopes_field_viewer_idx',
   'ocr_jobs_lifecycle_idx',
   'coverage_parameter_records_run_idx', 'coverage_parameter_records_case_idx',
@@ -94,6 +94,8 @@ export const requiredColumns = Object.freeze({
   document_uploads: ['logical_document_id', 'source_version', 'scan_attempts', 'next_scan_at'],
   evidence_facts: ['provenance_kind', 'statement_adult_id', 'institutional_source_ref', 'calculation_method', 'review_status', 'redacted_at', 'redaction_reason_code'],
   workflow_runs: ['case_revision', 'consent_grant_id', 'input_json', 'terminal_reason'],
+  service_cases: ['stated_estimate_ciphertext'],
+  idempotency_keys: ['document_index'],
   workflow_tasks: ['input_json', 'output_json', 'lease_owner', 'lease_expires_at', 'retry_available_at', 'terminal_reason'],
   ocr_jobs: ['contract_version', 'authorization_json', 'result_json', 'result_digest', 'updated_at'],
   source_pages: ['output_contract_version', 'text_sha256', 'provider_page_ref', 'provenance_json', 'blocks_json', 'blocks_upgrade_job_id'],
@@ -109,4 +111,5 @@ export const requiredColumns = Object.freeze({
   rate_limit_buckets: ['key_hash', 'window_start', 'request_count'],
   model_budget_scopes: ['scope', 'reserved_micro_usd', 'spent_micro_usd'],
   model_budget_reservations: ['scope', 'amount_micro_usd', 'state', 'actual_micro_usd'],
+  evidence_claims: ['claim_hash', 'owner', 'expires_at'],
 });

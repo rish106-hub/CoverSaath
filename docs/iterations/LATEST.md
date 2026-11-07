@@ -1,5 +1,9 @@
 # Latest iteration
 
+## S3 erasure, export and retention (2026-11-06, branch `patch/s3-erasure`, local, uncommitted)
+
+Erase a case, a member or a household; export own data; retention sweep (dry run by default). No migration (deletion ledger reuses `retention_records`). Map, residue, retention placeholders and open decisions: [data-lifecycle.md](../architecture/data-lifecycle.md). Routes (all under `/api/v1`): `POST /api/v1/cases/{id}/erasure`, `POST /api/v1/households/{id}/erasure`, `POST /api/v1/households/{id}/members/{memberId}/erasure` (body `{"confirm":"<id>"}`), `GET /api/v1/households/{id}/export`, `GET /api/v1/cases/{id}/export`, `GET /api/v1/households/{id}/members/{memberId}/export`. An erasure over the case cap (5000 cases) is refused with 409 `ERASURE_TOO_LARGE` before anything changes. `npm run retention:sweep [-- --apply]`. Proof: `tests/data-erasure-proof.test.mjs`. Residue after erasure is content-free tombstones pinned by audit foreign keys and append-only tables; dropping the audit foreign keys is an open owner decision. Retention periods and export scope FOR LEGAL REVIEW. Independent review pending.
+
 ## App data routes B-A (2026-11-01, branch `feat/app-data-ba`, local, nothing pushed)
 
 New `/api/v1` routes on existing tables, no migration. Session bearer; household ownership checked in `services.app` on every call; write needs owner or member role (viewer reads only, `HOUSEHOLD_WRITE_FORBIDDEN`); a foreign household or policy is 404.

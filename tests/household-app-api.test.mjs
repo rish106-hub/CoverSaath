@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 import { assertSafeSeedTarget, assertSeedAllowed, seedDemoHousehold } from '../scripts/seed-demo-household.js';
+import { plainRow } from './support/sealed.mjs';
 
 const bootstrapToken = 'coversaath-test-bootstrap-token-0003';
 const opts = postgresTestOptions();
@@ -211,7 +212,7 @@ test('a real adult member row cannot be changed by another adult; placeholders a
     assert.equal(r.status, 403, JSON.stringify(body));
     assert.equal(r.data.error.code, 'MEMBER_PROTECTED');
   }
-  const unchanged = await db.one('SELECT relationship_label, date_of_birth FROM household_members WHERE id = ?', [realMember.id]);
+  const unchanged = await plainRow(db, 'household_members', 'WHERE id = ?', [realMember.id]);
   assert.equal(unchanged.relationship_label, 'Sibling');
   assert.equal(unchanged.date_of_birth, null);
   const placeholder = await add(app, owner, { displayName: 'Placeholder Synthetic', memberKind: 'adult' });
