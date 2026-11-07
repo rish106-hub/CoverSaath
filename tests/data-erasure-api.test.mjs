@@ -5,6 +5,7 @@ import { postgresTestOptions } from './support/pg.mjs';
 import { startApp, household, ask } from './support/household-api-harness.mjs';
 import { createRetentionService } from '../src/backend/services/retention-service.js';
 import { createBackendServices } from '../src/backend/services/index.js';
+import { encryptExistingRows } from '../src/backend/security/column-backfill.js';
 
 const opts = postgresTestOptions();
 const caseCount = async (app, who) => (await app.call(`/api/v1/households/${who.householdId}/cases`, { token: who.token })).data.cases.length;
@@ -184,6 +185,47 @@ test('a member-role adult cannot erase a member whose case someone else opened; 
   const allowed = await erase(app, `/api/v1/households/${a.householdId}/members/${kid.data.id}/erasure`, a.token, kid.data.id);
   assert.equal(allowed.status, 200, JSON.stringify(allowed.data));
   assert.equal(await caseCount(app, a), 1);
+});
+
+test('the column backfill never seals the erased-member marker, so an erased member stays hidden', opts, async t => {
+  const app = await startApp(t);
+  const a = await household(app, { name: 'Alpha' });
+  const kid = await app.call(`/api/v1/households/${a.householdId}/members`, { method: 'POST', token: a.token, body: { displayName: 'Kid Synthetic', memberKind: 'dependent' } });
+  // A scrubbed member that must stay (something still refers to it) holds the plain marker; put a member in that state.
+  await app.database.run("UPDATE household_members SET display_name = '[erased]' WHERE id = ?", [kid.data.id]);
+  const services = createBackendServices(app.database);
+  const before = await app.database.one('SELECT display_name FROM household_members WHERE id = ?', [kid.data.id]);
+  assert.equal(before.display_name, '[erased]');
+  await encryptExistingRows({ database: app.database, crypto: services.columnCrypto, rotate: true });
+  const after = await app.database.one('SELECT display_name FROM household_members WHERE id = ?', [kid.data.id]);
+  assert.equal(after.display_name, '[erased]', 'the marker is still plain text after a sealing and rotation run');
+  const members = await app.call(`/api/v1/households/${a.householdId}/members`, { token: a.token });
+  assert.ok(!members.data.members.some(member => member.id === kid.data.id));
+  const patched = await app.call(`/api/v1/households/${a.householdId}/members/${kid.data.id}`, { method: 'PATCH', token: a.token, body: { displayName: 'Revived Synthetic' } });
+  assert.equal(patched.status, 404, 'an erased member cannot be updated or revived');
+});
+
+test('an erasure over the case cap is refused before anything changes, never reported as done', opts, async t => {
+  const app = await startApp(t);
+  const a = await household(app, { name: 'Alpha' });
+  const kid = await app.call(`/api/v1/households/${a.householdId}/members`, { method: 'POST', token: a.token, body: { displayName: 'Kid Synthetic', memberKind: 'dependent' } });
+  for (let index = 0; index < 2; index += 1) {
+    const opened = await app.call('/api/v1/cases', { method: 'POST', token: a.token, body: { householdId: a.householdId, subjectMemberId: kid.data.id, triggerType: 'planned_care' } });
+    assert.equal(opened.status, 201, JSON.stringify(opened.data));
+  }
+  const services = createBackendServices(app.database);
+  services.erasure.maxCases = 1;
+  const actor = { type: 'adult_user', id: a.adultId };
+  const reason = 'data_subject_request';
+  const grantsBefore = Number((await app.database.one('SELECT count(*) AS n FROM consent_grants WHERE household_id = ? AND revoked_at IS NULL', [a.householdId])).n);
+  await assert.rejects(services.erasure.eraseHousehold({ householdId: a.householdId, actor, reason }), { code: 'ERASURE_TOO_LARGE' });
+  await assert.rejects(services.erasure.eraseMember({ householdId: a.householdId, memberId: kid.data.id, actor, reason, mayEraseOthersCases: true }), { code: 'ERASURE_TOO_LARGE' });
+  // Nothing was revoked, scrubbed or recorded as erased by the refusals.
+  assert.equal(Number((await app.database.one('SELECT count(*) AS n FROM consent_grants WHERE household_id = ? AND revoked_at IS NULL', [a.householdId])).n), grantsBefore);
+  assert.equal(Number((await app.database.one('SELECT count(*) AS n FROM retention_records WHERE household_id = ?', [a.householdId])).n), 0);
+  assert.equal(await caseCount(app, a), 3);
+  const members = await app.call(`/api/v1/households/${a.householdId}/members`, { token: a.token });
+  assert.ok(members.data.members.some(member => member.id === kid.data.id));
 });
 
 test('export never carries free-text reasons, even from audit rows written before reasons were restricted', opts, async t => {
