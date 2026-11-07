@@ -8,6 +8,7 @@ import { createApiServer } from '../src/server/server.js';
 import {
   CONSENTERS, DATA_REGISTRY, PERSONAL_DATA_CATEGORIES, PURPOSES, RETENTION_CLASSES, noticeSetView, registryFields,
 } from '../src/contracts/data-purposes.js';
+import { CONSENT_PURPOSES } from '../src/contracts/data-purpose-registry.js';
 import { NOTICES, NOTICE_IDS, NOTICE_SET_VERSION, getNotice } from '../src/contracts/notices/index.js';
 
 const pg = postgresTestOptions();
@@ -185,4 +186,51 @@ test('GET /api/v1/notices is public, read-only and returns the notice set', pg, 
     http.get({ host: '127.0.0.1', port: server.address().port, path: '/api/v1/notices', headers: { Host: 'evil.example' } }, res => { res.resume(); resolve(res.statusCode); }).on('error', reject);
   });
   assert.equal(foreign, 403);
+});
+
+test('GET /api/v1/notices/:id is public, coded on a miss, and identical for every household', pg, async t => {
+  const { db } = await freshDatabase(t);
+  const token = 'coversaath-test-bootstrap-token-0005';
+  const server = createApiServer({ database: db, env: { KNOWVIA_BOOTSTRAP_TOKEN: token } });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const create = async name => {
+    const r = await fetch(`${base}/api/v1/households`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ displayName: `${name} household`, owner: { displayName: `${name} owner`, contactEmail: `${name.toLowerCase()}@example.test` } }) });
+    assert.equal(r.status, 201);
+    return (await r.json()).session.token;
+  };
+  const [a, b] = [await create('Alpha'), await create('Beta')];
+  const id = NOTICE_IDS[0];
+  const anon = await fetch(`${base}/api/v1/notices/${id}`);
+  assert.equal(anon.status, 200);
+  const anonBody = await anon.json();
+  assert.equal(anonBody.id, id);
+  assert.equal(anonBody.legalReview, 'pending');
+  // Household ownership: a notice is the same static text for every session, a bad token changes nothing, and it holds no household data.
+  for (const session of [a, b, 'not-a-real-token']) {
+    const r = await fetch(`${base}/api/v1/notices/${id}`, { headers: { Authorization: `Bearer ${session}` } });
+    assert.equal(r.status, 200);
+    assert.deepEqual(await r.json(), anonBody);
+  }
+  // Coded errors: unknown id is 404 NOTICE_NOT_FOUND; a malformed id never reaches a lookup; writes are refused.
+  const miss = await fetch(`${base}/api/v1/notices/notice_nope`);
+  assert.equal(miss.status, 404);
+  assert.equal((await miss.json()).error.code, 'NOTICE_NOT_FOUND');
+  const bad = await fetch(`${base}/api/v1/notices/..%2F..%2Fx`);
+  assert.ok(bad.status >= 400 && bad.status < 500);
+  for (const method of ['POST', 'PUT', 'DELETE']) {
+    const refused = await fetch(`${base}/api/v1/notices/${id}`, { method });
+    assert.ok(refused.status >= 400, `${method} must not succeed`);
+  }
+});
+
+test('every consent purpose in the data-purpose registry either has a notice purpose or is listed as not yet storing data', () => {
+  // These four consent purposes exist in the consent_grants CHECK list but no table stores data for them yet (S5 follow-up when they do).
+  const noDataYet = new Set(['voice_intake', 'institutional_clarification', 'purchase_review', 'payment']);
+  for (const purpose of CONSENT_PURPOSES) {
+    if (noDataYet.has(purpose)) assert.equal(PURPOSES[purpose], undefined, `${purpose} now has a notice purpose; drop it from the list`);
+    else assert.ok(PURPOSES[purpose], `consent purpose ${purpose} has no notice purpose`);
+  }
 });

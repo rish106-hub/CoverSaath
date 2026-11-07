@@ -130,7 +130,7 @@ export const DATA_REGISTRY = Object.freeze({
     { insurance_policy: ['member_reference_masked'] },
     ['policy_id', 'household_member_id', 'membership_state', 'source_page_id', 'created_at']),
   service_cases: entry('coverage_reconstruction',
-    { financial: ['stated_estimate_minor'] },
+    { financial: ['stated_estimate_minor', 'stated_estimate_ciphertext'] },
     ['id', 'household_id', 'subject_member_id', 'opened_by_adult_id', 'trigger_type', 'status', 'emergency_mode', 'currency', 'created_at', 'updated_at', 'closed_at']),
   case_participants: entry('coverage_reconstruction', {},
     ['case_id', 'adult_user_id', 'participant_role', 'consent_grant_id', 'created_at']),
@@ -229,10 +229,13 @@ export const DATA_REGISTRY = Object.freeze({
     { behavioural: ['key_hash'] },
     ['window_start', 'request_count']),
   idempotency_keys: entry('service_operations',
-    { derived_content: ['response_json'], derived_digest: ['request_digest'] },
+    { derived_content: ['response_json'], derived_digest: ['request_digest'], derived_identifier: ['document_index'] },
     ['scope', 'idempotency_key', 'response_status', 'locked_until', 'expires_at', 'created_at']),
   model_budget_reservations: entry('service_operations', {},
     ['id', 'scope', 'amount_micro_usd', 'state', 'actual_micro_usd', 'task', 'created_at', 'settled_at']),
+  // Evidence-question leases (migration 032): hashed claim key, random owner token and timestamps; no household content.
+  evidence_claims: entry('service_operations', {},
+    ['claim_hash', 'owner', 'claimed_at', 'expires_at']),
   model_budget_scopes: entry('service_operations', {},
     ['scope', 'reserved_micro_usd', 'spent_micro_usd', 'updated_at']),
 
@@ -264,6 +267,11 @@ export function registryFields() {
     for (const column of spec.system) rows.push({ ...base, column, kind: 'system', category: null });
   }
   return rows;
+}
+
+/** One notice by id in the same shape as the list, or null. */
+export function noticeView(id) {
+  return noticeSetView().notices.find(notice => notice.id === id) ?? null;
 }
 
 /** The public notice list: static text and the registry facts a reader needs. No household, adult or other stored data. */

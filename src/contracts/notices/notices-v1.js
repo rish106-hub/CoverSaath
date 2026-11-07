@@ -159,7 +159,7 @@ export const NOTICES_V1 = Object.freeze([
     summary: 'We keep short-lived technical records to stop abuse, find faults and avoid doing the same request twice.',
     items: [
       { categories: ['behavioural'], data: 'Which feature was used, when and how it ended, and a scrambled fingerprint of your network address', use: 'To spot faults and abuse and to limit request rates. Never your name or contact.' },
-      { categories: ['derived_content', 'derived_digest'], data: 'A saved copy of the answer to a request and a fingerprint of the request', use: 'So that a retry after a network drop gives the same answer.' },
+      { categories: ['derived_content', 'derived_digest', 'derived_identifier'], data: 'A saved copy of the answer to a request, a fingerprint of the request and a scrambled fingerprint of the document it concerned', use: 'So that a retry after a network drop gives the same answer.' },
     ],
     recipients: ['Our hosting and database providers, as above.'],
     retention: 'A short period measured in days, then removed automatically.',

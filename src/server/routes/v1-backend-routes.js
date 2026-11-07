@@ -10,7 +10,7 @@ import { validatePostgresSchema } from '../../backend/database/postgres/validate
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../../features/coverage-analysis/index.js';
 import { INTAKE_CONNECTORS } from '../../contracts/intake-connectors.js';
-import { noticeSetView } from '../../contracts/data-purposes.js';
+import { noticeSetView, noticeView } from '../../contracts/data-purposes.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
 import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from '../../contracts/profile-answers.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
@@ -293,6 +293,12 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     // session. Reading a notice is not consent; consent stays with the authenticated routes below. FOR LEGAL REVIEW.
     if (req.method === 'GET' && url.pathname === '/api/v1/notices') {
       return { status: 200, body: noticeSetView() };
+    }
+    const noticeMatch = req.method === 'GET' ? /^\/api\/v1\/notices\/([a-z0-9_]{1,80})$/.exec(url.pathname) : null;
+    if (noticeMatch) {
+      const view = noticeView(noticeMatch[1]);
+      if (!view) return { status: 404, body: { error: { code: 'NOTICE_NOT_FOUND', message: 'Notice not found.' } } };
+      return { status: 200, body: view };
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/households') {
       services.access.requireBootstrap(req.headers.authorization);
