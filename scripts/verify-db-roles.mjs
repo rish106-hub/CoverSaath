@@ -2,10 +2,15 @@
 // transactions that are always rolled back. Prints check names, pass/fail and SQLSTATE codes only; never a URL,
 // password or driver message. Exit code 1 if any check fails or the old credential is not proven rejected.
 //
-//   RUNTIME_DATABASE_URL    the new knowvia_runtime URL (required)
-//   MIGRATION_DATABASE_URL  the new knowvia_migrator URL (optional)
-//   OLD_DATABASE_URL        the URL with the exposed/rotated credential; it must be refused (optional but advised)
+// All three URLs are required for a passing result; a missing one is recorded as a failing `not_checked` entry.
+//   RUNTIME_DATABASE_URL    the new knowvia_runtime URL
+//   MIGRATION_DATABASE_URL  the new knowvia_migrator URL
+//   OLD_DATABASE_URL        the URL with the exposed/rotated credential; it must be refused. Needed only for the
+//                           cutover check. To re-verify the roles after a later migration, when the old credential
+//                           is gone, an owner may supply any URL that is known to be dead (a wrong password for the
+//                           same host), and `rejected` then proves it still fails; no old secret needs to be kept.
 //   DATABASE_SSL_CA_PATH    PEM CA for the hosted database (optional)
+// The variables must be in this process's environment (exported, or set on the command line).
 import { createPostgresPool, postgresPoolOptionsFromEnv } from '../src/backend/database/postgres/index.js';
 import { probeCredentialRejected, probeMigratorRole, probeRuntimeRole } from './lib/db-role-probe.mjs';
 
@@ -42,6 +47,7 @@ async function withPool(name, work) {
 try {
   add('runtime', await withPool('RUNTIME_DATABASE_URL', probeRuntimeRole));
   if (present('MIGRATION_DATABASE_URL')) add('migrator', await withPool('MIGRATION_DATABASE_URL', probeMigratorRole));
+  else add('migrator', [{ check: 'migrator_checked', ok: false, detail: { result: 'not_checked' } }]);
 } catch (error) {
   process.stderr.write(`Verification could not run (${typeof error?.code === 'string' ? error.code : 'UNKNOWN'}).\n`);
   process.exit(1);

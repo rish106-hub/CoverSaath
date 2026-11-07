@@ -7,6 +7,7 @@ try {
   const applied = await runPostgresMigrations(pool);
   const schema = await validatePostgresSchema(pool);
   process.stdout.write(`${JSON.stringify({ applied, ...schema }, null, 2)}\n`);
+  if (!schema.valid) process.exitCode = 1;
 } catch (error) {
   process.stderr.write(`${error.code ?? 'ERROR'}: ${error.message}\n`);
   process.exitCode = 1;

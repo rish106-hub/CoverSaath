@@ -30,7 +30,22 @@ function renamed(sql, names) {
   assert.match(names.migrator, ROLE_NAME);
   return sql.replaceAll('knowvia_runtime', names.runtime).replaceAll('knowvia_migrator', names.migrator);
 }
-const applyRoleScript = (db, script, names) => db.query(renamed(script, names));
+// The script travels as a bound parameter (set_config), and a constant DO block executes it, so no statement text is
+// built from file contents. One transaction, as with `psql -1`, so a failed check rolls the whole script back.
+async function applyRoleScript(db, script, names) {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT set_config('coversaath.test_script', $1, true)", [renamed(script, names)]);
+    await client.query("DO $run$ BEGIN EXECUTE current_setting('coversaath.test_script'); END $run$");
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 const failures = results => results.filter(item => !item.ok);
 
 // Applies the role SQL to `handle`, sets throwaway passwords and opens one pool per role.
@@ -62,11 +77,19 @@ test('migrationPoolOptionsFromEnv prefers MIGRATION_DATABASE_URL and the API pat
   assert.equal(postgresPoolOptionsFromEnv({ DATABASE_URL: api, MIGRATION_DATABASE_URL: migrator }).connectionString, api);
   assert.throws(() => migrationPoolOptionsFromEnv({}), { code: 'DATABASE_URL_REQUIRED' });
   assert.equal(migrationPoolOptionsFromEnv({ MIGRATION_DATABASE_URL: migrator }).connectionString, migrator);
+  // An invalid migrator URL is reported under its own name, and never echoes the value.
+  assert.throws(() => migrationPoolOptionsFromEnv({ DATABASE_URL: api, MIGRATION_DATABASE_URL: 'mysql://u:secret-token@h/db' }), error => {
+    assert.equal(error.code, 'DATABASE_URL_INVALID');
+    assert.match(error.message, /^MIGRATION_DATABASE_URL /);
+    assert.ok(!error.message.includes('secret-token'));
+    return true;
+  });
 });
 
 test('probeCredentialRejected: only an authentication failure proves a credential is dead', async () => {
   const stub = behaviour => () => ({ query: async () => behaviour(), end: async () => {} });
   assert.deepEqual(await probeCredentialRejected({}, { createPool: stub(() => { throw Object.assign(new Error('x'), { code: '28P01' }); }) }), { result: 'rejected', code: '28P01' });
+  assert.deepEqual(await probeCredentialRejected({}, { createPool: stub(() => { throw Object.assign(new Error('x'), { code: '28000' }); }) }), { result: 'inconclusive', code: '28000' }, 'a pg_hba refusal is not proof');
   assert.deepEqual(await probeCredentialRejected({}, { createPool: stub(() => ({ rows: [] })) }), { result: 'accepted', code: null });
   assert.deepEqual(await probeCredentialRejected({}, { createPool: stub(() => { throw Object.assign(new Error('x'), { code: 'ECONNREFUSED' }); }) }), { result: 'inconclusive', code: 'ECONNREFUSED' });
   assert.deepEqual(await probeCredentialRejected({}, { createPool: stub(() => { throw new Error('no code'); }) }), { result: 'inconclusive', code: null });
@@ -165,12 +188,14 @@ test('the rollback SQL returns ownership and removes every runtime grant and pol
       count(*) FILTER (WHERE c.relkind IN ('r', 'p') AND NOT c.relrowsecurity)::int AS tables_without_rls
     FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p', 'v') `, [names.runtime])).rows[0];
   assert.deepEqual(after, { not_owned_by_admin: 0, runtime_grants: 0, policies: before.policies, tables_without_rls: 0 });
-  // The database default is back: TEMPORARY belongs to PUBLIC again and the migrator keeps no grant of its own.
+  // Migration 003 revokes TEMPORARY from PUBLIC, so the rollback must not grant it back: the runtime role (which still
+  // exists) gets no temporary-table right through PUBLIC, and the migrator keeps no grant of its own.
   const temporary = (await handle.pool.query(
     `SELECT has_database_privilege($1, current_database(), 'TEMPORARY') AS runtime, d.datacl::text AS acl FROM pg_database d WHERE d.datname = current_database()`,
     [names.runtime])).rows[0];
-  assert.equal(temporary.runtime, true);
+  assert.equal(temporary.runtime, false);
   assert.ok(!temporary.acl?.includes(names.migrator), 'no leftover grant to the migrator');
+  assert.ok(!/(^|[{,])=[a-zA-Z]*T/.test(temporary.acl ?? ''), 'TEMPORARY is not granted back to PUBLIC');
   await assert.rejects(roles.runtime.query('SELECT 1 FROM public.households'), { code: '42501' });
   // And the whole thing can be applied again after a rollback.
   await applyRoleScript(handle.pool, SQL, names);
@@ -209,12 +234,17 @@ test('a SECURITY DEFINER function in public is flagged, and a function owned by 
   });
   assert.deepEqual(await runPostgresMigrations(roles.migrator, { directory }), ['999_s1_definer.sql']);
   assert.deepEqual(failures(await probeRuntimeRole(roles.runtime)).map(item => item.check), ['no_security_definer_functions']);
-  // The runtime role cannot make its own function (no CREATE on the schema), so ownership is shown with a grant.
-  await handle.pool.query(`ALTER FUNCTION public.s1_probe_definer() OWNER TO "${names.runtime}"`);
-  const checks = failures(await probeRuntimeRole(roles.runtime)).map(item => item.check);
-  assert.ok(checks.includes('owns_nothing'), 'a function owned by the runtime role is reported');
-  // Re-running the SQL hands the function back to the migrator.
-  await applyRoleScript(handle.pool, SQL, names);
+  // The runtime role cannot make its own function (no CREATE on the schema), so ownership is shown with a grant. Only a
+  // superuser can hand an object to a role that lacks CREATE on the schema; a non-superuser admin (the Supabase shape)
+  // cannot, so that part is skipped there and the rest of the test still runs.
+  const isSuperuser = (await handle.pool.query('SELECT rolsuper FROM pg_roles WHERE rolname = current_user')).rows[0].rolsuper;
+  if (isSuperuser) {
+    await handle.pool.query(`ALTER FUNCTION public.s1_probe_definer() OWNER TO "${names.runtime}"`);
+    const checks = failures(await probeRuntimeRole(roles.runtime)).map(item => item.check);
+    assert.ok(checks.includes('owns_nothing'), 'a function owned by the runtime role is reported');
+    // Re-running the SQL hands the function back to the migrator.
+    await applyRoleScript(handle.pool, SQL, names);
+  }
   assert.deepEqual(failures(await probeRuntimeRole(roles.runtime)).map(item => item.check), ['no_security_definer_functions']);
 });
 
@@ -224,6 +254,109 @@ test('the policy check requires the runtime policy itself, not just any policy',
   await handle.pool.query(`DROP POLICY coversaath_runtime_access ON public.households`);
   await handle.pool.query(`CREATE POLICY some_other_policy ON public.households FOR SELECT USING (true)`);
   assert.deepEqual(failures(await probeRuntimeRole(roles.runtime)).map(item => item.check), ['policy_on_every_table']);
+});
+
+const checkNames = results => failures(results).map(item => item.check);
+
+test('the probe checks each privilege, RLS state and policy expressions, and reads read-only tables from the catalogue', opts, async t => {
+  const handle = await useTestDatabase(t);
+  const names = roleNames();
+  const roles = await withRoles(t, handle, names);
+  const rt = `"${names.runtime}"`;
+  const restore = () => applyRoleScript(handle.pool, SQL, names);
+
+  // One missing write privilege is not hidden by SELECT (a privilege list passes on any single match).
+  await handle.pool.query(`REVOKE UPDATE ON public.households FROM ${rt}`);
+  assert.deepEqual(checkNames(await probeRuntimeRole(roles.runtime)), ['dml_on_application_tables']);
+  await restore();
+
+  // A disabled RLS keeps the policy but ignores it.
+  await handle.pool.query('ALTER TABLE public.households DISABLE ROW LEVEL SECURITY');
+  assert.deepEqual(checkNames(await probeRuntimeRole(roles.runtime)), ['policy_on_every_table']);
+  await restore();
+
+  // A policy of the right name that no longer grants anything.
+  await handle.pool.query('DROP POLICY coversaath_runtime_access ON public.households');
+  await handle.pool.query(`CREATE POLICY coversaath_runtime_access ON public.households AS PERMISSIVE FOR ALL TO ${rt} USING (false) WITH CHECK (false)`);
+  assert.deepEqual(checkNames(await probeRuntimeRole(roles.runtime)), ['policy_on_every_table']);
+  await restore();
+
+  // schema_migrations stays read-only and audit_events stays insert and read only, whatever an RLS refusal looks like.
+  await handle.pool.query(`GRANT UPDATE ON public.schema_migrations TO ${rt}`);
+  assert.ok(checkNames(await probeRuntimeRole(roles.runtime)).includes('schema_migrations_read_only'));
+  await restore();
+  await handle.pool.query(`GRANT DELETE ON public.audit_events TO ${rt}`);
+  assert.ok(checkNames(await probeRuntimeRole(roles.runtime)).includes('audit_events_insert_not_update_delete'));
+  await restore();
+  assert.deepEqual(checkNames(await probeRuntimeRole(roles.runtime)), []);
+});
+
+test('the migrator probe fails on memberships, a lost schema CREATE and objects it does not own', opts, async t => {
+  const handle = await useTestDatabase(t);
+  const names = roleNames();
+  const roles = await withRoles(t, handle, names);
+  assert.deepEqual(checkNames(await probeMigratorRole(roles.migrator)), []);
+
+  await handle.pool.query(`GRANT pg_read_all_data TO "${names.migrator}"`);
+  assert.deepEqual(checkNames(await probeMigratorRole(roles.migrator)), ['migrator_has_no_memberships']);
+  // The setup SQL refuses to finish while the migrator holds a membership.
+  await assert.rejects(applyRoleScript(handle.pool, SQL, names), /migrator role must not be a member/);
+  await handle.pool.query(`REVOKE pg_read_all_data FROM "${names.migrator}"`);
+
+  await handle.pool.query(`REVOKE CREATE ON SCHEMA public FROM "${names.migrator}"`);
+  assert.deepEqual(checkNames(await probeMigratorRole(roles.migrator)), ['migrator_can_create_in_schema']);
+  await applyRoleScript(handle.pool, SQL, names);
+
+  // A view (and a function) the migrator does not own are caught, not only tables.
+  await handle.pool.query('CREATE VIEW public.s1_probe_view AS SELECT 1 AS one');
+  assert.deepEqual(checkNames(await probeMigratorRole(roles.migrator)), ['migrator_owns_all_objects']);
+  await handle.pool.query('DROP VIEW public.s1_probe_view');
+  await handle.pool.query('CREATE FUNCTION public.s1_probe_fn() RETURNS integer LANGUAGE sql AS $$ SELECT 1 $$');
+  assert.deepEqual(checkNames(await probeMigratorRole(roles.migrator)), ['migrator_owns_all_objects']);
+  await applyRoleScript(handle.pool, SQL, names);
+  assert.deepEqual(checkNames(await probeMigratorRole(roles.migrator)), []);
+});
+
+test('widened default privileges are removed, and database CREATE through PUBLIC aborts the SQL', opts, async t => {
+  const handle = await useTestDatabase(t);
+  const names = roleNames();
+  const roles = await withRoles(t, handle, names);
+  for (const scope of ['', 'IN SCHEMA public ']) {
+    await handle.pool.query(`ALTER DEFAULT PRIVILEGES FOR ROLE "${names.migrator}" ${scope}GRANT ALL ON TABLES TO "${names.runtime}"`);
+  }
+  await applyRoleScript(handle.pool, SQL, names);
+  const directory = scratchMigrationDirectory(t, { '999_s1_defaults.sql': 'CREATE TABLE s1_probe_defaults (id text PRIMARY KEY);\n' });
+  assert.deepEqual(await runPostgresMigrations(roles.migrator, { directory }), ['999_s1_defaults.sql']);
+  const granted = (await handle.pool.query(
+    `SELECT has_table_privilege($1, 'public.s1_probe_defaults', 'TRUNCATE') AS truncate, has_table_privilege($1, 'public.s1_probe_defaults', 'REFERENCES') AS refs,
+       has_table_privilege($1, 'public.s1_probe_defaults', 'TRIGGER') AS trig, has_table_privilege($1, 'public.s1_probe_defaults', 'DELETE') AS del`,
+    [names.runtime])).rows[0];
+  assert.deepEqual(granted, { truncate: false, refs: false, trig: false, del: true });
+
+  // A database that grants CREATE to PUBLIC would leave the runtime role able to create schemas: the SQL aborts.
+  const database = (await handle.pool.query('SELECT current_database() AS name')).rows[0].name;
+  await handle.pool.query(`GRANT CREATE ON DATABASE "${database}" TO PUBLIC`);
+  await assert.rejects(applyRoleScript(handle.pool, SQL, names), /still create schemas/);
+  await handle.pool.query(`REVOKE CREATE ON DATABASE "${database}" FROM PUBLIC`);
+  await applyRoleScript(handle.pool, SQL, names);
+});
+
+test('the SQL takes bounded locks: a busy table makes it fail instead of stalling', opts, async t => {
+  const handle = await useTestDatabase(t);
+  const names = roleNames();
+  await withRoles(t, handle, names);
+  const blocker = await handle.pool.connect();
+  try {
+    await blocker.query('BEGIN');
+    await blocker.query('LOCK TABLE public.households IN ACCESS SHARE MODE');
+    // ENABLE ROW LEVEL SECURITY needs ACCESS EXCLUSIVE, which waits for the open reader and then gives up.
+    const started = Date.now();
+    await assert.rejects(applyRoleScript(handle.pool, SQL, names), { code: '55P03' });
+    assert.ok(Date.now() - started < 15_000, 'gave up within the lock timeout, not after an unbounded wait');
+  } finally {
+    await blocker.query('ROLLBACK').catch(() => {});
+    blocker.release();
+  }
 });
 
 test('the SQL and its rollback run as a non-superuser admin (the Supabase postgres shape)', opts, async t => {

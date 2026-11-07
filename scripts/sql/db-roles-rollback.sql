@@ -5,6 +5,11 @@
 -- Ownership returns to the current user, the runtime policies and grants are removed, and the default
 -- privileges are reset. The two roles are left in place (they own nothing afterwards); drop them with the
 -- commented lines only once nothing connects as them.
+-- Like db-roles.sql it takes ACCESS EXCLUSIVE locks until the transaction ends (policy drops and ownership changes
+-- touch every table): run it with the API drained. lock_timeout is 5 seconds, so a busy table makes it roll back.
+-- TEMPORARY stays revoked from PUBLIC: migration 003 revokes it, so that is the database's own state, not something
+-- db-roles.sql introduced. CREATE on schema public is not restored: PostgreSQL 15 and later (the supported 17) does
+-- not grant it to PUBLIC by default.
 DO $rollback$
 DECLARE
   runtime_role  constant text := 'knowvia_runtime';
@@ -14,6 +19,7 @@ DECLARE
   item record;
 BEGIN
   PERFORM set_config('client_min_messages', 'warning', true);
+  PERFORM set_config('lock_timeout', '5s', true);
   IF current_database() = 'postgres' THEN
     RAISE EXCEPTION 'Refusing to run in the default postgres database; connect to the coversaath database.';
   END IF;
@@ -67,8 +73,7 @@ BEGIN
     EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I REVOKE ALL ON SEQUENCES FROM %I', migrator_role, target_schema, runtime_role);
   END IF;
   EXECUTE format('REVOKE ALL ON SCHEMA %I FROM %I', target_schema, migrator_role);
-  -- Back to the PostgreSQL default: TEMPORARY (and CONNECT) belong to PUBLIC again.
-  EXECUTE format('GRANT TEMPORARY ON DATABASE %I TO PUBLIC', current_database());
+  -- TEMPORARY stays revoked from PUBLIC (migration 003); only the migrator's own grants are removed.
   EXECUTE format('REVOKE TEMPORARY ON DATABASE %I FROM %I', current_database(), migrator_role);
   EXECUTE format('REVOKE CONNECT ON DATABASE %I FROM %I', current_database(), migrator_role);
 END

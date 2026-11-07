@@ -7,7 +7,9 @@ import { createPostgresPool } from '../../src/backend/database/postgres/index.js
 
 const RUNTIME_POLICY_NAME = 'coversaath_runtime_access';
 const INSUFFICIENT_PRIVILEGE = '42501';
-const AUTH_REJECTED = new Set(['28P01', '28000']);
+// Only 28P01 (invalid_password) proves the credential itself was refused. 28000 also covers a missing pg_hba rule
+// or a pooler refusing the user, which says nothing about the password, so it stays `inconclusive`.
+const AUTH_REJECTED = new Set(['28P01']);
 
 // Statements a runtime role must be refused. `table` names exist in every CoverSaath schema.
 export const forbiddenRuntimeStatements = Object.freeze([
@@ -19,6 +21,8 @@ export const forbiddenRuntimeStatements = Object.freeze([
   ['create_schema', 'CREATE SCHEMA s1_probe_schema'],
   ['create_role', 'CREATE ROLE s1_probe_role'],
   ['write_schema_migrations', "INSERT INTO public.schema_migrations (version, checksum, applied_at) VALUES ('s1-probe', 'x', 'x')"],
+  ['update_schema_migrations', 'UPDATE public.schema_migrations SET version = version WHERE false'],
+  ['delete_schema_migrations', 'DELETE FROM public.schema_migrations WHERE false'],
   ['update_audit_events', 'UPDATE public.audit_events SET id = id WHERE false'],
   ['delete_audit_events', 'DELETE FROM public.audit_events WHERE false'],
   ['disable_trigger', 'ALTER TABLE public.audit_events DISABLE TRIGGER ALL'],
@@ -68,16 +72,21 @@ export async function probeRuntimeRole(pool) {
         AND has_table_privilege(current_user, c.oid, 'TRUNCATE, REFERENCES, TRIGGER')) AS forbidden_table_privileges,
       (SELECT count(*)::int FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p')
         AND c.relname NOT IN ('schema_migrations', 'audit_events')
-        AND NOT has_table_privilege(current_user, c.oid, 'SELECT, INSERT, UPDATE, DELETE')) AS tables_missing_dml,
+        AND NOT (has_table_privilege(current_user, c.oid, 'SELECT') AND has_table_privilege(current_user, c.oid, 'INSERT')
+          AND has_table_privilege(current_user, c.oid, 'UPDATE') AND has_table_privilege(current_user, c.oid, 'DELETE'))) AS tables_missing_dml,
       (SELECT count(*)::int FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p')
-        AND c.relname <> 'schema_migrations'
         AND NOT has_table_privilege(current_user, c.oid, 'SELECT')) AS tables_missing_select,
+      (SELECT count(*)::int FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relname = 'schema_migrations'
+        AND has_table_privilege(current_user, c.oid, 'INSERT, UPDATE, DELETE')) AS schema_migrations_writable,
+      (SELECT count(*)::int FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relname = 'audit_events'
+        AND (NOT has_table_privilege(current_user, c.oid, 'INSERT') OR has_table_privilege(current_user, c.oid, 'UPDATE, DELETE'))) AS audit_events_wrong_privileges,
       (SELECT count(*)::int FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p')
-        AND NOT EXISTS (
+        AND NOT (c.relrowsecurity AND EXISTS (
           SELECT 1 FROM pg_policy p
           WHERE p.polrelid = c.oid AND p.polname = $1 AND p.polcmd = '*' AND p.polpermissive
             AND p.polroles = ARRAY[(SELECT oid FROM pg_roles WHERE rolname = current_user)]::oid[]
-        )) AS tables_without_runtime_policy`, [RUNTIME_POLICY_NAME])).rows[0];
+            AND pg_get_expr(p.polqual, p.polrelid) = 'true' AND pg_get_expr(p.polwithcheck, p.polrelid) = 'true'
+        ))) AS tables_without_runtime_policy`, [RUNTIME_POLICY_NAME])).rows[0];
   record('no_create_in_schema', privileges.schema_create === false);
   record('no_create_in_database', privileges.database_create === false);
   record('no_temporary_in_database', privileges.database_temporary === false);
@@ -87,6 +96,9 @@ export async function probeRuntimeRole(pool) {
   record('no_truncate_references_trigger', privileges.forbidden_table_privileges === 0);
   record('dml_on_application_tables', privileges.tables_missing_dml === 0, { missing: privileges.tables_missing_dml });
   record('select_on_all_tables', privileges.tables_missing_select === 0, { missing: privileges.tables_missing_select });
+  // Read straight from the privilege catalogue, because a 42501 from a statement can also be a row level security refusal.
+  record('schema_migrations_read_only', privileges.schema_migrations_writable === 0);
+  record('audit_events_insert_not_update_delete', privileges.audit_events_wrong_privileges === 0);
   record('policy_on_every_table', privileges.tables_without_runtime_policy === 0, { missing: privileges.tables_without_runtime_policy });
 
   for (const [name, sql] of forbiddenRuntimeStatements) {
@@ -113,17 +125,28 @@ export async function probeCredentialRejected(poolOptions, { createPool = create
   }
 }
 
-// Role checks for the migrator: it owns the application tables, cannot bypass RLS and is not a superuser.
+// Role checks for the migrator: it owns every object the SQL hands over, cannot bypass RLS (as an attribute), is not a
+// superuser and is a member of no role. Extension members are skipped, as db-roles.sql skips them.
 export async function probeMigratorRole(pool) {
   const row = (await pool.query(`
     SELECT r.rolsuper, r.rolbypassrls, r.rolcreatedb, r.rolcreaterole, r.rolreplication,
-      (SELECT count(*)::int FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p')
-        AND c.relowner <> r.oid) AS tables_not_owned
+      (SELECT count(*)::int FROM pg_auth_members m WHERE m.member = r.oid) AS memberships,
+      has_schema_privilege(r.oid, 'public', 'USAGE') AS schema_usage,
+      has_schema_privilege(r.oid, 'public', 'CREATE') AS schema_create,
+      (SELECT count(*)::int FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace
+        AND c.relkind IN ('r', 'p', 'v', 'm', 'S') AND c.relowner <> r.oid
+        AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype IN ('a', 'i', 'e'))) AS objects_not_owned,
+      (SELECT count(*)::int FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prokind IN ('f', 'p')
+        AND p.proowner <> r.oid
+        AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_proc'::regclass AND d.objid = p.oid AND d.deptype = 'e')) AS functions_not_owned
     FROM pg_roles r WHERE r.rolname = current_user`)).rows[0];
+  const notOwned = row ? row.objects_not_owned + row.functions_not_owned : null;
   return [
     { check: 'migrator_not_superuser', ok: row?.rolsuper === false },
     { check: 'migrator_not_bypassrls', ok: row?.rolbypassrls === false },
     { check: 'migrator_cannot_create_db_or_role', ok: row?.rolcreatedb === false && row?.rolcreaterole === false && row?.rolreplication === false },
-    { check: 'migrator_owns_all_tables', ok: row?.tables_not_owned === 0, detail: { notOwned: row?.tables_not_owned } },
+    { check: 'migrator_has_no_memberships', ok: row?.memberships === 0 },
+    { check: 'migrator_can_create_in_schema', ok: row?.schema_usage === true && row?.schema_create === true },
+    { check: 'migrator_owns_all_objects', ok: notOwned === 0, detail: { notOwned } },
   ];
 }
