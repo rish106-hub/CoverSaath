@@ -6,22 +6,20 @@
 //   MIGRATION_DATABASE_URL  the new knowvia_migrator URL (optional)
 //   OLD_DATABASE_URL        the URL with the exposed/rotated credential; it must be refused (optional but advised)
 //   DATABASE_SSL_CA_PATH    PEM CA for the hosted database (optional)
-import { readFileSync } from 'node:fs';
-import { createPostgresPool } from '../src/backend/database/postgres/index.js';
+import { createPostgresPool, postgresPoolOptionsFromEnv } from '../src/backend/database/postgres/index.js';
 import { probeCredentialRejected, probeMigratorRole, probeRuntimeRole } from './lib/db-role-probe.mjs';
 
-const caPath = process.env.DATABASE_SSL_CA_PATH?.trim();
-let sslCa;
-if (caPath) {
-  try { sslCa = readFileSync(caPath, 'utf8'); } catch { process.stderr.write('DATABASE_SSL_CA_PATH could not be read.\n'); process.exit(1); }
+// One path builds the pool options for every URL (including the validated, size-capped DATABASE_SSL_CA_PATH read),
+// so this script holds no file read and no env-controlled branch of its own. Output names the variable and a code only.
+function optionsFor(name) {
+  try {
+    return postgresPoolOptionsFromEnv({ DATABASE_URL: process.env[name], DATABASE_SSL_CA_PATH: process.env.DATABASE_SSL_CA_PATH });
+  } catch (error) {
+    process.stderr.write(error?.code === 'DATABASE_URL_REQUIRED' ? `${name} is required.\n` : `${name} options could not be built (${typeof error?.code === 'string' ? error.code : 'UNKNOWN'}).\n`);
+    process.exit(1);
+  }
 }
-const optionsFor = connectionString => ({ connectionString, ...(sslCa ? { sslCa } : {}) });
 const present = name => typeof process.env[name] === 'string' && process.env[name].trim() !== '';
-
-if (!present('RUNTIME_DATABASE_URL')) {
-  process.stderr.write('RUNTIME_DATABASE_URL is required.\n');
-  process.exit(1);
-}
 
 const report = [];
 let failed = false;
@@ -33,7 +31,7 @@ const add = (scope, items) => {
 };
 
 async function withPool(name, work) {
-  const pool = createPostgresPool({ ...optionsFor(process.env[name]), max: 2, applicationName: 'coversaath-verify-roles' });
+  const pool = createPostgresPool({ ...optionsFor(name), max: 2, applicationName: 'coversaath-verify-roles' });
   try {
     return await work(pool);
   } finally {
@@ -49,7 +47,7 @@ try {
   process.exit(1);
 }
 if (present('OLD_DATABASE_URL')) {
-  const outcome = await probeCredentialRejected(optionsFor(process.env.OLD_DATABASE_URL));
+  const outcome = await probeCredentialRejected(optionsFor('OLD_DATABASE_URL'));
   add('old_credential', [{ check: 'old_credential_rejected', ok: outcome.result === 'rejected', detail: outcome }]);
 } else {
   report.push({ scope: 'old_credential', check: 'old_credential_rejected', ok: false, detail: { result: 'not_checked' } });

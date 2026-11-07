@@ -22,12 +22,20 @@ function roleNames() {
   const id = randomBytes(4).toString('hex');
   return { runtime: `s1rt_${id}`, migrator: `s1mg_${id}` };
 }
-const renamed = (sql, names) => sql.replaceAll('knowvia_runtime', names.runtime).replaceAll('knowvia_migrator', names.migrator);
+const ROLE_NAME = /^s1(rt|mg)_[0-9a-f]{8}$/;
+// The role scripts are committed files, never user input; the only substitution is the two per-test role names, and
+// those are checked against a fixed shape before they reach SQL. No value is concatenated into a statement here.
+function renamed(sql, names) {
+  assert.match(names.runtime, ROLE_NAME);
+  assert.match(names.migrator, ROLE_NAME);
+  return sql.replaceAll('knowvia_runtime', names.runtime).replaceAll('knowvia_migrator', names.migrator);
+}
+const applyRoleScript = (db, script, names) => db.query(renamed(script, names));
 const failures = results => results.filter(item => !item.ok);
 
 // Applies the role SQL to `handle`, sets throwaway passwords and opens one pool per role.
 async function withRoles(t, handle, names = roleNames()) {
-  await handle.pool.query(renamed(SQL, names));
+  await applyRoleScript(handle.pool, SQL, names);
   const pools = {};
   for (const [kind, role] of [['runtime', names.runtime], ['migrator', names.migrator]]) {
     const password = randomBytes(12).toString('hex');
@@ -101,7 +109,7 @@ test('applying the role SQL twice changes nothing', opts, async t => {
       (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
     FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind IN ('r', 'p', 'v', 'S') ORDER BY c.relname`)).rows;
   const first = await snapshot();
-  await handle.pool.query(renamed(SQL, names));
+  await applyRoleScript(handle.pool, SQL, names);
   assert.deepEqual(await snapshot(), first);
   assert.deepEqual(failures(await probeRuntimeRole(roles.runtime)), []);
   const owners = new Set(first.filter(row => row.relkind !== 'S' || !row.relname.endsWith('_seq')).map(row => row.owner));
@@ -117,7 +125,7 @@ test('the migrator builds the whole schema from an empty database, and a second 
   const report = await validatePostgresSchema(roles.migrator);
   assert.equal(report.valid, true, JSON.stringify({ ...report, collation: undefined }));
   // Run the grants again now that the tables exist.
-  await blank.pool.query(renamed(SQL, names));
+  await applyRoleScript(blank.pool, SQL, names);
   assert.deepEqual(failures(await probeRuntimeRole(roles.runtime)), []);
   assert.deepEqual(failures(await probeMigratorRole(roles.migrator)), []);
   // The API's /ready check runs the same validator as the runtime role.
@@ -136,7 +144,7 @@ test('a table added by a later migration needs the SQL re-run before the runtime
   await assert.rejects(roles.runtime.query("INSERT INTO s1_probe_items (id, note) VALUES ('a', 'b')"), { code: '42501' });
   const flagged = await probeRuntimeRole(roles.runtime);
   assert.deepEqual(failures(flagged).map(item => item.check), ['policy_on_every_table'], 'the probe reports the missing policy');
-  await handle.pool.query(renamed(SQL, names));
+  await applyRoleScript(handle.pool, SQL, names);
   await roles.runtime.query("INSERT INTO s1_probe_items (id, note) VALUES ('a', 'b')");
   assert.equal((await roles.runtime.query('SELECT count(*)::int AS n FROM s1_probe_items')).rows[0].n, 1);
   assert.deepEqual(failures(await probeRuntimeRole(roles.runtime)), []);
@@ -149,7 +157,7 @@ test('the rollback SQL returns ownership and removes every runtime grant and pol
   const names = roleNames();
   const before = (await handle.pool.query(`SELECT current_user AS who, (SELECT count(*)::int FROM pg_policy) AS policies`)).rows[0];
   const roles = await withRoles(t, handle, names);
-  await handle.pool.query(renamed(ROLLBACK_SQL, names));
+  await applyRoleScript(handle.pool, ROLLBACK_SQL, names);
   const after = (await handle.pool.query(`
     SELECT count(*) FILTER (WHERE pg_get_userbyid(c.relowner) <> current_user)::int AS not_owned_by_admin,
       count(*) FILTER (WHERE has_table_privilege($1, c.oid, 'SELECT, INSERT, UPDATE, DELETE'))::int AS runtime_grants,
@@ -165,7 +173,7 @@ test('the rollback SQL returns ownership and removes every runtime grant and pol
   assert.ok(!temporary.acl?.includes(names.migrator), 'no leftover grant to the migrator');
   await assert.rejects(roles.runtime.query('SELECT 1 FROM public.households'), { code: '42501' });
   // And the whole thing can be applied again after a rollback.
-  await handle.pool.query(renamed(SQL, names));
+  await applyRoleScript(handle.pool, SQL, names);
   assert.deepEqual(failures(await probeRuntimeRole(roles.runtime)), []);
 });
 
@@ -206,7 +214,7 @@ test('a SECURITY DEFINER function in public is flagged, and a function owned by 
   const checks = failures(await probeRuntimeRole(roles.runtime)).map(item => item.check);
   assert.ok(checks.includes('owns_nothing'), 'a function owned by the runtime role is reported');
   // Re-running the SQL hands the function back to the migrator.
-  await handle.pool.query(renamed(SQL, names));
+  await applyRoleScript(handle.pool, SQL, names);
   assert.deepEqual(failures(await probeRuntimeRole(roles.runtime)).map(item => item.check), ['no_security_definer_functions']);
 });
 
@@ -242,8 +250,8 @@ test('the SQL and its rollback run as a non-superuser admin (the Supabase postgr
   // The admin builds the schema and owns it, as the Supabase postgres user does today.
   assert.ok((await runPostgresMigrations(pool)).length > 25);
 
-  await pool.query(renamed(SQL, names));
-  await pool.query(renamed(SQL, names)); // idempotent for a non-superuser too
+  await applyRoleScript(pool, SQL, names);
+  await applyRoleScript(pool, SQL, names); // idempotent for a non-superuser too
   await pool.query(`ALTER ROLE "${names.runtime}" PASSWORD '${runtimePassword}'`);
   const runtimeUrl = new URL(url.toString());
   runtimeUrl.username = names.runtime;
@@ -257,13 +265,13 @@ test('the SQL and its rollback run as a non-superuser admin (the Supabase postgr
 
   // A pre-existing role that drifted on an attribute the admin cannot change fails the run closed.
   await adminQuery(`ALTER ROLE "${names.runtime}" REPLICATION`);
-  await assert.rejects(pool.query(renamed(SQL, names)), /unexpected attributes/);
+  await assert.rejects(applyRoleScript(pool, SQL, names), /unexpected attributes/);
   await adminQuery(`ALTER ROLE "${names.runtime}" NOREPLICATION`);
-  await pool.query(renamed(SQL, names));
+  await applyRoleScript(pool, SQL, names);
 
   await runtime.end();
   runtime = undefined;
-  await pool.query(renamed(ROLLBACK_SQL, names));
+  await applyRoleScript(pool, ROLLBACK_SQL, names);
   const after = (await pool.query(`
     SELECT count(*) FILTER (WHERE pg_get_userbyid(relowner) <> current_user)::int AS not_owned_by_admin,
       (SELECT count(*)::int FROM pg_policy WHERE polname = 'coversaath_runtime_access') AS runtime_policies

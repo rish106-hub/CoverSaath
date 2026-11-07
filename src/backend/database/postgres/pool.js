@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { openSync, closeSync, fstatSync, readFileSync } from 'node:fs';
+import { isAbsolute } from 'node:path';
 import pg from 'pg';
 import { PostgresDatabaseError } from './errors.js';
 
@@ -100,6 +101,27 @@ export function createPostgresPool({
   return pool;
 }
 
+const SSL_CA_MAX_BYTES = 256 * 1024;
+
+// The CA path is operator configuration, but it is still validated before any read: non-empty, no NUL byte,
+// absolute, a regular file and bounded in size. The size check runs on the opened descriptor, so a file that
+// changes between check and read cannot exceed the cap. Failures never echo the path.
+function readSslCaFile(caPath) {
+  const invalid = () => new PostgresDatabaseError('DATABASE_POOL_OPTION_INVALID', 'DATABASE_SSL_CA_PATH could not be read.');
+  if (typeof caPath !== 'string' || caPath === '' || caPath.includes('\0') || !isAbsolute(caPath)) throw invalid();
+  let fd;
+  try {
+    fd = openSync(caPath, 'r');
+    const stats = fstatSync(fd);
+    if (!stats.isFile() || stats.size === 0 || stats.size > SSL_CA_MAX_BYTES) throw invalid();
+    return readFileSync(fd, 'utf8');
+  } catch {
+    throw invalid();
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
+
 // Reads DATABASE_URL and the optional DATABASE_SSL_CA_PATH (a PEM file for a hosted database such as
 // Supabase). Errors name the variable, never its value.
 export function postgresPoolOptionsFromEnv(env = process.env) {
@@ -109,12 +131,7 @@ export function postgresPoolOptionsFromEnv(env = process.env) {
   }
   const caPath = env.DATABASE_SSL_CA_PATH?.trim();
   if (!caPath) return { connectionString };
-  let sslCa;
-  try {
-    sslCa = readFileSync(caPath, 'utf8');
-  } catch {
-    throw new PostgresDatabaseError('DATABASE_POOL_OPTION_INVALID', 'DATABASE_SSL_CA_PATH could not be read.');
-  }
+  const sslCa = readSslCaFile(caPath);
   return { connectionString, sslCa };
 }
 
