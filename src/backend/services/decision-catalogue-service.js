@@ -146,7 +146,7 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   }
 
   const activeHousehold = async householdId => (await services.households?.getHousehold(householdId))?.status === 'active';
-  const readCase = async caseId => (typeof caseId === 'string' ? services.access.database.one('SELECT * FROM service_cases WHERE id = ?', [caseId]) : null);
+  const readCase = async caseId => (typeof caseId === 'string' ? services.access.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId]) : null);
 
   /** Who may review: a household confirmer who still holds a household role, or (when enabled) an independent reviewer. */
   async function reviewerCase(principal, caseId) {

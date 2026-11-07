@@ -63,6 +63,7 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   ERASURE_FORBIDDEN: entry(403, 'authorization', false),
   ERASURE_REASON_INVALID: entry(400, 'request', false),
   ERASURE_ACTOR_INVALID: entry(500, 'contract', false),
+  ERASURE_TOO_LARGE: entry(409, 'request', false),
   EXECUTION_MODE_NOT_CONFIGURED: entry(null, 'configuration', false),
   READBACK_DISABLED: entry(503, 'configuration', false),
   // Document intake (Block 1): upload route, upload service, document repository and the

@@ -104,7 +104,7 @@ export class TenantAccessService {
         viewerAdultId: principal.adultId,
         fieldKey: 'date_of_birth',
       })) === true;
-      const latestCase = (await this.database.one(`SELECT id, status, trigger_type, updated_at
+      let latestCase = (await this.database.one(`SELECT id, status, trigger_type, updated_at
         FROM service_cases WHERE household_id = ? AND subject_member_id = ?
           AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))
         ORDER BY updated_at DESC LIMIT 1`, [householdId, member.id])) ?? null;
@@ -124,6 +124,9 @@ export class TenantAccessService {
       const policyCount = (await this.database.one(`SELECT count(*) AS count
         FROM policy_members JOIN policies ON policies.id = policy_members.policy_id
         WHERE household_member_id = ? AND policies.household_id = ?`, [member.id, householdId])).count;
+      // An erasure can commit between the reads above and this point: look the case up in the ledger once more before it is
+      // put in the response, so an erased case is never returned.
+      if (latestCase && await this.database.one(`SELECT 1 AS found FROM retention_records WHERE resource_type = 'case' AND resource_id = ? AND deletion_state IN ('deleted', 'verified')`, [latestCase.id])) latestCase = null;
       members.push({
         id: member.id,
         displayName: member.display_name,
@@ -135,7 +138,7 @@ export class TenantAccessService {
           immediateIssue: canReadImmediateIssue ? 'granted' : 'withheld',
         },
         policiesFound: policyCount,
-        immediateIssue: canReadImmediateIssue
+        immediateIssue: canReadImmediateIssue && latestCase
           ? { caseId: latestCase.id, status: latestCase.status, triggerType: latestCase.trigger_type }
           : null,
       });

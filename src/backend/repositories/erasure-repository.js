@@ -30,6 +30,12 @@ const quote = name => {
   return `"${name}"`;
 };
 const coded = (code, message, statusCode) => Object.assign(new Error(message), { code, statusCode });
+// Reads at most MAX_CASES_PER_ERASURE cases. One more than the cap means the erasure would be partial, so it is refused with a
+// coded error before anything is changed (never "succeed" on part of the data).
+const assertWithinCaseCap = (rows, max) => {
+  if (rows.length > max) throw coded('ERASURE_TOO_LARGE', 'Too many cases to erase in one request. Erase some cases first, then repeat.', 409);
+  return rows;
+};
 const reasonCode = reason => {
   if (reason !== ERASURE_REASONS.dataSubjectRequest && reason !== ERASURE_REASONS.retentionExpired) {
     throw coded('ERASURE_REASON_INVALID', 'Erasure reason is not supported.', 400);
@@ -43,7 +49,9 @@ const FACT_REDACTION = `epistemic_state = 'unknown', value_json = NULL, source_p
 export class ErasureRepository {
   constructor(database, {
     clock = () => new Date(), audit, consents, documents, profileAnswers, userData, appEvents, policyStructuring = null, clauses = null,
+    maxCases = MAX_CASES_PER_ERASURE,
   } = {}) {
+    this.maxCases = maxCases;
     this.database = database;
     this.clock = clock;
     this.audit = audit;
@@ -100,7 +108,7 @@ export class ErasureRepository {
         placeholderAdultId = member.adult_user_id;
       }
       // Cases about this member are erased whole (the case is the member's record).
-      const cases = await db.many(`SELECT * FROM service_cases WHERE household_id = ? AND subject_member_id = ? ORDER BY id LIMIT ?`, [householdId, memberId, MAX_CASES_PER_ERASURE]);
+      const cases = assertWithinCaseCap(await db.many(`SELECT * FROM service_cases WHERE household_id = ? AND subject_member_id = ? ORDER BY id LIMIT ?`, [householdId, memberId, this.maxCases + 1]), this.maxCases);
       // Same rule as erasing a case: without a manager role the caller may only erase cases they opened. Checked for every case
       // before anything is erased, inside the transaction, so a refusal leaves nothing changed.
       if (!mayEraseOthersCases && cases.some(row => row.opened_by_adult_id !== actor.id)) {
@@ -141,6 +149,9 @@ export class ErasureRepository {
       const soleAdultIds = [];
       for (const adultId of adultIds) if (!(await this.#belongsElsewhere(adultId, householdId))) soleAdultIds.push(adultId);
 
+      // Read the cases first: a household over the cap is refused before any grant is revoked or anything else changes.
+      const cases = assertWithinCaseCap(await db.many('SELECT * FROM service_cases WHERE household_id = ? ORDER BY id LIMIT ?', [householdId, this.maxCases + 1]), this.maxCases);
+
       // 1. Withdraw every permission. Each revocation erases what was derived under it (runs, observations, structuring,
       //    OCR text, activity payloads) and queues the grant's documents for deletion.
       const grants = await db.many('SELECT id, subject_adult_id FROM consent_grants WHERE household_id = ? AND revoked_at IS NULL ORDER BY id', [householdId]);
@@ -150,7 +161,6 @@ export class ErasureRepository {
       ctx.counts.grantsRevoked = grants.length;
 
       // 2. Every case.
-      const cases = await db.many('SELECT * FROM service_cases WHERE household_id = ? ORDER BY id LIMIT ?', [householdId, MAX_CASES_PER_ERASURE]);
       for (const row of cases) {
         if (!(await this.#erased('case', row.id))) await this.#eraseCaseData(ctx, row);
       }

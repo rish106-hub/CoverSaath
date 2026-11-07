@@ -85,8 +85,8 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await insert(pool, 'policy_structuring_jobs', { id: `job-${key}`, household_id: ids.household, case_id: ids.case, workflow_run_id: ids.run, document_id: ids.document, consent_grant_id: ids.consent });
 
   // User-stated data, sealed by the repositories.
-  await services.profileAnswers.upsert({ householdId: ids.household, caseId: ids.case, adultUserId: ids.adult, answers: new Map([['city', canary('city')]]) }).catch(() => undefined);
-  await insert(pool, 'profile_answers', { id: `profile2-${key}`, household_id: ids.household, case_id: ids.case, adult_user_id: ids.adult, field_key: 'pincode' }).catch(() => undefined);
+  // Setup failures must fail the proof, never reduce its coverage silently.
+  await services.profileAnswers.upsert({ householdId: ids.household, caseId: ids.case, adultUserId: ids.adult, answers: new Map([['city', canary('city')], ['state', canary('state')]]) });
   const userData = services.userDataRepository;
   await userData.setPermission({ householdId: ids.household, adultId: ids.adult, permission: 'location', state: 'granted', surface: 'settings', wordingVersion: 'v1', ifMatch: null });
   await userData.setPreferences({ householdId: ids.household, adultId: ids.adult, prefs: { language: canary('prefs') }, ifMatch: null });

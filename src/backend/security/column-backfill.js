@@ -5,6 +5,8 @@
 // trigger, and a batch disables exactly that trigger, updates, and enables it again inside the same transaction, so a crash
 // or error restores it. Takes a short ShareRowExclusive lock per batch: run it in a quiet period.
 
+import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
+
 export const ENCRYPTED_COLUMNS = Object.freeze([
   { table: 'adult_users', columns: ['display_name', 'contact_email', 'contact_phone'], triggers: [] },
   { table: 'households', columns: ['display_name'], triggers: [] },
@@ -33,7 +35,8 @@ const quote = identifier => {
  */
 export async function encryptExistingRows({ database, crypto, dryRun = false, rotate = false, batchSize = 200 }) {
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 5000) throw new RangeError('batchSize must be 1 to 5000.');
-  const needs = value => value !== null && value !== undefined
+  // The erased-name marker is a plaintext tombstone that readers match literally: sealing it would hide it from that match.
+  const needs = value => value !== null && value !== undefined && value !== ERASED_NAME
     && (!crypto.isSealed(value) || (rotate && crypto.needsRotation(value)));
   const report = [];
   for (const { table, columns, triggers } of ENCRYPTED_COLUMNS) {
@@ -44,8 +47,8 @@ export async function encryptExistingRows({ database, crypto, dryRun = false, ro
       const c = quote(column);
       return rotate
         // enc1 (unpadded) and other-key values are re-sealed by --rotate; any enc1 or enc2 value counts as sealed otherwise.
-        ? `(${c} IS NOT NULL AND (${c} !~ '^enc2[.]' OR split_part(${c}, '.', 2) <> ?))`
-        : `(${c} IS NOT NULL AND ${c} !~ '^enc[12][.]')`;
+        ? `(${c} IS NOT NULL AND ${c} <> '${ERASED_NAME}' AND (${c} !~ '^enc2[.]' OR split_part(${c}, '.', 2) <> ?))`
+        : `(${c} IS NOT NULL AND ${c} <> '${ERASED_NAME}' AND ${c} !~ '^enc[12][.]')`;
     }).join(' OR ');
     const candidateParams = rotate ? columns.map(() => crypto.keyId) : [];
     let rows = 0;

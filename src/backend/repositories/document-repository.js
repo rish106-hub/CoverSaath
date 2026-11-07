@@ -224,9 +224,11 @@ export class DocumentRepository {
   }
 
   // Removes expired idempotency records for every scope (the per-key purge only runs on lookup).
-  async purgeExpiredIdempotency(at = this.clock().toISOString()) {
+  // `limit` bounds one call (the retention sweep passes it); repeat the call for a larger backlog.
+  async purgeExpiredIdempotency(at = this.clock().toISOString(), { limit = 1000 } = {}) {
     return (await this.database.run(`DELETE FROM idempotency_keys
-      WHERE julianday(expires_at) <= julianday(CAST(? AS text))`, [at])).changes;
+      WHERE (scope, idempotency_key) IN (SELECT scope, idempotency_key FROM idempotency_keys
+        WHERE julianday(expires_at) <= julianday(CAST(? AS text)) ORDER BY expires_at LIMIT ?)`, [at, limit])).changes;
   }
 
   // Storage keys of every row whose bytes may still exist, for the orphan sweep.
