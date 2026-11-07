@@ -126,6 +126,9 @@ test('reviews: no grant or a grant in another household is refused; replays are 
   await w.repo.grantHouseholdConfirmer({ householdId: H, adultUserId: OWNER, grantedByAdultId: OWNER });
   const first = await w.repo.record(w.review({ reviewerAdultId: OWNER }));
   assert.equal(first.authority, 'household');
+  // D2: the reviewed fact value is sealed at rest and read back plain.
+  assert.match((await w.db.one('SELECT fact_json FROM catalogue_reviews WHERE id = ?', [first.reviewId])).fact_json, /^enc2\./);
+  assert.deepEqual(first.fact, { value: 'synthetic' });
   const replay = await w.repo.record(w.review({ reviewerAdultId: OWNER }));
   assert.equal(replay.replayed, true);
   assert.equal(replay.reviewId, first.reviewId);

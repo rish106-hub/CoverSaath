@@ -31,7 +31,7 @@ function mapJob(row, crypto) {
     result: parse(crypto.open('ocr_jobs', 'result_json', row.id, row.result_json)),
     resultDigest: row.result_digest,
     errorCode: row.error_code,
-    errorMessage: row.error_message,
+    errorMessage: crypto.open('ocr_jobs', 'error_message', row.id, row.error_message),
     requestedAt: row.requested_at,
     startedAt: row.started_at,
     completedAt: row.completed_at,
@@ -45,7 +45,7 @@ const UPDATE_JOB_COLUMNS = `provider_job_ref = ?, status = ?, contract_version =
 const jobParams = (next, crypto) => [
   next.providerJobRef, next.status, next.contractVersion,
   next.result == null ? null : crypto.seal('ocr_jobs', 'result_json', next.id, JSON.stringify(next.result)), next.resultDigest,
-  next.errorCode, next.errorMessage, next.startedAt, next.completedAt, next.updatedAt,
+  next.errorCode, crypto.seal('ocr_jobs', 'error_message', next.id, next.errorMessage ?? null), next.startedAt, next.completedAt, next.updatedAt,
 ];
 
 export class OcrRepository {
@@ -305,7 +305,7 @@ export class OcrRepository {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
           pageId, page.documentUploadId, jobId, page.pageNumber, page.sourceVersion,
           page.textSha256, this.crypto.seal('source_pages', 'extracted_text', pageId, page.text), page.extractionStatus, page.confidenceBasisPoints, page.createdAt,
-          page.outputContractVersion, page.textSha256, page.providerPageRef, JSON.stringify(page.provenance),
+          page.outputContractVersion, page.textSha256, page.providerPageRef, this.crypto.seal('source_pages', 'provenance_json', pageId, page.provenance === undefined ? null : JSON.stringify(page.provenance)),
           this.crypto.seal('source_pages', 'blocks_json', pageId, blocksJson),
         ]);
       }

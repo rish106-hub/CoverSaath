@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { idempotencyLock } from '../database/postgres/locks.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { openIdempotencyRow, openWorkflowRun, openWorkflowTask, sealIdempotencyResponse } from '../security/sealed-records.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
 
@@ -25,8 +27,10 @@ const CLAIMABLE_RUN_STATES = new Set(['queued', 'running']);
 // lock first. No transaction locks more than one run, so workflow transactions cannot deadlock
 // against each other, and the order matches consent revocation (grant -> runs -> tasks).
 export class WorkflowRepository {
-  constructor(database, { clock = () => new Date(), audit, leaseDurationMs = 60_000 } = {}) {
+  constructor(database, { clock = () => new Date(), audit, leaseDurationMs = 60_000, ...options } = {}) {
     this.database = database;
+    // Run and task JSON, error text and event payloads are sealed (ADR 0013 addendum D2) and opened at the edge of this class.
+    this.crypto = resolveColumnCrypto(options);
     this.clock = clock;
     this.audit = audit;
     this.leaseDurationMs = leaseDurationMs;
@@ -42,7 +46,8 @@ export class WorkflowRepository {
       (id, case_id, workflow_name, workflow_version, execution_mode, status, input_digest,
        case_revision, consent_grant_id, input_json, created_at)
       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)`,
-    [runId, caseId, workflowName, workflowVersion, executionMode, digest(inputJson), caseRevision, consentGrantId, inputJson, at]);
+    [runId, caseId, workflowName, workflowVersion, executionMode, digest(inputJson), caseRevision, consentGrantId,
+      this.crypto.seal('workflow_runs', 'input_json', runId, inputJson), at]);
     return this.getRun(runId);
   }
 
@@ -83,7 +88,7 @@ export class WorkflowRepository {
       await this.database.run(`DELETE FROM idempotency_keys
         WHERE scope = 'workflow_task' AND idempotency_key = ?
           AND julianday(expires_at) <= julianday(?)`, [idempotencyKey, at]);
-      const existing = await this.database.one('SELECT * FROM idempotency_keys WHERE scope = ? AND idempotency_key = ?', ['workflow_task', idempotencyKey]);
+      const existing = openIdempotencyRow(this.crypto, await this.database.one('SELECT * FROM idempotency_keys WHERE scope = ? AND idempotency_key = ?', ['workflow_task', idempotencyKey]));
       if (existing) {
         if (existing.request_digest !== requestDigest) {
           const error = new Error('Idempotency key was reused with a different request.');
@@ -96,7 +101,7 @@ export class WorkflowRepository {
       await this.database.run(`INSERT INTO idempotency_keys
         (scope, idempotency_key, request_digest, response_status, response_json, expires_at, created_at)
         VALUES ('workflow_task', ?, ?, 201, ?, ?, ?)`,
-      [idempotencyKey, requestDigest, JSON.stringify(task), expiry, at]);
+      [idempotencyKey, requestDigest, sealIdempotencyResponse(this.crypto, 'workflow_task', idempotencyKey, JSON.stringify(task)), expiry, at]);
       return task;
     }, { locks: [idempotencyLock('workflow_task', idempotencyKey)] });
   }
@@ -113,7 +118,7 @@ export class WorkflowRepository {
       await this.database.run(`INSERT INTO workflow_tasks
         (id, workflow_run_id, parent_task_id, agent_name, task_kind, status, input_digest, input_json, created_at)
         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
-      [taskId, runId, parentTaskId ?? dependencies[0] ?? null, agentName, taskKind, digest(inputJson), inputJson, at]);
+      [taskId, runId, parentTaskId ?? dependencies[0] ?? null, agentName, taskKind, digest(inputJson), this.crypto.seal('workflow_tasks', 'input_json', taskId, inputJson), at]);
       for (const dependencyId of dependencies) {
         await this.database.run(`INSERT INTO workflow_task_dependencies
           (workflow_task_id, depends_on_task_id, created_at) VALUES (?, ?, ?)`, [taskId, dependencyId, at]);
@@ -154,10 +159,13 @@ export class WorkflowRepository {
         if (claimed.changes !== 1) return { settled: false };
         await this.database.run(`UPDATE workflow_runs SET status = 'running', started_at = COALESCE(started_at, ?)
           WHERE id = ? AND status IN ('queued', 'running')`, [at, candidate.workflow_run_id]);
+        // The event id is taken from the table's sequence first, so the sealed payload is bound to its own row (additional
+        // authenticated data); a payload cannot be moved onto another event.
+        const eventId = String((await this.database.one("SELECT nextval(pg_get_serial_sequence('workflow_events', 'id')) AS id")).id);
         await this.database.run(`INSERT INTO workflow_events
-          (workflow_run_id, workflow_task_id, event_type, event_payload_json, occurred_at)
-          VALUES (?, ?, 'task.claimed', ?, ?)`,
-        [candidate.workflow_run_id, candidate.id, JSON.stringify({ workerId, leaseExpiresAt }), at]);
+          (id, workflow_run_id, workflow_task_id, event_type, event_payload_json, occurred_at)
+          VALUES (?, ?, ?, 'task.claimed', ?, ?)`,
+        [eventId, candidate.workflow_run_id, candidate.id, this.crypto.seal('workflow_events', 'event_payload_json', eventId, JSON.stringify({ workerId, leaseExpiresAt })), at]);
         return { settled: true, task: await this.getTask(candidate.id) };
       });
       if (outcome.settled) return outcome.task;
@@ -205,8 +213,8 @@ export class WorkflowRepository {
         for (const taskId of taskIds) {
           const failed = await this.database.run(`UPDATE workflow_tasks
             SET status = 'failed', finished_at = ?, terminal_reason = 'ATTEMPT_LIMIT',
-                last_error_code = 'ATTEMPT_LIMIT', last_error_message = 'Task attempt limit reached.'
-            WHERE id = ? AND status = 'pending' AND attempt_count >= 5`, [at, taskId]);
+                last_error_code = 'ATTEMPT_LIMIT', last_error_message = ?
+            WHERE id = ? AND status = 'pending' AND attempt_count >= 5`, [at, this.#sealMessage(taskId, 'Task attempt limit reached.'), taskId]);
           if (failed.changes !== 1) continue;
           changed = true;
           await this.blockDescendants(taskId, at, 'UPSTREAM_ATTEMPT_LIMIT');
@@ -228,7 +236,7 @@ export class WorkflowRepository {
         SET status = 'completed', output_digest = ?, output_json = ?, finished_at = ?,
             lease_owner = NULL, lease_expires_at = NULL, terminal_reason = 'completed'
         WHERE id = ? AND status = 'running' AND (CAST(? AS text) IS NULL OR lease_owner = ?)`,
-      [digest(outputJson), outputJson, at, taskId, workerId, workerId]);
+      [digest(outputJson), this.crypto.seal('workflow_tasks', 'output_json', taskId, outputJson), at, taskId, workerId, workerId]);
       if (updated.changes !== 1) throw new Error('Task lease changed before completion.');
       await this.#refreshRunStatus(task.workflow_run_id, at);
       return this.getTask(taskId);
@@ -247,7 +255,7 @@ export class WorkflowRepository {
       await this.database.run(`UPDATE workflow_tasks
         SET status = ?, retry_available_at = ?, last_error_code = ?, last_error_message = ?,
             lease_owner = NULL, lease_expires_at = NULL, finished_at = ?, terminal_reason = ?
-        WHERE id = ?`, [status, willRetry ? retryAt : null, code, message, willRetry ? null : at, willRetry ? null : code, taskId]);
+        WHERE id = ?`, [status, willRetry ? retryAt : null, code, this.#sealMessage(taskId, message), willRetry ? null : at, willRetry ? null : code, taskId]);
       if (!willRetry) await this.blockDescendants(taskId, at, `UPSTREAM_${code}`);
       await this.#refreshRunStatus(task.workflow_run_id, at);
       return this.getTask(taskId);
@@ -273,10 +281,10 @@ export class WorkflowRepository {
           const exhausted = task.attempt_count >= MAX_ATTEMPTS;
           await this.database.run(`UPDATE workflow_tasks
             SET status = ?, lease_owner = NULL, lease_expires_at = NULL, retry_available_at = ?,
-                last_error_code = 'LEASE_EXPIRED', last_error_message = 'Worker lease expired.',
+                last_error_code = 'LEASE_EXPIRED', last_error_message = ?,
                 finished_at = ?, terminal_reason = ?
             WHERE id = ? AND status = 'running'`,
-          [exhausted ? 'failed' : 'pending', exhausted ? null : at, exhausted ? at : null, exhausted ? 'LEASE_EXPIRED' : null, taskId]);
+          [exhausted ? 'failed' : 'pending', exhausted ? null : at, this.#sealMessage(taskId, 'Worker lease expired.'), exhausted ? at : null, exhausted ? 'LEASE_EXPIRED' : null, taskId]);
           if (exhausted) await this.blockDescendants(taskId, at, 'UPSTREAM_LEASE_EXPIRED');
           count += 1;
         }
@@ -303,9 +311,9 @@ export class WorkflowRepository {
     const counts = Object.fromEntries(states.map(row => [row.status, row.count]));
     if ((counts.pending ?? 0) + (counts.running ?? 0) > 0) return;
     const terminal = ['failed', 'blocked', 'revoked', 'cancelled', 'interrupted'].find(status => counts[status]);
-    const releaseTask = await this.database.one(`SELECT output_json FROM workflow_tasks
+    const releaseTask = openWorkflowTask(this.crypto, await this.database.one(`SELECT id, output_json FROM workflow_tasks
       WHERE workflow_run_id = ? AND task_kind = 'deterministic_release_gate' AND status = 'completed'
-      ORDER BY created_at DESC LIMIT 1`, [runId]);
+      ORDER BY created_at DESC LIMIT 1`, [runId]));
     let releaseBlocked = false;
     if (releaseTask?.output_json) {
       try {
@@ -322,26 +330,36 @@ export class WorkflowRepository {
 
   /** Blocks pending descendants of a task. Call inside a transaction that holds the run lock. */
   async blockDescendants(taskId, at, reason) {
-    await this.database.run(`WITH RECURSIVE descendants(id) AS (
+    const descendants = await this.database.many(`WITH RECURSIVE descendants(id) AS (
         SELECT workflow_task_id FROM workflow_task_dependencies WHERE depends_on_task_id = ?
         UNION
         SELECT dependency.workflow_task_id
         FROM workflow_task_dependencies dependency
         JOIN descendants parent ON parent.id = dependency.depends_on_task_id
       )
-      UPDATE workflow_tasks
-      SET status = 'blocked', finished_at = ?, terminal_reason = ?,
-          last_error_code = ?, last_error_message = 'A required upstream task did not complete.'
-      WHERE id IN (SELECT id FROM descendants) AND status = 'pending'`, [taskId, at, reason, reason]);
+      SELECT id FROM workflow_tasks WHERE id IN (SELECT id FROM descendants) AND status = 'pending' ORDER BY id`, [taskId]);
+    // The message is sealed per row (its id is part of the additional authenticated data).
+    for (const { id: descendantId } of descendants) {
+      await this.database.run(`UPDATE workflow_tasks
+        SET status = 'blocked', finished_at = ?, terminal_reason = ?, last_error_code = ?, last_error_message = ?
+        WHERE id = ? AND status = 'pending'`, [at, reason, reason, this.#sealMessage(descendantId, 'A required upstream task did not complete.'), descendantId]);
+    }
   }
 
   async getRun(runId) {
-    return this.database.one('SELECT * FROM workflow_runs WHERE id = ?', [runId]);
+    return openWorkflowRun(this.crypto, await this.database.one('SELECT * FROM workflow_runs WHERE id = ?', [runId])) ?? null;
   }
 
   async getTask(taskId) {
-    return this.database.one('SELECT * FROM workflow_tasks WHERE id = ?', [taskId]);
+    return openWorkflowTask(this.crypto, await this.database.one('SELECT * FROM workflow_tasks WHERE id = ?', [taskId])) ?? null;
   }
+
+  async listTasks(runId) {
+    return (await this.database.many('SELECT * FROM workflow_tasks WHERE workflow_run_id = ? ORDER BY created_at, id', [runId])).map(row => openWorkflowTask(this.crypto, row));
+  }
+
+  #sealMessage(taskId, message) { return this.crypto.seal('workflow_tasks', 'last_error_message', taskId, message); }
+
 
   #lockRun(runId) {
     return this.database.one('SELECT id, status FROM workflow_runs WHERE id = ? FOR UPDATE', [runId]);

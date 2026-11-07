@@ -10,6 +10,7 @@ const createCoverageAnalysisSourceInput = (caseRecord, pages, options = {}) => b
 import { POLICY_PARAMETER_REGISTRY } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { assertAcquisitionTransition } from '../src/features/coverage-analysis/parameter-records.js';
 import { liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
+import { plainRow, plainRows } from './support/sealed.mjs';
 
 const PINNED = 'policy-parameters/v1';
 const opaqueSourceId = rawId => sanitizeEvidenceForModel({
@@ -213,7 +214,7 @@ test('multi-document attribution: a citation resolves to the page and version of
   assert.equal(run.data.tasks.filter(task => task.status === 'completed').length, 22);
   assert.equal(run.data.modelUsage.calls, 5);
 
-  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id)).input_json);
+  const input = JSON.parse((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [run.data.id])).input_json);
   assert.deepEqual(input.sourcePages.map(item => [item.sourceId, item.documentId, item.page, item.version]).sort(), [
     [scenario.pageId, scenario.documentId, 3, 'va'],
     [documentB.pageId, documentB.documentId, 7, 'vb'],
@@ -234,7 +235,7 @@ test('multi-document attribution: a citation resolves to the page and version of
   }
 
   // The model cited document B's page; the fact is attributed to B (page 7, vb), not A.
-  const outputs = Object.fromEntries((await app.database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(run.data.id))
+  const outputs = Object.fromEntries((await plainRows(app.database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [run.data.id]))
     .map(row => [row.task_kind, JSON.parse(row.output_json).payload]));
   const expected = { sourceId: opaqueSourceId(documentB.pageId), page: 7, version: 'vb' };
   assert.deepEqual(outputs.group_cover_analysis[0].coverageGraph.nodes[0].citations, [expected]);
@@ -262,7 +263,7 @@ test('a case with more than 30 realistic 4 KB pages completes the live workflow 
   assert.equal(run.data.modelUsage.calls, 5);
   assert.equal(modelRequests.length, 5);
 
-  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id)).input_json);
+  const input = JSON.parse((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [run.data.id])).input_json);
   assert.ok(input.sourcePages.length > 0 && input.sourcePages.length <= 30);
   assert.equal(input.sourcePages.length + input.sourceSelection.notSent.length, 41, 'sent plus reported-unsent covers every page');
   assert.ok(input.sourceSelection.notSent.length > 0, 'the scenario must exceed the request budget');
@@ -272,7 +273,7 @@ test('a case with more than 30 realistic 4 KB pages completes the live workflow 
     assert.ok(Buffer.byteLength(JSON.stringify(evidence)) <= 48_000);
   }
   // Pages that were not sent are visible in the persisted blockers and the evidence review.
-  const reviews = Object.fromEntries((await app.database.prepare("SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ? AND task_kind = 'evidence_review'").all(run.data.id))
+  const reviews = Object.fromEntries((await plainRows(app.database, 'workflow_tasks', 'WHERE workflow_run_id = ? AND task_kind = \'evidence_review\'', [run.data.id]))
     .map(row => [row.task_kind, JSON.parse(row.output_json).payload]));
   assert.ok(reviews.evidence_review.findings.some(finding => finding.code === 'SOURCE_NOT_SENT' && finding.reasonCode === 'REQUEST_BUDGET_EXCEEDED'));
   // Authorisation is limited to the pages that were sent.
@@ -293,7 +294,7 @@ test('a restricted page in one document is excluded with a blocker while the oth
   assert.equal(run.data.tasks.filter(task => task.status === 'completed').length, 22);
   assert.equal(run.data.modelUsage.calls, 5);
 
-  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id)).input_json);
+  const input = JSON.parse((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [run.data.id])).input_json);
   assert.deepEqual(input.authorizedSourceIds, [scenario.pageId]);
   assert.deepEqual(input.sourceBlockers, [{ code: 'SOURCE_EXCLUDED', reasonCode: 'RESTRICTED_EVIDENCE', documentId: opaqueDocumentId(restricted.documentId), pageCount: 1 }]);
 
@@ -301,14 +302,14 @@ test('a restricted page in one document is excluded with a blocker while the oth
     provider: modelRequests,
     http: run.raw,
     persisted: [
-      await app.database.prepare('SELECT input_json FROM workflow_runs').all(),
-      await app.database.prepare('SELECT input_json, output_json, last_error_message FROM workflow_tasks').all(),
+      await plainRows(app.database, 'workflow_runs'),
+      await plainRows(app.database, 'workflow_tasks'),
       await app.database.prepare('SELECT event_payload_json FROM audit_events').all(),
     ],
   });
   for (const forbidden of ['4111 1111 1111 1111', 'RESTRICTEDMARKER98765', restricted.pageId, restricted.documentId]) assert.ok(!everything.includes(forbidden), `${forbidden} must not appear anywhere`);
 
-  const review = JSON.parse((await app.database.prepare("SELECT output_json FROM workflow_tasks WHERE workflow_run_id = ? AND task_kind = 'evidence_review'").get(run.data.id)).output_json).payload;
+  const review = JSON.parse((await plainRow(app.database, 'workflow_tasks', 'WHERE workflow_run_id = ? AND task_kind = \'evidence_review\'', [run.data.id])).output_json).payload;
   assert.ok(review.findings.some(finding => finding.code === 'SOURCE_EXCLUDED' && finding.reasonCode === 'RESTRICTED_EVIDENCE' && finding.documentId === opaqueDocumentId(restricted.documentId)));
 });
 
