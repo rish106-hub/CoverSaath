@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local --watch src/server/server.js",
+    "worker": "node --env-file-if-exists=.env.local src/server/worker.js",
     "db:init": "node --env-file-if-exists=.env.local scripts/database.mjs",
     "seed:demo-household": "node scripts/seed-demo-household.js",
     "verify:user-data": "node scripts/verify-user-data.js",
