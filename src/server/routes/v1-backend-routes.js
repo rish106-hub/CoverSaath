@@ -267,7 +267,7 @@ async function schemaStatus(database) {
 
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
-export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, onError }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -850,7 +850,10 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     }
     return { status: 404, body: { error: { code: 'ROUTE_NOT_FOUND', message: 'Versioned backend route not found.' } } };
   } catch (error) {
-    return errorResponse(error);
+    const response = errorResponse(error);
+    // Operational visibility only: the caller logs class, code and status, never the message or any value.
+    try { onError?.(error, response.status); } catch { /* logging must not change the response */ }
+    return response;
   }
 }
 
