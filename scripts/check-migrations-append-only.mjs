@@ -1,15 +1,15 @@
 // Fails when a PostgreSQL migration is edited, renamed or deleted instead of appended.
 // Usage: node scripts/check-migrations-append-only.mjs --base <git-ref> [--repo <dir>]
-// An all-zero base (GitHub push that has no previous commit) skips the check.
+// The caller skips the step when GitHub gives an all-zero base (a push with no previous commit); here it is just an unknown ref.
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
 const migrationsDir = 'src/backend/database/postgres/migrations';
 // Non-empty alphanumeric segments joined by single underscores (no `030_.sql`, no `030__x.sql`).
 const newMigration = /^(\d{3})_[a-z0-9]+(?:_[a-z0-9]+)*\.sql$/;
-const zeroSha = /^0{40}$/;
-// A base is a full commit SHA or a plain ref name. It must not start with '-' (option injection) or hold '..' / spaces.
-const safeBase = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
+// A base is a commit SHA or a git ref name. It must not start with '-' (option injection), hold '..', whitespace, control
+// characters or the characters git forbids in refs. '+', '@' and '#' are legal in refs, so they are allowed.
+const safeBase = /^[A-Za-z0-9][^\s\x00-\x1f\x7f~^:?*[\\]{0,199}$/;
 
 function git(repo, args) {
   return execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -28,14 +28,9 @@ if (!base) {
   process.exit(2);
 }
 if (!safeBase.test(base) || base.includes('..')) {
-  process.stderr.write('migration check: --base must be a commit SHA or a plain ref name.\n');
+  process.stderr.write('migration check: --base must be a commit SHA or a valid git ref name.\n');
   process.exit(2);
 }
-if (zeroSha.test(base)) {
-  process.stdout.write('migration check: no previous commit (all-zero base); nothing to compare.\n');
-  process.exit(0);
-}
-
 try {
   git(repo, ['rev-parse', '--verify', '--quiet', `${base}^{commit}`]);
 } catch {
@@ -54,6 +49,7 @@ for (const line of git(repo, ['ls-tree', '--name-only', base, `${migrationsDir}/
 // --no-renames turns a rename into a delete plus an add, so a moved migration is caught as a delete.
 const diff = git(repo, ['diff', '--no-renames', '--name-status', base, 'HEAD', '--', migrationsDir]);
 const violations = [];
+const seenNumbers = new Set();
 let appended = 0;
 
 for (const line of diff.split('\n').filter(Boolean)) {
@@ -65,7 +61,10 @@ for (const line of diff.split('\n').filter(Boolean)) {
     violations.push(`${path}: new migration must be named NNN_snake_case.sql.`);
   } else if (Number(name.slice(0, 3)) <= highestBase) {
     violations.push(`${path}: new migration number must be higher than the highest existing migration (${String(highestBase).padStart(3, '0')}).`);
+  } else if (seenNumbers.has(name.slice(0, 3))) {
+    violations.push(`${path}: another new migration already uses number ${name.slice(0, 3)}.`);
   } else {
+    seenNumbers.add(name.slice(0, 3));
     appended += 1;
   }
 }
