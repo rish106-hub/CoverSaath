@@ -11,11 +11,12 @@ import {
   validateTaskOutputEnvelope,
 } from '../src/features/coverage-analysis/agent-contracts.js';
 import { setupLiveCase, startLiveServer } from './support/live-analysis-scenario.mjs';
+import { plainRows } from './support/sealed.mjs';
 
 const MODEL_TASK_KINDS = ['profile_intake', 'group_cover_analysis', 'personal_cover_analysis', 'question_drafting', 'bounded_synthesis'];
 
 async function taskOutputs(database, runId) {
-  return (await database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(runId))
+  return (await plainRows(database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [runId]))
     .map(row => ({ taskKind: row.task_kind, envelope: JSON.parse(row.output_json) }));
 }
 

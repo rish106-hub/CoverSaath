@@ -52,6 +52,7 @@ function portWith({ db, appended = [], consents = {}, audit } = {}) {
 const eligibleDb = (extra = {}) => fakeDb({
   'FROM workflow_runs WHERE id': run,
   'FROM service_cases service_case': caseRow,
+  'SELECT household_id FROM service_cases': { household_id: 'household-1' },
   'FROM source_pages page': [{ id: 'page-1', document_upload_id: 'doc-1' }],
   ...extra,
 });

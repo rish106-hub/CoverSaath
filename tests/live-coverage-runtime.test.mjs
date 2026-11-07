@@ -5,6 +5,7 @@ import { GEMINI_MODEL_RECIPIENT, resolveCanonicalParameterPolicy } from '../src/
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../src/features/coverage-analysis/index.js';
 import { sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { auditActions, liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
+import { plainRow, plainRows } from './support/sealed.mjs';
 
 function liveRegistryFactory({ modelRequests = [], loadedModels = [], ...factoryOptions } = {}) {
   return createGeminiCoverageRegistryFactory({
@@ -60,7 +61,7 @@ test('persistent HTTP workflow executes only model-eligible roles with explicit 
     }
   }
   // No duplicate task executions: one persisted task per workflow key, each attempted exactly once.
-  const persistedTasks = await database.prepare('SELECT agent_name, attempt_count, status FROM workflow_tasks WHERE workflow_run_id = ?').all(analysis.data.id);
+  const persistedTasks = await plainRows(database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [analysis.data.id]);
   assert.equal(persistedTasks.length, 22);
   assert.equal(new Set(persistedTasks.map(task => task.agent_name)).size, 22);
   assert.ok(persistedTasks.every(task => task.attempt_count === 1 && task.status === 'completed'));
@@ -81,11 +82,11 @@ test('persistent HTTP workflow executes only model-eligible roles with explicit 
     assert.ok(!providerBody.includes(raw), 'raw identifier must not reach the provider');
   }
 
-  const persisted = JSON.parse((await database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(analysis.data.id)).input_json);
+  const persisted = JSON.parse((await plainRow(database, 'workflow_runs', 'WHERE id = ?', [analysis.data.id])).input_json);
   assert.equal(persisted.modelPermission, true);
   assert.deepEqual(persisted.authorizedSourceIds, [scenario.pageId]);
   assert.deepEqual(persisted.authorizedSources, [{ sourceId: scenario.pageId, documentId: scenario.documentId }]);
-  const outputs = (await database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(analysis.data.id)).map(row => ({ taskKind: row.task_kind, output: JSON.parse(row.output_json) }));
+  const outputs = (await plainRows(database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [analysis.data.id])).map(row => ({ taskKind: row.task_kind, output: JSON.parse(row.output_json) }));
   const modelOutputs = outputs.filter(item => item.output.producer.execution);
   assert.equal(modelOutputs.length, 5);
   assert.ok(modelOutputs.every(item => item.output.producer.owner === 'model_assist'));
@@ -198,7 +199,7 @@ const opaqueSourceId = rawId => sanitizeEvidenceForModel({
 }).input.sources[0].id;
 
 async function reviewOutputs(database, runId) {
-  return Object.fromEntries((await database.prepare('SELECT task_kind, output_json FROM workflow_tasks WHERE workflow_run_id = ?').all(runId))
+  return Object.fromEntries((await plainRows(database, 'workflow_tasks', 'WHERE workflow_run_id = ?', [runId]))
     .map(row => [row.task_kind, JSON.parse(row.output_json ?? "null")?.payload ?? null]));
 }
 
@@ -233,7 +234,7 @@ test('live happy path: opaque model citations map back to authorised pages; mode
   assert.equal(outputs.deterministic_release_gate.status, 'blocked');
   assert.equal(outputs.deterministic_release_gate.externalActionsAuthorized, false);
   assert.equal(outputs.bounded_synthesis.householdAction.recommendation.externalActionsAuthorized, false);
-  assert.equal((await app.database.prepare('SELECT status, terminal_reason FROM workflow_runs WHERE id = ?').get(run.data.id)).terminal_reason, 'RELEASE_BLOCKED');
+  assert.equal((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [run.data.id])).terminal_reason, 'RELEASE_BLOCKED');
 });
 
 test('live run never releases when a model cites an opaque id of a page outside the run', async t => {
@@ -259,7 +260,7 @@ test('a denied document stays out of the authorised mapping so its opaque id is 
   const scenario = await setupLiveCase(app);
   const denied = await scenario.addDocument({ suffix: 'denied', scopeRecipient: 'someone-else' });
   const run = await scenario.startLiveRun('live-denied-doc');
-  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(run.data.id)).input_json);
+  const input = JSON.parse((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [run.data.id])).input_json);
   assert.ok(!input.authorizedSourceIds.includes(denied.pageId), 'denied document page must not be authorised');
   assert.ok(!input.authorizedSources.some(source => source.documentId === denied.documentId));
   assert.ok(!run.raw.includes(denied.pageId));

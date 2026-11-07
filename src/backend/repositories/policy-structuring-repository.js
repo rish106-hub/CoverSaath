@@ -4,6 +4,7 @@ import { CoverageParameterRepository } from './coverage-parameter-repository.js'
 import { isDatabaseInterface } from '../database/postgres/db.js';
 import { PostgresDatabaseError, classifyDatabaseError } from '../database/postgres/errors.js';
 import { householdLock } from '../database/postgres/locks.js';
+import { resolveColumnCrypto } from '../security/column-crypto.js';
 import {
   getPolicyParameterDefinition,
   getPolicyParameterRegistry,
@@ -204,8 +205,9 @@ function validateProposals(proposals) {
   });
 }
 
-function mapProposal(row) {
-  const value = row.value_json == null ? null : JSON.parse(row.value_json);
+function mapProposal(row, crypto) {
+  const stored = crypto.open('proposed_parameters', 'value_json', row.id, row.value_json);
+  const value = stored == null ? null : JSON.parse(stored);
   return Object.freeze({
     id: row.id,
     structuringRunId: row.structuring_run_id,
@@ -214,7 +216,7 @@ function mapProposal(row) {
     registryVersion: row.registry_version,
     proposedKey: row.proposed_key,
     category: row.category,
-    label: row.label,
+    label: crypto.open('proposed_parameters', 'label', row.id, row.label),
     value,
     page: row.page,
     blockIndex: row.block_index,
@@ -318,12 +320,13 @@ function validateOutcome(outcome) {
 }
 
 export class PolicyStructuringRepository {
-  constructor(database, { clock = () => new Date(), audit = null, coverageParameters = null } = {}) {
+  constructor(database, { clock = () => new Date(), audit = null, coverageParameters = null, ...options } = {}) {
     if (!isDatabaseInterface(database)) throw new TypeError('A database is required.');
     this.database = database;
     this.clock = clock;
     this.audit = audit ?? new AuditRepository(database, { clock });
-    this.coverageParameters = coverageParameters ?? new CoverageParameterRepository(database, { clock, audit: this.audit });
+    this.crypto = resolveColumnCrypto(options);
+    this.coverageParameters = coverageParameters ?? new CoverageParameterRepository(database, { clock, audit: this.audit, columnCrypto: this.crypto });
   }
 
   // One transaction (a savepoint inside a caller's transaction) that takes the household advisory
@@ -490,12 +493,13 @@ export class PolicyStructuringRepository {
         JSON.stringify({ ...counts, ...(coverage ? { coverage } : {}), ...(outcome ? { outcome } : {}) }), at,
       ]);
       for (const proposal of checkedProposals) {
+        const proposalId = id('proposal');
         await this.database.run(`INSERT INTO proposed_parameters
           (id, structuring_run_id, household_id, document_id, source_page_id, registry_version, proposed_key,
            category, label, value_json, page, block_index, status, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review', ?)`, [
-          id('proposal'), structuringRunId, householdId, documentId, pages.get(proposal.page).id, registryVersion,
-          proposal.proposedKey, proposal.category, proposal.label, proposal.valueJson, proposal.page, proposal.blockIndex, at,
+          proposalId, structuringRunId, householdId, documentId, pages.get(proposal.page).id, registryVersion,
+          proposal.proposedKey, proposal.category, this.crypto.seal('proposed_parameters', 'label', proposalId, proposal.label), this.crypto.seal('proposed_parameters', 'value_json', proposalId, proposal.valueJson), proposal.page, proposal.blockIndex, at,
         ]);
       }
       await this.audit.append({
@@ -522,7 +526,7 @@ export class PolicyStructuringRepository {
     await this.#requireDocumentInHousehold(householdId, documentId);
     return (await this.database.many(`SELECT * FROM proposed_parameters
       WHERE structuring_run_id = ? AND document_id = ? AND household_id = ? AND redacted_at IS NULL
-      ORDER BY page, block_index, id LIMIT ?`, [structuringRunId, documentId, householdId, bound])).map(mapProposal);
+      ORDER BY page, block_index, id LIMIT ?`, [structuringRunId, documentId, householdId, bound])).map(row => mapProposal(row, this.crypto));
   }
 
   /** The most recent structuring run (counts only) of one document for one run, or null. */

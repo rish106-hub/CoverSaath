@@ -14,6 +14,7 @@ import { POLICY_PARAMETER_REGISTRY_VERSION, getPolicyParameterRegistry } from '.
 import { observationInput, parameterAt as at, parameterReviewerId, parameterScope, seedParameterWorld } from './support/parameter-fixtures.mjs';
 import { auditActions, setupLiveCase, startLiveServer } from './support/live-analysis-scenario.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
+import { plainRow, plainRows } from './support/sealed.mjs';
 
 const v1 = POLICY_PARAMETER_REGISTRY_VERSION;
 const pg = postgresTestOptions();
@@ -187,11 +188,10 @@ test('live run: extracted values become cited unverified observations with a cou
   const run = await scenario.startLiveRun('closeout-live');
   assert.equal(run.status, 202, run.raw);
   const runId = run.data.id;
-  const input = JSON.parse((await app.database.prepare('SELECT input_json FROM workflow_runs WHERE id = ?').get(runId)).input_json);
+  const input = JSON.parse((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [runId])).input_json);
   const [page] = input.sourcePages;
-  const rows = await app.database.prepare(`SELECT observation.* FROM coverage_parameter_observations observation
-    JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id
-    WHERE parameter.workflow_run_id = ?`).all(runId);
+  const rows = await plainRows(app.database, 'coverage_parameter_observations', `WHERE parameter_record_id IN
+    (SELECT id FROM coverage_parameter_records WHERE workflow_run_id = ?)`, [runId]);
   assert.ok(rows.length >= 1);
   for (const row of rows) {
     assert.equal(row.extraction_method, 'document_extraction');
@@ -233,8 +233,8 @@ test('live run: a document grant revoked during the model call records no observ
   database = app.database;
   documentConsentId = scenario.documentConsentId;
   const run = await scenario.startLiveRun('closeout-race');
-  const runId = run.data?.id ?? (await app.database.prepare('SELECT id FROM workflow_runs ORDER BY created_at DESC LIMIT 1').get()).id;
-  assert.equal((await app.database.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(runId)).status, 'revoked');
+  const runId = run.data?.id ?? (await plainRow(app.database, 'workflow_runs', 'ORDER BY created_at DESC LIMIT 1')).id;
+  assert.equal((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [runId])).status, 'revoked');
   assert.equal((await app.database.prepare(`SELECT count(*) AS count FROM coverage_parameter_observations observation
     JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id
     WHERE parameter.workflow_run_id = ? AND observation.value_json IS NOT NULL`).get(runId)).count, 0);
@@ -372,7 +372,7 @@ test('F4: erasing run data without a parameter repository fails closed when obse
   // The erasure transaction rolled back as a whole: no partial erasure was committed.
   assert.equal(database.inTransaction, false);
   assert.equal((await database.prepare('SELECT count(*) AS count FROM coverage_parameter_observations WHERE value_json IS NOT NULL').get()).count, 1);
-  assert.equal((await database.prepare("SELECT status FROM workflow_runs WHERE id = 'run-parameters'").get()).status, 'queued');
+  assert.equal((await plainRow(database, 'workflow_runs', 'WHERE id = \'run-parameters\'')).status, 'queued');
 });
 
 test('F7 and F8: values recorded by an earlier batch are erased when a later commit re-check fails', async t => {
@@ -389,10 +389,10 @@ test('F7 and F8: values recorded by an earlier batch are erased when a later com
   database = app.database;
   documentConsentId = scenario.documentConsentId;
   await scenario.startLiveRun('closeout-two-batch');
-  const runId = (await app.database.prepare('SELECT id FROM workflow_runs ORDER BY created_at DESC LIMIT 1').get()).id;
+  const runId = (await plainRow(app.database, 'workflow_runs', 'ORDER BY created_at DESC LIMIT 1')).id;
   const rows = await app.database.prepare(`SELECT observation.value_json, observation.redaction_reason_code FROM coverage_parameter_observations observation
     JOIN coverage_parameter_records parameter ON parameter.id = observation.parameter_record_id WHERE parameter.workflow_run_id = ?`).all(runId);
   assert.ok(rows.length >= 1, 'the extraction batch recorded observations before the revocation');
   assert.ok(rows.every(row => row.value_json === null && row.redaction_reason_code === 'source_consent_not_current'));
-  assert.equal((await app.database.prepare('SELECT status FROM workflow_runs WHERE id = ?').get(runId)).status, 'revoked');
+  assert.equal((await plainRow(app.database, 'workflow_runs', 'WHERE id = ?', [runId])).status, 'revoked');
 });
