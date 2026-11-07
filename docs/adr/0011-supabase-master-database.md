@@ -29,6 +29,8 @@ The owner chose one PostgreSQL master database on Supabase for every CoverSaath 
   - Sydney keeps D8: synthetic data only.
   - State at writing: app, volume and secrets exist; no machine is deployed because the Fly API returned 503 on every deploy attempt. The Dockerfile has never been built. See `docs/runbooks/fly-deploy.md`.
 
+- **D9 amendment (2026-11-06, plan P1, not yet deployed).** Owner decisions: region `sin` (Fly has no Mumbai region; Singapore is the nearest), two `shared-cpu-1x` machines with 1 GB each, no volume. Document bytes are in PostgreSQL (ADR 0013 D8), and the request limit and model spend cap are in PostgreSQL (ADR 0014), so the single-machine and volume constraints above no longer apply; the evidence claim guard and scan worker stay per process (duplicate work only). The API connection moves to the Supabase transaction pooler (port 6543) once `scripts/probe-pooler.mjs` shows the pool timeouts apply there; runtime advisory locks are transaction-scoped, so the D3 session-mode requirement now holds only for migrations (direct host or session pooler, port 5432). Until the database moves to Mumbai (`docs/runbooks/mumbai-migration.md`) the `sin` API talks to the Sydney database across regions; no latency has been measured.
+
 ## Segment map
 
 One project, one master database (`coversaath`), one schema per segment. Cross-schema references are not allowed between segments; a segment talks to another through the backend API, so any segment can later move to its own database or service without changing the others.
