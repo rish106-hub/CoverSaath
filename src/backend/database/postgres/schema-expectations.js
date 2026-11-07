@@ -18,6 +18,7 @@ export const expectedTables = Object.freeze([
   'source_curator_grants', 'curated_source_archives', 'curated_product_submissions', 'curated_action_nonces',
   'auth_identities', 'profile_answers', 'document_blobs', 'app_events', 'rate_limit_buckets', 'model_budget_scopes', 'model_budget_reservations',
   'device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios',
+  'reference_cache', 'reference_cache_leases',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -76,7 +77,7 @@ export const criticalIndexes = Object.freeze([
   'integration_outbox_consent_status_idx', 'idempotency_keys_expiry_idx',
   'audit_events_household_chain_idx',
   'app_events_time_idx', 'app_events_name_time_idx', 'app_events_household_idx', 'app_events_expiry_idx', 'rate_limit_buckets_window_idx',
-  'model_budget_reservations_scope_idx', 'document_uploads_consent_grant_idx', 'consent_grants_household_subject_idx',
+  'model_budget_reservations_scope_idx', 'reference_cache_stale_after_idx', 'reference_cache_leases_expiry_idx', 'document_uploads_consent_grant_idx', 'consent_grants_household_subject_idx',
   'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'consent_scopes_field_viewer_idx',
   'ocr_jobs_lifecycle_idx',
   'coverage_parameter_records_run_idx', 'coverage_parameter_records_case_idx',
@@ -108,5 +109,7 @@ export const requiredColumns = Object.freeze({
   app_events: ['occurred_at', 'expires_at', 'event_name', 'household_id', 'consent_grant_id', 'payload_enc', 'redacted_at'],
   rate_limit_buckets: ['key_hash', 'window_start', 'request_count'],
   model_budget_scopes: ['scope', 'reserved_micro_usd', 'spent_micro_usd'],
+  reference_cache: ['key', 'etag', 'body', 'signature', 'fetched_at', 'stale_after', 'status'],
+  reference_cache_leases: ['key', 'owner', 'expires_at'],
   model_budget_reservations: ['scope', 'amount_micro_usd', 'state', 'actual_micro_usd'],
 });
