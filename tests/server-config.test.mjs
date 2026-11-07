@@ -12,8 +12,9 @@ test('server configuration has explicit bounded defaults', () => {
     rateLimitPerMinute: 600,
     budgetUsd: undefined,
     projectBudgetUsd: undefined,
-    rateLimitBackend: 'memory',
-    budgetBackend: 'memory',
+    rateLimitBackend: 'database',
+    budgetBackend: 'database',
+    evidenceClaimBackend: 'database',
     events: { enabled: true, retentionDays: 30 },
     documents: {
       storageBackend: 'database',
