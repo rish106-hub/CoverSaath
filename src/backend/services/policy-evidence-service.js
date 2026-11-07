@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { CLAUSE_KINDS, FINDING_STATES, QUESTION_CONSENT_SCOPE } from '../../contracts/policy-evidence.js';
 import { INVESTIGATION_VERSION, buildClauses, investigate, looksLikeSchedule } from '../../features/policy-evidence/index.js';
 import { extractFields, flattenBlock, tableRows, FIELD_NAMES, FIELD_SPECS } from '../../features/ai-analysis/eval-extractor.js';
@@ -192,7 +192,10 @@ const documentNames = pages => {
   } catch { return []; }
 };
 
-export function createPolicyEvidenceService({ services, loadKnownIdentifiers, createModelCall, env = process.env } = {}) {
+const CLAIM_LEASE_MS = 120_000;
+
+export function createPolicyEvidenceService({ services, loadKnownIdentifiers, createModelCall, env = process.env, claimLeaseMs = CLAIM_LEASE_MS } = {}) {
+  if (!Number.isInteger(claimLeaseMs) || claimLeaseMs < 30 || claimLeaseMs > 3_600_000) throw new TypeError('claimLeaseMs must be 30 to 3600000.');
   // The request digest covers the raw question, so it is keyed: an unsalted hash would let anyone holding the database
   // confirm a guessed question. The key is derived from the server's document key; without one (development) it is
   // random per process, so a replay after a restart is a new request rather than a match.
@@ -203,7 +206,11 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     throw new TypeError('services, loadKnownIdentifiers and createModelCall are required.');
   }
   let inFlight = 0;
+  // The per-process set is the fast path and the only guard when EVIDENCE_CLAIM_BACKEND=memory (tests, one machine). By
+  // default the claim is also an expiring database lease shared by every machine (ADR 0014, migration 032).
   const claims = new Set();
+  const sharedClaims = env.EVIDENCE_CLAIM_BACKEND === 'memory' ? null
+    : (typeof services.runtimeLimits?.acquireClaim === 'function' ? services.runtimeLimits : null);
 
   // Clauses are derived deterministically on first use; a document without complete stored blocks is skipped.
   async function ensureClauses({ householdId, caseId, documentId }) {
@@ -437,15 +444,35 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
 
   return Object.freeze({
     // One question per idempotency key runs at a time. A stored answer is written only after the paid model call, so a
-    // duplicate that arrives meanwhile would miss the replay and bill the model twice. The claim is per process, so a
-    // multi-instance deployment needs a database-level claim instead.
+    // duplicate that arrives meanwhile would miss the replay and bill the model twice. The claim is a database lease with
+    // an expiry (shared by all machines) plus the per-process set; the in-flight cap below stays per process on purpose.
     async ask(input) {
       const { caseRecord, idempotencyKey } = input;
       if (typeof idempotencyKey !== 'string' || !idempotencyKey || !caseRecord) return askOnce(input);
       const claim = JSON.stringify([caseRecord.household_id, caseRecord.id, idempotencyKey]);
-      if (claims.has(claim)) throw coded('IDEMPOTENCY_IN_PROGRESS', 'This question is already being answered. Retry with the same idempotency key shortly.', 409);
+      const busy = () => coded('IDEMPOTENCY_IN_PROGRESS', 'This question is already being answered. Retry with the same idempotency key shortly.', 409);
+      if (claims.has(claim)) throw busy();
       claims.add(claim);
-      try { return await askOnce(input); } finally { claims.delete(claim); }
+      let lease = null;
+      try {
+        if (sharedClaims) {
+          // A plain digest, not digestKey's HMAC: that key is random per process in development, and every machine must
+          // derive the same hash. The idempotency key is client text and is never stored; the row lives one lease term.
+          lease = { claimHash: createHash('sha256').update('evidence-claim-v1\0').update(claim).digest('hex'), owner: randomBytes(24).toString('hex'), leaseMs: claimLeaseMs };
+          if (!(await sharedClaims.acquireClaim(lease))) { lease = null; throw busy(); }
+          // Renew while working; a crashed process stops renewing and the lease expires. A failed renewal is ignored: the
+          // worst case is a duplicate paid call after expiry, and the answer write is idempotent on the key.
+          lease.timer = setInterval(() => { sharedClaims.renewClaim(lease).catch(() => {}); }, Math.max(10, Math.floor(claimLeaseMs / 3)));
+          lease.timer.unref?.();
+        }
+        return await askOnce(input);
+      } finally {
+        if (lease) {
+          clearInterval(lease.timer);
+          await sharedClaims.releaseClaim(lease).catch(() => {});
+        }
+        claims.delete(claim);
+      }
     },
 
     /**
