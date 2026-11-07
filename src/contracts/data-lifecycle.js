@@ -101,6 +101,7 @@ export const DATA_STORES = Object.freeze([
   store('model_budget_scopes', 'global', null, null, 'Process-wide spend counters.'),
   store('model_budget_reservations', 'global', null, null, 'Process-wide spend counters.'),
   store('rate_limit_buckets', 'global', null, null, 'Keyed request counters; the key is a keyed hash.'),
+  store('evidence_claims', 'global', null, null, 'Short-lived question claims keyed by a hash; no household content, purged at expiry.'),
   store('schema_migrations', 'global', null, null, 'Migration ledger.'),
   store('coverage_parameter_registry_versions', 'global', null, null, 'Registry reference data.'),
   store('coverage_parameter_observation_rules', 'global', null, null, 'Rule reference data.'),
