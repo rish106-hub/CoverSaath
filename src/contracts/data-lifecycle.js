@@ -91,6 +91,7 @@ export const DATA_STORES = Object.freeze([
   store('onboarding_progress', 'delete', 'household_id = ?', 'userData', 'Deleted.'),
   store('tool_scenarios', 'delete', 'household_id = ?', 'userData', 'Deleted.'),
   // Telemetry, idempotency, ledger and audit
+  store('job_queue', 'delete', 'household_id = ?', null, 'Identifiers only (kind, document and grant ids). Deleted on revocation, document erasure and household erasure; never blocks an erasure.'),
   store('app_events', 'delete', 'household_id = ?', null, 'Deleted by household, case and adult id.'),
   store('idempotency_keys', 'delete', null, null, 'Reached by the ids a response mentions. Responses can carry document names and job content.'),
   store('retention_records', 'ledger', 'household_id = ?', null, 'The deletion ledger. Reason code and times only.'),

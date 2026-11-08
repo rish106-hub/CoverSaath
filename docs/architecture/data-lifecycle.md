@@ -85,6 +85,7 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `adult_preferences` | delete | userData | Deleted. |
 | `onboarding_progress` | delete | userData | Deleted. |
 | `tool_scenarios` | delete | userData | Deleted. |
+| `job_queue` | delete | - | Identifiers only (kind, document and grant ids). Deleted on revocation, document erasure and household erasure; never blocks an erasure. |
 | `app_events` | delete | - | Deleted by household, case and adult id. |
 | `idempotency_keys` | delete | - | Reached by the ids a response mentions. Responses can carry document names and job content. |
 | `retention_records` | ledger | - | The deletion ledger. Reason code and times only. |

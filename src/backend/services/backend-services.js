@@ -1,4 +1,4 @@
-import { ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, ProfileAnswerRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
+import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, ProfileAnswerRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
@@ -12,6 +12,8 @@ export function createBackendServices(database, options = {}) {
   // Activity events and shared runtime limits (ADR 0014). Event payloads are sealed with the same column crypto.
   const appEvents = new AppEventRepository(database, { clock: options.clock, columnCrypto });
   const runtimeLimits = new RuntimeLimitsRepository(database);
+  // Postgres job queue for the worker process group (migration 034). Revocation erases its rows through ConsentRepository.
+  const jobQueue = new JobQueueRepository(database, { clock: options.clock });
   const shared = { ...options, audit, columnCrypto };
   const households = new HouseholdRepository(database, shared);
   const coverageParameters = new CoverageParameterRepository(database, shared);
@@ -23,7 +25,7 @@ export function createBackendServices(database, options = {}) {
   const clauses = new ClauseRepository(database, shared);
   const catalogueReviews = new CatalogueReviewRepository(database, shared);
   const curatedProducts = new CuratedProductRepository(database, shared);
-  const consents = new ConsentRepository(database, { ...shared, coverageParameters, policyStructuring, clauses, appEvents });
+  const consents = new ConsentRepository(database, { ...shared, coverageParameters, policyStructuring, clauses, appEvents, jobQueue });
   const cases = new CaseRepository(database, shared);
   const workflows = new WorkflowRepository(database, shared);
   const auth = new AuthRepository(database, shared);
@@ -40,7 +42,7 @@ export function createBackendServices(database, options = {}) {
   const erasure = new ErasureRepository(database, { clock: options.clock, audit, consents, documents, profileAnswers, userData: userDataRepository, appEvents, policyStructuring, clauses });
 
   return {
-    erasure, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, columnCrypto, identities, profileAnswers, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
+    erasure, jobQueue, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, columnCrypto, identities, profileAnswers, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {
