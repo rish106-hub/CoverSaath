@@ -236,6 +236,9 @@ export function createApiServer({
         services.appEvents.purgeExpired().catch(() => {});
         services.runtimeLimits.purgeRequestWindows(10 * 60_000).catch(() => {});
         services.runtimeLimits.purgeExpiredClaims().catch(() => {});
+        // Finished queue rows hold identifiers only. Succeeded jobs go after a week; dead letters stay a month for an operator.
+        services.jobQueue?.purgeSucceeded(7 * 24 * 3_600_000).catch(() => {});
+        services.jobQueue?.purgeDead(30 * 24 * 3_600_000).catch(() => {});
       };
       housekeepingTimer = setInterval(sweep, 60 * 60 * 1000);
       housekeepingTimer.unref?.();
