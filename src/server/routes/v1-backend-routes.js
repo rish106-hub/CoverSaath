@@ -294,7 +294,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     if (req.method === 'GET' && url.pathname === '/api/v1/notices') {
       return { status: 200, body: noticeSetView() };
     }
-    const noticeMatch = req.method === 'GET' ? /^\/api\/v1\/notices\/([a-z0-9_]{1,80})$/.exec(url.pathname) : null;
+    const noticeMatch = req.method === 'GET' ? /^\/api\/v1\/notices\/([^/]{1,80})$/.exec(url.pathname) : null;
     if (noticeMatch) {
       const view = noticeView(noticeMatch[1]);
       if (!view) return { status: 404, body: { error: { code: 'NOTICE_NOT_FOUND', message: 'Notice not found.' } } };

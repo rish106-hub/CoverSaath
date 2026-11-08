@@ -250,6 +250,8 @@ export const DATA_REGISTRY = Object.freeze({
   curated_source_archives: entry('reference_data', {}, ['sha256', 'byte_size', 'content', 'created_at']),
   curated_action_nonces: entry('reference_data', {}, ['nonce', 'grant_id', 'action', 'submission_id', 'signature_sha256', 'used_at']),
   source_curator_grants: entry('reference_data', {}, ['id', 'adult_user_id', 'role', 'status', 'granted_by', 'created_at', 'expires_at', 'revoked_at', 'public_key']),
+  reference_cache: entry('reference_data', {}, ['key', 'etag', 'body', 'signature', 'fetched_at', 'stale_after', 'status']),
+  reference_cache_leases: entry('reference_data', {}, ['key', 'owner', 'claimed_at', 'expires_at']),
 });
 
 /** One row per stored column: { table, column, kind: 'personal'|'system', category, purpose, noticeId, legalBasis, retentionClass, consenter }. */
