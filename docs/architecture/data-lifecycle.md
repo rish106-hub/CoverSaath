@@ -96,6 +96,8 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `model_budget_reservations` | global | - | Process-wide spend counters. |
 | `rate_limit_buckets` | global | - | Keyed request counters; the key is a keyed hash. |
 | `evidence_claims` | global | - | Short-lived question claims keyed by a hash; no household content, purged at expiry. |
+| `reference_cache` | global | - | Public insurer and product reference data fetched from the reference service; no household, case or consent link. |
+| `reference_cache_leases` | global | - | Expiring refresh lease keyed by reference key; random owner token only. |
 | `schema_migrations` | global | - | Migration ledger. |
 | `coverage_parameter_registry_versions` | global | - | Registry reference data. |
 | `coverage_parameter_observation_rules` | global | - | Rule reference data. |
