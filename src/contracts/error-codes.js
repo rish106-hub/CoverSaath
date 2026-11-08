@@ -33,6 +33,7 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   CASE_NOT_FOUND: entry(404, 'not_found', false),
   HOUSEHOLD_NOT_FOUND: entry(404, 'not_found', false),
   CONSENT_NOT_FOUND: entry(404, 'not_found', false),
+  NOTICE_NOT_FOUND: entry(404, 'not_found', false),
   MEMBER_NOT_FOUND: entry(404, 'not_found', false),
   POLICY_NOT_FOUND: entry(404, 'not_found', false),
   HOUSEHOLD_WRITE_FORBIDDEN: entry(403, 'authorization', false),

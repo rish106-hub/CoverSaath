@@ -10,6 +10,7 @@ import { validatePostgresSchema } from '../../backend/database/postgres/validate
 import { createCoverageAnalysisPort } from '../../backend/services/index.js';
 import { COVERAGE_ANALYSIS_WORKFLOW } from '../../features/coverage-analysis/index.js';
 import { INTAKE_CONNECTORS } from '../../contracts/intake-connectors.js';
+import { noticeSetView, noticeView } from '../../contracts/data-purposes.js';
 import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
 import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from '../../contracts/profile-answers.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
@@ -287,6 +288,17 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       // Schema detail (missing tables, triggers, migration count) is for local operators only.
       if (isLoopbackRequest(req)) Object.assign(body, { database: schema, externalProviderCalls: false });
       return { status: ready ? 200 : 503, body };
+    }
+    // Static, itemised privacy notices (DPDP s5). Public by design: it holds no household or personal data, so it needs no
+    // session. Reading a notice is not consent; consent stays with the authenticated routes below. FOR LEGAL REVIEW.
+    if (req.method === 'GET' && url.pathname === '/api/v1/notices') {
+      return { status: 200, body: noticeSetView() };
+    }
+    const noticeMatch = req.method === 'GET' ? /^\/api\/v1\/notices\/([^/]{1,80})$/.exec(url.pathname) : null;
+    if (noticeMatch) {
+      const view = noticeView(noticeMatch[1]);
+      if (!view) return { status: 404, body: { error: { code: 'NOTICE_NOT_FOUND', message: 'Notice not found.' } } };
+      return { status: 200, body: view };
     }
     // Operational metrics (ADR 0017): Prometheus text, bootstrap bearer only. The Host/Origin guard and the rate limiter have
     // already run. Never reachable without the credential, so it is not a public status page.
