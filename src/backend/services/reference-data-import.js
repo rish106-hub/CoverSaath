@@ -40,6 +40,12 @@ function assertSyntheticOnly(endpoint, raw, index) {
   }
 }
 
+export function assertNoVerifiedFacts(body, index) {
+  if (Array.isArray(body?.facts) && body.facts.some(fact => fact?.outcome === 'verified')) {
+    throw importError('Synthetic import must not contain verified facts', index);
+  }
+}
+
 /**
  * Validates an import document. Returns the cache rows it would write ({ key, endpoint, body, signature }) and writes nothing.
  * Throws REFERENCE_IMPORT_INVALID (messages carry an entry index, never a value) or the parser's coded error.
@@ -71,6 +77,8 @@ export function prepareReferenceImport(document, { allowOwnerApproved = false } 
     if (document.data_class === 'synthetic') assertSyntheticOnly(endpoint, entry.response, index);
     let body;
     try { body = REFERENCE_ENDPOINTS[endpoint].parse(entry.response); } catch { throw importError('Response does not match the pinned shape', index); }
+    // Defence in depth: a synthetic import must never yield a verified fact, whatever the pre-parse checks let through.
+    if (document.data_class === 'synthetic') assertNoVerifiedFacts(body, index);
     const key = cacheKeyFor(endpoint, params);
     if (seen.has(key)) throw importError('Duplicate endpoint and params', index);
     seen.add(key);
@@ -88,9 +96,13 @@ export async function importReferenceData({ database, repository, document, ttlD
   const byEndpoint = {};
   for (const row of rows) byEndpoint[row.endpoint] = (byEndpoint[row.endpoint] ?? 0) + 1;
   const summary = { dataClass: document.data_class, entries: rows.length, byEndpoint, dryRun };
+  // rights_reference is printed only when it is short and printable (prepareReferenceImport already enforced that).
+  if (document.data_class === 'owner_approved') summary.rightsReference = document.rights_reference;
   if (dryRun) return summary;
-  // The etag column records which import wrote the row (a short digest of the file's entries), for audit only.
-  const marker = `import-${createHash('sha256').update(rows.map(row => `${row.key}:${row.signature}`).join('\n')).digest('hex').slice(0, 16)}`;
+  // The etag column records which import wrote the row (data class plus a short digest of the file's entries), for audit
+  // only. It keeps the `import-` prefix that the rollback SQL matches. The owner_approved opt-in is a placeholder gate
+  // until the legal rights register exists (FOR LEGAL REVIEW); the marker makes the class visible in the data.
+  const marker = `import-${document.data_class}-${createHash('sha256').update(rows.map(row => `${row.key}:${row.signature}`).join('\n')).digest('hex').slice(0, 16)}`;
   const ttlMs = ttlDays * 24 * 60 * 60 * 1000;
   await database.transaction(async () => {
     for (const row of rows) await repository.put({ key: row.key, etag: marker, body: row.body, signature: row.signature, ttlMs });

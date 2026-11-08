@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { ReferenceCacheRepository } from '../src/backend/repositories/reference-cache-repository.js';
 import { createReferenceDataPort } from '../src/backend/services/reference-data-port.js';
-import { importReferenceData, prepareReferenceImport } from '../src/backend/services/reference-data-import.js';
+import { assertNoVerifiedFacts, importReferenceData, prepareReferenceImport } from '../src/backend/services/reference-data-import.js';
 import { createInsuranceDataClient } from '../src/integrations/index.js';
 
 // ADR 0021 option d: reference rows imported from a local file into the reference cache, served by the port with no
@@ -59,7 +61,7 @@ test('import writes the cache in one go and the port serves it with no service c
 
   const summary = await importReferenceData({ database: db, repository, document: fixture(), ttlDays: 30 });
   assert.deepEqual(summary.byEndpoint, { 'insurers.resolve': 1, 'products.search': 1, 'products.versions': 1, 'versions.facts': 1 });
-  assert.match(summary.marker, /^import-[a-f0-9]{16}$/);
+  assert.match(summary.marker, /^import-synthetic-[a-f0-9]{16}$/);
   assert.equal((await db.one('SELECT count(*)::int AS n FROM reference_cache')).n, 4);
   // Re-import is idempotent: same keys, same count.
   await importReferenceData({ database: db, repository, document: fixture() });
@@ -101,4 +103,23 @@ test('a bad entry anywhere in the file writes nothing', postgresTestOptions(), a
   await assert.rejects(importReferenceData({ database: db, repository, document }), { code: 'REFERENCE_IMPORT_INVALID' });
   assert.equal((await db.one('SELECT count(*)::int AS n FROM reference_cache')).n, 0);
   await assert.rejects(importReferenceData({ database: db, repository, document: fixture(), ttlDays: 0 }), { code: 'REFERENCE_IMPORT_INVALID' });
+});
+
+test('the synthetic guard refuses any verified fact (defence in depth)', () => {
+  assert.doesNotThrow(() => assertNoVerifiedFacts({ facts: [{ outcome: 'unknown' }] }, 0));
+  assert.throws(() => assertNoVerifiedFacts({ facts: [{ outcome: 'unknown' }, { outcome: 'verified' }] }, 3),
+    error => error.code === 'REFERENCE_IMPORT_INVALID' && /entry 3/.test(error.message));
+});
+
+test('the CLI refuses a non-loopback write without --yes and rejects option values that look like flags', () => {
+  const script = fileURLToPath(new URL('../scripts/reference-import.mjs', import.meta.url));
+  const file = fileURLToPath(new URL('../scripts/fixtures/reference-import-synthetic.json', import.meta.url));
+  const run = (args, url) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8', env: { PATH: process.env.PATH, DATABASE_URL: url } });
+  const refused = run(['--file', file], 'postgres://user:secret-pass@db.example.invalid:5432/app?sslmode=require');
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /REFERENCE_IMPORT_CONFIRM_REQUIRED/);
+  assert.match(refused.stderr, /db\.example\.invalid/);
+  assert.doesNotMatch(refused.stderr, /secret-pass|sslmode|user/);
+  const flagValue = run(['--file', '--dry-run'], 'postgres://localhost/app');
+  assert.equal(flagValue.status, 2);
 });

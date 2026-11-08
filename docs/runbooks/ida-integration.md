@@ -58,7 +58,9 @@ node --env-file-if-exists=.env.local scripts/reference-import.mjs --file scripts
 
 - The file format is described at the top of `src/backend/services/reference-data-import.js`. Each entry is an allow-listed endpoint, its parameters, and the IDA response body.
 - One invalid entry rejects the whole file and writes nothing. The output gives counts and an entry index only.
-- `data_class: synthetic` cannot carry verified-looking data. Real data needs `data_class: owner_approved`, a `rights_reference` from the IDA rights register, and `--allow-owner-approved`. **FOR LEGAL REVIEW**: do not import real insurer data until the owner has recorded the source rights.
+- `data_class: synthetic` cannot carry verified-looking data. Real data needs `data_class: owner_approved`, a `rights_reference` from the IDA rights register, and `--allow-owner-approved`. This gate is a placeholder pending the legal rights register: it is honour-system, not proof of rights. **FOR LEGAL REVIEW**: do not import real insurer data until the owner has recorded the source rights. The class is stored in the cache `etag` marker (`import-<class>-<digest>`) and printed, with a short printable `rights_reference`, in the summary.
+- The CLI prints the target database host only. Writing to a non-loopback host (not localhost, 127.0.0.1, ::1) needs `--yes`; without it the CLI exits non-zero with `REFERENCE_IMPORT_CONFIRM_REQUIRED`. Option values starting with `--` are rejected and files over 8 MB are refused.
+- Import-only mode: once rows pass `--ttl-days`, a read returns code `REFERENCE_DATA_NOT_CONFIGURED` (HTTP 503) until the next import. `textList` in `schemas.js` deliberately accepts a bare string as a one-item list.
 - A hosted import is a change to a remote database. It needs owner approval.
 - After `--ttl-days` the rows are served labelled stale. Re-run the import to refresh them.
 
