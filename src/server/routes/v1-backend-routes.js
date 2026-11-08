@@ -268,7 +268,7 @@ async function schemaStatus(database) {
 
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
-export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, onError }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, onError, metrics }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -287,6 +287,13 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       // Schema detail (missing tables, triggers, migration count) is for local operators only.
       if (isLoopbackRequest(req)) Object.assign(body, { database: schema, externalProviderCalls: false });
       return { status: ready ? 200 : 503, body };
+    }
+    // Operational metrics (ADR 0017): Prometheus text, bootstrap bearer only. The Host/Origin guard and the rate limiter have
+    // already run. Never reachable without the credential, so it is not a public status page.
+    if (req.method === 'GET' && url.pathname === '/api/v1/metrics') {
+      services.access.requireBootstrap(req.headers.authorization);
+      if (!metrics) return { status: 404, body: { error: { code: 'ROUTE_NOT_FOUND', message: 'Versioned backend route not found.' } } };
+      return { status: 200, contentType: 'text/plain; version=0.0.4; charset=utf-8', text: await metrics.render() };
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/households') {
       services.access.requireBootstrap(req.headers.authorization);

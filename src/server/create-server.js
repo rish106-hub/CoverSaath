@@ -28,6 +28,7 @@ import { handleV1BackendRoute } from './routes/v1-backend-routes.js';
 import { createColumnCrypto, readDataEncryptionConfig } from '../backend/security/column-crypto.js';
 import { createAppEventRecorder, deriveEventHmacKey } from '../backend/services/app-event-recorder.js';
 import { isApplicationCode, newRequestId, safeCode, silentLogger } from '../shared/logging/index.js';
+import { createServerMetrics } from '../shared/metrics/index.js';
 import { createSharedRateLimiter } from './http/shared-rate-limiter.js';
 import { knownRouteTemplate, pathAttribution, requestEventName, routeTemplate } from './http/event-context.js';
 import { readIdentityConfig, readServerConfig } from './config.js';
@@ -45,6 +46,7 @@ export function createApiServer({
   sarvamFetch,
   logger = silentLogger,
   errorReporter,
+  metrics = createServerMetrics(),
 } = {}) {
   const config = readServerConfig(env);
   const identity = readIdentityConfig(env);
@@ -126,6 +128,7 @@ export function createApiServer({
     : {});
   // Metadata-only provider events (outcome, latency, tokens, cost); never prompt or output text.
   const onProviderEvent = event => {
+    metrics.recordModelCall({ task: event.task, outcome: event.outcome, latencyMs: event.latencyMs, costUsd: event.costUsd });
     logger.provider({ provider: 'google', task: event.task, outcome: event.outcome, code: event.outcome === 'ok' ? null : event.outcome, latencyMs: event.latencyMs, inputTokens: event.inputTokens, outputTokens: event.outputTokens, costMicroUsd: Math.round((event.costUsd ?? 0) * 1_000_000) });
     const outcome = String(event.outcome ?? '').toLowerCase();
     recordEvent({
@@ -168,7 +171,7 @@ export function createApiServer({
       loadKnownIdentifiers,
       createModelCall: createStructuringModelCall,
       env,
-      onError: event => logger.warn('policy_structuring_failed', { errorCode: safeCode(event.code) }),
+      onError: event => { metrics.recordPrivacyRefusal(event.code); logger.warn('policy_structuring_failed', { errorCode: safeCode(event.code) }); },
     });
     return structuringService;
   };
@@ -293,6 +296,20 @@ export function createApiServer({
     });
     return ocrService;
   };
+  // Gauges read at scrape time (ADR 0017): pool saturation, queue depth, budget use. Each is skipped if its source is not ready.
+  metrics.registry.collect(() => {
+    const pool = database?.pool;
+    if (pool && Number.isFinite(pool.totalCount)) metrics.setPool({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount, max: pool.options?.max });
+  });
+  metrics.registry.collect(async () => {
+    const count = await services?.documents?.countWorkDocuments?.();
+    if (Number.isFinite(count)) metrics.setQueueDepth(count);
+  });
+  metrics.registry.collect(async () => {
+    if (!config.projectBudgetUsd) return;
+    const snapshot = await projectBudget.get(config.projectBudgetUsd).snapshot();
+    metrics.setBudget({ maxUsd: snapshot.maxUsd, reservedUsd: snapshot.reservedUsd, spentUsd: snapshot.spentUsd });
+  });
   const server = http.createServer(async (req, res) => {
     prepareJsonResponse(res);
     const startedAt = performance.now();
@@ -307,6 +324,7 @@ export function createApiServer({
       const wrapped = error?.code === 'BACKEND_UNAVAILABLE' && error.cause && typeof error.cause === 'object';
       const subject = wrapped ? error.cause : error;
       logger.failure(subject, { requestId, status });
+      metrics.recordPrivacyRefusal(error?.code);
       // Only unexpected failures are reported: a 500, a 5xx with no application code, an internal error that the route
       // answered with a 4xx, or a backend that failed to build. An expected 503 that carries a deliberate code
       // (PROVIDER_NOT_CONFIGURED, DATABASE_UNAVAILABLE) is logged, not reported.
@@ -322,10 +340,11 @@ export function createApiServer({
     // marked aborted and carries no status. The route is shown only from the closed set of known route words.
     res.once('close', () => {
       const aborted = !res.writableFinished;
-      logger.request({
-        requestId, method: req.method, route: knownRouteTemplate(String(req.url ?? '').split('?')[0]), status: aborted ? null : res.statusCode,
-        durationMs: Math.round(performance.now() - startedAt), errorCode: errorCode ?? loggedCode, aborted,
-      });
+      const route = knownRouteTemplate(String(req.url ?? '').split('?')[0]);
+      const durationMs = Math.round(performance.now() - startedAt);
+      logger.request({ requestId, method: req.method, route, status: aborted ? null : res.statusCode, durationMs, errorCode: errorCode ?? loggedCode, aborted });
+      // Metrics never throw into the request path and carry the route template and status class only.
+      try { metrics.recordRequest({ method: req.method, route, status: res.statusCode, durationMs, aborted }); } catch { /* telemetry must not fail a request */ }
     });
     res.once('finish', () => {
       if (!recorder) return;
@@ -346,10 +365,16 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = await getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, onError });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, onError, metrics });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');
+        // A text result (the metrics scrape) is sent as is; every other route answers JSON.
+        if (typeof backendResult.text === 'string') {
+          res.setHeader('Content-Type', backendResult.contentType);
+          res.writeHead(backendResult.status);
+          return res.end(backendResult.text);
+        }
         return send(backendResult.status, backendResult.body);
       }
       return send(404, { error: { code: 'ROUTE_NOT_FOUND', message: 'Use the authenticated /api/v1 API.' } });
