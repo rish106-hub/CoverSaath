@@ -17,7 +17,7 @@ export const expectedTables = Object.freeze([
   'policy_structuring_runs', 'proposed_parameters', 'policy_structuring_jobs', 'policy_clauses', 'policy_answers', 'catalogue_reviewer_grants', 'catalogue_reviews',
   'source_curator_grants', 'curated_source_archives', 'curated_product_submissions', 'curated_action_nonces',
   'auth_identities', 'profile_answers', 'document_blobs', 'app_events', 'rate_limit_buckets', 'model_budget_scopes', 'model_budget_reservations', 'evidence_claims',
-  'device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios',
+  'device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios', 'job_queue',
   'reference_cache', 'reference_cache_leases',
 ]);
 

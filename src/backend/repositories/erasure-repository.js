@@ -182,6 +182,7 @@ export class ErasureRepository {
       await this.#count(ctx, 'facts', `UPDATE evidence_facts SET ${FACT_REDACTION} WHERE household_id = ? AND redacted_at IS NULL`, [at, reason, householdId]);
       await this.#count(ctx, 'factConflicts', `DELETE FROM fact_conflicts WHERE left_fact_id IN (SELECT id FROM evidence_facts WHERE household_id = ?)`, [householdId]);
       await this.#eraseParameterRecords(ctx, 'household_id = ?', [householdId]);
+      await this.#count(ctx, 'jobs', 'DELETE FROM job_queue WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyAnswers', 'DELETE FROM policy_answers WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyClauses', 'DELETE FROM policy_clauses WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'catalogueReviews', 'DELETE FROM catalogue_reviews WHERE household_id = ?', [householdId]);

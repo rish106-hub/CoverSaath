@@ -34,6 +34,7 @@ const PLAIN = {
   },
   auth_identities: { 'identity provider issuer URL, public': ['issuer'] },
   case_participants: { 'closed vocabulary': ['participant_role'] },
+  job_queue: { 'job kind, worker id, closed vocabulary and error code, no content': ['kind', 'locked_by', 'status', 'last_error_code', 'dedupe_key'], 'identifier values only, capped at 1 KiB by a check; never document, OCR, model or household content': ['payload_json'] },
   reference_cache: {
     'public reference-service data only (no household link), cache key, etag, integrity signature, expiry time and status': ['key', 'etag', 'body', 'signature', 'stale_after', 'status'],
   },
@@ -141,6 +142,7 @@ const PLAIN_NUMBERS = {
   integration_outbox: { 'retry counter': ['attempt_count'] },
   model_budget_reservations: { 'cost in micro-USD, no content': ['amount_micro_usd', 'actual_micro_usd'] },
   model_budget_scopes: { 'cost in micro-USD, no content': ['reserved_micro_usd', 'spent_micro_usd'] },
+  job_queue: { 'attempt counters and the due time of a job, no content': ['attempts', 'max_attempts', 'run_after'] },
   ocr_jobs: { 'retry counter': ['attempt_count'] },
   onboarding_progress: { 'row revision counter': ['revision'] },
   policy_clauses: { 'page number': ['page'] },
@@ -164,6 +166,7 @@ const PLAIN_REFS = {
   curated_product_submissions: { 'id of the previous source version': ['source_version_id'] },
   fact_conflicts: { 'id of the resolving review': ['resolved_by_review_id'] },
   human_approvals: { 'id of the approved target': ['target_id'] },
+  job_queue: { 'ids the job names (a household, document or grant), not keys so erasure never blocks': ['household_id', 'document_id', 'consent_grant_id'] },
   integration_webhook_events: { 'provider event id used for de-duplication': ['provider_event_id'] },
   retention_records: { 'id of the resource the record is about': ['resource_id'] },
 };
