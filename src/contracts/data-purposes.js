@@ -227,7 +227,7 @@ export const DATA_REGISTRY = Object.freeze({
     ['id', 'occurred_at', 'expires_at', 'event_name', 'request_id', 'household_id', 'adult_user_id', 'case_id', 'consent_grant_id', 'route', 'method', 'status', 'duration_ms', 'provider', 'outcome', 'code', 'redacted_at']),
   job_queue: entry('service_operations',
     { derived_identifier: ['payload_json'] },
-    ['id', 'kind', 'household_id', 'document_id', 'consent_grant_id', 'payload_json', 'dedupe_key', 'status', 'attempts', 'max_attempts', 'run_after', 'locked_by', 'lease_expires_at', 'last_error_code', 'created_at', 'updated_at', 'finished_at']),
+    ['id', 'kind', 'household_id', 'document_id', 'consent_grant_id', 'dedupe_key', 'status', 'attempts', 'max_attempts', 'run_after', 'locked_by', 'lease_expires_at', 'last_error_code', 'created_at', 'updated_at', 'finished_at']),
   rate_limit_buckets: entry('service_operations',
     { behavioural: ['key_hash'] },
     ['window_start', 'request_count']),
