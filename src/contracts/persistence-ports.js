@@ -21,7 +21,8 @@ export const PORT_CONTRACT_ERROR_CODE = 'PORT_CONTRACT_INVALID';
  *   Throws CONSENT_REQUIRED unless the grant is active for the case's analysis subject.
  * @property {(input: { scope: string, key: string, at: string }) => Awaitable<IdempotencyRow|null>} findIdempotency
  *   Deletes the key first if expired at `at`; returns { request_digest, response_json, ... } or null.
- * @property {(input: { scope: string, key: string, requestDigest: string, responseStatus: number, response: object, expiresAt: string }) => Awaitable<void>} recordIdempotency
+ * @property {(input: { scope: string, key: string, requestDigest: string, responseStatus: number, response: object, expiresAt: string, householdId?: string|null, caseId?: string|null }) => Awaitable<void>} recordIdempotency
+ *   Optional `householdId` and `caseId` are stored in the key's own columns (migration 038) so household and case erasure can reach the sealed response.
  * @property {(input: RunCreation & { idempotency?: IdempotencyRecord|null }) => Awaitable<(RunRow & { tasks: TaskRow[], idempotencyRecorded?: true })|{ existing: IdempotencyRow }>} createRunWithParameters
  *   Run, tasks (in declaration order), registry pin and one parameter record per registry
  *   key, created atomically. Any failure leaves nothing behind. With `idempotency` (S3.2

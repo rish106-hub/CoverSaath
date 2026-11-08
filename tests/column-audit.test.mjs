@@ -138,7 +138,7 @@ const PLAIN_NUMBERS = {
   evidence_facts: { 'confidence in basis points, a score about a fact, not the value': ['confidence_basis_points'] },
   household_places: { 'row revision counter': ['revision'] },
   human_reviews: { 'disclosure flag (0/1)': ['conflict_disclosure_shown'] },
-  idempotency_keys: { 'HTTP status of the stored response': ['response_status'], 'ids the key is scoped to, not keys so erasure never blocks': ['household_id', 'case_id'] },
+  idempotency_keys: { 'HTTP status of the stored response': ['response_status'] },
   integration_outbox: { 'retry counter': ['attempt_count'] },
   model_budget_reservations: { 'cost in micro-USD, no content': ['amount_micro_usd', 'actual_micro_usd'] },
   model_budget_scopes: { 'cost in micro-USD, no content': ['reserved_micro_usd', 'spent_micro_usd'] },
@@ -167,6 +167,7 @@ const PLAIN_REFS = {
   fact_conflicts: { 'id of the resolving review': ['resolved_by_review_id'] },
   human_approvals: { 'id of the approved target': ['target_id'] },
   job_queue: { 'ids the job names (a household, document or grant), not keys so erasure never blocks': ['household_id', 'document_id', 'consent_grant_id'] },
+  idempotency_keys: { 'ids the key is scoped to, not keys so erasure never blocks': ['household_id', 'case_id'] },
   integration_webhook_events: { 'provider event id used for de-duplication': ['provider_event_id'] },
   retention_records: { 'id of the resource the record is about': ['resource_id'] },
 };
