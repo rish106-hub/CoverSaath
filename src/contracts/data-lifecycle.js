@@ -93,7 +93,7 @@ export const DATA_STORES = Object.freeze([
   // Telemetry, idempotency, ledger and audit
   store('job_queue', 'delete', 'household_id = ?', null, 'Identifiers only (kind, document and grant ids). Deleted on revocation, document erasure and household erasure; never blocks an erasure.'),
   store('app_events', 'delete', 'household_id = ?', null, 'Deleted by household, case and adult id.'),
-  store('idempotency_keys', 'delete', 'household_id = ?', null, 'Reached by its household_id and case_id columns (migration 038; the response is sealed, so ids inside it cannot be searched), plus legacy needle and upload-scope queries for rows older than 038. Responses can carry document names and job content.'),
+  store('idempotency_keys', 'delete', 'household_id = ?', null, 'Reached by its household_id and case_id columns (migration 040; the response is sealed, so ids inside it cannot be searched), plus legacy needle and upload-scope queries for rows older than 038. Responses can carry document names and job content.'),
   store('retention_records', 'ledger', 'household_id = ?', null, 'The deletion ledger. Reason code and times only.'),
   store('audit_events', 'audit_retained', 'household_id = ?', 'audit', 'Append-only hash chain; codes and counts only.'),
   // Not household data

@@ -98,7 +98,7 @@ export class WorkflowRepository {
         return JSON.parse(existing.response_json);
       }
       const task = await this.insertTask({ taskId, runId, agentName, taskKind, input, parentTaskId, dependencyTaskIds: dependencies, at });
-      // The response is sealed, so erasure finds the key by these scope columns (migration 038), taken from the run's case.
+      // The response is sealed, so erasure finds the key by these scope columns (migration 040), taken from the run's case.
       const scope = await this.database.one(`SELECT service_case.household_id, workflow_run.case_id FROM workflow_runs workflow_run
         JOIN service_cases service_case ON service_case.id = workflow_run.case_id WHERE workflow_run.id = ?`, [runId]);
       await this.database.run(`INSERT INTO idempotency_keys

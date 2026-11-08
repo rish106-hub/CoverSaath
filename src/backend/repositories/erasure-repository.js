@@ -365,9 +365,9 @@ export class ErasureRepository {
   }
 
   // Idempotency responses can carry document names, job content and task inputs. They are keyed by client text, so they are
-  // found by their scope columns (migration 038: household_id, case_id, set by every writer), never by guessing the key.
-  // The response is sealed, so the scope columns are the only reliable path for rows written since 038.
-  // LEGACY (remove one 24 h TTL after 038 is deployed everywhere): rows written before 038 have no scope columns, so the
+  // found by their scope columns (migration 040: household_id, case_id, set by every writer), never by guessing the key.
+  // The response is sealed, so the scope columns are the only reliable path for rows written since 040.
+  // LEGACY (remove one 24 h TTL after 040 is deployed everywhere): rows written before 040 have no scope columns, so the
   // plaintext-needle query (matches only pre-030 plaintext rows) and the document-upload scope patterns below stay for them.
   async #eraseIdempotency(ctx, { householdId, caseId = null, adultIds = [], documentIds = [], runIds = [], taskIds = [] }) {
     let changes = 0;

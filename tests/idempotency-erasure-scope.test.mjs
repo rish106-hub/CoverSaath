@@ -1,5 +1,5 @@
 // P1-1: run and task idempotency responses are sealed (migration 030), so erasure cannot find them by the ids they mention.
-// They carry household_id / case_id columns (migration 038) and erasure deletes by those. Synthetic data only.
+// They carry household_id / case_id columns (migration 040) and erasure deletes by those. Synthetic data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AuditRepository } from '../src/backend/repositories/audit-repository.js';
