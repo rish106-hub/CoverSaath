@@ -136,17 +136,18 @@ test('json checks, flags, ranges and identity keys behave as in SQLite', postgre
   assert.ok(BigInt(event.id) > 0n);
 });
 
-test('api session checks use julianday and fail open on unparseable timestamps like SQLite', postgresTestOptions(), async t => {
+test('api session checks use julianday; expires_at must be fixed-width UTC ISO (migration 039)', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const a = await seedWorld(pool, 'a');
   const session = (id, extra) => insert(pool, 'api_sessions', { id, adult_user_id: a.adult, token_sha256: hex(id.slice(-1)), ...extra });
   await session('s-1', {});
-  await session('s-offset', { issued_at: '2026-10-16T10:00:00+05:30', expires_at: '2026-10-16T05:00:00Z' });
+  await session('s-offset', { issued_at: '2026-10-16T10:00:00+05:30', expires_at: '2026-10-16T05:00:00.000Z' });
+  await rejectsWith(session('s-offset-exp', { expires_at: '2026-10-16T10:30:00.000+05:30' }), CHECK_VIOLATION);
   await rejectsWith(session('s-2', { expires_at: at }), CHECK_VIOLATION);
   await rejectsWith(session('s-3', { expires_at: '2026-10-16T09:59:59Z' }), CHECK_VIOLATION);
   await rejectsWith(session('s-4', { revoked_at: '2026-10-16T09:00:00Z' }), CHECK_VIOLATION);
   await session('s-5', { revoked_at: at });
-  await session('s-6', { expires_at: 'not-a-date' });
+  await rejectsWith(session('s-6', { expires_at: 'not-a-date' }), CHECK_VIOLATION);
   await rejectsWith(session('s-7', { token_sha256: 'short' }), CHECK_VIOLATION);
   await rejectsWith(session('s-8', { token_sha256: hex('1') }), UNIQUE_VIOLATION);
 });

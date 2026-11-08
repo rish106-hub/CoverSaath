@@ -78,7 +78,7 @@ export const criticalIndexes = Object.freeze([
   'audit_events_household_chain_idx',
   'app_events_time_idx', 'app_events_name_time_idx', 'app_events_household_idx', 'app_events_expiry_idx', 'rate_limit_buckets_window_idx',
   'model_budget_reservations_scope_idx', 'evidence_claims_expiry_idx', 'reference_cache_stale_after_idx', 'reference_cache_leases_expiry_idx', 'document_uploads_consent_grant_idx', 'consent_grants_household_subject_idx',
-  'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'consent_scopes_field_viewer_idx',
+  'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'api_sessions_live_expiry_idx', 'consent_scopes_field_viewer_idx',
   'ocr_jobs_lifecycle_idx',
   'coverage_parameter_records_run_idx', 'coverage_parameter_records_case_idx',
   'coverage_parameter_observations_parameter_idx', 'coverage_parameter_observations_document_idx',
