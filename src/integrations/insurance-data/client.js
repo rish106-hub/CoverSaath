@@ -1,6 +1,6 @@
 // Read-only client for the insurance-data-api reference service (X1 audit). Off unless REFERENCE_DATA_ENABLED is
 // exactly "true". Only the allow-listed GET endpoints below exist; POST /v1/customer-mappings/resolve is deliberately
-// absent (it takes a raw policy-schedule reference, which must never leave CoverSaath). The only request inputs are an
+// absent (it takes a raw policy-schedule reference, which must never leave this service). The only request inputs are an
 // insurer alias, a UIN, or opaque ids returned by earlier calls. No household or personal data can be expressed here.
 import { ReferenceDataError, errorForStatus, referenceError } from './errors.js';
 import * as schemas from './schemas.js';
