@@ -87,7 +87,7 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `tool_scenarios` | delete | userData | Deleted. |
 | `job_queue` | delete | - | Identifiers only (kind, document and grant ids). Deleted on revocation, document erasure and household erasure; never blocks an erasure. |
 | `app_events` | delete | - | Deleted by household, case and adult id. |
-| `idempotency_keys` | delete | - | Reached by the ids a response mentions. Responses can carry document names and job content. |
+| `idempotency_keys` | delete | - | Reached by its `household_id` and `case_id` columns (migration 040; the response is sealed, so ids inside it cannot be searched), plus legacy needle and upload-scope queries for rows older than 038. Responses can carry document names and job content. |
 | `retention_records` | ledger | - | The deletion ledger. Reason code and times only. |
 | `audit_events` | audit_retained | audit | Append-only hash chain; codes and counts only. |
 | `insurers` | global | - | Reference data shared by every household. |

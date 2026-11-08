@@ -101,6 +101,8 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await q(`INSERT INTO app_events (occurred_at, expires_at, event_name, household_id, adult_user_id, case_id, consent_grant_id, route) VALUES (now(), now() + interval '1 day', 'http_request', $1, $2, $3, $4, '/x')`, [ids.household, ids.adult, ids.case, ids.consent]);
   await q(`INSERT INTO idempotency_keys (scope, idempotency_key, request_digest, response_status, response_json, expires_at, created_at) VALUES ($1, $2, $3, 201, $4, $5, $6)`,
     [`document-upload:${ids.adult}:${ids.case}`, `key-${key}`, hex('d'), JSON.stringify({ document: { id: ids.document, filename: canary('idem-filename') } }), later, at]);
+  await q(`INSERT INTO idempotency_keys (scope, idempotency_key, request_digest, response_status, response_json, expires_at, created_at, household_id, case_id) VALUES ($1, $2, $3, 202, $4, $5, $6, $7, $8)`,
+    ['analysis_run', `run-key-${key}`, hex('d'), JSON.stringify({ runId: ids.run }), later, at, ids.household, ids.case]);
   await q('INSERT INTO audit_events (household_id, case_id, actor_type, actor_id, action, resource_type, resource_id, event_payload_json, event_hash, occurred_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
     [ids.household, ids.case, 'system', 'seed', 'case.created', 'case', ids.case, '{"triggerType":"renewal"}', digest('audit'), at]);
   ids.canaryPrefix = `CANARY-${key}-`;

@@ -365,10 +365,15 @@ export class ErasureRepository {
   }
 
   // Idempotency responses can carry document names, job content and task inputs. They are keyed by client text, so they are
-  // found by the ids their stored response mentions and by the upload scope, never by guessing the key.
+  // found by their scope columns (migration 040: household_id, case_id, set by every writer), never by guessing the key.
+  // The response is sealed, so the scope columns are the only reliable path for rows written since 040.
+  // LEGACY (remove one 24 h TTL after 040 is deployed everywhere): rows written before 040 have no scope columns, so the
+  // plaintext-needle query (matches only pre-030 plaintext rows) and the document-upload scope patterns below stay for them.
   async #eraseIdempotency(ctx, { householdId, caseId = null, adultIds = [], documentIds = [], runIds = [], taskIds = [] }) {
-    const needles = [...new Set([householdId, caseId, ...documentIds, ...runIds, ...taskIds].filter(Boolean))];
     let changes = 0;
+    if (householdId) changes += (await this.database.run('DELETE FROM idempotency_keys WHERE household_id = ?', [householdId])).changes;
+    if (caseId) changes += (await this.database.run('DELETE FROM idempotency_keys WHERE case_id = ?', [caseId])).changes;
+    const needles = [...new Set([householdId, caseId, ...documentIds, ...runIds, ...taskIds].filter(Boolean))];
     if (needles.length > 0) {
       changes += (await this.database.run(`DELETE FROM idempotency_keys WHERE response_json IS NOT NULL AND EXISTS (
           SELECT 1 FROM unnest(CAST(? AS text[])) AS needle(value) WHERE position(needle.value IN idempotency_keys.response_json) > 0)`, [needles])).changes;

@@ -167,6 +167,7 @@ const PLAIN_REFS = {
   fact_conflicts: { 'id of the resolving review': ['resolved_by_review_id'] },
   human_approvals: { 'id of the approved target': ['target_id'] },
   job_queue: { 'ids the job names (a household, document or grant), not keys so erasure never blocks': ['household_id', 'document_id', 'consent_grant_id'] },
+  idempotency_keys: { 'ids the key is scoped to, not keys so erasure never blocks': ['household_id', 'case_id'] },
   integration_webhook_events: { 'provider event id used for de-duplication': ['provider_event_id'] },
   retention_records: { 'id of the resource the record is about': ['resource_id'] },
 };

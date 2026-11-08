@@ -173,11 +173,11 @@ export class DocumentRepository {
       if (idempotency) {
         const stored = await this.getDocument(record.id);
         await this.database.run(`INSERT INTO idempotency_keys
-          (scope, idempotency_key, request_digest, response_status, response_json, document_index, expires_at, created_at)
-          VALUES (?, ?, ?, 201, ?, ?, ?, ?)`, [
+          (scope, idempotency_key, request_digest, response_status, response_json, document_index, expires_at, created_at, household_id, case_id)
+          VALUES (?, ?, ?, 201, ?, ?, ?, ?, ?, ?)`, [
           idempotency.scope, idempotency.key, idempotency.requestDigest,
           sealIdempotencyResponse(this.crypto, idempotency.scope, idempotency.key, JSON.stringify(idempotency.response(stored))),
-          documentIdempotencyIndex(this.crypto, record.id), idempotency.expiresAt, at,
+          documentIdempotencyIndex(this.crypto, record.id), idempotency.expiresAt, at, record.householdId, record.caseId ?? null,
         ]);
       }
       return this.getDocument(record.id);
