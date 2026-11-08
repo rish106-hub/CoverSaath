@@ -1,0 +1,53 @@
+{
+  "format": "reference-import-v1",
+  "data_class": "synthetic",
+  "note": "Fictional reference data for local and prototype use only. Not a real insurer, product or policy term.",
+  "entries": [
+    {
+      "endpoint": "insurers.resolve",
+      "params": { "q": "Example Insurer" },
+      "response": {
+        "status": "resolved",
+        "insurer": { "id": "ins_example_1", "canonical_name": "Example Insurer", "aliases": ["Example"] },
+        "candidates": [{ "id": "ins_example_1", "canonical_name": "Example Insurer", "aliases": ["Example"] }]
+      }
+    },
+    {
+      "endpoint": "products.search",
+      "params": { "uin": "SYNTHETIC-TEST-ONLY/01" },
+      "response": {
+        "data": [{
+          "product_id": "prod_example_01", "insurer_id": "ins_example_1", "product_name": "Example Health Plan 01",
+          "line_of_business": "health", "uin_raw": "SYNTHETIC-TEST-ONLY/01", "data_coverage": "not_observed",
+          "last_observed_at": "2026-01-01T00:00:00.000Z", "verification_status": "synthetic_test"
+        }],
+        "next_cursor": null,
+        "dataset_snapshot": "registry-v1"
+      }
+    },
+    {
+      "endpoint": "products.versions",
+      "params": { "productId": "prod_example_01" },
+      "response": {
+        "data": [{
+          "version_id": "ver_example_01", "product_id": "prod_example_01", "wording_version": "ver_example_01",
+          "approved_at": null, "effective_from": null, "effective_to": null, "version_status": "active_unknown",
+          "version_synthetic": true, "freshness": "test_fixture", "source_observed_at": "2026-01-01T00:00:00.000Z"
+        }],
+        "next_cursor": null
+      }
+    },
+    {
+      "endpoint": "versions.facts",
+      "params": { "versionId": "ver_example_01" },
+      "response": {
+        "version_id": "ver_example_01", "product_id": "prod_example_01", "product_name": "Example Health Plan 01",
+        "insurer_name": "Example Insurer", "uin_raw": "SYNTHETIC-TEST-ONLY/01", "wording_version": "ver_example_01",
+        "approved_at": null, "source_observed_at": "2026-01-01T00:00:00.000Z", "version_synthetic": true,
+        "facts": [],
+        "coverage": { "room_rent_limit": "not_observed", "copay": "not_observed", "waiting_periods": "not_observed", "exclusions": "not_observed" },
+        "next_cursor": null
+      }
+    }
+  ]
+}
