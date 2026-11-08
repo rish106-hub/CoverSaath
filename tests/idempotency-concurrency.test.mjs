@@ -97,6 +97,8 @@ test('decision 1: ten concurrent creations with one key create exactly one run a
     assert.equal(JSON.parse(result.existing.response_json).runId, winner, 'every loser sees the winner\'s run');
   }
   assert.equal((await keyRow(db, 'same-key-0001')).count, 1);
+  const scoped = await db.one("SELECT household_id, case_id FROM idempotency_keys WHERE idempotency_key = 'same-key-0001'");
+  assert.deepEqual({ ...scoped }, { household_id: ids.household, case_id: ids.case }, 'the key row carries its erasure scope (migration 038)');
   assert.equal((await db.one("SELECT count(*) AS count FROM workflow_runs WHERE id LIKE 'run-idem-%'")).count, 1);
   // The unclassified placeholder policy is created once (ON CONFLICT DO NOTHING) and audit is per run.
   assert.equal((await db.one('SELECT count(*) AS count FROM policies WHERE id = ?', [`UNCLASSIFIED:${'a'.repeat(24)}`])).count, 1);

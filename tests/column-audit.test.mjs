@@ -138,7 +138,7 @@ const PLAIN_NUMBERS = {
   evidence_facts: { 'confidence in basis points, a score about a fact, not the value': ['confidence_basis_points'] },
   household_places: { 'row revision counter': ['revision'] },
   human_reviews: { 'disclosure flag (0/1)': ['conflict_disclosure_shown'] },
-  idempotency_keys: { 'HTTP status of the stored response': ['response_status'] },
+  idempotency_keys: { 'HTTP status of the stored response': ['response_status'], 'ids the key is scoped to, not keys so erasure never blocks': ['household_id', 'case_id'] },
   integration_outbox: { 'retry counter': ['attempt_count'] },
   model_budget_reservations: { 'cost in micro-USD, no content': ['amount_micro_usd', 'actual_micro_usd'] },
   model_budget_scopes: { 'cost in micro-USD, no content': ['reserved_micro_usd', 'spent_micro_usd'] },

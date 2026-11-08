@@ -101,8 +101,8 @@ const DELETE_EXPIRED_IDEMPOTENCY_SQL = `DELETE FROM idempotency_keys
   WHERE scope = ? AND idempotency_key = ? AND julianday(expires_at) <= julianday(?)`;
 const SELECT_IDEMPOTENCY_SQL = 'SELECT * FROM idempotency_keys WHERE scope = ? AND idempotency_key = ?';
 const INSERT_IDEMPOTENCY_SQL = `INSERT INTO idempotency_keys
-  (scope, idempotency_key, request_digest, response_status, response_json, expires_at, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?)`;
+  (scope, idempotency_key, request_digest, response_status, response_json, expires_at, created_at, household_id, case_id)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
 function boundedId(value) {
   return typeof value === 'string' && value.length > 0 && value.length <= 200 ? value : null;
@@ -375,8 +375,8 @@ export function createCoverageAnalysisPort({
     },
     // For ports without in-transaction idempotency. The persistent service calls it
     // only when createRunWithParameters did not record the key itself.
-    async recordIdempotency({ scope, key, requestDigest, responseStatus, response, expiresAt }) {
-      await database.run(INSERT_IDEMPOTENCY_SQL, [scope, key, requestDigest, responseStatus, sealIdempotencyResponse(columnCrypto, scope, key, JSON.stringify(response)), expiresAt, new Date().toISOString()]);
+    async recordIdempotency({ scope, key, requestDigest, responseStatus, response, expiresAt, householdId = null, caseId = null }) {
+      await database.run(INSERT_IDEMPOTENCY_SQL, [scope, key, requestDigest, responseStatus, sealIdempotencyResponse(columnCrypto, scope, key, JSON.stringify(response)), expiresAt, new Date().toISOString(), householdId, caseId]);
     },
     async createRunWithTasks(input) { return services.workflows.createRunWithTasks(input); },
     // Creates a run, its tasks, its registry pin and one explicit parameter
@@ -481,7 +481,7 @@ export function createCoverageAnalysisPort({
         if (idempotency) {
           await database.run(INSERT_IDEMPOTENCY_SQL, [
             idempotency.scope, idempotency.key, idempotency.requestDigest, idempotency.responseStatus,
-            sealIdempotencyResponse(columnCrypto, idempotency.scope, idempotency.key, JSON.stringify(idempotency.response)), idempotency.expiresAt, at,
+            sealIdempotencyResponse(columnCrypto, idempotency.scope, idempotency.key, JSON.stringify(idempotency.response)), idempotency.expiresAt, at, householdId, caseId,
           ]);
         }
         const created = await services.workflows.getRun(run.id);

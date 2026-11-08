@@ -233,7 +233,7 @@ export const DATA_REGISTRY = Object.freeze({
     ['window_start', 'request_count']),
   idempotency_keys: entry('service_operations',
     { derived_content: ['response_json'], derived_digest: ['request_digest'], derived_identifier: ['document_index'] },
-    ['scope', 'idempotency_key', 'response_status', 'locked_until', 'expires_at', 'created_at']),
+    ['scope', 'idempotency_key', 'response_status', 'locked_until', 'expires_at', 'created_at', 'household_id', 'case_id']),
   model_budget_reservations: entry('service_operations', {},
     ['id', 'scope', 'amount_micro_usd', 'state', 'actual_micro_usd', 'task', 'created_at', 'settled_at']),
   // Evidence-question leases (migration 032): hashed claim key, random owner token and timestamps; no household content.

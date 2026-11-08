@@ -310,7 +310,7 @@ export function createPersistentCoverageAnalysisService({
       });
       if (creation?.existing) return replay(creation.existing);
       // A port without in-transaction idempotency records the key afterwards.
-      if (creation?.idempotencyRecorded !== true) await port.recordIdempotency({ ...idempotency });
+      if (creation?.idempotencyRecorded !== true) await port.recordIdempotency({ ...idempotency, householdId: caseRecord.household_id, caseId });
       return { created: true, job: await port.getJob(runId) };
     },
     getJob: runId => port.getJob(runId),
