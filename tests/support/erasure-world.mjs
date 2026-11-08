@@ -94,6 +94,9 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await userData.setScenario({ householdId: ids.household, adultId: ids.adult, tool: 'tax', inputs: { v: canary('scenario') }, ifMatch: null });
   await userData.setPlace({ householdId: ids.household, adultId: ids.adult, memberId: ids.dependent, place: { kind: 'registered_address', slot: null, label: canary('place-label'), source: 'user_typed', precision: 'exact', payload: { line: canary('address') } }, ifMatch: null }).catch(error => { throw new Error(`setPlace: ${error.code ?? error.message}`); });
 
+  // Queued worker job (identifiers only, no document or grant): only the household sweep reaches it.
+  await q(`INSERT INTO job_queue (id, kind, household_id, payload_json) VALUES ($1, 'ocr.page', $2, '{}')`, [`job-${key}`, ids.household]);
+
   // Telemetry and idempotency.
   await q(`INSERT INTO app_events (occurred_at, expires_at, event_name, household_id, adult_user_id, case_id, consent_grant_id, route) VALUES (now(), now() + interval '1 day', 'http_request', $1, $2, $3, $4, '/x')`, [ids.household, ids.adult, ids.case, ids.consent]);
   await q(`INSERT INTO idempotency_keys (scope, idempotency_key, request_digest, response_status, response_json, expires_at, created_at) VALUES ($1, $2, $3, 201, $4, $5, $6)`,

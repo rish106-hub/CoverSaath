@@ -109,7 +109,7 @@ test('PostgreSQL catalog holds every expected object and the frozen object count
     views: Object.keys(actual.views).length,
     triggers: Object.keys(actual.triggers).length,
   }, {
-    tables: 68, columns: 666, foreignKeys: 139, uniqueConstraints: 25, checkConstraints: 281, namedIndexes: 96, views: 2, triggers: 106,
+    tables: 69, columns: 683, foreignKeys: 139, uniqueConstraints: 25, checkConstraints: 295, namedIndexes: 102, views: 2, triggers: 106,
   });
 });
 
@@ -138,5 +138,5 @@ test('seed rows are the reviewed registry and observation rules', postgresTestOp
 test('the PostgreSQL migrations record exactly the immutable migration files', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const versions = (await pool.query('SELECT version FROM schema_migrations ORDER BY version')).rows.map(row => row.version);
-  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql', '013_catalogue_reviews.sql', '014_curated_product_workflow.sql', '015_curated_signed_actions.sql', '016_data_api_lockdown.sql', '017_auth_identities.sql', '018_profile_answers.sql', '019_column_encryption_prep.sql', '020_document_blobs.sql', '021_sealed_column_checks.sql', '022_app_events.sql', '023_runtime_limits.sql', '024_hot_path_indexes.sql', '025_device_permissions.sql', '026_household_places.sql', '027_adult_preferences_onboarding.sql', '028_tool_scenarios.sql', '029_adult_contacts.sql', '030_seal_remaining_columns.sql', '032_evidence_claims.sql', '033_reference_cache.sql']);
+  assert.deepEqual(versions, ['001_baseline_schema.sql', '002_baseline_triggers.sql', '003_harden_invariants.sql', '004_document_intake_scheduling.sql', '005_evidence_fact_redaction.sql', '006_evidence_fact_redaction_hardening.sql', '007_policy_structuring.sql', '008_julianday_hour_24.sql', '009_source_page_blocks.sql', '010_policy_structuring_jobs.sql', '011_source_page_blocks_upgrade.sql', '012_policy_evidence.sql', '013_catalogue_reviews.sql', '014_curated_product_workflow.sql', '015_curated_signed_actions.sql', '016_data_api_lockdown.sql', '017_auth_identities.sql', '018_profile_answers.sql', '019_column_encryption_prep.sql', '020_document_blobs.sql', '021_sealed_column_checks.sql', '022_app_events.sql', '023_runtime_limits.sql', '024_hot_path_indexes.sql', '025_device_permissions.sql', '026_household_places.sql', '027_adult_preferences_onboarding.sql', '028_tool_scenarios.sql', '029_adult_contacts.sql', '030_seal_remaining_columns.sql', '032_evidence_claims.sql', '033_reference_cache.sql', '034_job_queue.sql']);
 });

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { PolicyStructuringRepository } from './policy-structuring-repository.js';
 import { ClauseRepository } from './clause-repository.js';
 import { AppEventRepository } from './app-event-repository.js';
+import { JobQueueRepository } from './job-queue-repository.js';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { openWorkflowRun } from '../security/sealed-records.js';
@@ -39,7 +40,7 @@ const notConfigured = message => Object.assign(new Error(message), { code: 'ERAS
 // workflow_tasks -> the rest. Every DB-touching method is async; a rejected query (including a
 // dropped connection) rejects the method, so every consent check fails closed.
 export class ConsentRepository {
-  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null, clauses = null, appEvents = null, ...options } = {}) {
+  constructor(database, { clock = () => new Date(), audit, coverageParameters = null, policyStructuring = null, clauses = null, appEvents = null, jobQueue = null, ...options } = {}) {
     this.database = database;
     // Revocation reasons, outbox error text and run input are sealed (ADR 0013 addendum D2).
     this.crypto = resolveColumnCrypto(options);
@@ -54,6 +55,8 @@ export class ConsentRepository {
       ?? (database ? optionalRepository(() => new PolicyStructuringRepository(database, { clock, ...(audit ? { audit } : {}), ...(coverageParameters ? { coverageParameters } : {}) })) : null);
     // Clauses and answers are derived stores too (ADR 0008): the same rule, erasure always has a path.
     this.clauses = clauses ?? (database ? optionalRepository(() => new ClauseRepository(database, { clock, ...(audit ? { audit } : {}) })) : null);
+    // Queued worker jobs reference documents and grants by id: erasure deletes them too (migration 034). Needs only the database.
+    this.jobQueue = jobQueue ?? (database ? optionalRepository(() => new JobQueueRepository(database, { clock: () => new Date(clock()) })) : null);
   }
 
   async grant({ id: grantId = id('consent'), householdId, subjectAdultId, grantedToActor = 'knowvia-local', purpose, noticeVersion = 'v1', evidenceMethod = 'typed', expiresAt = null, scopes = [] }) {
@@ -599,8 +602,21 @@ export class ConsentRepository {
         payload: { reason, facts, documents: documents.size },
       });
     }
+    // Queued worker jobs of the affected documents and of the grant (migration 034) hold identifiers only, but a pending job
+    // would run work the household withdrew. They are deleted in the same transaction; a running worker loses its lease.
+    let jobs = 0;
+    if (documents.size > 0 || consentGrantId) {
+      if (!this.jobQueue) throw notConfigured('Job queue erasure is not configured.');
+      jobs = await this.jobQueue.eraseDerived({ householdId, documentIds: [...documents], consentGrantId });
+    }
+    if (jobs > 0) {
+      await this.audit?.append({
+        householdId, caseId, actorType, actorId, action: 'job_queue.erased', resourceType, resourceId,
+        payload: { reason, jobs, documents: documents.size },
+      });
+    }
     return Object.freeze({
-      runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers,
+      runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers, jobs,
       structuringProposals: structuring.proposals, structuringRuns: structuring.runs,
       policyClauses: evidence.clauses, policyAnswers: evidence.answers,
     });
