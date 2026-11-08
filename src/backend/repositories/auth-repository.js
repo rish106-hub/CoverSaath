@@ -24,8 +24,10 @@ export class AuthRepository {
         throw new Error('Session duration must be between one minute and 24 hours.');
       }
       const issuedAt = this.clock();
+      // expires_at is fixed-width UTC ISO text (migration 039 check), so the text comparison is exact and uses
+      // api_sessions_live_expiry_idx.
       const { count: activeSessions } = await this.database.one(`SELECT count(*) AS count FROM api_sessions
-        WHERE revoked_at IS NULL AND julianday(expires_at) > julianday(?)`, [issuedAt.toISOString()]);
+        WHERE revoked_at IS NULL AND expires_at > ?`, [issuedAt.toISOString()]);
       if (activeSessions >= this.maxActiveSessions) {
         throw Object.assign(new Error('Session capacity reached.'), { code: 'SESSION_CAPACITY_REACHED', statusCode: 429 });
       }
