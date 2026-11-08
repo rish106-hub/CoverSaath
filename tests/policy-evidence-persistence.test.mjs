@@ -117,6 +117,22 @@ test('B1: the database safety net deletes clauses and citing answers when a docu
   assert.equal(await count(database, 'policy_answers'), 0);
 });
 
+test('P1-2: document erasure deletes only its own household answers, even for an equal cited document id', pgOptions, async t => {
+  const { database, services } = await open(t);
+  await saveAnswer(services);
+  // Household B cites the same-valued document id. A real upload cannot share an id, but the trigger must not rely on that.
+  await database.run("INSERT INTO households (id, display_name, created_at, updated_at) VALUES ('household-other', 'Other', ?, ?)", [at, at]);
+  await database.run("INSERT INTO adult_users (id, display_name, account_status, created_at, updated_at) VALUES ('adult-other', 'Other', 'active', ?, ?)", [at, at]);
+  await database.run("INSERT INTO household_members (id, household_id, adult_user_id, display_name, member_kind, created_at, updated_at) VALUES ('member-other', 'household-other', 'adult-other', 'Other', 'adult', ?, ?)", [at, at]);
+  await database.run("INSERT INTO service_cases (id, household_id, subject_member_id, opened_by_adult_id, trigger_type, status, created_at, updated_at) VALUES ('case-other', 'household-other', 'member-other', 'adult-other', 'renewal', 'processing', ?, ?)", [at, at]);
+  await database.run(`INSERT INTO policy_answers (id, household_id, case_id, requested_by_adult_id, idempotency_key, request_digest, question, state, document_ids_json, answer_json, created_at)
+    VALUES ('answer-other', 'household-other', 'case-other', 'adult-other', 'idem-other-0001', ?, 'q', 'conditional', ?, '{}', ?)`, ['b'.repeat(64), JSON.stringify([documentId]), at]);
+  assert.equal(await count(database, 'policy_answers'), 2);
+  await database.run(`UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = '${documentId}'`);
+  const left = await database.many('SELECT id, household_id FROM policy_answers');
+  assert.deepEqual(left.map(row => [row.id, row.household_id]), [['answer-other', 'household-other']]);
+});
+
 test('B4 storage: answers replay on the same key and digest and conflict on a different digest', pgOptions, async t => {
   const { database, services } = await open(t);
   const first = await saveAnswer(services);

@@ -23,12 +23,22 @@ const text = (value, max = MAX_TEXT) => {
   return value;
 };
 const optionalText = (value, max = MAX_TEXT) => (value === undefined || value === null ? null : text(value, max));
+// Required but nullable (openapi `type: [string, 'null']` in a `required` list): absent fails closed, null is allowed.
+const nullableText = (value, max = MAX_TEXT) => { if (value === undefined) throw invalid(); return value === null ? null : text(value, max); };
 const oneOf = (value, allowed) => { if (typeof value !== 'string' || !allowed.has(value)) throw invalid(); return value; };
 const bool = value => { if (typeof value !== 'boolean') throw invalid(); return value; };
 const optionalDate = value => {
   if (value === undefined || value === null) return null;
   if (typeof value !== 'string' || value.length > 40 || Number.isNaN(Date.parse(value))) throw invalid();
   return value;
+};
+
+// openapi.yaml VerifiedFact: conditions and exceptions are arrays of strings. A bare string (older pinned shape) is
+// accepted as a one-item list; anything else fails closed.
+const textList = value => {
+  if (value === undefined || value === null) return [];
+  if (typeof value === 'string') return [text(value, MAX_LONG_TEXT)];
+  return array(value, 20).map(item => text(item, MAX_LONG_TEXT));
 };
 
 export function parseInsurer(raw) {
@@ -57,7 +67,8 @@ export function parseProduct(raw) {
     insurerId: text(value.insurer_id, 100),
     productName: text(value.product_name),
     lineOfBusiness: text(value.line_of_business, 100),
-    uinRaw: text(value.uin_raw, 100),
+    // openapi.yaml: uin_raw is required but nullable (a product may have no recorded UIN).
+    uinRaw: nullableText(value.uin_raw, 100),
     verificationStatus: oneOf(value.verification_status, PRODUCT_VERIFICATION),
     dataCoverage: optionalText(value.data_coverage, 100),
     lastObservedAt: optionalDate(value.last_observed_at),
@@ -100,8 +111,8 @@ function parseFact(raw, versionSynthetic, coverageByFamily) {
     factId: text(value.fact_id, 100),
     factType: text(value.fact_type, 100),
     valueText: optionalText(isObject(value.value) ? value.value.text : null, MAX_LONG_TEXT),
-    conditions: optionalText(value.conditions, MAX_LONG_TEXT),
-    exceptions: optionalText(value.exceptions, MAX_LONG_TEXT),
+    conditions: textList(value.conditions),
+    exceptions: textList(value.exceptions),
     verificationStatus: text(value.verification_status, 100),
     taxonomyVersion: optionalText(value.taxonomy_version, 100),
     reviewId: optionalText(value.review_id, 100),
@@ -114,7 +125,9 @@ function parseFact(raw, versionSynthetic, coverageByFamily) {
     && fact.evidence.length > 0 && family === 'verified';
   const outcome = usable ? 'verified' : family === 'conflicting_evidence' ? 'conflicting' : 'unknown';
   // Never carry the value forward unless usable: a non-usable fact is `unknown`/`conflicting`, not a decided value.
-  return { ...fact, valueText: usable ? fact.valueText : null, outcome };
+  // Conditions and exceptions qualify a value, so they are dropped with it.
+  if (!usable) return { ...fact, valueText: null, conditions: [], exceptions: [], outcome };
+  return { ...fact, outcome };
 }
 
 export function parseFacts(raw) {
@@ -130,7 +143,7 @@ export function parseFacts(raw) {
   }
   return {
     versionId: text(value.version_id, 100),
-    uinRaw: text(value.uin_raw, 100),
+    uinRaw: nullableText(value.uin_raw, 100),
     wordingVersion: text(value.wording_version, 100),
     versionSynthetic,
     coverage,

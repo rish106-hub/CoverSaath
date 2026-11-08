@@ -225,7 +225,7 @@ test('removing a placeholder adult that other rows still reference is a coded 40
   const base = `/api/v1/households/${owner.householdId}/members`;
   const placeholder = await add(app, owner, { displayName: 'Placeholder Synthetic', memberKind: 'adult' });
   const adultId = (await db.one('SELECT adult_user_id FROM household_members WHERE id = ?', [placeholder.data.id])).adult_user_id;
-  await db.run(`INSERT INTO api_sessions (id, adult_user_id, token_sha256, issued_at, expires_at, created_at) VALUES ('session-synthetic', ?, ?, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00Z', '2026-01-01T00:00:00Z')`, [adultId, 'a'.repeat(64)]);
+  await db.run(`INSERT INTO api_sessions (id, adult_user_id, token_sha256, issued_at, expires_at, created_at) VALUES ('session-synthetic', ?, ?, '2026-01-01T00:00:00Z', '2026-01-02T00:00:00.000Z', '2026-01-01T00:00:00Z')`, [adultId, 'a'.repeat(64)]);
   const refused = await app.call(`${base}/${placeholder.data.id}`, { method: 'DELETE', token: owner.token });
   assert.equal(refused.status, 409, JSON.stringify(refused.data));
   assert.equal(refused.data.error.code, 'MEMBER_PROTECTED');

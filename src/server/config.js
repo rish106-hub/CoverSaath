@@ -126,9 +126,29 @@ export function readIdentityConfig(env) {
   return Object.freeze({ issuers: Object.freeze(issuers) });
 }
 
+const LOOPBACK_HOSTS = Object.freeze(['127.0.0.1', 'localhost', '[::1]']);
+
+// Reference data (ADR 0021): off unless REFERENCE_DATA_ENABLED is exactly "true". With no REFERENCE_DATA_BASE_URL the
+// port is import-only: it serves rows loaded by scripts/reference-import.mjs and never calls a service. With a base URL it
+// must be https (or http on loopback, for a local reference service) and needs REFERENCE_DATA_API_KEY; a half-configured
+// service mode stops startup instead of failing on the first read. The client re-checks the same rules (fail closed).
+export function readReferenceDataConfig(env = process.env) {
+  if (env.REFERENCE_DATA_ENABLED !== 'true') return Object.freeze({ enabled: false, mode: 'off' });
+  const raw = String(env.REFERENCE_DATA_BASE_URL ?? '').trim();
+  if (!raw) return Object.freeze({ enabled: true, mode: 'import' });
+  let base;
+  try { base = new URL(raw); } catch { throw new Error('Invalid REFERENCE_DATA_BASE_URL.'); }
+  const secure = base.protocol === 'https:' || (base.protocol === 'http:' && LOOPBACK_HOSTS.includes(base.hostname));
+  if (!secure || base.username || base.password || base.search || base.hash) throw new Error('Invalid REFERENCE_DATA_BASE_URL.');
+  if (!env.REFERENCE_DATA_API_KEY) throw new Error('REFERENCE_DATA_API_KEY is required when REFERENCE_DATA_BASE_URL is set.');
+  return Object.freeze({ enabled: true, mode: 'service' });
+}
+
 export function readServerConfig(env = process.env) {
   // Validated here so a bad identity setting stops startup; the route reads it through readIdentityConfig.
   readIdentityConfig(env);
+  // Validated here so a half-configured reference service stops startup; the client reads the same variables.
+  readReferenceDataConfig(env);
   // Fails startup with a coded error when column encryption is required (production) and the key is missing or invalid.
   readDataEncryptionConfig(env);
   return Object.freeze({
