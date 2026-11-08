@@ -88,6 +88,26 @@ export const criticalIndexes = Object.freeze([
   'proposed_parameters_document_idx', 'proposed_parameters_run_idx',
   'policy_structuring_jobs_active_uidx', 'policy_structuring_jobs_attempt_uidx', 'policy_structuring_jobs_status_idx',
   'auth_identities_adult_idx',
+  // 036: foreign-key and erasure-path indexes (db-schema-review P1-4).
+  'workflow_events_task_idx',
+  'reviewer_findings_task_idx',
+  'workflow_tasks_parent_idx',
+  'coverage_parameter_observations_source_idx',
+  'proposed_parameters_source_page_idx',
+  'policy_members_source_page_idx',
+  'policies_source_document_idx',
+  'source_pages_blocks_upgrade_job_idx',
+  'evidence_facts_household_idx',
+  'evidence_facts_subject_member_idx',
+  'integration_outbox_case_idx',
+  'human_approvals_case_idx',
+  'policy_structuring_jobs_grant_idx',
+  'case_participants_grant_idx',
+  'service_cases_opener_idx',
+  'document_uploads_uploader_idx',
+  'household_members_adult_idx',
+  'household_roles_adult_idx',
+  'app_events_case_idx',
 ]);
 
 export const requiredColumns = Object.freeze({

@@ -222,12 +222,21 @@ export class JobQueueRepository {
     return Object.freeze({ ...byStatus, due: due.count });
   }
 
-  /** Deletes succeeded jobs that finished before `olderThanMs` ago. Dead jobs stay for an operator. */
+  /** Deletes succeeded jobs that finished before `olderThanMs` ago. Dead jobs are purged separately, later (purgeDead). */
   async purgeSucceeded(olderThanMs) {
+    return this.#purgeFinished('succeeded', olderThanMs);
+  }
+
+  /** Deletes dead-lettered jobs that finished dying before `olderThanMs` ago. Use a long window: an operator reads these first. */
+  async purgeDead(olderThanMs) {
+    return this.#purgeFinished('dead', olderThanMs);
+  }
+
+  async #purgeFinished(status, olderThanMs) {
     positiveInteger(olderThanMs, 'olderThanMs', 365 * 24 * 3_600_000);
     const cutoff = new Date(this.clock().getTime() - olderThanMs).toISOString();
     return (await this.database.run(
-      "DELETE FROM job_queue WHERE status = 'succeeded' AND finished_at < CAST(? AS timestamptz)", [cutoff])).changes;
+      'DELETE FROM job_queue WHERE status = ? AND finished_at < CAST(? AS timestamptz)', [status, cutoff])).changes;
   }
 
   /**

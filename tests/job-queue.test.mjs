@@ -253,6 +253,31 @@ test('stats report depth and purge removes only old succeeded jobs', pg, async t
   assert.ok(a.job.id);
 });
 
+test('purgeDead removes only dead jobs past the window and leaves queued and recent ones', pg, async t => {
+  const { queue, advance } = await world(t);
+  const dead = await enqueue(queue, { documentId: 'document-dead', maxAttempts: 1 });
+  const claimed = await queue.claim({ workerId: 'worker-a', kinds: [KIND], leaseMs: LEASE_MS });
+  assert.equal(claimed.id, dead.job.id);
+  assert.equal((await queue.fail({ id: claimed.id, workerId: 'worker-a', attempt: 1, errorCode: 'JOB_FAILED', retryable: false })).state, 'dead');
+  await enqueue(queue, { documentId: 'document-live' });
+  advance(3_600_000);
+  assert.equal(await queue.purgeDead(7_200_000), 0, 'a dead job inside the window stays');
+  assert.equal(await queue.purgeSucceeded(1_000), 0, 'the succeeded purge never touches dead jobs');
+  assert.equal(await queue.purgeDead(1_800_000), 1);
+  assert.equal(await queue.get(dead.job.id), null);
+  assert.equal((await queue.stats()).queued, 1);
+  await assert.rejects(queue.purgeDead(0), { code: 'JOB_QUEUE_INPUT_INVALID' });
+});
+
+test('payload_json must be a JSON object: arrays, scalars and text are refused by the database', pg, async t => {
+  const { db } = await world(t);
+  const insert = payload => db.run(
+    "INSERT INTO job_queue (id, kind, household_id, payload_json) VALUES (?, 'ocr.document', 'household-queue', ?)", [`job-${Math.random().toString(36).slice(2, 10)}`, payload]);
+  assert.equal((await insert('{}')).changes, 1);
+  assert.equal((await insert('{"documentId":"d1"}')).changes, 1);
+  for (const bad of ['[]', '"text"', '5', 'null', 'not json', '{"a":']) await assertDbError(insert(bad), { sqlstate: '23514' });
+});
+
 // ---------------------------------------------------------------------------------------------
 // Erasure (AI.md invariant 3): revocation and document erasure delete the queued work of what was withdrawn.
 // ---------------------------------------------------------------------------------------------
