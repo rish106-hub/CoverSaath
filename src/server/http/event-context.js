@@ -60,7 +60,7 @@ export function requestEventName({ status, method, route }) {
 export const KNOWN_ROUTE_SEGMENTS = new Set([
   'api', 'v1', 'access', 'analysis-runs', 'audit-events', 'cases', 'catalogue-reviewers', 'consents', 'coverage-preview',
   'curated-products', 'current', 'decision-catalogue', 'deletion-inventory', 'documents', 'fields', 'health', 'households',
-  'identity-sessions', 'integrations', 'jobs', 'live', 'members', 'notices', 'ocr-jobs', 'onboarding', 'passages', 'permissions',
+  'identity-sessions', 'integrations', 'jobs', 'live', 'members', 'metrics', 'notices', 'ocr-jobs', 'onboarding', 'passages', 'permissions',
   'overview', 'places', 'policies', 'preferences', 'profile-answers', 'questions', 'read-facts', 'ready', 'refresh', 'reviews', 'revoke',
   'runs', 'scenarios', 'sessions', 'source-pack', 'structuring-runs', 'tasks', 'transitions',
 ]);
