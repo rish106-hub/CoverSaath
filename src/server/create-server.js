@@ -71,6 +71,18 @@ export function createApiServer({
   })();
   const scanner = documentScanner
     ?? (config.documents.clamd ? createClamdScanner(config.documents.clamd) : null);
+  // Scanner health for /api/v1/ready, answered from a short cache so a probe loop cannot hammer clamd.
+  let scannerSeen = { at: 0, status: 'disabled' };
+  const scannerStatus = async () => {
+    if (!scanner) return 'disabled';
+    if (Date.now() - scannerSeen.at < 5_000) return scannerSeen.status;
+    let status = 'ready';
+    if (typeof scanner.ping === 'function') {
+      status = await scanner.ping().then(ok => (ok ? 'ready' : 'unreachable'), () => 'unreachable');
+    }
+    scannerSeen = { at: Date.now(), status };
+    return status;
+  };
   // Untrusted PDF structure is parsed only in a permission-restricted child process (ADR 0005).
   // Events carry reason codes and numbers only, never document content.
   const pdfInspector = documentStorage
@@ -386,7 +398,7 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = await getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, getChatService, onError, metrics });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, scannerStatus, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, getChatService, onError, metrics });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');
@@ -433,6 +445,9 @@ export function createApiServer({
         orphanTimer.unref?.();
         if (scanner) {
           scanner.ping().then(ok => { if (!ok) warn({ event: 'document_scanner_unreachable' }); }, () => warn({ event: 'document_scanner_unreachable' }));
+        } else {
+          // Every upload stays quarantined and nothing reaches OCR. Loud once at startup so it is not a silent default.
+          warn({ event: 'document_scanning_disabled' });
         }
       } catch {
         warn({ event: 'document_worker_start_failed' });

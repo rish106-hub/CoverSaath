@@ -82,6 +82,8 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   DOCUMENT_STORAGE_NOT_CONFIGURED: entry(503, 'configuration', false),
   DOCUMENT_UPDATE_NOT_SUPPORTED: entry(null, 'contract', false),
   UPLOAD_CAPACITY_REACHED: entry(429, 'capacity', true),
+  // Pending uploads cannot clear because no malware scanner is configured on this server (DOCUMENT_SCAN_MODE=disabled).
+  DOCUMENT_SCANNER_NOT_CONFIGURED: entry(503, 'configuration', false),
   UNSUPPORTED_MEDIA_TYPE: entry(415, 'request', false),
   REQUEST_TOO_LARGE: entry(413, 'request', false),
   UNSUPPORTED_DOCUMENT_KIND: entry(400, 'request', false),

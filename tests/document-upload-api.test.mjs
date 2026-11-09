@@ -719,7 +719,9 @@ test('real clamd blocks a valid synthetic PDF through the authenticated upload A
 test('upload capacity and missing storage configuration fail closed', postgresTestOptions(), async t => {
   const h = await harness(t, { MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD: '2' });
   const database = h.database;
-  const app = await start({ database, env: h.env });
+  // A scanner that never answers keeps documents pending: the household is told to wait (429, retryable).
+  const stalledScanner = { mode: 'clamd', scan: () => new Promise(() => {}), ping: async () => true };
+  const app = await start({ database, env: h.env, documentScanner: stalledScanner });
   t.after(async () => { await app.stop(); });
   const owner = await household(app, 'Capacity');
   assert.equal((await app.upload({ ...owner, bytes: syntheticPdf('c1') })).status, 201);
@@ -727,6 +729,17 @@ test('upload capacity and missing storage configuration fail closed', postgresTe
   const third = await app.upload({ ...owner, bytes: syntheticPdf('c3') });
   assert.equal(third.status, 429);
   assert.equal(third.data.error.code, 'UPLOAD_CAPACITY_REACHED');
+
+  // No scanner configured: nothing will ever clear a pending document, so the answer is a configuration error, not "wait".
+  const h3 = await harness(t, { MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD: '2' });
+  const app3 = await start({ database: h3.database, env: h3.env });
+  t.after(async () => { await app3.stop(); });
+  const owner3 = await household(app3, 'No scanner');
+  assert.equal((await app3.upload({ ...owner3, bytes: syntheticPdf('n1') })).status, 201);
+  assert.equal((await app3.upload({ ...owner3, bytes: syntheticPdf('n2') })).status, 201);
+  const noScanner = await app3.upload({ ...owner3, bytes: syntheticPdf('n3') });
+  assert.equal(noScanner.status, 503);
+  assert.equal(noScanner.data.error.code, 'DOCUMENT_SCANNER_NOT_CONFIGURED');
 
   const h2 = await harness(t);
   const database2 = h2.database;

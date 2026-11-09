@@ -6,10 +6,10 @@ Every step marked **OWNER APPROVAL REQUIRED** deploys, changes a remote system, 
 
 ## State (2026-11-06, plan P1)
 
-- Prepared, not deployed. `fly.toml` now describes the target: region `sin` (owner decision: Fly has no Mumbai region and Singapore is the nearest), two `shared-cpu-1x` machines with 1 GB each, no volume, no document file path.
+- Prepared, not deployed. `fly.toml` now describes the target: region `sin` (owner decision: Fly has no Mumbai region and Singapore is the nearest), two `shared-cpu-2x` machines with 3 GB each (clamd on, see Real workflow), no volume, no document file path.
 - Document bytes live in PostgreSQL (ADR 0013 D8, `DOCUMENT_STORAGE_BACKEND=database`, which is also the code default). Verified in code: `src/server/create-server.js` builds the database store as the primary and the filesystem store only as a read fallback, and `src/features/input/encrypted-local-storage.js` creates its directory only on a write. With the volume gone, nothing is written to disk.
 - The request limit and the model spend cap are in PostgreSQL (`RATE_LIMIT_BACKEND=database`, `MODEL_BUDGET_BACKEND=database`, migration 023), so two machines share them.
-- Still per process (duplicate work, never corruption; for the evidence service a duplicate run can bill a second paid model call, so live model runs wait for a database-backed claim): the evidence claim guard and in-flight cap in `policy-evidence-service.js`, and the document scan worker. The scanner is off, so uploads stay quarantined.
+- Still per process (duplicate work, never corruption; for the evidence service a duplicate run can bill a second paid model call, so live model runs wait for a database-backed claim): the evidence claim guard and in-flight cap in `policy-evidence-service.js`, and the document scan worker. The scanner is now on in `fly.toml` (ADR 0022); before that change every upload stayed quarantined.
 - App `knowvia-api` and volume `coversaath_data` (1 GB, syd) exist from October; no machine has ever run, so the volume holds nothing. Secrets staged on the app: `DATABASE_URL`, `DOCUMENT_ENCRYPTION_KEY_BASE64`, `KNOWVIA_BOOTSTRAP_TOKEN`. Not yet set: `DATA_ENCRYPTION_KEY_BASE64` (required in production; without it the server stops at startup), `KNOWVIA_IDENTITY_TOKEN`, `IDENTITY_ISSUERS`.
 - The Dockerfile has never been built. Every October `fly deploy` failed with a Fly API 503.
 
@@ -17,7 +17,7 @@ Every step marked **OWNER APPROVAL REQUIRED** deploys, changes a remote system, 
 
 - The `fly` binary is at `~/.fly/bin/fly` (not on PATH). `fly auth whoami` must succeed.
 - Run from a clean checkout of the branch. Do not put secrets in `fly.toml`.
-- Migrations 001 to 029 are applied to the target database first (see Database connections). A deploy against an unmigrated database fails `/ready`.
+- All migrations (the highest file in `src/backend/database/postgres/migrations/`, 040 at the time of writing) are applied to the target database first (see Database connections). A deploy against an unmigrated database fails `/ready`.
 
 ## Database connections
 
@@ -80,11 +80,11 @@ The remaining step to change region: no machine exists, so nothing moves. The `s
 
 1. `fly status -a knowvia-api`: two machines started in `sin`, checks passing on both.
 2. `GET https://knowvia-api.fly.dev/api/v1/health` returns 200 (no database).
-3. `GET /api/v1/ready` returns 200 with `checks.database` and `checks.authentication` true (database schema valid, bootstrap token set). A 503 means the schema is behind or the database is unreachable.
+3. `GET /api/v1/ready` returns 200 with `checks.database`, `checks.authentication` and `checks.documentScanner` true (database schema valid, bootstrap token set, clamd answers PING; the scanner key is absent when `DOCUMENT_SCAN_MODE=disabled`, and with `DOCUMENT_SCAN_REQUIRED=true` a dead scanner makes the answer 503). A 503 means the schema is behind or the database is unreachable.
 4. `curl -H 'Host: evil.example' https://knowvia-api.fly.dev/api/v1/health` returns 403.
 5. `fly logs -a knowvia-api --no-tail`: both machines logged server start, no stack traces, no `DATA_ENCRYPTION_KEY_REQUIRED`.
 6. Shared limits: send a few authenticated requests, then check that `rate_limit_buckets` rows exist (migration 023) rather than relying on one machine's memory.
-7. Do not upload real documents: the scanner is off, so uploads stay quarantined. A synthetic upload checks the database store: the response succeeds and `document_blobs` gains a row.
+7. Do not upload real documents. A synthetic upload checks the database store (the response succeeds and `document_blobs` gains a row) and, with the scanner on, the scan: see Real workflow, step 4.
 
 ### `/ready` review
 
@@ -95,16 +95,68 @@ The remaining step to change region: no machine exists, so nothing moves. The `s
 
 ## Not verified yet
 
-Dockerfile build, entrypoint behaviour without a volume, live health, ready and host guard, whether the transaction pooler applies the timeouts (probe above), behaviour of two machines under load, real HTTP concurrency for the per-case run cap, the Singapore to Sydney query latency, Supabase pooler connection limits, and the ranking change from bm25 to `ts_rank_cd`.
+Dockerfile build (including clamd, the signature download and `docker/entrypoint.sh` as PID 1), clamd memory on a 3 GB machine, entrypoint behaviour without a volume, live health, ready and host guard, whether the transaction pooler applies the timeouts (probe above), behaviour of two machines under load, real HTTP concurrency for the per-case run cap, the Singapore to Sydney query latency, Supabase pooler connection limits, and the ranking change from bm25 to `ts_rank_cd`.
 
 `docker/entrypoint.sh` still runs `mkdir -p "${DOCUMENT_STORAGE_PATH:-/data/documents}"` and `chown -R node:node /data` at start. Without a volume `/data` is an empty directory in the image (the Dockerfile creates it), so both are harmless; the read fallback never writes. Tidy later with a build that can be tested.
 
 ## Operate
 
 - Two machines is the supported shape. Do not scale past two before the scan worker moves to the database (the request limit, model budget and evidence claim guard are already shared through the database, migrations 023 and 032).
-- Enable the scanner: 2 GB machines, `DOCUMENT_SCAN_MODE=clamd`, `CLAMD_HOST=127.0.0.1` (**OWNER APPROVAL REQUIRED**, costs more).
+- The scanner is enabled in `fly.toml` (3 GB machines, `DOCUMENT_SCAN_MODE=clamd`, `DOCUMENT_SCAN_REQUIRED=true`). Redeploy at least weekly so the baked-in signatures never age past what the runtime updater (freshclam) can replace; watch `fly logs` for `freshclam_stopped` loops.
 - Rotate the Supabase password (it was pasted into chat twice), update `DATABASE_URL` in `.env.local` and with `fly secrets set` (**OWNER APPROVAL REQUIRED**), then move the runtime to a least-privilege role.
 - Abandon: `fly apps destroy knowvia-api` removes the app, volume and secrets. Destructive; needs explicit owner approval.
+
+## Real workflow: scan, OCR (Sarvam), structuring (Gemini)
+
+Decision record: [ADR 0022](../adr/0022-production-upload-scan-and-scale-path.md). Load plan: [load-soak.md](load-soak.md). Every command below is **OWNER APPROVAL REQUIRED** (secrets, deploys, paid resources); an agent prepares them and does not run them.
+
+What an upload goes through, in order:
+
+1. `POST /api/v1/cases/:id/documents` (PDF, at most 15 MiB, headers `Idempotency-Key`, `X-Document-Kind`, `X-Consent-Grant-Id`, `X-Filename`). Needs a signed-in session, write access to the case, a current household-wide `document_processing` collect consent from the uploader, and room under `MAX_DOCUMENTS_PER_CASE` (50) and `MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD` (20). Without `DOCUMENT_ENCRYPTION_KEY_BASE64` it answers `503 DOCUMENT_STORAGE_NOT_CONFIGURED`.
+2. Sandboxed PDF inspection (child process: structure, page limit, no active content, no password), duplicate and version checks, then the bytes are encrypted and stored in PostgreSQL. Response `201`, status `received_pending_checks` (`lifecycle_state=quarantined`, `malware_status=pending`).
+3. Scan: the in-process worker streams the bytes to clamd (`INSTREAM`). `clean` makes the document `active`/`accepted`; a hit deletes the bytes and marks it `rejected`; an outage defers with backoff (30 s doubling to 1 h). **If `DOCUMENT_SCAN_MODE=disabled` nothing scans: the document stays pending for ever, OCR answers `DOCUMENT_NOT_OCR_READY`, and after 20 pending uploads the household gets `503 DOCUMENT_SCANNER_NOT_CONFIGURED`.**
+4. OCR: `POST /api/v1/documents/:id/ocr-jobs` with `consentGrantId` of a consent whose recipient is `sarvam`. Needs `SARVAM_OCR_ENABLED=true` and `SARVAM_API_KEY`, else `503 OCR_PROVIDER_DISABLED`. The caller polls `POST /api/v1/ocr-jobs/:id/refresh`.
+5. Structuring: `POST /api/v1/documents/:id/structuring-runs` with a `workflowRunId`, a `consentGrantId` and the Gemini settings below. Needs `POLICY_STRUCTURING_ENABLED=true`; question answering additionally needs `POLICY_EVIDENCE_ENABLED=true`. Output is only `extracted_unverified` or `conflicting`.
+
+Required settings:
+
+| Stage | Plain env (fly.toml) | Secrets |
+| --- | --- | --- |
+| Scan | `DOCUMENT_SCAN_MODE=clamd`, `CLAMD_HOST=127.0.0.1`, `DOCUMENT_SCAN_REQUIRED=true` (already set) | none |
+| Upload | `DOCUMENT_STORAGE_BACKEND=database` (already set) | `DOCUMENT_ENCRYPTION_KEY_BASE64` (set), `DATA_ENCRYPTION_KEY_BASE64` (not yet set) |
+| OCR | `SARVAM_OCR_ENABLED=true`; optional `SARVAM_OCR_MAX_DOCUMENT_PAGES` (default 100), `SARVAM_OCR_MAX_CONCURRENT` (2) | `SARVAM_API_KEY` |
+| Structuring | `POLICY_STRUCTURING_ENABLED=true`, `LLM_PROVIDER=google`, `LLM_MODEL`, `LLM_INPUT_USD_PER_MILLION`, `LLM_OUTPUT_USD_PER_MILLION`, `ORCHESTRATION_RUN_BUDGET_USD`, `ORCHESTRATION_PROJECT_BUDGET_USD` | `GEMINI_API_KEY` |
+
+`LLM_MODEL` and the two rates have no default by design: take them from Google's current pricing page for a model the key can use. Wrong rates make every budget cap wrong.
+
+Apply, in this order:
+
+```bash
+# 1. Secrets (values are typed on the operator machine, never committed)
+~/.fly/bin/fly secrets set DATA_ENCRYPTION_KEY_BASE64='<32 random bytes, base64>' -a knowvia-api --stage
+~/.fly/bin/fly secrets set SARVAM_API_KEY='<key>' GEMINI_API_KEY='<key>' -a knowvia-api --stage
+
+# 2. Provider flags and Gemini settings as staged secrets (they are plain values; keeping them out of fly.toml means the
+#    paid features stay a separate, reversible owner step)
+~/.fly/bin/fly secrets set SARVAM_OCR_ENABLED=true POLICY_STRUCTURING_ENABLED=true LLM_PROVIDER=google \
+  LLM_MODEL='<model>' LLM_INPUT_USD_PER_MILLION='<rate>' LLM_OUTPUT_USD_PER_MILLION='<rate>' \
+  ORCHESTRATION_RUN_BUDGET_USD=0.25 ORCHESTRATION_PROJECT_BUDGET_USD=5 -a knowvia-api --stage
+
+# 3. Deploy the image with the scanner (builds clamd into the image; first build downloads signatures)
+~/.fly/bin/fly deploy --remote-only -a knowvia-api
+~/.fly/bin/fly status -a knowvia-api            # two machines in sin, checks passing
+~/.fly/bin/fly logs -a knowvia-api --no-tail    # expect clamd_ready within about three minutes, no document_scanner_unreachable after that
+```
+
+Verify (synthetic documents only):
+
+1. `GET /api/v1/ready` returns 200 with `checks.documentScanner: true` on both machines (repeat; the proxy chooses a machine).
+2. Upload a synthetic PDF through the BFF or the API: status moves from `received_pending_checks` to `accepted` within a minute.
+3. Scanner detection is proven by `tests/clamd-integration.test.mjs` (EICAR, run locally per [clamav.md](clamav.md)); clamd listens on loopback inside the machine, so it cannot be reached from outside and nothing here exposes it. In production, a hit shows as a `rejected` document and a `document.scan_blocked` audit event.
+4. OCR job on the accepted document, then a structuring run. Check `fly logs` for no `policy_structuring_failed`, and provider spend against `ORCHESTRATION_PROJECT_BUDGET_USD`.
+5. Watch memory for a day: `fly machine status <id> -a knowvia-api`, and any OOM kill in `fly logs`. If a machine is OOM-killed, raise `[[vm]] memory` before raising load.
+
+Rollback of this step: `fly secrets unset SARVAM_OCR_ENABLED POLICY_STRUCTURING_ENABLED -a knowvia-api` turns the paid features off; reverting `fly.toml` to `DOCUMENT_SCAN_MODE=disabled`, removing `DOCUMENT_SCAN_REQUIRED` and redeploying turns the scanner off (pending documents stay quarantined).
 
 ## Activity events and shared limits (ADR 0014)
 

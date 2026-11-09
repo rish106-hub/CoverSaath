@@ -23,6 +23,12 @@ const STORAGE_BACKENDS = Object.freeze(['database', 'filesystem']);
 function readDocumentConfig(env) {
   const scanMode = env.DOCUMENT_SCAN_MODE ?? 'disabled';
   if (!SCAN_MODES.includes(scanMode)) throw new Error('Invalid DOCUMENT_SCAN_MODE.');
+  // DOCUMENT_SCAN_REQUIRED=true is the production switch: the server refuses to start without a scanner (a mode of
+  // 'disabled' would otherwise leave every upload quarantined forever) and /api/v1/ready reports not_ready while the
+  // scanner does not answer. It never relaxes anything: unset or 'false' keeps today's behaviour.
+  if (env.DOCUMENT_SCAN_REQUIRED !== undefined && !['true', 'false'].includes(env.DOCUMENT_SCAN_REQUIRED)) throw new Error('Invalid DOCUMENT_SCAN_REQUIRED.');
+  const scanRequired = env.DOCUMENT_SCAN_REQUIRED === 'true';
+  if (scanRequired && scanMode !== 'clamd') throw new Error('DOCUMENT_SCAN_REQUIRED=true needs DOCUMENT_SCAN_MODE=clamd.');
   const clamd = scanMode === 'clamd'
     ? Object.freeze({
       host: (() => {
@@ -43,6 +49,7 @@ function readDocumentConfig(env) {
     storagePath: env.DOCUMENT_STORAGE_PATH || '.local/documents',
     encryptionKeyBase64: env.DOCUMENT_ENCRYPTION_KEY_BASE64 || null,
     scanMode,
+    scanRequired,
     clamd,
     maxDocumentsPerCase: boundedInteger(env.MAX_DOCUMENTS_PER_CASE, 50, 'MAX_DOCUMENTS_PER_CASE', 1_000),
     maxPendingPerHousehold: boundedInteger(env.MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD, 20, 'MAX_PENDING_DOCUMENTS_PER_HOUSEHOLD', 1_000),

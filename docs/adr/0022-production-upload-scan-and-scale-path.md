@@ -1,0 +1,42 @@
+# ADR 0022: Production upload, scan and parse path, and the scale path beyond two machines
+
+Status: proposed (owner decision needed on D3 to D6). D1 and D2 are implemented on branch `feat/real-workflow-ops`. Synthetic data only. No capacity number below is measured; every figure marked "estimate" is a planning input to be replaced by a soak result.
+
+## Context
+
+The hosted app (`knowvia-api`, Fly, two machines in `sin`) had `DOCUMENT_SCAN_MODE=disabled`. An upload was accepted, encrypted and stored, then stayed `quarantined` / `malware_status=pending` for ever: the worker only schedules scans when a scanner exists, and OCR requires `active` + `clean` (`DOCUMENT_NOT_OCR_READY`). After 20 such uploads a household got `429 UPLOAD_CAPACITY_REACHED` ("wait for pending documents to be checked") although nothing would ever check them. Provider flags (`SARVAM_OCR_ENABLED`, `POLICY_STRUCTURING_ENABLED`) were off. The owner wants the real workflow (scan, Sarvam OCR, Gemini structuring) live and testable at enterprise-scale load, with paid test runs approved.
+
+Measured or read from code (not assumed):
+
+- Upload is `POST /api/v1/cases/:id/documents`, one PDF up to 15 MiB (`MAX_DOCUMENT_BYTES`), held fully in memory while it is hashed, inspected in a sandboxed child, encrypted (AES-256-GCM, `CSD1`) and written to PostgreSQL (`DOCUMENT_STORAGE_BACKEND=database`, default).
+- The scan worker is in the API process: `concurrency=2`, in-memory attempt counters, queue cap 500, sweep of 50 ids every `DOCUMENT_WORKER_SWEEP_MS` (30 s). The database row is the durable queue; per-row `scan_attempts` and `next_scan_at` give durable backoff. Two machines can both scan a document; the persistence guards (`markScanClean` / `markScanBlocked` are conditional updates) make the second a no-op.
+- OCR and structuring are client-driven: the caller starts `POST /documents/:id/ocr-jobs`, then polls `POST /ocr-jobs/:id/refresh`; structuring starts with `POST /documents/:id/structuring-runs` and runs in the API process (202, then `GET`). Limits are per process: `SARVAM_OCR_MAX_CONCURRENT=2`, `LLM_MAX_CONCURRENT_CALLS=2`.
+- `job_queue` (migrations 034, 037; `JobQueueRepository`, `createJobWorker`, `npm run worker`) exists with `FOR UPDATE SKIP LOCKED` claims, leases, heartbeat, fenced complete/fail, dead letter and erasure. `src/server/worker.js` registers no handler, and `fly.toml` has no worker process group, so nothing uses it yet.
+
+## Decisions
+
+**D1. The scanner is part of the production image and is required (implemented).** `fly.toml` sets `DOCUMENT_SCAN_MODE=clamd`, `CLAMD_HOST=127.0.0.1`, `DOCUMENT_SCAN_REQUIRED=true`. `DOCUMENT_SCAN_REQUIRED=true` makes `DOCUMENT_SCAN_MODE=disabled` a startup error and makes `/api/v1/ready` answer 503 while clamd does not answer `PING`. The image gains: a clamd config with `AlertExceedsMax`, `StreamMaxLength` >= the upload cap and bounded threads (`docker/clamd.conf`; it previously lacked the limits the clamav runbook already required); a signature updater (`docker/freshclam.conf`, run as `clamav` by `docker/entrypoint.sh`, clamd reloads on `SelfCheck`); build-time checks that signatures exist. Machines move to `shared-cpu-2x` / 3 GB (estimate: clamd ~1.2 GB resident, reload held to one engine by `ConcurrentDatabaseReload no`). No control is weakened: an unscanned file still never becomes `clean`, an over-limit file is `SCANNER_ERROR`, never `OK`.
+
+**D2. Honest errors when scanning is off (implemented).** With no scanner, a household at the pending cap gets `503 DOCUMENT_SCANNER_NOT_CONFIGURED` (non-retryable, configuration) instead of a retryable 429 that can never clear. The server logs `document_scanning_disabled` at startup. `/api/v1/ready` reports `documentScanner` (boolean when configured; the string state `disabled|ready|unreachable` for loopback operators).
+
+**D3. Object storage for document bytes (proposed, gated).** Move ciphertext (still the `CSD1` envelope, still encrypted by the application) from PostgreSQL `bytea` to an S3-compatible bucket in the app's region, behind the existing `ByteStorage` port (`put/read/remove/list`). The fallback storage wrapper already reads from a second backend, so the switch is reversible and old documents stay readable. Gate: do it when measured database size or Supabase egress from document reads (the scanner, OCR and segmentation each re-read the full object) passes an owner-set threshold, or when the soak shows document I/O dominating pool time. Cost: a new vendor, a credential, a residency decision (ADR 0011 D8). Hard to reverse once real data lands there, so it needs the owner's explicit yes.
+
+**D4. Move scanning and OCR/structuring execution onto `job_queue` workers (proposed, staged).** Stage 1: register a `document.scan` handler in `src/server/worker.js` (identifiers only; re-check ownership and the document's current state; call `processDocument`), enqueue from `onStored` with `dedupeKey = scan:<documentId>`, keep the in-process worker as the fallback behind a flag (`DOCUMENT_SCAN_RUNNER=inprocess|queue`). Stage 2: `ocr.poll` (replaces client-driven refresh as the source of truth). Stage 3: `structuring.run`. Each handler re-checks consent and the privacy gate before any provider call (AI.md invariants 1 and 2) and each new kind needs an erasure path and test (the queue already deletes rows by document and consent grant). Run workers as a second Fly process group (`[processes] app, worker`) so API memory and scan CPU scale separately. Gate: begin when the soak (D7) shows API latency degraded by scan or structuring work, or when a restart loses structuring runs in a way users see.
+
+**D5. Multi-machine correctness before scale-out (proposed).** Per-process state that still duplicates or caps work across machines: scan sweeps (harmless duplicate), `LLM_MAX_CONCURRENT_CALLS` and `SARVAM_OCR_MAX_CONCURRENT` (per machine, so cost and provider rate scale with machine count), the per-process rate limiter fallback, `MAX_ACTIVE_SESSIONS` / `MAX_ACTIVE_CASES` defaults of 100 (a load test will hit these first, see fix branch `fix/p1-session-capacity`), and one client-address key for the rate limit (a BFF behind one address shares 600 requests per minute across all its users: raise `API_RATE_LIMIT_PER_MINUTE` for the test or key by household for authenticated calls). Queue claims (D4) remove the duplicate-work class instead of tolerating it.
+
+**D6. Bound upload memory before raising upload concurrency (proposed).** Each in-flight upload holds up to 15 MiB several times over (body, hash, ciphertext, sandbox copy). At the proxy hard limit of 80 concurrent requests per machine that is a worst case near 1 GB of transient buffers, on top of clamd. Add a process-wide upload semaphore (for example 4 bodies at once, the rest answered `503` with `Retry-After`) sized from the soak's resident-memory curve, not from this estimate.
+
+**D7. Load and soak tests use real components, synthetic data, and are budget-capped.** See `docs/runbooks/load-soak.md`: stages L0 to L4 from API-only smoke to a paid soak, each with pass/fail numbers recorded rather than assumed, a hard spend ceiling (`ORCHESTRATION_PROJECT_BUDGET_USD`, `SARVAM_*` page limits) and teardown through household erasure.
+
+## Consequences
+
+- Production uploads become `accepted` only after a real clamd scan. A scanner outage defers (durable backoff, retried for ever, capped at an hour between tries), so documents wait instead of being lost or released; with `DOCUMENT_SCAN_REQUIRED=true` the machine reports not ready.
+- The image is larger (the signature database, hundreds of MB, is baked in; size not measured) and each machine costs more: 2 x `shared-cpu-2x` / 3 GB instead of 2 x `shared-cpu-1x` / 1 GB.
+- Signatures are fresh only while the updater can reach ClamAV mirrors; a machine that cannot update keeps the build-time signatures. Redeploy at least weekly (runbook).
+- Rollback: set `DOCUMENT_SCAN_REQUIRED=false` and `DOCUMENT_SCAN_MODE=disabled` and redeploy the previous image. Documents already scanned stay `clean`; pending ones stay quarantined. No migration is involved.
+- Not verified here: the Docker build, clamd memory on a Fly machine, real signature download, and any throughput number.
+
+## Not decided here
+
+Region/residency of any object store (ADR 0011 D8), whether a managed scanner replaces clamd, and the retention of scanned bytes. All need the owner.
