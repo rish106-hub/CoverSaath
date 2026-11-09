@@ -1,6 +1,6 @@
 # ADR 0021: Reference data without a second service (insurance-data-api hosting)
 
-- Status: Accepted-pending-owner (2026-11-08). **Needs owner acceptance before merge or any non-synthetic import.** Code: import path and contract test on branch `feat/ida-integration`. No cloud resource, account or secret was created.
+- Status: Accepted by owner 2026-11-09 (option d, import-only). No cloud resource, account or secret was created. Licence and legal wording remains FOR LEGAL REVIEW and is not a priority per owner.
 - Synthetic data only. Statements about licences and source rights are an engineering reading and are **FOR LEGAL REVIEW**.
 - Related: ADR 0011 (Supabase + Fly, one database, one schema per segment), X1 audit `docs/architecture/insurance-data-api-audit.md`, B3 port `src/backend/services/reference-data-port.js`, D3 cache (migration 033), runbook `docs/runbooks/ida-integration.md`.
 

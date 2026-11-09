@@ -269,7 +269,7 @@ async function schemaStatus(database) {
 
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
-export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, onError, metrics }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, onError, metrics }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -376,6 +376,27 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
           note: 'Configuration status only. This endpoint makes no provider request.',
         },
       };
+    }
+    // Public reference data (ADR 0021). Read-only, context only: it never feeds eligibility, money, consent or release.
+    // No household id is read or accepted; only the allow-listed products.search params. Disabled, stale or missing data
+    // fails closed with REFERENCE_DATA_NOT_CONFIGURED (503).
+    if (req.method === 'GET' && url.pathname === '/api/v1/reference/products') {
+      const params = {};
+      for (const [name, value] of url.searchParams) {
+        if (!['q', 'uin', 'insurerId'].includes(name) || Object.hasOwn(params, name)) {
+          badRequest('Use one of q, uin or insurerId.', 'REFERENCE_DATA_REQUEST_INVALID');
+        }
+        params[name] = value;
+      }
+      const notConfigured = () => Object.assign(new Error('Reference data is not configured.'), { code: 'REFERENCE_DATA_NOT_CONFIGURED', statusCode: 503 });
+      let result;
+      try {
+        result = await (await getReferenceDataPort()).searchProducts(params);
+      } catch (error) {
+        throw error?.code === 'REFERENCE_DATA_DISABLED' ? notConfigured() : error;
+      }
+      if (result.stale) throw notConfigured();
+      return { status: 200, body: { ...result.data, source: result.source, fetchedAt: result.fetchedAt, referenceContextOnly: true } };
     }
     const listMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/(cases|consents)$/);
     if (req.method === 'GET' && listMatch) {
