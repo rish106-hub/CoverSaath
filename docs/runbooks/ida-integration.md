@@ -64,6 +64,34 @@ node --env-file-if-exists=.env.local scripts/reference-import.mjs --file scripts
 - A hosted import is a change to a remote database. It needs owner approval.
 - After `--ttl-days` the rows are served labelled stale. Re-run the import to refresh them.
 
+## 3a. Offline flow: IDA export -> convert -> import (admin tooling, no beta counterpart)
+
+Who does what: the IDA operator runs the export (IDA repo, `DATABASE_URL` only); the CoverSaath operator runs convert, dry-run and import. Nothing here is reachable from the app or the beta; it is local admin tooling only. No network call, no new dependency, no migration.
+
+```sh
+# 1. In the IDA repo (offline): rights-gated export of one product. Add --allow-synthetic only to rehearse with synthetic rows.
+npm run export:product -- <product-id> --out /secure/path/export.json
+# 2. In CoverSaath: convert (export-v2 only), mode 0600, refuses to overwrite without --force, prints counts only.
+node scripts/reference-import-convert.mjs --in /secure/path/export.json --out /secure/path/import.json
+# 3. Validate again with the importer, no database.
+node scripts/reference-import.mjs --file /secure/path/import.json --dry-run [--allow-owner-approved]
+# 4. Import (owner approval for any hosted database; see section 3).
+node --env-file-if-exists=.env.local scripts/reference-import.mjs --file /secure/path/import.json --ttl-days 30 [--allow-owner-approved]
+```
+
+Rehearsal with the shipped synthetic fixture: `node scripts/reference-import-convert.mjs --in scripts/fixtures/ida-export-v2-synthetic.json --out <new file>`.
+
+What is checked: `export_schema_version` is exactly 2; the export, product, versions and facts all carry the same `data_class`; at least one `uin` identifier exists (one `products.search` entry per UIN); `latest_snapshot_id` is present and only facts of that snapshot are kept (IDA lists newest first; older snapshots are dropped and counted); after conversion the object runs through the importer's own validator (`prepareReferenceImport`) and the convert fails if it is invalid. Errors are coded (`IDA_EXPORT_SCHEMA_UNSUPPORTED`, `IDA_EXPORT_INVALID`, `IDA_EXPORT_IDENTIFIER_MISSING`, `IDA_EXPORT_DATA_CLASS_REFUSED`, `IDA_EXPORT_RIGHTS_REFERENCE_INVALID`, `IDA_EXPORT_OUTPUT_EXISTS`, `IDA_EXPORT_SELF_CHECK_FAILED`, `IDA_EXPORT_UNREADABLE`) and never print a value.
+
+Mapping rules (**FOR LEGAL REVIEW**):
+- `data_class: synthetic` becomes `verification_status: synthetic_test`, `freshness: test_fixture`, `version_synthetic: true`. The importer then refuses anything verified-looking.
+- `data_class: owner_approved` needs the export's `rights_reference` to be 1 to 200 printable ASCII characters. The converter refuses a longer value with `IDA_EXPORT_RIGHTS_REFERENCE_INVALID`; it never truncates. Imported labels are the least trusted real ones (`source_observed`, `unknown`, fact `candidate`, empty coverage), so a converted fact is never `verified`. The import still needs `--allow-owner-approved`, which is honour-system, not proof of rights.
+- Quotes are never carried: the importer has no field for quote text. Evidence keeps document id, page number and document sha256 only. Quote text on evidence with `quote_included: false` makes the export invalid.
+- Only `value_json.text` (a string) is carried as the fact value; other `value_json` kinds are dropped (the importer drops values of non-usable facts anyway). Nothing else is invented.
+- Imported reference data is context only (X1 rule 8). It must not feed eligibility, money, consent or release.
+
+Rollback: the converted file is a local artefact; delete it. Cache rows expire by `--ttl-days` (served labelled stale, never refreshed) and can be removed with the delete marker in section 4. No code or schema change is needed to undo an import.
+
 ## 4. Rollback
 
 - Turn it off: `REFERENCE_DATA_ENABLED=false` (the default) and restart. The port then refuses every read, cached or not.

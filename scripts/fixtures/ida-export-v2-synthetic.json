@@ -1,0 +1,49 @@
+{
+  "export_schema_version": 2,
+  "generated_at": "2026-01-02T00:00:00.000Z",
+  "product": { "id": "prod_ida_syn_01", "display_name": "Synthetic Health Plan 01", "line_of_business": "health", "data_class": "synthetic" },
+  "insurer": { "id": "ins_ida_syn_1", "canonical_name": "Synthetic Test Insurer", "aliases": ["Synthetic Insurer"] },
+  "identifiers": [
+    { "id_type": "uin", "raw_value": "SYNTHETIC-TEST-ONLY/01", "normalized_value": "SYNTHETIC-TEST-ONLY/01" },
+    { "id_type": "internal", "raw_value": "internal-ref-01", "normalized_value": "internal-ref-01" }
+  ],
+  "data_class": "synthetic",
+  "rights_reference": "synthetic fixture, no real source",
+  "rights": [{ "rights_record_id": "rr_syn_1", "rights_reference": "synthetic fixture, no real source", "expires_at": null }],
+  "versions": [
+    {
+      "version_id": "ver_ida_syn_01",
+      "wording_version": "SYN-WORDING-1",
+      "approval_date": null,
+      "effective_from": "2026-01-01",
+      "effective_to": null,
+      "status": "active_unknown",
+      "source_observed_at": "2026-01-01T00:00:00.000Z",
+      "data_class": "synthetic",
+      "latest_snapshot_id": "snap_new",
+      "facts": [
+        {
+          "fact_id": "fact_new_1", "candidate_id": "cand_1", "snapshot_id": "snap_new", "fact_type": "waiting_periods",
+          "value_json": { "text": "Synthetic waiting period text." },
+          "conditions": ["Synthetic condition."], "exceptions": [],
+          "evidence_ids": ["ev_1", "ev_2"], "taxonomy_version": "tax-1", "published_at": "2026-01-02T00:00:00.000Z",
+          "evidence": [
+            { "evidence_id": "ev_1", "source_document_id": "doc_syn_1", "page_number": 3, "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "quote_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "quote_included": true, "quote": "SYNTHETIC QUOTE TEXT MUST NEVER APPEAR." },
+            { "evidence_id": "ev_2", "source_document_id": "doc_syn_1", "page_number": 4, "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "quote_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "quote_included": false }
+          ],
+          "provenance": { "review_decision_id": "rev_1", "checked_at": "2026-01-02T00:00:00.000Z", "snapshot_id": "snap_new", "published_at": "2026-01-02T00:00:00.000Z" },
+          "data_class": "synthetic", "rights_reference": "synthetic fixture, no real source"
+        },
+        {
+          "fact_id": "fact_old_1", "candidate_id": "cand_0", "snapshot_id": "snap_old", "fact_type": "copay",
+          "value_json": { "text": "OLD SNAPSHOT TEXT MUST NOT APPEAR." },
+          "conditions": [], "exceptions": [], "evidence_ids": [], "taxonomy_version": "tax-1", "published_at": "2026-01-01T00:00:00.000Z",
+          "evidence": [],
+          "provenance": { "review_decision_id": "rev_0", "checked_at": "2026-01-01T00:00:00.000Z", "snapshot_id": "snap_old", "published_at": "2026-01-01T00:00:00.000Z" },
+          "data_class": "synthetic", "rights_reference": "synthetic fixture, no real source"
+        }
+      ]
+    }
+  ],
+  "limitations": ["Export contains reviewed product reference facts only."]
+}
