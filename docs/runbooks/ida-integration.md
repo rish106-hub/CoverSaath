@@ -69,3 +69,4 @@ node --env-file-if-exists=.env.local scripts/reference-import.mjs --file scripts
 - Turn it off: `REFERENCE_DATA_ENABLED=false` (the default) and restart. The port then refuses every read, cached or not.
 - Remove imported rows (owner approval; public reference data only): `DELETE FROM reference_cache WHERE etag LIKE 'import-%';`
 - Code: revert the `feat/ida-integration` commits. No migration was added.
+- API: `GET /api/v1/reference/products?uin=|insurerId=|q=` (bearer auth, read-only, context only). Disabled, stale or uncached data answers 503 `REFERENCE_DATA_NOT_CONFIGURED`; a bad query answers 400 `REFERENCE_DATA_REQUEST_INVALID`. The route never accepts or returns household data and its result must not feed eligibility, money, consent or release.

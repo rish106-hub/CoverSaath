@@ -5,6 +5,9 @@ import { assertLocalRequest, clientRateKey } from './http/security.js';
 import { createRateLimiter } from '../shared/http/index.js';
 import { createDatabase } from '../backend/database/postgres/db.js';
 import { createPostgresPool, postgresPoolOptionsFromEnv } from '../backend/database/postgres/pool.js';
+import { createReferenceDataPort } from '../backend/services/reference-data-port.js';
+import { ReferenceCacheRepository } from '../backend/repositories/index.js';
+import { createInsuranceDataClient } from '../integrations/index.js';
 import { createBackendServices, createCoverageAnalysisPort, createDecisionCatalogueService, createDocumentUploadService, createHouseholdPreviewService, createPolicyEvidenceService, createPolicyStructuringService } from '../backend/services/index.js';
 import {
   createClamdScanner,
@@ -201,6 +204,14 @@ export function createApiServer({
     householdPreviewService ||= createHouseholdPreviewService({ services, catalogue });
     return householdPreviewService;
   };
+  // Reference data (ADR 0021): public, context only. Off unless REFERENCE_DATA_ENABLED is exactly "true"; import-only when
+  // REFERENCE_DATA_BASE_URL is empty. The port holds no household data.
+  let referenceDataPort = null;
+  const getReferenceDataPort = async () => {
+    await getBackend();
+    referenceDataPort ||= createReferenceDataPort({ repository: new ReferenceCacheRepository(database), client: createInsuranceDataClient({ env }), env });
+    return referenceDataPort;
+  };
   let services = backendServices ?? null;
   let documentUploads = null;
   let ocrService = null;
@@ -368,7 +379,7 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = await getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, onError, metrics });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, onError, metrics });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');
