@@ -16,9 +16,16 @@ primary_region = "sin"
   # remains: see the [[vm]] note).
   RATE_LIMIT_BACKEND = "database"
   MODEL_BUDGET_BACKEND = "database"
-  # Scanner off: every upload stays quarantined. To enable it, use a 2 GB machine and set
-  # DOCUMENT_SCAN_MODE = "clamd", CLAMD_HOST = "127.0.0.1".
-  DOCUMENT_SCAN_MODE = "disabled"
+  # Malware scanning on: clamd runs in the same container (docker/entrypoint.sh) and uploads are scanned before OCR.
+  # DOCUMENT_SCAN_REQUIRED makes a missing scanner a startup error and a dead one a failing /api/v1/ready.
+  # Needs the larger [[vm]] below: clamd holds the whole signature database in memory (about 1.2 GB or more).
+  DOCUMENT_SCAN_MODE = "clamd"
+  CLAMD_HOST = "127.0.0.1"
+  DOCUMENT_SCAN_REQUIRED = "true"
+  # Provider features stay off here and are turned on as staged Fly secrets after the keys exist (docs/runbooks/fly-deploy.md,
+  # "Real workflow"), which keeps the paid step separate and reversible. Equivalent env lines, if ever committed here:
+  #   SARVAM_OCR_ENABLED = "true"          needs SARVAM_API_KEY
+  #   POLICY_STRUCTURING_ENABLED = "true"  needs GEMINI_API_KEY, LLM_MODEL and the two LLM_*_USD_PER_MILLION rates
   DATABASE_SSL_CA_PATH = "/app/docker/supabase-ca.crt"
   PUBLIC_HOSTS = "knowvia-api.fly.dev"
   TRUST_FLY_CLIENT_IP = "true"
@@ -54,9 +61,12 @@ primary_region = "sin"
     [http_service.checks.headers]
       Host = "knowvia-api.fly.dev"
 
-# Two machines in sin. Run claims for the evidence service and the document scan worker are still per process (duplicate
-# work and, for the evidence service, a second paid model call on another machine; the request limit, the model spend cap and document bytes are in PostgreSQL. clamd needs about
-# 1 GB or more of RAM on its own, so it stays off on this size.
+# Two machines in sin. Each runs its own clamd. Run claims for the evidence service and the document scan worker are still per
+# process (two machines can scan the same pending document; the persistence guards make that harmless, and the evidence
+# service can make a second paid model call on another machine). The request limit, the model spend cap and document bytes
+# are in PostgreSQL. Sizing is an estimate, not a measurement: clamd needs roughly 1.2 GB resident for the signature
+# database, plus Node, the PDF sandbox children and headroom. Watch `fly machine status` memory and any OOM kill after the
+# first deploy and adjust (docs/runbooks/fly-deploy.md, "Real workflow").
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "1gb"
+  size = "shared-cpu-2x"
+  memory = "3gb"

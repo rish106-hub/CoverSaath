@@ -39,11 +39,12 @@ test('fly.toml has no volume and no document file path (documents live in Postgr
   assert.equal(sec('env').DOCUMENT_STORAGE_BACKEND, 'database');
 });
 
-test('fly.toml runs two 1 GB machines in Singapore with no auto-stop', () => {
+test('fly.toml runs two machines with room for clamd (3 GB) in Singapore with no auto-stop', () => {
   assert.equal(sec('')['primary_region'], 'sin');
   assert.equal(sec('')['app'], 'knowvia-api');
-  assert.equal(sec('vm').size, 'shared-cpu-1x');
-  assert.equal(sec('vm').memory, '1gb');
+  assert.equal(sec('vm').size, 'shared-cpu-2x');
+  // clamd holds the signature database in memory: never below 2 GB while the scanner is on.
+  assert.ok(Number.parseInt(sec('vm').memory, 10) >= 2 && sec('vm').memory.endsWith('gb'));
   assert.equal(sec('http_service').min_machines_running, 2);
   assert.equal(sec('http_service').auto_stop_machines, 'off');
   assert.equal(sec('http_service').auto_start_machines, 'false');
@@ -58,13 +59,21 @@ test('fly.toml keeps the health check and shares limits through the database for
   const env = sec('env');
   assert.equal(env.RATE_LIMIT_BACKEND, 'database');
   assert.equal(env.MODEL_BUDGET_BACKEND, 'database');
-  assert.equal(env.DOCUMENT_SCAN_MODE, 'disabled');
+  // The scanner is on and required: a hosted upload is never silently left quarantined (ADR 0005, ADR 0022).
+  assert.equal(env.DOCUMENT_SCAN_MODE, 'clamd');
+  assert.equal(env.CLAMD_HOST, '127.0.0.1');
+  assert.equal(env.DOCUMENT_SCAN_REQUIRED, 'true');
+  // Paid provider features stay an explicit, separate owner step.
+  assert.notEqual(env.SARVAM_OCR_ENABLED, 'true');
+  assert.notEqual(env.POLICY_STRUCTURING_ENABLED, 'true');
   assert.equal(env.TRUST_FLY_CLIENT_IP, 'true');
 });
 
 test('fly.toml [env] is accepted by the server configuration reader', () => {
   const config = readServerConfig({ ...sec('env') });
   assert.equal(config.documents.storageBackend, 'database');
+  assert.equal(config.documents.scanMode, 'clamd');
+  assert.equal(config.documents.scanRequired, true);
   assert.equal(config.rateLimitBackend, 'database');
   assert.equal(config.budgetBackend, 'database');
   assert.deepEqual(config.network.publicHosts, ['knowvia-api.fly.dev']);

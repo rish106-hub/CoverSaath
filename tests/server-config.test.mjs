@@ -22,6 +22,7 @@ test('server configuration has explicit bounded defaults', () => {
       storagePath: '.local/documents',
       encryptionKeyBase64: null,
       scanMode: 'disabled',
+      scanRequired: false,
       clamd: null,
       maxDocumentsPerCase: 50,
       maxPendingPerHousehold: 20,
@@ -64,4 +65,14 @@ test('activity-event, rate-limit and budget backends are validated', () => {
   for (const [name, value] of [['APP_EVENTS_ENABLED', 'yes'], ['APP_EVENTS_RETENTION_DAYS', '0'], ['APP_EVENTS_RETENTION_DAYS', '99999'], ['RATE_LIMIT_BACKEND', 'redis'], ['MODEL_BUDGET_BACKEND', 'file']]) {
     assert.throws(() => readServerConfig({ [name]: value }), new RegExp(`Invalid ${name}`));
   }
+});
+
+test('DOCUMENT_SCAN_REQUIRED needs a real scanner and is validated', () => {
+  assert.throws(() => readServerConfig({ DOCUMENT_SCAN_REQUIRED: 'true' }), /needs DOCUMENT_SCAN_MODE=clamd/);
+  assert.throws(() => readServerConfig({ DOCUMENT_SCAN_REQUIRED: 'true', DOCUMENT_SCAN_MODE: 'disabled' }), /needs DOCUMENT_SCAN_MODE=clamd/);
+  assert.throws(() => readServerConfig({ DOCUMENT_SCAN_REQUIRED: 'yes' }), /Invalid DOCUMENT_SCAN_REQUIRED/);
+  assert.throws(() => readServerConfig({ DOCUMENT_SCAN_REQUIRED: 'true', DOCUMENT_SCAN_MODE: 'clamd' }), /Invalid CLAMD_HOST/);
+  const config = readServerConfig({ DOCUMENT_SCAN_REQUIRED: 'true', DOCUMENT_SCAN_MODE: 'clamd', CLAMD_HOST: '127.0.0.1' });
+  assert.equal(config.documents.scanRequired, true);
+  assert.equal(readServerConfig({ DOCUMENT_SCAN_REQUIRED: 'false' }).documents.scanRequired, false);
 });

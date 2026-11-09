@@ -158,8 +158,12 @@ export function createDocumentUploadService({
       const existing = await repository.findIdempotency(scope, idempotencyKey, clock().toISOString());
       if (existing) return replay(existing, requestDigest);
 
-      if (await repository.countActiveForCase(caseRecord.id) >= limits.maxDocumentsPerCase
-        || await repository.countPendingForHousehold(caseRecord.household_id) >= limits.maxPendingPerHousehold) {
+      if (await repository.countActiveForCase(caseRecord.id) >= limits.maxDocumentsPerCase) {
+        fail('UPLOAD_CAPACITY_REACHED', 'Upload capacity reached. Wait for pending documents to be checked.', 429);
+      }
+      if (await repository.countPendingForHousehold(caseRecord.household_id) >= limits.maxPendingPerHousehold) {
+        // Without a scanner nothing ever clears a pending document, so "wait" would be a lie and a retry loop.
+        if (!scanner) fail('DOCUMENT_SCANNER_NOT_CONFIGURED', 'Document scanning is not enabled on this server, so pending documents are not being checked.', 503);
         fail('UPLOAD_CAPACITY_REACHED', 'Upload capacity reached. Wait for pending documents to be checked.', 429);
       }
 

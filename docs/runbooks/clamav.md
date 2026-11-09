@@ -39,6 +39,10 @@ clamd --foreground
 
 Run the API with `DOCUMENT_SCAN_MODE=clamd`, `CLAMD_HOST=127.0.0.1`, `CLAMD_PORT=3310`. At startup the server logs `document_scanner_unreachable` if clamd does not answer `PING`.
 
+## Fly.io (production container)
+
+`docker/clamd.conf` carries the limits above (plus `MaxThreads 4`, `ConcurrentDatabaseReload no`, `SelfCheck 600`), `docker/freshclam.conf` fetches signatures (`Checks 12`), and `docker/entrypoint.sh` starts both next to the API when `DOCUMENT_SCAN_MODE=clamd`. The Dockerfile bakes signatures in at build time and fails the build if they are missing. `tests/container-scanner-config.test.mjs` guards the config values. Memory: clamd holds the whole database (estimate 1.2 GB or more), so the machine is 3 GB; a signature reload blocks scans for its duration (they time out as `SCANNER_UNAVAILABLE` and are retried). Redeploy weekly. Details and commands: [fly-deploy.md](fly-deploy.md), "Real workflow".
+
 ## Azure
 
 Run clamd as a container in the same virtual network as the App Service, listening only on the private interface, with the settings above and a scheduled `freshclam`. Never expose port 3310 publicly. This is not provisioned yet.

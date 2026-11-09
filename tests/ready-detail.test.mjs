@@ -98,3 +98,31 @@ test('isLoopbackRequest needs both a loopback peer and the local request guard',
   foreignOrigin.headers.origin = 'https://attacker.example';
   assert.equal(isLoopbackRequest(foreignOrigin), false);
 });
+
+const scannerReq = () => fakeRequest({ remoteAddress: '203.0.113.7', host: '127.0.0.1:8787' });
+
+async function readyWithScanner(t, { status, required }) {
+  const { database, services } = await backend(t);
+  const req = scannerReq();
+  return handleV1BackendRoute({
+    req, url: new URL(req.url, 'http://127.0.0.1:8787'), database, services, integrations: {},
+    config: { documents: { scanRequired: required } }, scannerStatus: async () => status,
+  });
+}
+
+test('readiness reports the document scanner, and gates on it only when DOCUMENT_SCAN_REQUIRED', postgresTestOptions(), async t => {
+  // Configured and answering: an extra boolean, still ready.
+  const up = await readyWithScanner(t, { status: 'ready', required: true });
+  assert.equal(up.status, 200);
+  assert.deepEqual(up.body.checks, { database: true, authentication: true, documentScanner: true });
+  // Configured but down and required: not ready (a scanner outage must not look healthy), no detail for outsiders.
+  const required = await readyWithScanner(t, { status: 'unreachable', required: true });
+  assert.equal(required.status, 503);
+  assert.deepEqual(required.body, { status: 'not_ready', checks: { database: true, authentication: true, documentScanner: false } });
+  // Configured but down and not required: informational only.
+  const optional = await readyWithScanner(t, { status: 'unreachable', required: false });
+  assert.equal(optional.status, 200);
+  assert.equal(optional.body.checks.documentScanner, false);
+  // Disabled: no scanner key at all, same body as before.
+  assertNoDetail(await readyWithScanner(t, { status: 'disabled', required: false }));
+});

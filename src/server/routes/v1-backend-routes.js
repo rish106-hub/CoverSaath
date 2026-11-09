@@ -269,7 +269,7 @@ async function schemaStatus(database) {
 
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
-export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, getChatService, onError, metrics }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, scannerStatus = null, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, getChatService, onError, metrics }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -280,13 +280,16 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     }
     if (req.method === 'GET' && url.pathname === '/api/v1/ready') {
       const schema = await schemaStatus(database);
-      const ready = schema.valid === true && services.access.bootstrapConfigured;
-      const body = {
-        status: ready ? 'ready' : 'not_ready',
-        checks: { database: schema.valid === true, authentication: services.access.bootstrapConfigured },
-      };
+      // Scanner state: 'disabled' (not configured), 'ready' (answers PING) or 'unreachable'. The boolean check appears only when a
+      // scanner is configured, and gates readiness only when DOCUMENT_SCAN_REQUIRED=true; otherwise it is informational.
+      const scanner = scannerStatus ? await scannerStatus() : 'disabled';
+      const scannerRequired = config?.documents?.scanRequired === true;
+      const ready = schema.valid === true && services.access.bootstrapConfigured && (!scannerRequired || scanner === 'ready');
+      const checks = { database: schema.valid === true, authentication: services.access.bootstrapConfigured };
+      if (scanner !== 'disabled') checks.documentScanner = scanner === 'ready';
+      const body = { status: ready ? 'ready' : 'not_ready', checks };
       // Schema detail (missing tables, triggers, migration count) is for local operators only.
-      if (isLoopbackRequest(req)) Object.assign(body, { database: schema, externalProviderCalls: false });
+      if (isLoopbackRequest(req)) Object.assign(body, { database: schema, externalProviderCalls: false, documentScanner: scanner });
       return { status: ready ? 200 : 503, body };
     }
     // Static, itemised privacy notices (DPDP s5). Public by design: it holds no household or personal data, so it needs no
