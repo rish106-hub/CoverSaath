@@ -8,7 +8,7 @@ import { createPostgresPool, postgresPoolOptionsFromEnv } from '../backend/datab
 import { createReferenceDataPort } from '../backend/services/reference-data-port.js';
 import { ReferenceCacheRepository } from '../backend/repositories/index.js';
 import { createInsuranceDataClient } from '../integrations/index.js';
-import { createBackendServices, createCoverageAnalysisPort, createDecisionCatalogueService, createDocumentUploadService, createHouseholdPreviewService, createPolicyEvidenceService, createPolicyStructuringService } from '../backend/services/index.js';
+import { createBackendServices, createChatService, createCoverageAnalysisPort, createDecisionCatalogueService, createDocumentUploadService, createHouseholdPreviewService, createPolicyEvidenceService, createPolicyStructuringService } from '../backend/services/index.js';
 import {
   createClamdScanner,
   createDocumentScanWorker,
@@ -212,6 +212,13 @@ export function createApiServer({
     referenceDataPort ||= createReferenceDataPort({ repository: new ReferenceCacheRepository(database), client: createInsuranceDataClient({ env }), env });
     return referenceDataPort;
   };
+  // Chat v0 (P7a): deterministic, cited, no model. Off unless CHAT_ENABLED is exactly "true" (checked by the service).
+  let chatService = null;
+  const getChatService = async () => {
+    const { services: backendServicesBuilt } = await getBackend();
+    chatService ||= createChatService({ services: backendServicesBuilt, getEvidenceService, getReferenceDataPort, env });
+    return chatService;
+  };
   let services = backendServices ?? null;
   let documentUploads = null;
   let ocrService = null;
@@ -379,7 +386,7 @@ export function createApiServer({
       const url = new URL(req.url, 'http://127.0.0.1:8787');
       if (url.pathname.startsWith('/api/v1/')) {
         const backend = await getBackend();
-        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, onError, metrics });
+        const backendResult = await handleV1BackendRoute({ req, url, ...backend, integrations, intakeConnectors, config, identity, liveRegistryFactory, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, getChatService, onError, metrics });
         // A body refused mid-stream is never drained: close the connection after answering so the
         // client gets the 413 and the server stops receiving bytes.
         if (backendResult.status === 413) res.setHeader('Connection', 'close');

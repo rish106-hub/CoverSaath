@@ -5,6 +5,7 @@ export { UPLOAD_DOCUMENT_KINDS, createDocumentUploadService, documentDto, docume
 export { createPolicyStructuringService } from './policy-structuring-service.js';
 export { createDecisionCatalogueService } from './decision-catalogue-service.js';
 export { createHouseholdPreviewService } from './household-preview-service.js';
+export { createChatService } from './chat-service.js';
 export { createPolicyEvidenceService, evidenceEnabled, questionGrantCheck, readbackEnabled } from './policy-evidence-service.js';
 export { createHouseholdAppService, ageYears } from './household-app-service.js';
 export { createUserDataService, parseIfMatch } from './user-data-service.js';

@@ -57,7 +57,7 @@ export async function eventually(check, { timeoutMs = 3000 } = {}) {
   }
 }
 
-export async function startApp(t, { env: extraEnv = {} } = {}) {
+export async function startApp(t, { env: extraEnv = {}, logger } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-readfacts-'));
   const { db: database } = await freshDatabase(t);
   const providerCalls = [];
@@ -80,7 +80,7 @@ export async function startApp(t, { env: extraEnv = {} } = {}) {
     ...extraEnv,
   };
   const server = createApiServer({
-    database, env, sarvamFetch: sarvamFetch(providerCalls),
+    database, env, sarvamFetch: sarvamFetch(providerCalls), ...(logger ? { logger } : {}),
     analysisLiveModelDriver: { loadModel: async () => ({ mocked: true }), createAgent: () => ({ generate: async () => { modelCalls.push('model'); throw new Error('no model call expected'); } }) },
     documentScanner: { mode: 'clamd', async scan() { return { status: 'clean' }; }, async ping() { return true; } },
   });

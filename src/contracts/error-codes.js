@@ -67,6 +67,13 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   ERASURE_TOO_LARGE: entry(409, 'request', false),
   EXECUTION_MODE_NOT_CONFIGURED: entry(null, 'configuration', false),
   READBACK_DISABLED: entry(503, 'configuration', false),
+  // Reference data route (ADR 0021): registered here because the routes file names them (main had left them out).
+  REFERENCE_DATA_NOT_CONFIGURED: entry(503, 'configuration', false),
+  REFERENCE_DATA_DISABLED: entry(503, 'configuration', false),
+  REFERENCE_DATA_REQUEST_INVALID: entry(400, 'request', false),
+  // Chat v0 (P7a): deterministic cited lookup, no model.
+  CHAT_REQUEST_INVALID: entry(400, 'request', false),
+  CHAT_NOT_CONFIGURED: entry(503, 'configuration', false),
   // Document intake (Block 1): upload route, upload service, document repository and the
   // document-intake module errors those surfaces return. ADR 0005.
   DOCUMENT_NOT_FOUND: entry(404, 'not_found', false),

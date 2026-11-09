@@ -269,7 +269,7 @@ async function schemaStatus(database) {
 
 // Every service, repository and policy call below is awaited inside the try, so a rejection
 // (a denial or a database error) maps through errorResponse and never lets the request through.
-export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, onError, metrics }) {
+export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, getChatService, onError, metrics }) {
   if (!url.pathname.startsWith('/api/v1/')) return null;
   try {
     if (req.method === 'GET' && ['/api/v1/health', '/api/v1/live'].includes(url.pathname)) {
@@ -697,6 +697,20 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         status: 200,
         body: await (await getHouseholdPreviewService()).preview({
           principal, householdId: previewMatch[1], body,
+          authorizeCase: caseRecord => responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack }),
+        }),
+      };
+    }
+    // Chat v0 (P7a): deterministic, cited lookup over the household's own readable documents. No model, nothing stored.
+    // The service checks CHAT_ENABLED (503 CHAT_NOT_CONFIGURED), then household ownership, then DOCUMENT_READBACK_ENABLED.
+    // The message is never logged, audited or echoed.
+    const chatMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/chat$/);
+    if (req.method === 'POST' && chatMatch) {
+      const body = await readBody(req, { limitBytes: 4096 });
+      return {
+        status: 200,
+        body: await (await getChatService()).answer({
+          principal, householdId: chatMatch[1], body,
           authorizeCase: caseRecord => responses.requireCaseField({ principal, caseRecord, field: READ_FIELDS.sourcePack }),
         }),
       };
