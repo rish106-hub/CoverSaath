@@ -15,6 +15,7 @@ import { ANALYSIS_ERROR_CODES } from '../../contracts/error-codes.js';
 import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from '../../contracts/profile-answers.js';
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
 import { handleDataLifecycleRoute } from './data-lifecycle-routes.js';
+import { parsePolicyType } from '../../contracts/policy-type.js';
 import {
   READ_FIELDS, analysisJobDto, analysisTaskDto, auditSummaryDto, caseSummaryDto,
   createReadResponsePolicy, sourcePackDto,
@@ -412,7 +413,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         const { cases, truncated } = await services.cases.listOpenedBy({ householdId: listMatch[1], adultId: principal.adultId, limit });
         return { status: 200, body: {
           householdId: listMatch[1],
-          cases: cases.map(row => ({ id: row.id, triggerType: row.trigger_type, status: row.status, emergencyMode: Number(row.emergency_mode) === 1, createdAt: row.created_at, updatedAt: row.updated_at })),
+          cases: cases.map(row => ({ id: row.id, triggerType: row.trigger_type, policyType: row.policy_type, status: row.status, emergencyMode: Number(row.emergency_mode) === 1, createdAt: row.created_at, updatedAt: row.updated_at })),
           truncated,
         } };
       }
@@ -567,6 +568,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         subjectMemberId: body.subjectMemberId ?? null,
         openedByAdultId: principal.adultId,
         triggerType: requiredString(body.triggerType, 'triggerType'),
+        policyType: parsePolicyType(body.policyType),
         statedEstimateMinor: body.statedEstimateMinor ?? null,
         currency: body.currency ?? null,
         // The check above is a fast fail only. This one counts and inserts under a global lock.

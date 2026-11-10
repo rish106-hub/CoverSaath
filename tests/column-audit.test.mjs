@@ -114,7 +114,7 @@ const PLAIN = {
   release_gates: { 'closed vocabulary and system actor': ['gate_kind', 'status', 'decided_by'] },
   retention_records: { 'closed vocabulary': ['resource_type', 'retention_basis', 'deletion_state'] },
   reviewer_findings: { 'closed vocabulary and finding code': ['reviewer_kind', 'severity', 'finding_code'] },
-  service_cases: { 'closed vocabulary and currency code': ['trigger_type', 'status', 'currency'] },
+  service_cases: { 'closed vocabulary and currency code': ['trigger_type', 'policy_type', 'status', 'currency'] },
   source_curator_grants: { 'closed vocabulary, curator id and public key': ['role', 'status', 'granted_by', 'public_key'] },
   source_pages: { 'versions, closed vocabulary and opaque provider page reference': ['source_version', 'extraction_status', 'output_contract_version', 'provider_page_ref'] },
   tool_scenarios: { 'closed vocabulary': ['tool'] },

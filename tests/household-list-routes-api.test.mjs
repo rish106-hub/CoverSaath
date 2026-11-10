@@ -73,7 +73,7 @@ test('case list is the caller\'s own, newest first, bounded and tenant-isolated'
   for (const forbidden of ['stated_estimate_minor', 'statedEstimateMinor', 'currency', 'subject_member_id', 'subjectMemberId', '123456', 'example.test', owner.token]) {
     assert.equal(text.includes(forbidden), false, `${forbidden} must not be returned`);
   }
-  assert.deepEqual(Object.keys(listed.data.cases[0]).sort(), ['createdAt', 'emergencyMode', 'id', 'status', 'triggerType', 'updatedAt']);
+  assert.deepEqual(Object.keys(listed.data.cases[0]).sort(), ['createdAt', 'emergencyMode', 'id', 'policyType', 'status', 'triggerType', 'updatedAt']);
 
   const one = await app.call(`/api/v1/households/${owner.householdId}/cases?limit=1`, { token: owner.token });
   assert.equal(one.data.cases.length, 1);

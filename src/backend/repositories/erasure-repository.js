@@ -342,7 +342,7 @@ export class ErasureRepository {
     ctx.counts.appEvents = (ctx.counts.appEvents ?? 0) + await this.appEvents.eraseForCase(caseId);
     await this.#eraseIdempotency(ctx, { caseId, documentIds: documents.map(document => document.id), runIds, taskIds });
 
-    await db.run(`UPDATE service_cases SET subject_member_id = NULL, trigger_type = 'user_requested_review', status = 'closed', emergency_mode = 0,
+    await db.run(`UPDATE service_cases SET subject_member_id = NULL, trigger_type = 'user_requested_review', policy_type = 'other', status = 'closed', emergency_mode = 0,
         stated_estimate_minor = NULL, currency = NULL, updated_at = ?, closed_at = COALESCE(closed_at, CAST(? AS text)) WHERE id = ?`, [at, at, caseId]);
     await this.#ledger(ctx, 'case', caseId);
     ctx.erasedCaseIds.push(caseId);

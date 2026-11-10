@@ -131,7 +131,7 @@ export const DATA_REGISTRY = Object.freeze({
     ['policy_id', 'household_member_id', 'membership_state', 'source_page_id', 'created_at']),
   service_cases: entry('coverage_reconstruction',
     { financial: ['stated_estimate_minor', 'stated_estimate_ciphertext'] },
-    ['id', 'household_id', 'subject_member_id', 'opened_by_adult_id', 'trigger_type', 'status', 'emergency_mode', 'currency', 'created_at', 'updated_at', 'closed_at']),
+    ['id', 'household_id', 'subject_member_id', 'opened_by_adult_id', 'trigger_type', 'policy_type', 'status', 'emergency_mode', 'currency', 'created_at', 'updated_at', 'closed_at']),
   case_participants: entry('coverage_reconstruction', {},
     ['case_id', 'adult_user_id', 'participant_role', 'consent_grant_id', 'created_at']),
   evidence_facts: entry('coverage_reconstruction',

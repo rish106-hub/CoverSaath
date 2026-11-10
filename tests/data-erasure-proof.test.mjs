@@ -98,7 +98,7 @@ test('household erasure: nothing left but content-free tombstones; other househo
   await none(`households WHERE id = ? AND (display_name <> ? OR status <> 'closed')`, [a.household, ERASED_NAME]);
   await none(`household_members WHERE household_id = ? AND (display_name <> ? OR relationship_label IS NOT NULL OR date_of_birth IS NOT NULL)`, [a.household, ERASED_NAME]);
   await none(`consent_grants WHERE household_id = ? AND revoked_at IS NULL`, [a.household]);
-  await none(`service_cases WHERE household_id = ? AND (status <> 'closed' OR subject_member_id IS NOT NULL OR stated_estimate_minor IS NOT NULL OR currency IS NOT NULL OR trigger_type <> 'user_requested_review')`, [a.household]);
+  await none(`service_cases WHERE household_id = ? AND (status <> 'closed' OR subject_member_id IS NOT NULL OR stated_estimate_minor IS NOT NULL OR currency IS NOT NULL OR trigger_type <> 'user_requested_review' OR policy_type <> 'other')`, [a.household]);
   await none(`workflow_runs WHERE case_id = ? AND input_json IS NOT NULL`, [a.case]);
   // The filename is sealed at rest (D2): open it before comparing with the tombstone marker.
   await none(`document_uploads WHERE household_id = ? AND lifecycle_state <> 'deleted'`, [a.household]);
