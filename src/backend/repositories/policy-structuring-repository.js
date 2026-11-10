@@ -320,9 +320,11 @@ function validateOutcome(outcome) {
 }
 
 export class PolicyStructuringRepository {
-  constructor(database, { clock = () => new Date(), audit = null, coverageParameters = null, ...options } = {}) {
+  constructor(database, { clock = () => new Date(), audit = null, coverageParameters = null, afterCommit = null, ...options } = {}) {
     if (!isDatabaseInterface(database)) throw new TypeError('A database is required.');
     this.database = database;
+    // Optional (householdId, documentId, sourceVersion, consentGrantId) hook run in a savepoint at the end of a new commit (ADR 0025).
+    this.afterCommit = typeof afterCommit === 'function' ? afterCommit : null;
     this.clock = clock;
     this.audit = audit ?? new AuditRepository(database, { clock });
     this.crypto = resolveColumnCrypto(options);
@@ -367,7 +369,7 @@ export class PolicyStructuringRepository {
    */
   async commitStructuring({
     householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
-    decisions = [], proposals = [], coverage = null, outcome = null, consentCheck, at = this.clock().toISOString(),
+    decisions = [], proposals = [], coverage = null, outcome = null, consentCheck, consentGrantId = null, at = this.clock().toISOString(),
   } = {}) {
     requireBounded(householdId, 'householdId');
     requireBounded(workflowRunId, 'workflowRunId');
@@ -387,7 +389,7 @@ export class PolicyStructuringRepository {
     try {
       return await this.#commit({
         householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
-        decisions: checkedDecisions, proposals: checkedProposals, coverage: checkedCoverage, outcome: checkedOutcome, consentCheck, at,
+        decisions: checkedDecisions, proposals: checkedProposals, coverage: checkedCoverage, outcome: checkedOutcome, consentCheck, consentGrantId, at,
       });
     } catch (error) {
       throw clientSafe(error);
@@ -396,7 +398,7 @@ export class PolicyStructuringRepository {
 
   #commit({
     householdId, workflowRunId, documentId, sourceVersion, pipelineVersion, registryVersion, recordedBy,
-    decisions: checkedDecisions, proposals: checkedProposals, coverage, outcome, consentCheck, at,
+    decisions: checkedDecisions, proposals: checkedProposals, coverage, outcome, consentCheck, consentGrantId, at,
   }) {
     return this.#atomic(householdId, async () => {
       const scope = await this.#scope({ householdId, workflowRunId, documentId, requireActive: true });
@@ -510,6 +512,12 @@ export class PolicyStructuringRepository {
         resourceId: documentId,
         payload: { structuringRunId, ...counts },
       });
+      if (this.afterCommit && typeof consentGrantId === 'string' && consentGrantId) {
+        // A savepoint: a failure here (an invalid identifier, a queue error) must never undo the structuring result.
+        try {
+          await this.database.transaction(() => this.afterCommit({ householdId, documentId, sourceVersion, consentGrantId }));
+        } catch { /* the facts job is best effort; the structuring result stands */ }
+      }
       return Object.freeze({ replayed: false, structuringRunId, ...counts });
     });
   }

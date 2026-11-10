@@ -4,14 +4,25 @@ import { createDatabase } from '../backend/database/postgres/db.js';
 import { createPostgresPool, postgresPoolOptionsFromEnv } from '../backend/database/postgres/pool.js';
 import { JobQueueRepository } from '../backend/repositories/job-queue-repository.js';
 import { createJobWorker } from '../backend/services/job-worker.js';
+import { createBackendServices } from '../backend/services/index.js';
+import { POLICY_FACTS_JOB_KIND } from '../backend/services/policy-facts-service.js';
+import { policyFactsEnabled } from '../backend/services/policy-profile-service.js';
+import { createPolicyFactsHandler } from '../backend/jobs/policy-facts-handler.js';
 
 // Worker process entry (plan B4): `npm run worker`. Same image and database as the API, no HTTP listener. It claims jobs from
 // the Postgres queue (job_queue, migration 034) and runs the handler registered for the job's kind.
 //
-// No handler is registered yet: moving the OCR and model calls behind the queue is a follow-up that adds entries here, one
-// kind at a time. Each handler receives identifiers only, re-checks household ownership and current consent, and sends
-// nothing to a provider without the privacy gate (AI.md invariants 1 and 2). Until then the worker claims nothing.
+// Handlers are registered one kind at a time. Each receives identifiers only, re-checks household ownership and current consent,
+// and sends nothing to a provider without the privacy gate (AI.md invariants 1 and 2). Today: policy_facts.extract (ADR 0025),
+// registered only while POLICY_FACTS_ENABLED is exactly "true"; with nothing registered the worker claims nothing.
 export const jobHandlers = Object.freeze({});
+
+/** The handlers for this environment, built on the services of one database. */
+export function buildJobHandlers(services, env = process.env) {
+  const handlers = {};
+  if (policyFactsEnabled(env)) handlers[POLICY_FACTS_JOB_KIND] = createPolicyFactsHandler({ service: services.policyFacts });
+  return Object.freeze(handlers);
+}
 
 function boundedInteger(value, fallback, name, min, max) {
   if (value === undefined || value === '') return fallback;
@@ -33,10 +44,11 @@ export function readWorkerConfig(env = process.env) {
 }
 
 /** Builds and starts a worker on the database from `env`. Returns { worker, stop }. */
-export function startWorker({ env = process.env, handlers = jobHandlers, log = line => console.log(JSON.stringify(line)) } = {}) {
+export function startWorker({ env = process.env, handlers = null, log = line => console.log(JSON.stringify(line)) } = {}) {
   const config = readWorkerConfig(env);
   const database = createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(env)));
-  const worker = createJobWorker({ queue: new JobQueueRepository(database), handlers, onEvent: event => log({ ...event, workerId: config.workerId }), ...config });
+  const registered = handlers ?? buildJobHandlers(createBackendServices(database, { env }), env);
+  const worker = createJobWorker({ queue: new JobQueueRepository(database), handlers: registered, onEvent: event => log({ ...event, workerId: config.workerId }), ...config });
   worker.start();
   log({ type: 'worker.started', workerId: config.workerId, kinds: worker.kinds });
   return {

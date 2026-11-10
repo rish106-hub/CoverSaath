@@ -108,6 +108,15 @@ const PLAIN = {
   },
   policy_clauses: { 'source version, block indexes, clause kind and digest, no text': ['source_version', 'block_indexes_json', 'kind', 'digest'] },
   policy_members: { 'closed vocabulary': ['membership_state'] },
+  fact_evidence: {
+    'document source version, clause id and role: locators and a closed vocabulary, no text (the quote is sealed)': ['source_version', 'clause_id', 'role'],
+  },
+  policy_facts: {
+    'document source version, run id, fact type, scope slug, origin, state, value type, normaliser version, confirmation source and supersession ids: closed vocabularies and identifiers, no value': [
+      'source_version', 'extraction_run_id', 'fact_type', 'scope_key', 'ordinal', 'origin', 'state', 'value_type', 'normaliser_version', 'confirmation_source', 'supersedes_fact_id', 'superseded_by_fact_id'],
+    'coarse values by design (ADR 0025 D3): currency, amount band, day count, basis points, flag, enum, year-month; exact values are sealed': [
+      'currency', 'amount_band', 'value_bool', 'value_enum', 'value_ym'],
+  },
   policy_profiles: {
     'public product and insurer identifiers printed on every policy of the product (UIN, insurer code), not about a person; names are sealed': ['uin', 'insurer_code'],
     'closed vocabulary and document source version, no content': ['source_version', 'uin_state', 'insurer_state', 'policy_name_state', 'confirmation_source'],
@@ -141,6 +150,8 @@ const PLAIN_NUMBERS = {
   device_permissions: { 'row revision counter': ['revision'] },
   document_uploads: { 'file size in bytes, scan retry counter and page count, no content': ['byte_size', 'scan_attempts', 'page_count'] },
   policy_profiles: { 'row version counter for optimistic concurrency': ['version'] },
+  fact_evidence: { 'page and block index of the printed place, no content': ['page', 'block_index'] },
+  policy_facts: { 'ordinal, and coarse values by design (ADR 0025 D3): day count and basis points; exact values are sealed': ['ordinal', 'value_duration_days', 'value_percent_bp'] },
   evidence_facts: { 'confidence in basis points, a score about a fact, not the value': ['confidence_basis_points'] },
   household_places: { 'row revision counter': ['revision'] },
   human_reviews: { 'disclosure flag (0/1)': ['conflict_disclosure_shown'] },

@@ -86,6 +86,11 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   POLICY_PROFILE_INVALID_UIN: entry(422, 'request', false),
   POLICY_PROFILE_INVALID: entry(400, 'request', false),
   PAGE_COUNT_INVALID: entry(400, 'request', false),
+  // Policy facts (slice 2, ADR 0025): datapoints read from a document, each with verified evidence.
+  POLICY_FACTS_NOT_FOUND: entry(404, 'not_found', false),
+  POLICY_FACTS_NOT_READY: entry(409, 'conflict', true),
+  POLICY_FACT_NOT_READY: entry(409, 'conflict', true),
+  POLICY_FACT_INVALID: entry(400, 'request', false),
   // Document intake (Block 1): upload route, upload service, document repository and the
   // document-intake module errors those surfaces return. ADR 0005.
   DOCUMENT_NOT_FOUND: entry(404, 'not_found', false),

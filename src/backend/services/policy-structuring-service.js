@@ -156,7 +156,7 @@ export function createPolicyStructuringService({
       commit: async ({ decisions, proposals, coverage, outcome }) => services.policyStructuring.commitStructuring({
         householdId: document.householdId, workflowRunId, documentId: document.id, sourceVersion: stored.sourceVersion,
         pipelineVersion: POLICY_STRUCTURING_VERSION, registryVersion, recordedBy: RECORDED_BY, decisions, proposals,
-        coverage: { ...coverage, costUsd }, outcome, consentCheck,
+        coverage: { ...coverage, costUsd }, outcome, consentCheck, consentGrantId,
       }),
     });
   }

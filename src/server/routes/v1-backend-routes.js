@@ -857,6 +857,24 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       if (!confirming) return { status: 200, body: await services.policyProfile.get({ document: record }) };
       return { status: 200, body: await services.policyProfile.confirm({ document: record, adultUserId: principal.adultId, body: await readBody(req), idempotencyKey: idempotencyKey(req) }) };
     }
+    // Policy facts (ADR 0025): the datapoints read from a document, each with its evidence locator. Owner adult only; the same 404
+    // for a missing document, another household's document and a non-owner. Sealed values are never returned before the owner reports them.
+    // Off unless POLICY_FACTS_ENABLED is exactly "true". No model call.
+    const policyFactsMatch = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/policy-facts$/);
+    if (policyFactsMatch && req.method === 'GET') {
+      if (!services.policyFacts.enabled()) throw Object.assign(new Error('Policy facts are disabled.'), { code: 'POLICY_FACTS_DISABLED', statusCode: 503 });
+      const factsNotFound = () => Object.assign(new Error('Policy facts were not found.'), { code: 'POLICY_FACTS_NOT_FOUND', statusCode: 404 });
+      let record;
+      try {
+        record = await requireOwnedDocument({ services, documentUploads, principal, documentId: policyFactsMatch[1], write: false });
+        const roles = await services.households.listActiveRoles(record.householdId, principal.adultId);
+        if (!roles.some(item => item.role === 'owner')) throw factsNotFound();
+      } catch (error) {
+        if (['DOCUMENT_NOT_FOUND', 'HOUSEHOLD_WRITE_FORBIDDEN', 'HOUSEHOLD_NOT_FOUND', 'CASE_NOT_FOUND'].includes(error?.code)) throw factsNotFound();
+        throw error;
+      }
+      return { status: 200, body: await services.policyFacts.get({ document: record }) };
+    }
     if (req.method === 'DELETE' && documentMatch) {
       // Missing and foreign-household ids are deliberately indistinguishable. Deletion does not
       // require current processing consent: a person must still be able to erase stored data.
