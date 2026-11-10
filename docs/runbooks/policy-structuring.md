@@ -11,8 +11,9 @@ Scope: whole-document policy structuring (ADR 0006) through the local API. Real 
 - `ORCHESTRATION_RUN_BUDGET_USD` must cover one reservation:
   `(STRUCTURING_MAX_INPUT_BYTES x input price + STRUCTURING_MAX_OUTPUT_TOKENS x output price) / 1e6`
   (defaults 64,000 bytes and 16,000 tokens).
-- Sarvam OCR and ClamAV as in [clamav.md](clamav.md). Uploads with JavaScript or embedded content are refused
-  (`PDF_ACTIVE_CONTENT`); ask for a plain copy.
+- Sarvam OCR and ClamAV as in [clamav.md](clamav.md). A PDF with JavaScript, embedded files or form actions is rebuilt
+  automatically into a clean copy (page content only; links, forms, signatures and scripts dropped) in a permission-restricted
+  child process, re-inspected, and only the clean copy is stored (`PDF_SANITIZE_FAILED` when it cannot be rebuilt).
 
 ## Run one document
 

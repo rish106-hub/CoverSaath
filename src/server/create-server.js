@@ -17,6 +17,7 @@ import {
   createFallbackByteStorage,
   createOcrService,
   createSandboxedPdfInspector,
+  createSandboxedPdfSanitizer,
   createSandboxedPdfSegmenter,
 } from '../features/input/index.js';
 import {
@@ -94,6 +95,23 @@ export function createApiServer({
       },
     })
     : null;
+  // A PDF with active content (JavaScript, embedded files, form actions) is rebuilt into a clean copy in its own sandbox and
+  // that copy is re-inspected; the original is never stored or passed on. Failure rejects the upload.
+  const pdfSanitizer = documentStorage
+    ? createSandboxedPdfSanitizer({
+      onEvent: event => { if (event.type === 'pdf_sanitize_failed') logger.warn(event.type, { reason: event.reason ?? null }); },
+    })
+    : null;
+  const inspectOrSanitizePdf = async bytes => {
+    try {
+      return await pdfInspector.inspect(bytes);
+    } catch (error) {
+      if (error?.code !== 'PDF_ACTIVE_CONTENT') throw error;
+    }
+    const cleanBytes = await pdfSanitizer.sanitize(bytes);
+    const inspection = await pdfInspector.inspect(cleanBytes);
+    return Object.freeze({ ...inspection, cleanBytes, sanitized: true });
+  };
   const pdfSegmenter = documentStorage ? createSandboxedPdfSegmenter() : null;
   // Activity events and the database-backed limiter both need the data key (payload sealing, keyed client hash). It is read
   // here so a missing key in production stops startup instead of the first request (ADR 0014).
@@ -289,7 +307,7 @@ export function createApiServer({
           authorization: { authorized: true, purpose: 'document_erasure' },
         });
       },
-      inspectFile: validated => (validated.detectedMimeType === 'application/pdf' ? pdfInspector.inspect(validated.bytes) : null),
+      inspectFile: validated => (validated.detectedMimeType === 'application/pdf' ? inspectOrSanitizePdf(validated.bytes) : null),
       limits: {
         maxDocumentsPerCase: config.documents.maxDocumentsPerCase,
         maxPendingPerHousehold: config.documents.maxPendingPerHousehold,
