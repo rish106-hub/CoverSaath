@@ -10,6 +10,7 @@
 import { randomBytes } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { setPageCountOnce } from './page-count.js';
 import { documentIdempotencyIndex, documentIdempotencyIndexes, openIdempotencyRow, sealIdempotencyResponse } from '../security/sealed-records.js';
 
 const DOCUMENT_COLUMNS = `id, household_id, case_id, uploaded_by_adult_id, consent_grant_id, document_kind,
@@ -288,6 +289,11 @@ export class DocumentRepository {
     ])).changes === 1;
   }
 
+  /** Records the page count of a document unless a count of equal or better trust exists. Resolves true when it changed. */
+  async setPageCountOnce(documentId, pageCount, source) {
+    return setPageCountOnce(this.database, documentId, pageCount, source);
+  }
+
   async markScanClean(documentId, { engine = null } = {}) {
     const householdId = await this.#householdOf(documentId);
     if (householdId === null) return false;
@@ -297,6 +303,9 @@ export class DocumentRepository {
         WHERE id = ? AND lifecycle_state = 'quarantined' AND malware_status = 'pending'
           AND encryption_status = 'encrypted_local'`, [documentId]);
       if (changes !== 1) return false;
+      // An image is one page by definition. A PDF's count comes from OCR completion; this path never reads the bytes.
+      const kind = await this.database.one('SELECT mime_type FROM document_uploads WHERE id = ?', [documentId]);
+      if (typeof kind?.mime_type === 'string' && kind.mime_type.startsWith('image/')) await setPageCountOnce(this.database, documentId, 1, 'image_single');
       await this.appendSystemAudit(documentId, 'document.scan_clean', engine ? { engine } : {});
       return true;
     }, householdId);

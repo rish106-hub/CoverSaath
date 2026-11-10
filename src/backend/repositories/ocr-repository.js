@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { parseStoredBlocks, serializeStoredBlocks } from '../../features/input/ocr-blocks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { MAX_PAGE_COUNT, setPageCountOnce } from './page-count.js';
 
 // OCR jobs and source pages on the async PostgreSQL interface (S3.2). Every write that also audits
 // runs in one transaction that takes the document's household advisory lock first (lock order,
@@ -316,6 +317,8 @@ export class OcrRepository {
           OR (status = 'failed' AND error_code = 'OCR_PERSISTENCE_FAILED')
         )`, [...jobParams(next, this.crypto), jobId]);
       if (updated.changes !== 1) throw new Error('OCR job changed before completion.');
+      // The provider-reported page count of the document (migration 042); a better source already stored is kept.
+      if (pages.length >= 1 && pages.length <= MAX_PAGE_COUNT) await setPageCountOnce(this.database, current.documentUploadId, pages.length, 'ocr');
       await this.appendLifecycleAudit(await this.getJob(jobId), current.status, { pageCount: pages.length });
       return this.getJob(jobId);
     }, { locks: [householdLock(householdId)] });
@@ -371,6 +374,7 @@ export class OcrRepository {
         await this.database.run(`UPDATE source_pages SET blocks_json = ?, blocks_upgrade_job_id = ?
           WHERE id = ? AND blocks_json IS NULL`, [this.crypto.seal('source_pages', 'blocks_json', row.id, serializeStoredBlocks(page.pageNumber, page.blocks)), jobId, row.id]);
       }
+      if (stored.length >= 1 && stored.length <= MAX_PAGE_COUNT) await setPageCountOnce(this.database, current.documentUploadId, stored.length, 'source_pages');
       await this.appendLifecycleAudit(await this.getJob(jobId), current.status, { pageCount: stored.length });
       return this.getJob(jobId);
     }, { locks: [householdLock(householdId)] });

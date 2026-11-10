@@ -45,6 +45,11 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await insert(pool, 'document_blobs', { document_id: ids.document, household_id: ids.household, storage_key: digest('blob') });
   await insert(pool, 'policy_clauses', { id: `clause-${key}`, household_id: ids.household, case_id: ids.case, document_id: ids.document, text: canary('clause-text') });
   await insert(pool, 'policy_answers', { id: `answer-${key}`, household_id: ids.household, case_id: ids.case, requested_by_adult_id: ids.adult, question: canary('question'), document_ids_json: JSON.stringify([ids.document]), answer_json: JSON.stringify({ a: canary('answer') }) });
+  // A confirmed policy profile (migration 043). The sealed columns hold an envelope-shaped value carrying the canary.
+  await insert(pool, 'policy_profiles', {
+    id: `profile-${key}`, household_id: ids.household, case_id: ids.case, document_id: ids.document, source_version: '1', uin: 'ABCHLIP12345V012021', uin_state: 'reported',
+    policy_name_enc: `enc2.k1.${canary('policy-name')}`, policy_name_state: 'reported', confirmation_source: 'user_statement', confirmed_at: at, confirmed_by_adult_id: ids.adult,
+  });
   await insert(pool, 'catalogue_reviewer_grants', { id: `crg-${key}`, household_id: ids.household, adult_user_id: ids.adult, granted_by: ids.adult, case_id: ids.case });
 
   await insert(pool, 'catalogue_reviews', { id: `review2-${key}`, household_id: ids.household, case_id: ids.case, grant_id: `crg-${key}`, reviewer_adult_id: ids.adult, document_id: ids.document, fact_key: hex('f'), fact_json: JSON.stringify({ f: canary('review-fact') }) });

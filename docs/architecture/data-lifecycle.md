@@ -65,6 +65,7 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `source_pages` | scrub_prune | - | Text and blocks cleared; deleted with the document unless an append-only record names the page. |
 | `policy_clauses` | delete | - | Deleted. |
 | `policy_answers` | delete | - | Deleted. |
+| `policy_profiles` | delete | - | Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Names are sealed. |
 | `catalogue_reviews` | delete | - | Deleted. |
 | `catalogue_reviewer_grants` | delete | - | Deleted. |
 | `policies` | scrub_prune | policies | Insurer, number, dates cleared; deleted unless a fact or parameter record names the policy. |

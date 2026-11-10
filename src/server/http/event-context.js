@@ -58,10 +58,10 @@ export function requestEventName({ status, method, route }) {
 // would let an unknown path such as /api/v1/asha-sharma be written to a log; the log uses this closed set instead and
 // shows everything else as :x. tests/logging-leak-review.test.mjs fails if the routes file gains a word missing here.
 export const KNOWN_ROUTE_SEGMENTS = new Set([
-  'api', 'v1', 'access', 'analysis-runs', 'audit-events', 'cases', 'catalogue-reviewers', 'chat', 'consents', 'coverage-preview',
+  'api', 'v1', 'access', 'analysis-runs', 'audit-events', 'cases', 'catalogue-reviewers', 'chat', 'confirm', 'consents', 'coverage-preview',
   'curated-products', 'current', 'decision-catalogue', 'deletion-inventory', 'documents', 'fields', 'health', 'households',
   'identity-sessions', 'integrations', 'jobs', 'live', 'members', 'metrics', 'notices', 'ocr-jobs', 'onboarding', 'passages', 'permissions',
-  'overview', 'places', 'policies', 'preferences', 'profile-answers', 'questions', 'read-facts', 'ready', 'reference', 'products', 'refresh', 'reviews', 'revoke',
+  'overview', 'places', 'policies', 'policy-profile', 'preferences', 'profile-answers', 'questions', 'read-facts', 'ready', 'reference', 'products', 'refresh', 'reviews', 'revoke',
   'runs', 'scenarios', 'sessions', 'source-pack', 'structuring-runs', 'tasks', 'transitions',
 ]);
 

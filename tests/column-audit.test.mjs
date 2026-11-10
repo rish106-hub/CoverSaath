@@ -72,6 +72,7 @@ const PLAIN = {
   document_uploads: {
     'closed vocabulary and MIME type': ['document_kind', 'mime_type', 'malware_status', 'encryption_status', 'lifecycle_state', 'source_version'],
     'opaque random storage key, replaced by a tombstone on deletion': ['storage_path'],
+    'closed vocabulary: where the page count came from (a count, no content)': ['page_count_source'],
   },
   evidence_facts: {
     'closed vocabulary': ['epistemic_state', 'evidence_kind', 'provenance_kind', 'review_status', 'subject_confirmation_state', 'redaction_reason_code'],
@@ -107,6 +108,10 @@ const PLAIN = {
   },
   policy_clauses: { 'source version, block indexes, clause kind and digest, no text': ['source_version', 'block_indexes_json', 'kind', 'digest'] },
   policy_members: { 'closed vocabulary': ['membership_state'] },
+  policy_profiles: {
+    'public product and insurer identifiers printed on every policy of the product (UIN, insurer code), not about a person; names are sealed': ['uin', 'insurer_code'],
+    'closed vocabulary and document source version, no content': ['source_version', 'uin_state', 'insurer_state', 'policy_name_state', 'confirmation_source'],
+  },
   policy_structuring_jobs: { 'versions, closed vocabulary and error codes': ['source_version', 'pipeline_version', 'status', 'evidence_outcome', 'error_code', 'erasure_reason_code'] },
   policy_structuring_runs: { 'versions, counts and codes, no values': ['source_version', 'pipeline_version', 'counts_json', 'erasure_reason_code'] },
   profile_answers: { 'closed vocabulary': ['field_key', 'source'] },
@@ -134,7 +139,8 @@ const PLAIN_NUMBERS = {
   coverage_parameter_records: { 'applicability flag (0/1)': ['applicable'] },
   curated_source_archives: { 'byte size of a public source file': ['byte_size'] },
   device_permissions: { 'row revision counter': ['revision'] },
-  document_uploads: { 'file size in bytes and scan retry counter, no content': ['byte_size', 'scan_attempts'] },
+  document_uploads: { 'file size in bytes, scan retry counter and page count, no content': ['byte_size', 'scan_attempts', 'page_count'] },
+  policy_profiles: { 'row version counter for optimistic concurrency': ['version'] },
   evidence_facts: { 'confidence in basis points, a score about a fact, not the value': ['confidence_basis_points'] },
   household_places: { 'row revision counter': ['revision'] },
   human_reviews: { 'disclosure flag (0/1)': ['conflict_disclosure_shown'] },

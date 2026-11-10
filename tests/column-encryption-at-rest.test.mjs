@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { postgresTestOptions, freshDatabase } from './support/pg.mjs';
@@ -66,6 +66,11 @@ async function populate(app, s) {
   await new EvidenceRepository(app.database).append({
     id: 'fact-at-rest', householdId: s.householdId, caseId: s.caseId, factKey: 'preferred_hospital', value: { name: MARKER },
     epistemicState: 'known', provenanceKind: 'adult_statement', statementAdultId: s.adultId, assertedBy: s.adultId,
+  });
+  // Policy profile (migration 043): both sealed names, written through the real confirm path.
+  await services.policyProfiles.confirm({
+    householdId: s.householdId, documentId: s.documentId, adultUserId: s.adultId, idempotencyKey: 'idem-key-profile',
+    statement: { insurerName: 'Synthetic Insurer Name', policyName: 'Synthetic Policy Name', expectedVersion: 0 },
   });
   return services;
 }
@@ -159,6 +164,11 @@ test('E1b: a key rotation re-seals under the new key id, idempotently, and old r
   // Move everything from the development key to k1 first, then rotate k1 to k2.
   await downgrade(app.database, sharedColumnCrypto());
   await encryptExistingRows({ database: app.database, crypto: first });
+  // A table that is sealed from its first write (policy_profiles) is never unsealed by the downgrade above, so it still sits under the
+  // development key; a rotation from that key moves it to k1 like the others.
+  const developmentKey = createHash('sha256').update('cover-saath development column key, not a secret').digest('base64');
+  const fromDevelopment = createColumnCrypto(readDataEncryptionConfig({ DATA_ENCRYPTION_KEY_BASE64: oldKey, DATA_ENCRYPTION_KEY_ID: 'k1', DATA_ENCRYPTION_PREVIOUS_KEYS_JSON: JSON.stringify({ dev: developmentKey }) }));
+  await encryptExistingRows({ database: app.database, crypto: fromDevelopment, rotate: true });
   assert.equal(await readCount(app.database, 'adult_users', 'display_name', "AND left(display_name, 8) = 'enc2.k1.'"), 2);
 
   const second = createColumnCrypto(readDataEncryptionConfig({

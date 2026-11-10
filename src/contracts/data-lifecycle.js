@@ -68,6 +68,7 @@ export const DATA_STORES = Object.freeze([
   store('source_pages', 'scrub_prune', 'document_upload_id IN (SELECT id FROM document_uploads WHERE household_id = ?)', null, 'Text and blocks cleared; deleted with the document unless an append-only record names the page.'),
   store('policy_clauses', 'delete', 'household_id = ?', null, 'Deleted.'),
   store('policy_answers', 'delete', 'household_id = ?', null, 'Deleted.'),
+  store('policy_profiles', 'delete', 'household_id = ?', null, 'Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Names are sealed.'),
   store('catalogue_reviews', 'delete', 'household_id = ?', null, 'Deleted.'),
   store('catalogue_reviewer_grants', 'delete', 'household_id = ?', null, 'Deleted.'),
   // Policies and evidence
