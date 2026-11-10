@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { caseCapacityLock, householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { openCaseRecord, sealStatedEstimate } from '../security/sealed-records.js';
+import { parsePolicyType } from '../../contracts/policy-type.js';
 import { assertCaseTransition, emergencyInstruction } from '../state/case-state-machine.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
@@ -34,7 +35,8 @@ export class CaseRepository {
     this.crypto = resolveColumnCrypto(options);
   }
 
-  async create({ id: caseId = id('case'), householdId, subjectMemberId = null, openedByAdultId, triggerType, statedEstimateMinor = null, currency = null, maxActiveCases = null }) {
+  async create({ id: caseId = id('case'), householdId, subjectMemberId = null, openedByAdultId, triggerType, statedEstimateMinor = null, currency = null, maxActiveCases = null, policyType }) {
+    const type = parsePolicyType(policyType);
     if (maxActiveCases !== null && (!Number.isSafeInteger(maxActiveCases) || maxActiveCases < 0)) {
       throw new TypeError('maxActiveCases must be a non-negative integer or null.');
     }
@@ -50,10 +52,10 @@ export class CaseRepository {
       }
       await this.database.run(`INSERT INTO service_cases
         (id, household_id, subject_member_id, opened_by_adult_id, trigger_type, status, emergency_mode,
-         stated_estimate_ciphertext, currency, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?)`,
-      [caseId, householdId, subjectMemberId, openedByAdultId, triggerType, emergency, sealStatedEstimate(this.crypto, caseId, statedEstimateMinor), currency, at, at]);
-      await this.audit?.append({ householdId, caseId, actorType: 'adult_user', actorId: openedByAdultId, action: 'case.created', resourceType: 'case', resourceId: caseId, payload: { triggerType, emergencyInstruction: emergencyInstruction(triggerType) } });
+         stated_estimate_ciphertext, currency, created_at, updated_at, policy_type)
+        VALUES (?, ?, ?, ?, ?, 'created', ?, ?, ?, ?, ?, ?)`,
+      [caseId, householdId, subjectMemberId, openedByAdultId, triggerType, emergency, sealStatedEstimate(this.crypto, caseId, statedEstimateMinor), currency, at, at, type]);
+      await this.audit?.append({ householdId, caseId, actorType: 'adult_user', actorId: openedByAdultId, action: 'case.created', resourceType: 'case', resourceId: caseId, payload: { triggerType, policyType: type, emergencyInstruction: emergencyInstruction(triggerType) } });
       return this.get(caseId);
     }, { locks: [...(maxActiveCases !== null ? [caseCapacityLock(CASE_CAPACITY_KEY)] : []), householdLock(householdId)] });
   }
@@ -66,7 +68,7 @@ export class CaseRepository {
 
   // The caller's own cases in one household, newest first. Reads only the columns the list route returns.
   async listOpenedBy({ householdId, adultId, limit }) {
-    const rows = await this.database.many(`SELECT id, trigger_type, status, emergency_mode, created_at, updated_at
+    const rows = await this.database.many(`SELECT id, trigger_type, policy_type, status, emergency_mode, created_at, updated_at
       FROM service_cases WHERE household_id = ? AND opened_by_adult_id = ?
         AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))
       ORDER BY created_at DESC, id DESC LIMIT ?`, [householdId, adultId, limit + 1]);

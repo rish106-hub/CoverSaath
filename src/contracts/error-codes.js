@@ -19,6 +19,7 @@ const entry = (httpStatus, category, retryable) => Object.freeze({ httpStatus, c
 export const ANALYSIS_ERROR_CODES = Object.freeze({
   // Request validation (v1 routes).
   INVALID_REQUEST: entry(400, 'request', false),
+  POLICY_TYPE_INVALID: entry(400, 'request', false),
   IDEMPOTENCY_KEY_REQUIRED: entry(400, 'request', false),
   INVALID_EXECUTION_MODE: entry(400, 'request', false),
   BACKEND_REQUEST_FAILED: entry(400, 'request', false),
