@@ -131,7 +131,12 @@ export function errorResponse(raised) {
   const status = error.statusCode || (deliberate && error.status) || statusByCode[code]
     || ANALYSIS_ERROR_CODES[code]?.httpStatus || (/constraint/i.test(error.message) ? 409 : 400);
   const message = deliberate ? error.message : 'The request could not be completed.';
-  return { status, body: { error: { code, message } } };
+  const body = { error: { code, message } };
+  // Documented extra: the prior structuring attempt's stored, pattern-validated failure code (never text).
+  if (code === 'STRUCTURING_RESTART_REQUIRED' && typeof error.priorErrorCode === 'string' && /^[A-Z][A-Z0-9_]{1,63}$/.test(error.priorErrorCode)) {
+    body.error.priorErrorCode = error.priorErrorCode;
+  }
+  return { status, body };
 }
 
 async function job(services, runId) {

@@ -23,7 +23,31 @@ function coded(code, message, statusCode) {
   return Object.assign(new Error(message), { code, statusCode });
 }
 
-const clientCode = error => (typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(error.code) ? error.code : 'STRUCTURING_FAILED');
+// Stable, client-safe failure codes stored on the job. Model-path errors carry lowercase gateway codes or an
+// AI SDK provider error (HTTP statusCode, no code); both map to one of these. Never a message or provider text.
+export const STRUCTURING_FAILURE_CODES = Object.freeze([
+  'STRUCTURING_FAILED', 'STRUCTURING_PROVIDER_UNAVAILABLE', 'STRUCTURING_PROVIDER_QUOTA', 'STRUCTURING_PROVIDER_AUTH',
+  'STRUCTURING_BUDGET_REFUSED', 'STRUCTURING_PRIVACY_GATE_REFUSED',
+]);
+const GATEWAY_CODE_MAP = Object.freeze({
+  budget_refused: 'STRUCTURING_BUDGET_REFUSED', reservation_limit: 'STRUCTURING_BUDGET_REFUSED',
+  reservation_exceeded: 'STRUCTURING_BUDGET_REFUSED', input_limit: 'STRUCTURING_BUDGET_REFUSED',
+  ungated_model_input: 'STRUCTURING_PRIVACY_GATE_REFUSED', MODEL_INPUT_NOT_ALLOWED: 'STRUCTURING_PRIVACY_GATE_REFUSED',
+});
+const SAFE_CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
+
+export { clientCode as structuringFailureCode };
+function clientCode(error) {
+  const code = error?.code;
+  if (typeof code === 'string' && Object.hasOwn(GATEWAY_CODE_MAP, code)) return GATEWAY_CODE_MAP[code];
+  if (typeof code === 'string' && SAFE_CODE.test(code)) return code;
+  const http = Number.isInteger(error?.statusCode) ? error.statusCode : null;
+  if (http === 429 || http === 402) return 'STRUCTURING_PROVIDER_QUOTA';
+  if (http === 401 || http === 403) return 'STRUCTURING_PROVIDER_AUTH';
+  if ((http !== null && http >= 500) || http === 408) return 'STRUCTURING_PROVIDER_UNAVAILABLE';
+  if (error?.name === 'AbortError' || error?.name === 'TimeoutError' || code === 'aborted') return 'STRUCTURING_PROVIDER_UNAVAILABLE';
+  return 'STRUCTURING_FAILED';
+}
 
 // Names printed in the document itself (policyholder, insured members), found by local rules and used only
 // as known identifiers for the privacy gate. Never stored, logged or sent.
@@ -155,7 +179,7 @@ export function createPolicyStructuringService({
       // An attempt in flight is never paid for twice, even after its outputs were erased.
       if (prior?.status === 'running' || prior?.status === 'queued') return statusBody('running');
       if (prior && !prior.erasedAt && NEEDS_RESTART.has(prior.status) && restart !== true) {
-        throw Object.assign(coded('STRUCTURING_RESTART_REQUIRED', `The previous attempt is ${prior.status}. Send restart: true to start a new paid attempt.`, 409), { priorStatus: prior.status });
+        throw Object.assign(coded('STRUCTURING_RESTART_REQUIRED', `The previous attempt is ${prior.status}. Send restart: true to start a new paid attempt.`, 409), { priorStatus: prior.status, priorErrorCode: typeof prior.errorCode === 'string' && SAFE_CODE.test(prior.errorCode) ? prior.errorCode : null });
       }
       const key = jobKey(document.id, workflowRunId);
       if ([...jobs.values()].filter(entry => entry.running).length >= MAX_JOBS) throw coded('STRUCTURING_BUSY', 'Too many structuring runs are in progress.', 503);

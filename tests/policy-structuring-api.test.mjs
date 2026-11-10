@@ -383,6 +383,7 @@ test('W4: a restart turns a running attempt interrupted; a new attempt and a blo
   assert.equal(shown.data.structuring.processingStatus, 'interrupted');
   const refused = await startStructuring(app, s);
   assert.deepEqual([refused.status, refused.data.error.code], [409, 'STRUCTURING_RESTART_REQUIRED']);
+  assert.deepEqual(Object.keys(refused.data.error).sort(), ['code', 'message'], 'no stored code on this interrupted attempt, so no extra field');
   const invalid = await app.call(structuringPath(s), { method: 'POST', token: s.token, body: { workflowRunId: s.workflowRunId, consentGrantId: s.geminiGrantId, restart: 'yes' } });
   assert.deepEqual([invalid.status, invalid.data.error.code], [400, 'VALIDATION_ERROR']);
   assert.equal(app.requests.length, 0, 'no model call without restart: true');

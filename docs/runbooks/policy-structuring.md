@@ -40,6 +40,11 @@ Scope: whole-document policy structuring (ADR 0006) through the local API. Real 
 
 A new attempt is a new paid run. After `failed_processing`, `interrupted` or an evidence `failed` outcome,
 `POST .../structuring-runs` returns `409 STRUCTURING_RESTART_REQUIRED` until the body adds `"restart": true`.
+That 409 body adds `error.priorErrorCode` when the prior attempt stored a code: `STRUCTURING_PROVIDER_UNAVAILABLE`,
+`STRUCTURING_PROVIDER_QUOTA`, `STRUCTURING_PROVIDER_AUTH`, `STRUCTURING_BUDGET_REFUSED`,
+`STRUCTURING_PRIVACY_GATE_REFUSED`, `STRUCTURING_EVIDENCE_INSUFFICIENT`, `STRUCTURING_INTERRUPTED` or
+`STRUCTURING_FAILED` (anything else). Codes only, never provider text. Quota and auth codes mean a retry will fail
+again until the provider account is fixed.
 A run already stored for the current pipeline version is replayed and never paid again, with or without the flag.
 
 ## Documents OCR'd without blocks (knowvia.ocr.v1)

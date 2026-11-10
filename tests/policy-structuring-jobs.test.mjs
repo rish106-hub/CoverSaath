@@ -133,7 +133,8 @@ test('a failed attempt is recorded with codes only and needs restart: true', pgO
   assert.deepEqual([row.status, row.evidence_outcome, row.error_code, row.structuring_run_id], ['failed', 'failed', 'STRUCTURING_EVIDENCE_INSUFFICIENT', null]);
   const shown = await structuring.result({ document: owned, workflowRunId: run });
   assert.deepEqual([shown.status, shown.evidenceOutcome, shown.errorCode], ['finished', 'failed', 'STRUCTURING_EVIDENCE_INSUFFICIENT']);
-  await assert.rejects(() => structuring.start(startInput()), error => error.code === 'STRUCTURING_RESTART_REQUIRED' && error.priorStatus === 'failed');
+  await assert.rejects(() => structuring.start(startInput()), error => error.code === 'STRUCTURING_RESTART_REQUIRED' && error.priorStatus === 'failed'
+    && error.priorErrorCode === 'STRUCTURING_EVIDENCE_INSUFFICIENT');
   assert.equal(failing.calls.filter(kind => kind === 'extract').length, 1);
   assert.equal((await structuring.start(startInput({ restart: true }))).status, 'running');
   await structuring.settle(document, run);
