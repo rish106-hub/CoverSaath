@@ -66,19 +66,21 @@ export function createDocumentIntakeService({ repository, storage, mode = 'live'
       const inspection = inspectFile ? await inspectFile(validated) : null;
       // Inspection can take seconds: re-check consent so a grant revoked meanwhile stores nothing.
       if (inspectFile) assertConsent(await repository.getConsent(consentGrantId), { householdId, uploadedByAdultId }, now());
-      const contentSha256 = createHash('sha256').update(validated.bytes).digest('hex');
+      // A PDF the inspector found active content in is stored only as its rebuilt clean copy (inspection.cleanBytes).
+      const storedBytes = inspection?.cleanBytes ?? validated.bytes;
+      const contentSha256 = createHash('sha256').update(storedBytes).digest('hex');
       if (await repository.findByHash(householdId, contentSha256)) throw new DocumentIntakeError('DUPLICATE_DOCUMENT', 'The same document bytes already exist for this household.');
       if (await repository.findVersion(householdId, logicalDocumentId, input.version)) throw new DocumentIntakeError('DOCUMENT_VERSION_EXISTS', 'This immutable document version already exists.');
 
       const id = randomUUID();
-      const storageKey = await storage.put({ documentId: id, householdId, bytes: validated.bytes });
+      const storageKey = await storage.put({ documentId: id, householdId, bytes: storedBytes });
       const createdAt = now().toISOString();
       const record = {
         id, householdId, caseId, uploadedByAdultId, consentGrantId, logicalDocumentId, version: input.version,
         documentKind: input.documentKind,
         originalFilename: validated.safeFilename,
         mimeType: validated.detectedMimeType,
-        byteSize: validated.bytes.length,
+        byteSize: storedBytes.length,
         contentSha256,
         storageKey,
         malwareStatus: mode === 'fixture' ? 'not_scanned_fixture' : 'pending',

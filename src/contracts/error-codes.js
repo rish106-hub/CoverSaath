@@ -104,6 +104,8 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   PDF_PAGE_LIMIT: entry(422, 'request', false),
   PDF_RESOURCE_LIMIT: entry(422, 'request', false),
   PDF_UNSUPPORTED_ENCODING: entry(422, 'request', false),
+  PDF_SANITIZE_FAILED: entry(422, 'request', false),
+  PDF_SANITIZE_UNAVAILABLE: entry(503, 'configuration', true),
   // Sandboxed PDF inspection (ADR 0005 amendment). Every one rejects the upload; none is clean.
   PDF_INSPECTION_FAILED: entry(422, 'request', false),
   PDF_INSPECTION_BUSY: entry(429, 'capacity', true),

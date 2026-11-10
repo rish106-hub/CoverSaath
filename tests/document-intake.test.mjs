@@ -174,3 +174,12 @@ test('HRMS and payroll shaped documents cannot establish policy terms', async ()
     await assert.rejects(fixtureService().intake(upload({ documentKind })), error => error.code === 'UNSUPPORTED_DOCUMENT_KIND');
   }
 });
+
+test('a sanitized PDF is stored and hashed as its clean copy, never as the original bytes', async () => {
+  const clean = Buffer.from('%PDF-1.7\nclean rebuilt synthetic copy\n%%EOF');
+  const service = fixtureService([consent()], { inspectFile: async () => ({ pageCount: 1, cleanBytes: clean, sanitized: true }) });
+  const record = await service.intake(upload());
+  assert.equal(record.contentSha256, createHash('sha256').update(clean).digest('hex'));
+  assert.notEqual(record.contentSha256, createHash('sha256').update(PDF).digest('hex'));
+  assert.equal(record.byteSize, clean.length);
+});
