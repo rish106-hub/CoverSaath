@@ -26,6 +26,7 @@ const erasure = (module, fn, test, member = null) => Object.freeze({ module, fn,
 const ERASE = Object.freeze({
   userData: erasure('src/backend/repositories/user-data-repository.js', 'UserDataRepository.eraseForHousehold', 'tests/user-data-api.test.mjs'),
   profileAnswers: erasure('src/backend/repositories/profile-answer-repository.js', 'ProfileAnswerRepository.eraseForHousehold', 'tests/profile-answers-api.test.mjs'),
+  policyProfiles: erasure('src/backend/repositories/policy-profile-repository.js', 'PolicyProfileRepository.eraseForHousehold', 'tests/policy-profiles.test.mjs'),
   appEvents: erasure('src/backend/repositories/app-event-repository.js', 'AppEventRepository.eraseForHousehold', 'tests/app-events.test.mjs'),
   clauses: erasure('src/backend/repositories/clause-repository.js', 'ClauseRepository.eraseDerived', 'tests/revocation-concurrency.test.mjs'),
   structuring: erasure('src/backend/repositories/policy-structuring-repository.js', 'PolicyStructuringRepository.eraseDerived', 'tests/policy-structuring-persistence.test.mjs'),
@@ -80,6 +81,15 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   table('policy_clauses.text', {
     category: 'insurance_document', purposes: ['document_processing', 'coverage_reconstruction'], recipients: ['none'], retention: 'until_revocation',
     childData: 'possible', sealed: true, erasure: ERASE.clauses, // clause-repository.js seals the text column on write and opens it on read
+  }),
+  // Policy profile (migration 043, ADR 0024): the names the owner confirmed. Public product identifiers (UIN, insurer code) are plaintext.
+  table('policy_profiles.policy_name_enc', {
+    category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.policyProfiles,
+  }),
+  table('policy_profiles.insurer_name_enc', {
+    category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.policyProfiles,
   }),
   table('policy_structuring_runs.*', {
     category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], retention: 'until_revocation', childData: 'possible',

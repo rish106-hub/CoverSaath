@@ -111,7 +111,7 @@ export const DATA_REGISTRY = Object.freeze({
   // ---- document_processing ----
   document_uploads: entry('document_processing',
     { free_text: ['original_filename'], derived_digest: ['content_sha256'] },
-    ['id', 'household_id', 'case_id', 'uploaded_by_adult_id', 'consent_grant_id', 'document_kind', 'storage_path', 'mime_type', 'byte_size', 'malware_status', 'encryption_status', 'lifecycle_state', 'uploaded_at', 'deleted_at', 'logical_document_id', 'source_version', 'scan_attempts', 'next_scan_at']),
+    ['id', 'household_id', 'case_id', 'uploaded_by_adult_id', 'consent_grant_id', 'document_kind', 'storage_path', 'mime_type', 'byte_size', 'malware_status', 'encryption_status', 'lifecycle_state', 'uploaded_at', 'deleted_at', 'logical_document_id', 'source_version', 'scan_attempts', 'next_scan_at', 'page_count', 'page_count_source']),
   document_blobs: entry('document_processing',
     { health_or_policy_content: ['envelope'] },
     ['document_id', 'storage_key', 'household_id', 'created_at']),
@@ -142,6 +142,9 @@ export const DATA_REGISTRY = Object.freeze({
   policy_clauses: entry('coverage_reconstruction',
     { health_or_policy_content: ['title', 'text'], derived_digest: ['digest'] },
     ['id', 'household_id', 'case_id', 'document_id', 'source_version', 'page', 'block_indexes_json', 'kind', 'created_at']),
+  policy_profiles: entry('document_processing',
+    { health_or_policy_content: ['policy_name_enc', 'insurer_name_enc'] },
+    ['id', 'household_id', 'uin', 'insurer_code', 'case_id', 'document_id', 'source_version', 'uin_state', 'insurer_state', 'policy_name_state', 'confirmation_source', 'confirmed_at', 'confirmed_by_adult_id', 'version', 'created_at', 'updated_at']),
   coverage_graph_snapshots: entry('coverage_reconstruction',
     { derived_content: ['graph_json'] },
     ['id', 'household_id', 'case_id', 'version', 'status', 'generated_by_run_id', 'created_at']),

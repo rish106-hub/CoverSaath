@@ -837,6 +837,26 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const workflowRunId = url.searchParams.get('workflowRunId');
       return { status: 200, body: { structuring: await (await getStructuringService()).result({ document: record, workflowRunId: requiredString(workflowRunId, 'workflowRunId') }) } };
     }
+    // Policy profile (ADR 0024): the identity of the policy a document describes, and its owner's confirmation. Owner adult only.
+    // A missing document, another household's document and a household member who is not the owner all answer the same 404.
+    // Off unless POLICY_FACTS_ENABLED is exactly "true". No model call.
+    const policyProfileMatch = url.pathname.match(/^\/api\/v1\/documents\/([^/]+)\/policy-profile(\/confirm)?$/);
+    if (policyProfileMatch && ((req.method === 'GET' && !policyProfileMatch[2]) || (req.method === 'POST' && policyProfileMatch[2]))) {
+      if (!services.policyProfile.enabled()) throw Object.assign(new Error('Policy facts are disabled.'), { code: 'POLICY_FACTS_DISABLED', statusCode: 503 });
+      const confirming = req.method === 'POST';
+      const profileNotFound = () => Object.assign(new Error('Policy profile was not found.'), { code: 'POLICY_PROFILE_NOT_FOUND', statusCode: 404 });
+      let record;
+      try {
+        record = await requireOwnedDocument({ services, documentUploads, principal, documentId: policyProfileMatch[1], write: confirming });
+        const roles = await services.households.listActiveRoles(record.householdId, principal.adultId);
+        if (!roles.some(item => item.role === 'owner')) throw profileNotFound();
+      } catch (error) {
+        if (['DOCUMENT_NOT_FOUND', 'HOUSEHOLD_WRITE_FORBIDDEN', 'HOUSEHOLD_NOT_FOUND', 'CASE_NOT_FOUND'].includes(error?.code)) throw profileNotFound();
+        throw error;
+      }
+      if (!confirming) return { status: 200, body: await services.policyProfile.get({ document: record }) };
+      return { status: 200, body: await services.policyProfile.confirm({ document: record, adultUserId: principal.adultId, body: await readBody(req), idempotencyKey: idempotencyKey(req) }) };
+    }
     if (req.method === 'DELETE' && documentMatch) {
       // Missing and foreign-household ids are deliberately indistinguishable. Deletion does not
       // require current processing consent: a person must still be able to erase stored data.

@@ -75,6 +75,17 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   // Chat v0 (P7a): deterministic cited lookup, no model.
   CHAT_REQUEST_INVALID: entry(400, 'request', false),
   CHAT_NOT_CONFIGURED: entry(503, 'configuration', false),
+  // Policy profile (policy facts slice 1, ADR 0024): identity of a policy read from a document and confirmed by its owner.
+  // Already thrown by policy-structuring-service.js (409) and named in the route file; it was missing from this registry (found by p1a-error-codes).
+  STRUCTURING_RESTART_REQUIRED: entry(409, 'conflict', false),
+  POLICY_FACTS_DISABLED: entry(503, 'configuration', false),
+  POLICY_PROFILE_NOT_FOUND: entry(404, 'not_found', false),
+  POLICY_PROFILE_VERSION_CONFLICT: entry(409, 'conflict', false),
+  POLICY_PROFILE_CONFLICTING_FACTS: entry(409, 'conflict', false),
+  POLICY_PROFILE_NOT_READY: entry(409, 'conflict', true),
+  POLICY_PROFILE_INVALID_UIN: entry(422, 'request', false),
+  POLICY_PROFILE_INVALID: entry(400, 'request', false),
+  PAGE_COUNT_INVALID: entry(400, 'request', false),
   // Document intake (Block 1): upload route, upload service, document repository and the
   // document-intake module errors those surfaces return. ADR 0005.
   DOCUMENT_NOT_FOUND: entry(404, 'not_found', false),

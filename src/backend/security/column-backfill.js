@@ -7,7 +7,7 @@
 //
 // Entry fields: table; key (primary key column names, default ['id']); columns (sealed text columns); triggers (the exact
 // triggers that block an UPDATE of this table); rowId (row -> the id used as additional authenticated data, default row[key[0]]);
-// select (extra columns the rowId function reads); since ('D2' for the columns added by migration 030); unwritten (true when no application code writes the column yet, so the at-rest test cannot expect a value there).
+// noUnseal (true for a table whose CHECK requires a sealed value, so --unseal skips it); select (extra columns the rowId function reads); since ('D2' for the columns added by migration 030); unwritten (true when no application code writes the column yet, so the at-rest test cannot expect a value there).
 
 import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
 import { compositeRowId, documentIdOfUploadResponse, documentIdempotencyIndex, idempotencyRowId } from './sealed-records.js';
@@ -60,6 +60,9 @@ export const ENCRYPTED_COLUMNS = Object.freeze([
   { since: 'D2', table: 'reviewer_findings', columns: ['message', 'resolution_note'], triggers: [], unwritten: true },
   { since: 'D2', table: 'consent_revocations', columns: ['reason'], triggers: [] },
   { since: 'D2', table: 'catalogue_reviews', columns: ['fact_json'], triggers: ['catalogue_reviews_immutable'] },
+  // Policy facts slice 1 (migration 043): sealed from the first write, so only a rotation ever touches them. The update guard is the
+  // one trigger a re-seal has to step past (it demands a version bump); noUnseal because the column CHECK refuses plaintext.
+  { since: 'S1', table: 'policy_profiles', columns: ['insurer_name_enc', 'policy_name_enc'], triggers: ['policy_profiles_update_guard'], noUnseal: true },
   { since: 'D2', table: 'service_cases', columns: ['stated_estimate_ciphertext'], fixedSize: { stated_estimate_ciphertext: 64 }, triggers: [], legacy: { column: 'stated_estimate_minor', to: 'stated_estimate_ciphertext' } },
 ]);
 
@@ -92,7 +95,7 @@ export async function encryptExistingRows({ database, crypto, dryRun = false, ro
   }
   const report = [];
   for (const entry of ENCRYPTED_COLUMNS) {
-    if (unseal && !includeE1 && entry.since !== 'D2') continue;
+    if (unseal && (entry.noUnseal || (!includeE1 && entry.since !== 'D2'))) continue;
     report.push(await sealTable({ database, crypto, entry, dryRun, rotate, unseal, batchSize }));
   }
   // Checks added NOT VALID by migration 030 are validated here, in their own statements (no long exclusive lock).

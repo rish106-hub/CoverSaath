@@ -32,6 +32,7 @@ const defaults = {
   source_pages: id => ({
     id, page_number: 2, source_version: 'version-1', page_sha256: hex('b'), extraction_status: 'extracted', created_at: at,
   }),
+  policy_profiles: id => ({ id, created_at: at, updated_at: at }),
   policies: id => ({ id, policy_kind: 'personal', verification_state: 'unverified', created_at: at, updated_at: at }),
   policy_members: () => ({ membership_state: 'stated', created_at: at }),
   evidence_facts: id => ({

@@ -1,7 +1,8 @@
-import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, ProfileAnswerRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
+import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, ProfileAnswerRepository, PolicyProfileRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
+import { createPolicyProfileService } from './policy-profile-service.js';
 import { TenantAccessService } from './tenant-access-service.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 
@@ -32,6 +33,9 @@ export function createBackendServices(database, options = {}) {
   const identities = new AuthIdentityRepository(database, { ...shared, households, auth });
   const ocr = new OcrRepository(database, shared);
   const profileAnswers = new ProfileAnswerRepository(database, shared);
+  // Policy profile (migration 043, ADR 0024): identity of a policy and its owner confirmation. Off unless POLICY_FACTS_ENABLED=true.
+  const policyProfiles = new PolicyProfileRepository(database, shared);
+  const policyProfile = createPolicyProfileService({ repository: policyProfiles, ocr, env: options.env ?? process.env, clock: options.clock });
   const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
   const access = new TenantAccessService(database, { auth, households, consents, env: options.env ?? {}, columnCrypto });
   const householdApp = new HouseholdAppRepository(database, shared);
@@ -42,7 +46,7 @@ export function createBackendServices(database, options = {}) {
   const erasure = new ErasureRepository(database, { clock: options.clock, audit, consents, documents, profileAnswers, userData: userDataRepository, appEvents, policyStructuring, clauses });
 
   return {
-    erasure, jobQueue, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, columnCrypto, identities, profileAnswers, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
+    erasure, jobQueue, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {

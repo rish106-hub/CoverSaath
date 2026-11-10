@@ -554,6 +554,19 @@ export class ConsentRepository {
         householdId, documentIds: [...documents], reasonCode: redactionReason, caseId, resourceType, resourceId, actorType, actorId,
       });
     }
+    // Policy profiles (migration 043) of the affected documents: the confirmed names are derived from the withdrawn documents.
+    let policyProfiles = 0;
+    if (documents.size > 0 && householdId) {
+      policyProfiles = (await db.run('DELETE FROM policy_profiles WHERE household_id = ? AND document_id = ANY(CAST(? AS text[]))', [householdId, [...documents]])).changes;
+    } else if (documents.size > 0) {
+      policyProfiles = (await db.run('DELETE FROM policy_profiles WHERE document_id = ANY(CAST(? AS text[]))', [[...documents]])).changes;
+    }
+    if (policyProfiles > 0) {
+      await this.audit?.append({
+        householdId, caseId, actorType, actorId, action: 'policy_profile.erased', resourceType, resourceId,
+        payload: { reasonCode: redactionReason, profiles: policyProfiles, documents: documents.size },
+      });
+    }
     if (runs > 0) {
       const graphCounts = graphs || graphNodes || graphEdges ? { graphs, graphNodes, graphEdges } : {};
       await this.audit?.append({
@@ -616,7 +629,7 @@ export class ConsentRepository {
       });
     }
     return Object.freeze({
-      runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers, jobs,
+      runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers, jobs, policyProfiles,
       structuringProposals: structuring.proposals, structuringRuns: structuring.runs,
       policyClauses: evidence.clauses, policyAnswers: evidence.answers,
     });

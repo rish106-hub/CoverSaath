@@ -985,6 +985,31 @@ test('policy clauses and answers stay scoped, immutable and erase with their doc
   proves('policy_evidence_erase_on_document_erasure');
 });
 
+test('policy profiles: scope on insert, a guarded update path, and erasure with the document (043)', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const version = (await one(pool, 'SELECT source_version FROM document_uploads WHERE id = $1', [a.document])).source_version;
+  const base = { household_id: a.household, case_id: a.case, document_id: a.document, source_version: version, uin: 'ABCHLIP12345V012021', uin_state: 'extracted_unverified' };
+  await rejects(insert(pool, 'policy_profiles', { ...base, id: 'pp-foreign', household_id: b.household }), 'policy profile must match an active document of its case and household');
+  await rejects(insert(pool, 'policy_profiles', { ...base, id: 'pp-version', source_version: 'other-version' }), 'policy profile must match an active document of its case and household');
+  await rejects(insert(pool, 'policy_profiles', { ...base, id: 'pp-confirmer', uin_state: 'reported', confirmation_source: 'user_statement', confirmed_at: '2026-01-01T00:00:00.000Z', confirmed_by_adult_id: b.adult }), 'policy profile confirmer must be an active adult of the household');
+  await insert(pool, 'policy_profiles', { ...base, id: 'pp-1' });
+  proves('policy_profiles_scope_insert');
+
+  await rejects(pool.query("UPDATE policy_profiles SET uin = 'ABCHLIP99999V099999' WHERE id = 'pp-1'"), 'policy profile version must increase by one');
+  await rejects(pool.query("UPDATE policy_profiles SET household_id = $1, version = 2 WHERE id = 'pp-1'", [b.household]), 'policy profile identity is immutable');
+  await pool.query("UPDATE policy_profiles SET uin = 'ABCHLIP99999V099999', version = 2 WHERE id = 'pp-1'");
+  await pool.query("UPDATE policy_profiles SET uin_state = 'reported', confirmation_source = 'user_statement', confirmed_at = '2026-01-01T00:00:00.000Z', confirmed_by_adult_id = $1, version = 3 WHERE id = 'pp-1'", [a.adult]);
+  await rejects(pool.query("UPDATE policy_profiles SET uin_state = 'extracted_unverified', version = 4 WHERE id = 'pp-1'"), 'a reported policy profile field cannot return to an unconfirmed state');
+  await rejects(pool.query("UPDATE policy_profiles SET policy_name_enc = 'enc2.k1.a.b.c', policy_name_state = 'reported', confirmed_at = NULL, version = 4 WHERE id = 'pp-1'"), 'a policy or insurer name needs a confirmation');
+  proves('policy_profiles_update_guard');
+
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['quarantined', a.document]);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM policy_profiles')).n, 1, 'quarantine is not erasure');
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['deletion_requested', a.document]);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM policy_profiles')).n, 0);
+  proves('policy_profiles_erase_on_document_erasure');
+});
+
 test('profile answers stay scoped to their case and household; document blobs erase with their document (E1)', postgresTestOptions(), async t => {
   const { pool, a, b } = await worlds(t);
   const scope = 'profile answer must match its case and household';
