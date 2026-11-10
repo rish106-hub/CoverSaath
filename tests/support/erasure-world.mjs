@@ -50,6 +50,14 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
     id: `profile-${key}`, household_id: ids.household, case_id: ids.case, document_id: ids.document, source_version: '1', uin: 'ABCHLIP12345V012021', uin_state: 'reported',
     policy_name_enc: `enc2.k1.${canary('policy-name')}`, policy_name_state: 'reported', confirmation_source: 'user_statement', confirmed_at: at, confirmed_by_adult_id: ids.adult,
   });
+  // A policy fact and its evidence (migration 044). The sealed columns hold envelope-shaped values carrying the canary.
+  await insert(pool, 'policy_facts', {
+    id: `pfact-${key}`, household_id: ids.household, case_id: ids.case, document_id: ids.document, source_version: '1', fact_type: 'sum_insured', value_type: 'money', value_enum: null,
+    currency: 'INR', amount_band: '5l_10l', value_enc: `enc2.k1.${canary('pfact-value')}`, raw_text_enc: `enc2.k1.${canary('pfact-raw')}`,
+  });
+  await insert(pool, 'fact_evidence', {
+    id: `fev-${key}`, fact_id: `pfact-${key}`, household_id: ids.household, case_id: ids.case, document_id: ids.document, source_version: '1', quote_enc: `enc2.k1.${canary('pfact-quote')}`,
+  });
   await insert(pool, 'catalogue_reviewer_grants', { id: `crg-${key}`, household_id: ids.household, adult_user_id: ids.adult, granted_by: ids.adult, case_id: ids.case });
 
   await insert(pool, 'catalogue_reviews', { id: `review2-${key}`, household_id: ids.household, case_id: ids.case, grant_id: `crg-${key}`, reviewer_adult_id: ids.adult, document_id: ids.document, fact_key: hex('f'), fact_json: JSON.stringify({ f: canary('review-fact') }) });
@@ -58,7 +66,7 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await q('UPDATE policies SET household_id = household_id, policy_number_masked = $1, starts_on = $2, ends_on = $3 WHERE id = $4', [canary('policy-number'), '2026-01-01', '2026-12-31', ids.policy]);
   await insert(pool, 'policy_members', { policy_id: ids.policy, household_member_id: ids.dependent });
   ids.fact2 = `fact2-${key}`;
-  await insert(pool, 'evidence_facts', { id: ids.fact2, household_id: ids.household, case_id: ids.case, subject_member_id: ids.dependent, policy_id: ids.policy, epistemic_state: 'known', value_json: JSON.stringify({ v: canary('fact-value') }), statement_adult_id: ids.adult });
+  await insert(pool, 'evidence_facts', { id: ids.fact2, household_id: ids.household, case_id: ids.case, subject_member_id: ids.dependent, policy_id: ids.policy, epistemic_state: 'known', value_json: JSON.stringify({ v: canary('pfact-value') }), statement_adult_id: ids.adult });
   await insert(pool, 'fact_conflicts', { id: `conflict-${key}`, left_fact_id: ids.fact, right_fact_id: ids.fact2 });
 
   // Workflow.

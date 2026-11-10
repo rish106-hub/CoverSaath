@@ -1,8 +1,10 @@
-import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, ProfileAnswerRepository, PolicyProfileRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
+import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository } from '../repositories/index.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
-import { createPolicyProfileService } from './policy-profile-service.js';
+import { createPolicyProfileService, policyFactsEnabled } from './policy-profile-service.js';
+import { createPolicyFactsService, POLICY_FACTS_JOB_KIND, policyFactsDedupeKey } from './policy-facts-service.js';
+import { NORMALISER_VERSION } from '../../features/policy-facts/normalisers.js';
 import { TenantAccessService } from './tenant-access-service.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 
@@ -20,7 +22,16 @@ export function createBackendServices(database, options = {}) {
   const coverageParameters = new CoverageParameterRepository(database, shared);
   // Consent revocation appends an explicit redaction audit event through the
   // parameter repository, inside the revocation transaction.
-  const policyStructuring = new PolicyStructuringRepository(database, { ...shared, coverageParameters });
+  // Policy facts (ADR 0025): when a structuring run commits, queue the identifiers-only extraction job in the same transaction.
+  // Off unless POLICY_FACTS_ENABLED=true. The repository runs this in a savepoint, so a queue failure never undoes a structuring commit.
+  const afterStructuringCommit = async ({ householdId, documentId, sourceVersion, consentGrantId }) => {
+    if (!policyFactsEnabled(options.env ?? process.env)) return;
+    await jobQueue.enqueue({
+      kind: POLICY_FACTS_JOB_KIND, householdId, documentId, consentGrantId, payload: { normaliserVersion: NORMALISER_VERSION },
+      dedupeKey: policyFactsDedupeKey({ documentId, sourceVersion }),
+    });
+  };
+  const policyStructuring = new PolicyStructuringRepository(database, { ...shared, coverageParameters, afterCommit: afterStructuringCommit });
   // Revocation and document erasure also erase structuring proposals and runs (counts-only audit).
   // Clauses and answers are derived stores (ADR 0008) erased by the same paths.
   const clauses = new ClauseRepository(database, shared);
@@ -36,6 +47,9 @@ export function createBackendServices(database, options = {}) {
   // Policy profile (migration 043, ADR 0024): identity of a policy and its owner confirmation. Off unless POLICY_FACTS_ENABLED=true.
   const policyProfiles = new PolicyProfileRepository(database, shared);
   const policyProfile = createPolicyProfileService({ repository: policyProfiles, ocr, env: options.env ?? process.env, clock: options.clock });
+  // Policy facts (migration 044, ADR 0025): datapoints read from a document, each with verified evidence. Same switch as the profile.
+  const policyFactsRepository = new PolicyFactsRepository(database, shared);
+  const policyFacts = createPolicyFactsService({ repository: policyFactsRepository, ocr, env: options.env ?? process.env, clock: options.clock });
   const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
   const access = new TenantAccessService(database, { auth, households, consents, env: options.env ?? {}, columnCrypto });
   const householdApp = new HouseholdAppRepository(database, shared);
@@ -46,7 +60,7 @@ export function createBackendServices(database, options = {}) {
   const erasure = new ErasureRepository(database, { clock: options.clock, audit, consents, documents, profileAnswers, userData: userDataRepository, appEvents, policyStructuring, clauses });
 
   return {
-    erasure, jobQueue, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
+    erasure, jobQueue, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {

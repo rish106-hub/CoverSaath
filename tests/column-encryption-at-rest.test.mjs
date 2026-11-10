@@ -72,6 +72,15 @@ async function populate(app, s) {
     householdId: s.householdId, documentId: s.documentId, adultUserId: s.adultId, idempotencyKey: 'idem-key-profile',
     statement: { insurerName: 'Synthetic Insurer Name', policyName: 'Synthetic Policy Name', expectedVersion: 0 },
   });
+  // Policy facts (migration 044): value, raw text and quote, written through the real repository path.
+  const document = await services.policyFactsRepository.documentIdentity({ householdId: s.householdId, documentId: s.documentId });
+  await services.policyFactsRepository.insertExtraction({
+    householdId: s.householdId, documentId: s.documentId, sourceVersion: document.sourceVersion, extractionRunId: 'run-at-rest', normaliserVersion: 'pf-norm.1',
+    facts: [{
+      factType: 'sum_insured', scopeKey: '', origin: 'deterministic', state: 'extracted_unverified', value: { amountMinor: 50_000_000, currency: 'INR' }, raw: 'Rs. 5,00,000',
+      evidence: [{ role: 'primary', quote: 'Sum Insured: Rs. 5,00,000/-', page: 1, blockIndex: 0, clauseId: 'p1-b0' }],
+    }],
+  });
   return services;
 }
 

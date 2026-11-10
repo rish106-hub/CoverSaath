@@ -33,6 +33,8 @@ const defaults = {
     id, page_number: 2, source_version: 'version-1', page_sha256: hex('b'), extraction_status: 'extracted', created_at: at,
   }),
   policy_profiles: id => ({ id, created_at: at, updated_at: at }),
+  policy_facts: id => ({ id, extraction_run_id: `run-${id}`, fact_type: 'payment_mode_last', origin: 'deterministic', state: 'extracted_unverified', value_type: 'enum', value_enum: 'upi', normaliser_version: 'pf-norm.1', created_at: at }),
+  fact_evidence: id => ({ id, page: 1, role: 'primary', quote_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at }),
   policies: id => ({ id, policy_kind: 'personal', verification_state: 'unverified', created_at: at, updated_at: at }),
   policy_members: () => ({ membership_state: 'stated', created_at: at }),
   evidence_facts: id => ({

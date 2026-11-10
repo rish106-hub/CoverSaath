@@ -26,6 +26,7 @@ const erasure = (module, fn, test, member = null) => Object.freeze({ module, fn,
 const ERASE = Object.freeze({
   userData: erasure('src/backend/repositories/user-data-repository.js', 'UserDataRepository.eraseForHousehold', 'tests/user-data-api.test.mjs'),
   profileAnswers: erasure('src/backend/repositories/profile-answer-repository.js', 'ProfileAnswerRepository.eraseForHousehold', 'tests/profile-answers-api.test.mjs'),
+  policyFacts: erasure('src/backend/repositories/policy-facts-repository.js', 'PolicyFactsRepository.eraseForHousehold', 'tests/policy-facts.test.mjs'),
   policyProfiles: erasure('src/backend/repositories/policy-profile-repository.js', 'PolicyProfileRepository.eraseForHousehold', 'tests/policy-profiles.test.mjs'),
   appEvents: erasure('src/backend/repositories/app-event-repository.js', 'AppEventRepository.eraseForHousehold', 'tests/app-events.test.mjs'),
   clauses: erasure('src/backend/repositories/clause-repository.js', 'ClauseRepository.eraseDerived', 'tests/revocation-concurrency.test.mjs'),
@@ -90,6 +91,24 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   table('policy_profiles.insurer_name_enc', {
     category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], sealed: true, retention: 'until_revocation',
     childData: 'possible', erasure: ERASE.policyProfiles,
+  }),
+  // Policy facts (migration 044, ADR 0025): exact values and quotes are sealed; amount bands, day counts, basis points, enums and
+  // year-months are plaintext. recipients none: a model never receives these rows (modelEligible stays false, the default).
+  table('policy_facts.value_enc', {
+    category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.policyFacts,
+  }),
+  table('policy_facts.raw_text_enc', {
+    category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.policyFacts,
+  }),
+  table('policy_facts.coarse', {
+    category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.policyFacts,
+  }),
+  table('fact_evidence.quote_enc', {
+    category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.policyFacts,
   }),
   table('policy_structuring_runs.*', {
     category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], retention: 'until_revocation', childData: 'possible',

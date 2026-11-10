@@ -561,6 +561,21 @@ export class ConsentRepository {
     } else if (documents.size > 0) {
       policyProfiles = (await db.run('DELETE FROM policy_profiles WHERE document_id = ANY(CAST(? AS text[]))', [[...documents]])).changes;
     }
+    // Policy facts (migration 044) of the affected documents. All facts are deleted, including model-proposed ones: this path cannot
+    // tell which grant was withdrawn, and a derived store keeps nothing it cannot justify. Evidence goes with its fact.
+    let policyFacts = 0;
+    if (documents.size > 0) {
+      const scoped = householdId ? ' AND household_id = ?' : '';
+      const params = householdId ? [[...documents], householdId] : [[...documents]];
+      await db.run(`DELETE FROM fact_evidence WHERE document_id = ANY(CAST(? AS text[]))${scoped}`, params);
+      policyFacts = (await db.run(`DELETE FROM policy_facts WHERE document_id = ANY(CAST(? AS text[]))${scoped}`, params)).changes;
+    }
+    if (policyFacts > 0) {
+      await this.audit?.append({
+        householdId, caseId, actorType, actorId, action: 'policy_facts.erased', resourceType, resourceId,
+        payload: { reasonCode: redactionReason, facts: policyFacts, documents: documents.size },
+      });
+    }
     if (policyProfiles > 0) {
       await this.audit?.append({
         householdId, caseId, actorType, actorId, action: 'policy_profile.erased', resourceType, resourceId,
@@ -629,7 +644,7 @@ export class ConsentRepository {
       });
     }
     return Object.freeze({
-      runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers, jobs, policyProfiles,
+      runs, tasks, pages, facts, graphs, graphNodes, graphEdges, policies, policyMembers, jobs, policyProfiles, policyFacts,
       structuringProposals: structuring.proposals, structuringRuns: structuring.runs,
       policyClauses: evidence.clauses, policyAnswers: evidence.answers,
     });

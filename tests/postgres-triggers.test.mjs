@@ -1135,6 +1135,44 @@ test('app events are append only except for redacting the sealed payload', postg
   proves('app_events_guard_update');
 });
 
+test('policy facts: scope on insert, immutability with one guarded supersession, fully immutable evidence, and erasure with the document (044)', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const version = (await one(pool, 'SELECT source_version FROM document_uploads WHERE id = $1', [a.document])).source_version;
+  const sealed = 'enc2.k1.AAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA.AAAA';
+  const base = { household_id: a.household, case_id: a.case, document_id: a.document, source_version: version };
+  const scope = 'policy fact must match an active document of its case and household';
+  await rejects(insert(pool, 'policy_facts', { ...base, id: 'pf-foreign', household_id: b.household }), scope);
+  await rejects(insert(pool, 'policy_facts', { ...base, id: 'pf-version', source_version: 'other-version' }), scope);
+  await rejects(insert(pool, 'policy_facts', { ...base, id: 'pf-confirmer', state: 'reported', origin: 'user_statement', confirmation_source: 'user_statement', confirmed_at: '2026-01-01T00:00:00.000Z', confirmed_by_adult_id: b.adult }), 'policy fact confirmer must be an active adult of the household');
+  await insert(pool, 'policy_facts', { ...base, id: 'pf-1', scope_key: 'one' });
+  await insert(pool, 'policy_facts', { ...base, id: 'pf-2', scope_key: 'two' });
+  await rejects(insert(pool, 'policy_facts', { ...base, id: 'pf-sup', scope_key: 'three', supersedes_fact_id: 'no-such-fact' }), 'a superseded policy fact must belong to the same document');
+  proves('policy_facts_scope_insert');
+
+  await rejects(pool.query("UPDATE policy_facts SET value_enum = 'cash' WHERE id = 'pf-1'"), 'policy facts are immutable; only superseded_by_fact_id may be set once; erasure deletes them');
+  await rejects(pool.query("UPDATE policy_facts SET superseded_by_fact_id = 'no-such-fact' WHERE id = 'pf-1'"), 'policy facts are immutable; only superseded_by_fact_id may be set once; erasure deletes them');
+  assert.equal((await pool.query("UPDATE policy_facts SET value_enum = 'x' WHERE false")).rowCount, 0, 'row-level: no row, no fire');
+  await pool.query("UPDATE policy_facts SET superseded_by_fact_id = 'pf-2' WHERE id = 'pf-1'");
+  await rejects(pool.query("UPDATE policy_facts SET superseded_by_fact_id = 'pf-1' WHERE id = 'pf-1'"), 'policy facts are immutable; only superseded_by_fact_id may be set once; erasure deletes them');
+  proves('policy_facts_immutable');
+
+  const evidence = { ...base, fact_id: 'pf-1', quote_enc: sealed };
+  await rejects(insert(pool, 'fact_evidence', { ...evidence, id: 'fe-foreign', household_id: b.household }), 'fact evidence must match the document, case and household of its fact');
+  await rejects(insert(pool, 'fact_evidence', { ...evidence, id: 'fe-version', source_version: 'other-version' }), 'fact evidence must match the document, case and household of its fact');
+  await insert(pool, 'fact_evidence', { ...evidence, id: 'fe-1' });
+  proves('fact_evidence_scope_insert');
+  await rejects(pool.query("UPDATE fact_evidence SET role = 'corroborating' WHERE id = 'fe-1'"), 'fact evidence is immutable; erasure deletes it');
+  assert.equal((await pool.query("UPDATE fact_evidence SET page = 2 WHERE false")).rowCount, 0, 'row-level: no row, no fire');
+  proves('fact_evidence_immutable');
+
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['quarantined', a.document]);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM policy_facts')).n, 2, 'quarantine is not erasure');
+  await pool.query('UPDATE document_uploads SET lifecycle_state = $1 WHERE id = $2', ['deletion_requested', a.document]);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM policy_facts')).n, 0);
+  assert.equal((await one(pool, 'SELECT count(*)::int AS n FROM fact_evidence')).n, 0);
+  proves('policy_facts_erase_on_document_erasure');
+});
+
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const catalog = (await pool.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname")).rows.map(row => row.tgname);

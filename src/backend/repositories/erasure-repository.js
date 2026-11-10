@@ -185,6 +185,8 @@ export class ErasureRepository {
       await this.#count(ctx, 'jobs', 'DELETE FROM job_queue WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyAnswers', 'DELETE FROM policy_answers WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyClauses', 'DELETE FROM policy_clauses WHERE household_id = ?', [householdId]);
+      await this.#count(ctx, 'factEvidence', 'DELETE FROM fact_evidence WHERE household_id = ?', [householdId]);
+      await this.#count(ctx, 'policyFacts', 'DELETE FROM policy_facts WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyProfiles', 'DELETE FROM policy_profiles WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'catalogueReviews', 'DELETE FROM catalogue_reviews WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'catalogueReviewerGrants', 'DELETE FROM catalogue_reviewer_grants WHERE household_id = ?', [householdId]);
@@ -314,6 +316,8 @@ export class ErasureRepository {
       OR right_fact_id IN (SELECT id FROM evidence_facts WHERE case_id = ?)`, [caseId, caseId]);
     await this.#count(ctx, 'policyAnswers', 'DELETE FROM policy_answers WHERE case_id = ?', [caseId]);
     await this.#count(ctx, 'policyClauses', 'DELETE FROM policy_clauses WHERE case_id = ?', [caseId]);
+    await this.#count(ctx, 'factEvidence', 'DELETE FROM fact_evidence WHERE case_id = ?', [caseId]);
+    await this.#count(ctx, 'policyFacts', 'DELETE FROM policy_facts WHERE case_id = ?', [caseId]);
     await this.#count(ctx, 'policyProfiles', 'DELETE FROM policy_profiles WHERE case_id = ?', [caseId]);
     await this.#count(ctx, 'catalogueReviews', 'DELETE FROM catalogue_reviews WHERE case_id = ?', [caseId]);
     await this.#count(ctx, 'catalogueReviewerGrants', 'DELETE FROM catalogue_reviewer_grants WHERE case_id = ?', [caseId]);

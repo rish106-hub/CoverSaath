@@ -1,6 +1,7 @@
 import { CURATED_PRODUCT_RECORDS, extractUins } from '../../features/decision-catalogue/index.js';
 import { flattenBlock } from '../../features/ai-analysis/eval-extractor.js';
 import { parseProfileStatement } from '../repositories/policy-profile-repository.js';
+import { createStoredPagesReader } from './readable-document.js';
 
 // Policy profile service (ADR 0024, policy facts slice 1). Off unless POLICY_FACTS_ENABLED is exactly "true".
 //
@@ -40,28 +41,12 @@ export function createPolicyProfileService({ repository, ocr, env = process.env,
     if (document?.lifecycleState !== 'active') throw coded('POLICY_PROFILE_NOT_READY', 'The document is not available yet.', 409);
   };
 
-  // The stored text of a document, only while every succeeded OCR job that holds its pages still has a current exact reading
-  // grant (the same gate as the read-back routes). Null when the text may not be read now.
+  const readStoredPages = createStoredPagesReader({ ocr, clock });
+
+  // The stored text of a document (flattened), or null when the shared gate (readable-document.js) says it may not be read now.
   async function readableText(document) {
-    const latest = await ocr.getLatestJobForDocument(document.id);
-    if (latest?.status !== 'succeeded') return null;
-    const holders = await ocr.getJobsHoldingPages(document.id);
-    if (!holders.length || holders.some(job => job.provider !== 'sarvam')) return null;
-    const at = clock().toISOString();
-    for (const job of holders) {
-      const authorization = job.authorization;
-      const ready = authorization?.consentGrantId && authorization.requestedByAdultId
-        ? await ocr.getReadyDocument(document.id, at, { consentGrantId: authorization.consentGrantId, requestedByAdultId: authorization.requestedByAdultId, recipient: 'sarvam' })
-        : null;
-      if (!ready) return null;
-    }
-    let stored;
-    try {
-      stored = await ocr.getDocumentBlockPages({ documentId: document.id, householdId: document.householdId });
-    } catch (error) {
-      if (['OCR_PAGES_UNAVAILABLE', 'OCR_PAGES_INCOMPLETE', 'DOCUMENT_NOT_FOUND'].includes(String(error?.code))) return null;
-      throw error;
-    }
+    const stored = await readStoredPages(document);
+    if (!stored) return null;
     let text = '';
     for (const page of stored.pages) {
       for (const block of page.blocks ?? []) {
