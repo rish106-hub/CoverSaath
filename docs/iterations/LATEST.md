@@ -56,11 +56,11 @@ Added an API regression to `tests/backend-api.test.mjs`: two separately bootstra
 
 ## Block 5 real-backend smoke test and BFF remediation (2026-10-22)
 
-No CoverSaath source changed. Commit `5676a89` on `block5/frontend-audit` records the smoke findings, lists the three feature switches in `.env.example`, and sets `SARVAM_OCR_ENABLED=false`. The BFF under test lives in `Knowvia_website-block5` (see the exec-plan addendum in [block5-frontend-audit.md](../exec-plans/active/block5-frontend-audit.md)). The isolated run used Block 4 commit `56f4fa5`, whose content is now merged into `main` through PR #45. Verified: upload, real clamd scan, consents, revocation, deletion and sign-out. OCR success, evidence answers and a real coverage preview were not run because paid providers were not called. BFF defects found by the run and two read-only reviews have regression tests; the final OCR cookie-size probe and non-retryable retry guard still need the required fresh security review before landing. Open: D1 identity, D2 topology, backend list-cases and list-grants routes, and a per-caller backend rate limit.
+No CoverSaath source changed. Commit `5676a89` on `block5/frontend-audit` records the smoke findings, lists the three feature switches in `.env.example`, and sets `SARVAM_OCR_ENABLED=false`. The BFF under test lives in `Knowvia_website-block5` (see the exec-plan addendum in block5-frontend-audit.md (deleted 2026-11-11)). The isolated run used Block 4 commit `56f4fa5`, whose content is now merged into `main` through PR #45. Verified: upload, real clamd scan, consents, revocation, deletion and sign-out. OCR success, evidence answers and a real coverage preview were not run because paid providers were not called. BFF defects found by the run and two read-only reviews have regression tests; the final OCR cookie-size probe and non-retryable retry guard still need the required fresh security review before landing. Open: D1 identity, D2 topology, backend list-cases and list-grants routes, and a per-caller backend rate limit.
 
 ## Block 4 household reasoning (2026-10-21, branch `block3/synthetic-acceptance`, uncommitted)
 
-Base `434de7e`. Synthetic data only. No provider call, no network, no migration, no new dependency. Status: IMPLEMENTED and AUTOMATED_TESTED; see `docs/exec-plans/active/block4-acceptance.md` for the gate record and the final status. Not externally validated, not production ready.
+Base `434de7e`. Synthetic data only. No provider call, no network, no migration, no new dependency. Status: IMPLEMENTED and AUTOMATED_TESTED; see `block4-acceptance.md` (deleted 2026-11-11) for the gate record and the final status. Not externally validated, not production ready.
 
 - New: `POST /api/v1/households/{householdId}/coverage-preview` (read-only, stateless). Server builds each Block 3 handoff from the live stored answer; the client names `caseId` and `answerId` only. Contract `household-scenario/v1` in, `household-coverage-preview/v1` out. Design and schemas: `docs/architecture/household-reasoning.md`.
 - New pure engine `src/features/household-reasoning/` (validate, normalise, coverage map, comparison, context gaps G01 to G10, question planner, next actions, output contract) and adapter `src/backend/services/household-preview-service.js`.
@@ -82,7 +82,7 @@ Base `main` `e5d448c` (PRs #39 to #43). Synthetic PDFs and test identities only.
 
 ## Block 3 synthetic engineering acceptance (2026-10-21, branch `block3/synthetic-acceptance`, uncommitted)
 
-Base `main` `0922fa4`. No provider call, no network, no migration. Full report: [block-3-acceptance.md](../exec-plans/active/block-3-acceptance.md).
+Base `main` `0922fa4`. No provider call, no network, no migration. Full report: block-3-acceptance.md (deleted 2026-11-11).
 
 - Fixed (each with a regression test that failed first): a published curated product whose archive bytes, archive row or page text was altered outside the application stayed verified (reads now re-check; CLI `verify-archives`); policy ids were an unkeyed hash of the policy number (now keyed HMAC); an independent grant covered documents uploaded after it (`documentsUntil`); applicability U01 (undated query answered from a lower layer), U02 (older wording answered a term the newer one dropped), U03 (policy-wide enrolment or continuity applied to any member).
 - Hardened: `assertHandoffContract` refuses a foreign catalogue version, missing arrays and a non-boolean association.
@@ -194,7 +194,7 @@ First-pass findings now carry a model-reported `effect` (covers, limits, exclude
 ## Block 2 close-out: baseline audit and document boundaries D1, D1a, D1b, D2, D3 (2026-10-20)
 
 Base: HEAD `5b31739`, equal to `origin/main` `fee77db`.
-Audit: [block-2-closeout-audit.md](../exec-plans/active/block-2-closeout-audit.md). Block 2 decision: **NO-GO** for freeze; single-policy live pipeline PASS.
+Audit: block-2-closeout-audit.md (deleted 2026-11-11). Block 2 decision: **NO-GO** for freeze; single-policy live pipeline PASS.
 
 Live findings fixed (first live question run, 2026-10-20):
 - Every source carries `verbatim`. The model reads gated text, so a quote can hold privacy placeholders (and the
@@ -246,7 +246,7 @@ Uncommitted on `codex/backend-first-layout`.
 
 ## Direction change: Phase A S0/S1/S2/S7 and Phase B B0/B1 start (2026-10-20)
 
-Plan: [direction-change.md](../exec-plans/active/direction-change.md). ADR: [0008](../adr/0008-evidence-first-reasoning.md) (Proposed).
+Plan: direction-change.md (deleted 2026-11-11). ADR: [0008](../adr/0008-evidence-first-reasoning.md) (Proposed).
 Uncommitted on `codex/backend-first-layout`.
 
 - S0: `correct_unknown` outcome for golden "unknown"; a single duration inside a clause matches.
@@ -273,7 +273,7 @@ Uncommitted on `codex/backend-first-layout`.
 
 ## Policy structuring hardening S1 to S5 (2026-10-20)
 
-Active plan: [policy-structuring-hardening.xml](../exec-plans/active/policy-structuring-hardening.xml). Decisions:
+Active plan: policy-structuring-hardening.xml (deleted 2026-11-11). Decisions:
 ADR 0006 addendum (2026-10-20). Uncommitted on `codex/backend-first-layout`; no commit, push, PR or deployment.
 
 ### Done
@@ -307,7 +307,7 @@ Production readiness remains **FAIL**.
 
 ## Backend-first repository layout (2026-10-20)
 
-Completed plan: [backend-first-layout.md](../exec-plans/completed/backend-first-layout.md).
+Completed plan: backend-first-layout.md (deleted 2026-11-11).
 
 ### State
 

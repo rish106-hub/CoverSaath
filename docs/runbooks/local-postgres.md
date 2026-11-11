@@ -1,6 +1,6 @@
 # Runbook: local PostgreSQL
 
-Scope: a developer's machine. Synthetic data only. Decisions: [ADR 0004](../adr/0004-postgresql-runtime.md). The runtime still uses SQLite until Section 3 slice S3.2 lands ([exec plan](../exec-plans/active/p1b-postgres.md)); today PostgreSQL serves the PostgreSQL tests.
+Scope: a developer's machine. Synthetic data only. Decisions: [ADR 0004](../adr/0004-postgresql-runtime.md). The runtime still uses SQLite until Section 3 slice S3.2 lands (exec plan (deleted 2026-11-11)); today PostgreSQL serves the PostgreSQL tests.
 
 The test suite only requires `TEST_DATABASE_URL`. Use either the verified Homebrew setup or the Podman alternative. Do not run both on port 54329.
 

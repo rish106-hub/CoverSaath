@@ -1,6 +1,6 @@
 # Evidence-first reasoning architecture
 
-Status: **proposed**, 2026-10-20. Nothing here is built yet. This document details the direction in [../exec-plans/active/direction-change.md](../exec-plans/active/direction-change.md); ADR 0008 is to record it. Companion documents: [system.md](system.md), [data.md](data.md), [security.md](security.md), [pipeline-blocks.md](pipeline-blocks.md).
+Status: **proposed**, 2026-10-20. Nothing here is built yet. This document details the direction in direction-change.md (deleted 2026-11-11); ADR 0008 is to record it. Companion documents: [system.md](system.md), [data.md](data.md), [security.md](security.md), [pipeline-blocks.md](pipeline-blocks.md).
 
 Facts marked *(measured)* come from the 2026-10-20 live run on one sanitised 20-page policy. Nothing here is a capacity, scale or accuracy claim.
 
@@ -266,7 +266,7 @@ Golden question set: `.local/eval/golden-questions.json` (owner-authored, git-ig
 
 ## 11. Build order
 
-This follows [direction-change.md](../exec-plans/active/direction-change.md):
+This follows direction-change.md (deleted 2026-11-11):
 
 1. Phase A: S0 scorer, S1 gate card fix, S2 target fix, S7 database path.
 2. B0: ADR 0008 and the consent scope.

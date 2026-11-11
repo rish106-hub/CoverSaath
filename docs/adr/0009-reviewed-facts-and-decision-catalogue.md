@@ -84,7 +84,7 @@ PostgreSQL 013 was run against PostgreSQL 17 (parity, runner and trigger tests p
 - An independent grant covers only documents uploaded at or before its `granted_at`. A later upload needs an operator regrant, which also starts a new review window.
 - Applicability: an undated query cannot be answered from a lower layer when a dated contract fact could control (`as_of_required`); the newest version of a document family is judged across all of the policy's facts; enrolment always needs a member-scoped fact and a named member's continuity must be their own (`member_scope_missing`).
 - Curated products: every read re-checks the archived bytes and quotes of each published product.
-- Evidence: [block-3-acceptance.md](../exec-plans/active/block-3-acceptance.md).
+- Evidence: block-3-acceptance.md (deleted 2026-11-11).
 
 ## Unverified
 

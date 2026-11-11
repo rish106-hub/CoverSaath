@@ -7,7 +7,7 @@ Status: describes the repository at the commit that added this file. Companion d
 - Engine: PostgreSQL (Supabase, ADR 0011) through the async interface in `src/backend/database/postgres/` (`createDatabase` over a `pg` pool). The SQLite runtime and its migration files are removed.
 - Timestamps are ISO-8601 UTC text. Money is integer minor units (`service_cases.stated_estimate_minor` with `currency`).
 - The database stores controlled paths, hashes, derived facts, permissions and audit records. Document bytes live outside the database (`postgres/migrations/001_baseline_schema.sql`).
-- PostgreSQL is in progress (Section 3; ADR 0004, `docs/exec-plans/active/p1b-postgres.md`, local setup in [local-postgres](../runbooks/local-postgres.md)). Six PostgreSQL migrations now provide the SQLite-equivalent baseline plus hardening for `TRUNCATE`, function `search_path`, collation validation and pool or runner error boundaries, document intake scheduling (004), evidence fact redaction (005) and its forward fix (006). The runtime now uses PostgreSQL. The port contract in `src/contracts/persistence-ports.js` is the only preparation; routes and `TenantAccessService` still read `workflow_*` tables with direct SQL and are outside that port (ADR 0002, "Consequences and gaps").
+- PostgreSQL is in progress (Section 3; ADR 0004, `p1b-postgres.md` (deleted 2026-11-11), local setup in [local-postgres](../runbooks/local-postgres.md)). Six PostgreSQL migrations now provide the SQLite-equivalent baseline plus hardening for `TRUNCATE`, function `search_path`, collation validation and pool or runner error boundaries, document intake scheduling (004), evidence fact redaction (005) and its forward fix (006). The runtime now uses PostgreSQL. The port contract in `src/contracts/persistence-ports.js` is the only preparation; routes and `TenantAccessService` still read `workflow_*` tables with direct SQL and are outside that port (ADR 0002, "Consequences and gaps").
 
 ## Migrations
 
@@ -68,7 +68,7 @@ Gaps:
 | Derived data after consent revocation | Decided: erased (above). |
 | Derived data after consent expiry | Open owner decision (review F3 in `docs/iterations/LATEST.md`). Expiry blocks new use but does not erase observations, run excerpts or task outputs. |
 | `retention_records` policy, legal holds, deletion SLAs | Not decided. No source names a retention period. |
-| `docs/evidence/` in git history | Open owner decision (purge or private repository; `docs/exec-plans/completed/p0-baseline-intake.md`). |
+| `docs/evidence/` in git history | Open owner decision (purge or private repository; `p0-baseline-intake.md` (deleted 2026-11-11)). |
 
 ## Backup and restore
 

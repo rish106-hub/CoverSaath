@@ -3,7 +3,7 @@
 - Status: Proposed
 - Date: 2026-10-19
 - Scope: new `src/features/policy-structuring/`; reads `knowvia.ocr.v1` pages; writes parameter observations and a proposed-parameter store
-- Plan: [policy-document-structuring.xml](../exec-plans/active/policy-document-structuring.xml)
+- Plan: policy-document-structuring.xml (deleted 2026-11-11)
 
 ## Context
 
@@ -155,7 +155,7 @@ project. Consent wording for the Gemini step is not final and needs legal review
 
 ## Addendum (2026-10-20): structuring hardening S1 to S5
 
-Status: accepted. Plan: `docs/exec-plans/active/policy-structuring-hardening.xml`. S6 (document-to-policy
+Status: accepted. Plan: `policy-structuring-hardening.xml` (deleted 2026-11-11). S6 (document-to-policy
 association, ADR 0007) is blocked; see below.
 
 - **Typed accuracy evaluator (S1).** `readingMatches` compares by type through the validator normalisers:

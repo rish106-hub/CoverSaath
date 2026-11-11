@@ -3,7 +3,7 @@
 - Status: Proposed (accepted by the product owner 2026-10-20; ADR text awaits independent review)
 - Date: 2026-10-20
 - Scope: new `src/features/policy-evidence/`, `src/contracts/policy-evidence.js`, clause and answer stores
-- Plan: [direction-change.md](../exec-plans/active/direction-change.md)
+- Plan: direction-change.md (deleted 2026-11-11)
 
 ## Context
 
