@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { CHAT_INPUT_KINDS, CHAT_PROCEDURE_KEYS, CHAT_THREAD_REQUEST_KEYS, CHAT_TURN_REQUEST_KEYS, CHAT_V1_MESSAGE_MAX } from '../../contracts/chat.js';
+import { ANALYTICS_EVENTS } from '../../contracts/analytics-events.js';
 import { CHAT_INTENTS } from '../../features/ai-analysis/gateway-contract.js';
 import { gateText, gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { buildDeterministicAnswer } from '../../features/insurance-rules/chat-answer.js';
@@ -35,6 +36,8 @@ const DELTA_CHARS = 48;
 const coded = (code, message, statusCode) => Object.assign(new Error(message), { code, statusCode });
 const invalid = message => coded('CHAT_REQUEST_INVALID', message, 400);
 const sha256 = text => createHash('sha256').update(text, 'utf8').digest('hex');
+// Provider ids the analytics allowlist knows; anything else is reported as 'none' (ADR 0033).
+const ANALYTICS_PROVIDERS = ANALYTICS_EVENTS.chat_turn.provider.values;
 const alias = (householdId, id) => `fact_${sha256(`${householdId}|${id}`).slice(0, 24)}`;
 const only = (value, keys, name) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid(`${name} must be an object.`);
@@ -262,8 +265,14 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               audio_retained: audioDocumentId !== null, created_at: clock().toISOString(),
             });
             emit('done', {});
+            // Counts for product analytics (ADR 0033). The route reads this; it is never sent to the client.
+            return Object.freeze({
+              householdId, intent: CHAT_INTENTS.includes(intent) ? intent : 'unknown', provider: ANALYTICS_PROVIDERS.includes(assistantMeta.provider) ? assistantMeta.provider : 'none',
+              tokens: (assistantMeta.tokensIn ?? 0) + (assistantMeta.tokensOut ?? 0), ms: Date.now() - startedAt, factsUsed: usedFacts.length,
+            });
           } catch (error) {
             emit('error', { code: typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,60}$/.test(error.code) ? error.code : 'CHAT_TURN_FAILED' });
+            return null;
           }
         },
       };

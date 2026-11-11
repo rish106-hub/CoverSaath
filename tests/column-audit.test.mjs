@@ -39,6 +39,9 @@ const PLAIN = {
   retrieval_traces: {
     'closed vocabulary and ids only (holding, fact, chunk and conflict ids), no content': ['mode', 'holding_ids', 'fact_ids', 'chunk_ids', 'conflict_ids'],
   },
+  analytics_outbox: {
+    'closed vocabulary: allowlisted event name, a keyed hash of the household id and closed-vocabulary or bounded-count properties; never free text (ADR 0033)': ['event', 'distinct_id_hash', 'properties_json'],
+  },
   provider_calls: {
     'closed vocabulary: purpose, provider, model id and call status, no content': ['purpose', 'provider', 'model', 'status'],
     'gate counts only (gate version, slots, placeholders, reason-code count, bytes) and a sha256 of the redacted payload; never the payload (ADR 0030)': ['redaction_report_json', 'payload_sha256'],

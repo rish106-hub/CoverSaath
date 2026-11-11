@@ -84,10 +84,10 @@ export async function handleHoldingRecordsRoute({ req, url, principal, services 
     }
     const body = object(await readBody(req), DECLARATION_KEYS);
     const consentGrantId = await writeGrant({ services, householdId, principal, named: body.consentGrantId });
-    return {
-      status: 201,
-      body: await repo.create({ householdId, adultId, memberId: requiredId(body.memberId, 'memberId'), kind: body.kind, ...declarationBody(body), holdingId: optionalId(body.holdingId, 'holdingId'), consentGrantId }),
-    };
+    const created = await repo.create({ householdId, adultId, memberId: requiredId(body.memberId, 'memberId'), kind: body.kind, ...declarationBody(body), holdingId: optionalId(body.holdingId, 'holdingId'), consentGrantId });
+    // Product analytics (ADR 0033): the declaration kind only (a closed vocabulary), never the label.
+    void services.analytics?.track({ householdId, event: 'declaration_added', properties: { kind: body.kind } });
+    return { status: 201, body: created };
   }
 
   if (resource === 'premiums') {
@@ -96,14 +96,14 @@ export async function handleHoldingRecordsRoute({ req, url, principal, services 
     if (method === 'DELETE') { await repo.deletePayment({ householdId, adultId, paymentId: rowId }); return { status: 200, body: { deleted: true } }; }
     const body = object(await readBody(req), PREMIUM_KEYS);
     const consentGrantId = await writeGrant({ services, householdId, principal, named: body.consentGrantId });
-    return {
-      status: 201,
-      body: await repo.recordPayment({
-        householdId, adultId, holdingId: requiredId(body.holdingId, 'holdingId'), amountPaise: body.amountPaise, paidOn: body.paidOn,
-        channel: body.channel ?? 'unknown', paidVia: body.paidVia ?? 'self', payerMemberId: optionalId(body.payerMemberId, 'payerMemberId'),
-        agentName: body.agentName ?? null, agentCode: body.agentCode ?? null, receiptDocumentId: optionalId(body.receiptDocumentId, 'receiptDocumentId'), consentGrantId,
-      }),
-    };
+    const recorded = await repo.recordPayment({
+      householdId, adultId, holdingId: requiredId(body.holdingId, 'holdingId'), amountPaise: body.amountPaise, paidOn: body.paidOn,
+      channel: body.channel ?? 'unknown', paidVia: body.paidVia ?? 'self', payerMemberId: optionalId(body.payerMemberId, 'payerMemberId'),
+      agentName: body.agentName ?? null, agentCode: body.agentCode ?? null, receiptDocumentId: optionalId(body.receiptDocumentId, 'receiptDocumentId'), consentGrantId,
+    });
+    // Product analytics (ADR 0033): channel and who paid, both closed vocabularies. No amount, no agent name or code.
+    void services.analytics?.track({ householdId, event: 'premium_recorded', properties: { channel: body.channel ?? 'unknown', via: body.paidVia ?? 'self' } });
+    return { status: 201, body: recorded };
   }
 
   const repo = services.premiums;

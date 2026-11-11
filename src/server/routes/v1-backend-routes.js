@@ -845,7 +845,10 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         throw error;
       }
       const bytes = await readBinaryBody(req, { contentType: 'application/pdf', limitBytes: MAX_DOCUMENT_BYTES });
-      return await documentUploads.upload({ principal, caseRecord, headers: req.headers, bytes });
+      const uploaded = await documentUploads.upload({ principal, caseRecord, headers: req.headers, bytes });
+      // Product analytics (ADR 0033): the document kind (already validated against the upload list) only. A replay adds nothing.
+      if (uploaded?.status === 201) void services.analytics?.track({ householdId: caseRecord.household_id, event: 'cover_uploaded', properties: { kind: String(req.headers['x-document-kind'] ?? '').trim() } });
+      return uploaded;
     }
     if (req.method === 'GET' && documentsMatch) {
       const caseRecord = await requireDocumentCase(services, principal, documentsMatch[1]);

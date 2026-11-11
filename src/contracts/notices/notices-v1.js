@@ -158,6 +158,20 @@ export const NOTICES_V1 = Object.freeze([
     guardianNote: dependentNote,
   },
   {
+    id: 'notice_analytics',
+    purposeId: 'analytics',
+    title: 'Understanding how the service is used',
+    summary: 'With your permission we count which steps people use, to improve the service. We send short event records to our analytics provider. They never hold names, policy numbers, amounts or anything you type.',
+    items: [
+      { categories: ['derived_identifier'], data: 'A scrambled fingerprint of your household, so events from one household can be counted together without showing who it is', use: 'To count how many households use each step.' },
+      { categories: ['derived_content'], data: 'The name of a step (for example "cover uploaded") and a few fixed words or small counts about it, such as the kind of document or how many facts were read', use: 'To see which steps work and which fail.' },
+    ],
+    recipients: ['PostHog, our analytics provider. Where it processes the records is not yet decided.'],
+    retention: 'Records waiting to be sent are erased when your permission is withdrawn or ends. How long the provider keeps what it received is set by its terms and is not yet confirmed.',
+    withdrawal: withdrawNote,
+    guardianNote: null,
+  },
+  {
     id: 'notice_service_operations',
     purposeId: 'service_operations',
     title: 'Keeping the service safe and working',

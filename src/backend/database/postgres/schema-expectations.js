@@ -22,7 +22,7 @@ export const expectedTables = Object.freeze([
   'auth_signing_keys', 'auth_refresh_tokens', 'auth_challenges', 'webauthn_credentials', 'devices', 'notice_acceptances',
   'household_changes', 'household_sync_state',
   'person_records',
-  'policy_holdings', 'household_memory_facts', 'memory_conflicts', 'member_declarations', 'premium_payments', 'premium_dues', 'provider_calls',
+  'policy_holdings', 'household_memory_facts', 'memory_conflicts', 'member_declarations', 'premium_payments', 'premium_dues', 'provider_calls', 'analytics_outbox',
   'memory_chunks', 'chat_threads', 'chat_turns', 'retrieval_traces', 'network_hospitals',
 ]);
 
@@ -165,6 +165,7 @@ export const requiredColumns = Object.freeze({
   chat_threads: ['household_id', 'holding_id', 'created_by_adult_id'],
   chat_turns: ['household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'content_enc', 'transcript_enc', 'audio_document_id', 'redacted_prompt_hash'],
   retrieval_traces: ['household_id', 'thread_id', 'turn_id', 'mode', 'holding_ids', 'fact_ids', 'chunk_ids', 'conflict_ids'],
+  analytics_outbox: ['household_id', 'event', 'distinct_id_hash', 'properties_json'],
   provider_calls: ['household_id', 'purpose', 'provider', 'model', 'redaction_report_json', 'payload_sha256', 'input_tokens', 'output_tokens', 'cost_paise', 'status'],
   person_records: ['household_id', 'subject_member_id', 'record_type', 'slot', 'payload_ciphertext', 'completeness', 'source', 'state', 'revision'],
   policy_holdings: ['household_id', 'policy_id', 'document_id', 'policy_profile_id', 'kind', 'status'],

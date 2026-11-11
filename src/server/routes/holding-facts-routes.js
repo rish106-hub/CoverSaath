@@ -43,5 +43,9 @@ export async function handleHoldingFactsRoute({ req, url, principal, services })
   if (facts) return { status: 200, body: await services.holdings.facts({ holding }) };
   if (conflicts) return { status: 200, body: await services.holdings.conflicts({ holding }) };
   if (!ID.test(resolve[2])) throw Object.assign(new Error('The conflict was not found.'), { code: 'MEMORY_CONFLICT_NOT_FOUND', statusCode: 404 });
-  return { status: 200, body: await services.holdings.resolveConflict({ holding, conflictId: resolve[2], adultId: principal.adultId, body: await readBody(req) }) };
+  const choice = await readBody(req);
+  const body = await services.holdings.resolveConflict({ holding, conflictId: resolve[2], adultId: principal.adultId, body: choice });
+  // Product analytics (ADR 0033): one allowlisted word, never a fact id or value. No-op unless enabled and consented.
+  void services.analytics?.track({ householdId: holding.householdId, event: 'conflict_resolved', properties: { choice: choice?.alternativeIndex == null ? 'primary' : 'alternative' } });
+  return { status: 200, body };
 }

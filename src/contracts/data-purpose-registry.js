@@ -13,7 +13,7 @@ export const LEGAL_REVIEW = 'required';
 // Exactly the consent_grants.purpose CHECK list (migration 001); tests/data-purpose-registry.test.mjs compares them.
 export const CONSENT_PURPOSES = Object.freeze([
   'profile_intake', 'document_processing', 'coverage_reconstruction', 'voice_intake',
-  'institutional_clarification', 'human_review', 'purchase_review', 'payment',
+  'institutional_clarification', 'human_review', 'purchase_review', 'payment', 'analytics',
 ]);
 
 const GEMINI = 'google-gemini';
