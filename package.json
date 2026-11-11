@@ -10,6 +10,7 @@
     "dev": "node --env-file-if-exists=.env.local --watch src/server/server.js",
     "worker": "node --env-file-if-exists=.env.local src/server/worker.js",
     "db:init": "node --env-file-if-exists=.env.local scripts/database.mjs",
+    "seed:demo": "node --env-file-if-exists=.env.local scripts/seed-demo.mjs",
     "seed:demo-household": "node scripts/seed-demo-household.js",
     "verify:user-data": "node scripts/verify-user-data.js",
     "backfill:adult-contacts": "node --env-file-if-exists=.env.local scripts/backfill-adult-contacts.mjs",
