@@ -1173,6 +1173,37 @@ test('policy facts: scope on insert, immutability with one guarded supersession,
   proves('policy_facts_erase_on_document_erasure');
 });
 
+test('sync triggers log every change of a synced table without a value, and the touch trigger never double-bumps (migration 046)', postgresTestOptions(), async t => {
+  const { pool } = await useTestDatabase(t);
+  const w = await seedWorld(pool, 'sync');
+  const log = async () => (await pool.query('SELECT entity, entity_id, op, revision FROM household_changes WHERE household_id = $1 ORDER BY seq', [w.household])).rows;
+  // The world's inserts: members, policies, cases and documents all logged by AFTER triggers.
+  const seeded = (await log()).map(row => `${row.entity}:${row.op}`);
+  for (const entry of ['members:upsert', 'policies:upsert', 'cases:upsert', 'documents:upsert']) assert.ok(seeded.includes(entry), entry);
+  await pool.query("UPDATE policies SET updated_at = '2030-01-01T00:00:00.000Z' WHERE id = $1", [w.policy]);
+  await pool.query('DELETE FROM source_pages WHERE document_upload_id = $1', [w.document]);
+  assert.equal((await log()).filter(row => row.entity === 'policies').length, 2);
+  // Tables with a revision column: the touch trigger bumps a writer that did not, and leaves one that did.
+  await pool.query(`INSERT INTO device_permissions (id, household_id, adult_user_id, permission, state, surface, decided_at, updated_at)
+    VALUES ('perm-sync', $1, $2, 'camera', 'granted', 'settings', '2030-01-01T00:00:00.000Z', '2030-01-01T00:00:00.000Z')`, [w.household, w.adult]);
+  await pool.query("UPDATE device_permissions SET state = 'denied' WHERE id = 'perm-sync'");
+  assert.equal((await one(pool, "SELECT revision, updated_at <> '2030-01-01T00:00:00.000Z' AS moved FROM device_permissions WHERE id = 'perm-sync'")).revision, 2);
+  assert.equal((await one(pool, "SELECT updated_at <> '2030-01-01T00:00:00.000Z' AS moved FROM device_permissions WHERE id = 'perm-sync'")).moved, true);
+  await pool.query("UPDATE device_permissions SET state = 'granted', revision = revision + 1 WHERE id = 'perm-sync'");
+  assert.equal((await one(pool, "SELECT revision FROM device_permissions WHERE id = 'perm-sync'")).revision, 3);
+  await pool.query("DELETE FROM device_permissions WHERE id = 'perm-sync'");
+  const permissions = (await log()).filter(row => row.entity === 'permissions');
+  assert.deepEqual(permissions.map(row => [row.op, row.revision]), [['upsert', 1], ['upsert', 2], ['upsert', 3], ['delete', 4]]);
+  assert.ok(permissions.every(row => row.entity_id === 'perm-sync'));
+  proves(
+    'household_members_sync_log', 'policies_sync_log', 'service_cases_sync_log', 'document_uploads_sync_log',
+    'device_permissions_sync_log', 'device_permissions_sync_touch',
+    // The remaining tables use the same function and helper; sync-log.test.mjs drives them through the application.
+    'household_places_sync_log', 'household_places_sync_touch', 'adult_preferences_sync_log', 'adult_preferences_sync_touch',
+    'onboarding_progress_sync_log', 'onboarding_progress_sync_touch', 'tool_scenarios_sync_log', 'tool_scenarios_sync_touch',
+  );
+});
+
 test('every critical trigger and every catalog trigger has a PostgreSQL behaviour test', postgresTestOptions(), async t => {
   const { pool } = await useTestDatabase(t);
   const catalog = (await pool.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname")).rows.map(row => row.tgname);

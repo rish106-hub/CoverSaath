@@ -20,6 +20,7 @@ export const expectedTables = Object.freeze([
   'device_permissions', 'household_places', 'adult_preferences', 'onboarding_progress', 'tool_scenarios', 'job_queue',
   'reference_cache', 'reference_cache_leases', 'policy_profiles', 'policy_facts', 'fact_evidence',
   'auth_signing_keys', 'auth_refresh_tokens', 'auth_challenges', 'webauthn_credentials', 'devices', 'notice_acceptances',
+  'household_changes', 'household_sync_state',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -112,6 +113,7 @@ export const criticalIndexes = Object.freeze([
   'household_roles_adult_idx',
   'app_events_case_idx',
   'auth_signing_keys_one_active', 'auth_refresh_session_idx', 'auth_refresh_expiry_idx', 'api_sessions_household_idx', 'api_sessions_identity_idx',
+  'household_changes_cursor_idx',
 ]);
 
 export const requiredColumns = Object.freeze({

@@ -24,7 +24,9 @@ export function parseIfMatch(header) {
 
 export function createUserDataService({ access, repository, clock = () => new Date(), writesPerMinute = WRITES_PER_MINUTE }) {
   const limiter = createRateLimiter({ limit: writesPerMinute, windowMs: 60_000, clock: () => clock().getTime() });
-  const throttle = adultId => {
+  // `skipThrottle` is for the sync push only: it has its own limit on batches, so its items must not each burn the 60 a minute.
+  const throttle = (adultId, options = {}) => {
+    if (options.skipThrottle === true) return;
     try { limiter.check(`user-data:${adultId}`); } catch {
       fail('USER_DATA_RATE_LIMITED', 'Too many changes. Wait a moment and try again.', 429);
     }
@@ -46,12 +48,12 @@ export function createUserDataService({ access, repository, clock = () => new Da
       return { householdId, permissions: await repository.listPermissions({ householdId, adultId: principal.adultId }) };
     },
 
-    async setPermission(principal, householdId, permission, body, ifMatchHeader) {
+    async setPermission(principal, householdId, permission, body, ifMatchHeader, options) {
       await own(principal, householdId);
       const name = parsePermissionName(permission);
       const parsed = parsePermissionBody(body);
       const ifMatch = parseIfMatch(ifMatchHeader);
-      throttle(principal.adultId);
+      throttle(principal.adultId, options);
       return repository.setPermission({ householdId, adultId: principal.adultId, permission: name, ...parsed, ifMatch });
     },
 
@@ -61,19 +63,19 @@ export function createUserDataService({ access, repository, clock = () => new Da
       return { householdId, places: await repository.listPlaces({ householdId, adultId: principal.adultId }) };
     },
 
-    async setPlace(principal, householdId, kind, query, body, ifMatchHeader) {
+    async setPlace(principal, householdId, kind, query, body, ifMatchHeader, options) {
       parsePlaceKind(kind);
       if (kind === 'current_location') await own(principal, householdId); else await shared(principal, householdId);
       const memberId = memberIdOf(query.memberId);
       if (kind === 'current_location' && memberId) invalid('A current location belongs to you, not to a member.');
       const place = parsePlaceBody(kind, body);
       const ifMatch = parseIfMatch(ifMatchHeader);
-      throttle(principal.adultId);
+      throttle(principal.adultId, options);
       await repository.purgeExpiredLocations(householdId);
       return repository.setPlace({ householdId, adultId: principal.adultId, memberId, place, ifMatch });
     },
 
-    async deletePlace(principal, householdId, kind, query, ifMatchHeader) {
+    async deletePlace(principal, householdId, kind, query, ifMatchHeader, options) {
       parsePlaceKind(kind);
       if (kind === 'current_location') await own(principal, householdId); else await shared(principal, householdId);
       const memberId = memberIdOf(query.memberId);
@@ -84,7 +86,7 @@ export function createUserDataService({ access, repository, clock = () => new Da
         if (!PLACE_SLOTS.includes(slot)) invalid('slot is required for a saved place.');
       } else if (query.slot !== undefined) invalid('slot only applies to a saved place.');
       const ifMatch = parseIfMatch(ifMatchHeader);
-      throttle(principal.adultId);
+      throttle(principal.adultId, options);
       await repository.deletePlace({ householdId, adultId: principal.adultId, memberId, kind, slot, ifMatch });
       return { status: 'removed', kind };
     },
@@ -94,11 +96,11 @@ export function createUserDataService({ access, repository, clock = () => new Da
       return { householdId, ...await repository.getPreferences({ householdId, adultId: principal.adultId }) };
     },
 
-    async setPreferences(principal, householdId, body, ifMatchHeader) {
+    async setPreferences(principal, householdId, body, ifMatchHeader, options) {
       await own(principal, householdId);
       const { prefs } = parsePreferencesBody(body);
       const ifMatch = parseIfMatch(ifMatchHeader);
-      throttle(principal.adultId);
+      throttle(principal.adultId, options);
       return { householdId, ...await repository.setPreferences({ householdId, adultId: principal.adultId, prefs, ifMatch }) };
     },
 
@@ -107,11 +109,11 @@ export function createUserDataService({ access, repository, clock = () => new Da
       return { householdId, ...await repository.getOnboarding({ householdId, adultId: principal.adultId }) };
     },
 
-    async setOnboarding(principal, householdId, body, ifMatchHeader) {
+    async setOnboarding(principal, householdId, body, ifMatchHeader, options) {
       await own(principal, householdId);
       const { state, completed } = parseOnboardingBody(body);
       const ifMatch = parseIfMatch(ifMatchHeader);
-      throttle(principal.adultId);
+      throttle(principal.adultId, options);
       return { householdId, ...await repository.setOnboarding({ householdId, adultId: principal.adultId, state, completed, ifMatch }) };
     },
 
@@ -125,11 +127,11 @@ export function createUserDataService({ access, repository, clock = () => new Da
       return { householdId, ...await repository.getScenario({ householdId, adultId: principal.adultId, tool: parseScenarioTool(tool) }) };
     },
 
-    async setScenario(principal, householdId, tool, body, ifMatchHeader) {
+    async setScenario(principal, householdId, tool, body, ifMatchHeader, options) {
       await own(principal, householdId);
       const { inputs } = parseScenarioBody(tool, body);
       const ifMatch = parseIfMatch(ifMatchHeader);
-      throttle(principal.adultId);
+      throttle(principal.adultId, options);
       return { householdId, ...await repository.setScenario({ householdId, adultId: principal.adultId, tool, inputs, ifMatch }) };
     },
 

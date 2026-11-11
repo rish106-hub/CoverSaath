@@ -265,6 +265,11 @@ export const DATA_REGISTRY = Object.freeze({
   // Evidence-question leases (migration 032): hashed claim key, random owner token and timestamps; no household content.
   evidence_claims: entry('service_operations', {},
     ['claim_hash', 'owner', 'claimed_at', 'expires_at']),
+  // Sync change log (migration 046, ADR 0028): ids, revisions and operations only, no values. Trimmed by a maintenance job.
+  household_changes: entry('service_operations', {},
+    ['seq', 'household_id', 'entity', 'entity_id', 'op', 'revision', 'subject_adult_id', 'actor_adult_id', 'at']),
+  household_sync_state: entry('service_operations', {},
+    ['household_id', 'min_seq', 'updated_at']),
   model_budget_scopes: entry('service_operations', {},
     ['scope', 'reserved_micro_usd', 'spent_micro_usd', 'updated_at']),
 

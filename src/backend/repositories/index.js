@@ -24,3 +24,5 @@ export { UserDataRepository } from './user-data-repository.js';
 export { JobQueueRepository } from './job-queue-repository.js';
 export { ErasureRepository } from './erasure-repository.js';
 export { ReferenceCacheRepository } from './reference-cache-repository.js';
+export { SyncRepository } from './sync-repository.js';
+export { setSyncActor } from './sync-actor.js';
