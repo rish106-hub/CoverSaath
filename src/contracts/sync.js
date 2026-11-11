@@ -1,4 +1,4 @@
-// Sync contract (ADR 0017, migration 031): pull by cursor, snapshot, batched idempotent push. No personal data lives here.
+// Sync contract (ADR 0017, migration 046): pull by cursor, snapshot, batched idempotent push. No personal data lives here.
 //
 //   GET  /api/v1/households/{id}/changes?since=<seq>&limit=<1..200>[&include=data]
 //        -> { items: [{ seq, entity, id, op, revision, at, data? }], next, hasMore }

@@ -4,7 +4,7 @@ import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createBackendServices } from '../src/backend/services/index.js';
 import { createApiServer } from '../src/server/server.js';
 
-// Sync (ADR 0017, migration 031): change log, cursor pull, snapshot, batched idempotent push. Synthetic data only.
+// Sync (ADR 0017, migration 046): change log, cursor pull, snapshot, batched idempotent push. Synthetic data only.
 // Needs PostgreSQL (TEST_DATABASE_URL); REQUIRE_POSTGRES=1 makes a missing server an error.
 
 const bootstrapToken = 'coversaath-test-bootstrap-token-0017';

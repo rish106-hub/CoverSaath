@@ -76,7 +76,7 @@ async function postgresCatalog(pool) {
     WHERE NOT t.tgisinternal AND c.relnamespace = current_schema()::regnamespace ORDER BY t.tgname`);
   for (const row of triggers) {
     if (POSTGRES_ONLY_TRIGGERS.has(row.name)) continue;
-    // Sync triggers (migration 031) are PostgreSQL-only and multi-event by design; tests/sync-log.test.mjs covers them.
+    // Sync triggers (migration 046) are PostgreSQL-only and multi-event by design; tests/sync-log.test.mjs covers them.
     if (/_sync_(log|touch)$/.test(row.name)) continue;
     const events = [row.type & 4 ? 'INSERT' : null, row.type & 8 ? 'DELETE' : null, row.type & 16 ? 'UPDATE' : null].filter(Boolean);
     assert.equal(events.length, 1, `${row.name} must have exactly one event`);
@@ -112,6 +112,7 @@ test('PostgreSQL catalog holds every expected object and the frozen object count
     triggers: Object.keys(actual.triggers).length,
   }, {
     tables: 78, columns: 809, foreignKeys: 159, uniqueConstraints: 30, checkConstraints: 376, namedIndexes: 141, views: 2, triggers: 114,
+    tables: 74, columns: 759, foreignKeys: 153, uniqueConstraints: 27, checkConstraints: 355, namedIndexes: 134, views: 2, triggers: 114,
   });
 });
 

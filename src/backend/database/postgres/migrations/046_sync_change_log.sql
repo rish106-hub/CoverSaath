@@ -98,6 +98,8 @@ BEGIN
   IF hid IS NULL OR eid IS NULL THEN RETURN NULL; END IF;
   -- A cascade from a household delete: the household is already gone, and so is its log.
   IF TG_OP = 'DELETE' AND NOT EXISTS (SELECT 1 FROM public.households WHERE id = hid) THEN RETURN NULL; END IF;
+  -- An erased household (closed tombstone): its log was deleted by the erasure, so later prunes of its rows log nothing.
+  IF EXISTS (SELECT 1 FROM public.households WHERE id = hid AND status = 'closed') THEN RETURN NULL; END IF;
   rev := CASE WHEN row_json ? 'revision' THEN (row_json ->> 'revision')::integer + CASE WHEN TG_OP = 'DELETE' THEN 1 ELSE 0 END
               ELSE 1 END;
   scope := COALESCE(NULLIF(TG_ARGV[2], ''), 'household');

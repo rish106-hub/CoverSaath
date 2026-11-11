@@ -1,6 +1,6 @@
 # ADR 0017: Sync change log (pull by cursor, snapshot, batched idempotent push)
 
-Status: accepted for the prototype (synthetic data only), pending independent read-only review. This is the sync half; the isolated demo is a later slice. Design: `docs/exec-plans/active/full-system-design.md` section 5. Migration `031_sync_change_log.sql` (030 is reserved for the auth slice built in parallel; numbers need not be contiguous).
+Status: accepted for the prototype (synthetic data only), pending independent read-only review. This is the sync half; the isolated demo is a later slice. Design: `docs/exec-plans/active/full-system-design.md` section 5. Migration `046_sync_change_log.sql` (renumbered from 031 when rebased onto main at 044; numbers need not be contiguous).
 
 ## Context
 

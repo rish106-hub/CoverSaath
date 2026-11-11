@@ -111,6 +111,7 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await q(`INSERT INTO job_queue (id, kind, household_id, payload_json) VALUES ($1, 'ocr.page', $2, '{}')`, [`job-${key}`, ids.household]);
 
   // Telemetry and idempotency.
+  await q(`INSERT INTO household_sync_state (household_id, min_seq, updated_at) VALUES ($1, 0, '2030-01-01T00:00:00.000Z')`, [ids.household]);
   await q(`INSERT INTO app_events (occurred_at, expires_at, event_name, household_id, adult_user_id, case_id, consent_grant_id, route) VALUES (now(), now() + interval '1 day', 'http_request', $1, $2, $3, $4, '/x')`, [ids.household, ids.adult, ids.case, ids.consent]);
   await q(`INSERT INTO idempotency_keys (scope, idempotency_key, request_digest, response_status, response_json, expires_at, created_at) VALUES ($1, $2, $3, 201, $4, $5, $6)`,
     [`document-upload:${ids.adult}:${ids.case}`, `key-${key}`, hex('d'), JSON.stringify({ document: { id: ids.document, filename: canary('idem-filename') } }), later, at]);

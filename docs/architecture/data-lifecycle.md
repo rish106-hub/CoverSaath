@@ -95,6 +95,8 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `onboarding_progress` | delete | userData | Deleted. |
 | `tool_scenarios` | delete | userData | Deleted. |
 | `job_queue` | delete | - | Identifiers only (kind, document and grant ids). Deleted on revocation, document erasure and household erasure; never blocks an erasure. |
+| `household_changes` | delete | - | Sync change log (migration 046): ids, revisions and operations only, no values. Deleted on household erasure, after the data erasures that log their own deletes. |
+| `household_sync_state` | delete | - | Sync cursor state (migration 046): counters and times only. Deleted on household erasure. |
 | `app_events` | delete | - | Deleted by household, case and adult id. |
 | `idempotency_keys` | delete | - | Reached by its `household_id` and `case_id` columns (migration 040; the response is sealed, so ids inside it cannot be searched), plus legacy needle and upload-scope queries for rows older than 038. Responses can carry document names and job content. |
 | `retention_records` | ledger | - | The deletion ledger. Reason code and times only. |
