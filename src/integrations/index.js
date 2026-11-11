@@ -9,4 +9,4 @@ export {
   UnverifiedConnectorError,
 } from './shared/index.js';
 export { createIntakeConnectorStubs } from './intake/index.js';
-export { createInsuranceDataClient, referenceDataEnabled, REFERENCE_ENDPOINTS, ReferenceDataError } from './insurance-data/index.js';
+export { createInsuranceDataClient, referenceDataEnabled, REFERENCE_ENDPOINTS, SERVICE_ENDPOINTS, ReferenceDataError } from './insurance-data/index.js';

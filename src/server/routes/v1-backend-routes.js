@@ -17,6 +17,7 @@ import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from 
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
 import { handleDataLifecycleRoute } from './data-lifecycle-routes.js';
 import { handleHoldingsRoute } from './holdings-routes.js';
+import { handleHoldingProductRoute } from './holding-product-routes.js';
 import { parsePolicyType } from '../../contracts/policy-type.js';
 import {
   READ_FIELDS, analysisJobDto, analysisTaskDto, auditSummaryDto, caseSummaryDto,
@@ -405,6 +406,8 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     // Erasure and export of a case, member or household (S3). New routes only; ownership is checked in the services.
     const lifecycle = await handleDataLifecycleRoute({ req, url, principal, services, documentUploads, responses });
     if (lifecycle) return lifecycle;
+    const holdingProduct = await handleHoldingProductRoute({ req, url, principal, services, documentUploads, requireOwnedDocument, idempotencyKey });
+    if (holdingProduct) return holdingProduct;
     const holdingsRoute = await handleHoldingsRoute({ req, url, principal, services });
     if (holdingsRoute) return holdingsRoute;
 
