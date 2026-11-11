@@ -37,7 +37,7 @@ export function createBackendServices(database, options = {}) {
   const appEvents = new AppEventRepository(database, { clock: options.clock, columnCrypto });
   const providerCalls = new ProviderCallRepository(database, { clock: options.clock });
   const runtimeLimits = new RuntimeLimitsRepository(database);
-  // Product analytics outbox (migration 057, ADR 0033): off unless ANALYTICS_ENABLED is exactly "true" and the household consented.
+  // Product analytics outbox (migration 058, ADR 0033): off unless ANALYTICS_ENABLED is exactly "true" and the household consented.
   const analytics = createAnalyticsService({ database, env: options.env ?? process.env });
   // Postgres job queue for the worker process group (migration 034). Revocation erases its rows through ConsentRepository.
   const jobQueue = new JobQueueRepository(database, { clock: options.clock });

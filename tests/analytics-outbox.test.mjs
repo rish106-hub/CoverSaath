@@ -14,7 +14,7 @@ import { PAID_VIA, PAYMENT_CHANNELS } from '../src/backend/repositories/premium-
 import { createApiServer } from '../src/server/server.js';
 import { UPLOAD_DOCUMENT_KINDS } from '../src/backend/services/document-upload-service.js';
 
-// Product analytics outbox (migration 057, ADR 0033, complete.md D6). Synthetic data only; no live PostHog call: the client is a local stub.
+// Product analytics outbox (migration 058, ADR 0033, complete.md D6). Synthetic data only; no live PostHog call: the client is a local stub.
 const opts = postgresTestOptions();
 const SALT = 'test-analytics-salt-not-a-secret';
 const ENV = { ANALYTICS_ENABLED: 'true', ANALYTICS_DISTINCT_ID_SALT: SALT };

@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { ANALYTICS_CONSENT_SCOPE, ANALYTICS_PURPOSE, sanitizeAnalyticsEvent } from '../../contracts/analytics-events.js';
 
-// Analytics outbox (migration 057, ADR 0033). One row per allowlisted event. Household-linked so erasure deletes it; the household id never
+// Analytics outbox (migration 058, ADR 0033). One row per allowlisted event. Household-linked so erasure deletes it; the household id never
 // leaves this table (the distinct id is an HMAC of it). Properties are re-validated on enqueue AND on drain, so a row written by a bug or a
 // manual edit still cannot send a key outside the allowlist.
 

@@ -9,7 +9,7 @@ import { seedWorld } from './support/postgres-fixtures.mjs';
 import { seedDemo } from '../scripts/seed-demo.mjs';
 import { buildJobHandlers } from '../src/server/worker.js';
 
-// Network hospitals (migration 055): sync from the reference export, the owner route, and the demo seed. Synthetic data only.
+// Network hospitals (migration 057): sync from the reference export, the owner route, and the demo seed. Synthetic data only.
 // Needs PostgreSQL (TEST_DATABASE_URL).
 
 const opts = postgresTestOptions();

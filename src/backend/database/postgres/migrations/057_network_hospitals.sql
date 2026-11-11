@@ -11,7 +11,7 @@
 --   equality is enough and PostGIS is not installed.
 -- Row level security on with no policy; Data API roles hold nothing (see 016_data_api_lockdown.sql).
 -- Rollback: expand-only. Turn HOLDINGS_ENABLED off (the route answers 503); a synthetic-only project may DROP TABLE public.network_hospitals and
---   DELETE FROM schema_migrations WHERE version = '055_network_hospitals.sql'.
+--   DELETE FROM schema_migrations WHERE version = '057_network_hospitals.sql'.
 CREATE TABLE IF NOT EXISTS public.network_hospitals (
   id text PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 100 AND id ~ '^[A-Za-z0-9][A-Za-z0-9_.:-]*$'),
   insurer_id text CHECK (insurer_id IS NULL OR length(insurer_id) BETWEEN 1 AND 100),
