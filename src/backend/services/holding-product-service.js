@@ -94,6 +94,11 @@ export function createHoldingProductService({
       kind: REFERENCE_IMPORT_JOB_KIND, householdId, payload: { scope: 'registry' },
       dedupeKey: referenceImportDedupeKey({ scope: 'registry', identifier: 'snapshot-v1' }),
     });
+    // The network hospital directory refreshes on the same trigger (S-C2). One live job at a time.
+    await jobQueue.enqueue({
+      kind: REFERENCE_IMPORT_JOB_KIND, householdId, payload: { scope: 'hospitals' },
+      dedupeKey: referenceImportDedupeKey({ scope: 'hospitals', identifier: 'directory-v1' }),
+    });
   }
 
   // First pages only, flattened to text. Null when the text may not be read now.

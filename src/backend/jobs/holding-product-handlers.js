@@ -7,12 +7,13 @@ import { DETECT_INSURER_JOB_KIND, REFERENCE_IMPORT_JOB_KIND } from '../services/
 const malformed = () => Object.assign(new Error('The job is not a valid holdings job.'), { code: 'JOB_PAYLOAD_INVALID', retryable: false });
 const PERMANENT_END = new Set(['HOLDING_DOCUMENT_NOT_READABLE']);
 
-export function createReferenceImportHandler({ service }) {
+export function createReferenceImportHandler({ service, hospitals = null }) {
   if (!service || typeof service.importReference !== 'function') throw new TypeError('A holding product service is required.');
   return async function handleReferenceImport({ job, signal } = {}) {
     if (job?.kind !== REFERENCE_IMPORT_JOB_KIND || typeof job.householdId !== 'string') throw malformed();
     if (signal?.aborted) return;
     if (job.payload?.scope === 'registry') { await service.importRegistry(); return; }
+    if (job.payload?.scope === 'hospitals' && hospitals) { await hospitals.importHospitals(); return; }
     if (job.payload?.scope === 'product' && typeof job.payload.policyProfileId === 'string') {
       await service.importReference({ householdId: job.householdId, policyProfileId: job.payload.policyProfileId });
       return;

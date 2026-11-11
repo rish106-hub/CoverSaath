@@ -30,7 +30,7 @@ export function buildJobHandlers(services, env = process.env) {
   // Holdings (HOLDINGS_ENABLED=true): detection, and the reference import (also needs REFERENCE_DATA_ENABLED=true to do any work).
   if (holdingsEnabled(env)) {
     handlers[DETECT_INSURER_JOB_KIND] = createDetectInsurerHandler({ service: services.holdingProducts });
-    handlers[REFERENCE_IMPORT_JOB_KIND] = createReferenceImportHandler({ service: services.holdingProducts });
+    handlers[REFERENCE_IMPORT_JOB_KIND] = createReferenceImportHandler({ service: services.holdingProducts, hospitals: services.networkHospitals });
   }
   return Object.freeze(handlers);
 }

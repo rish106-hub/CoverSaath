@@ -14,6 +14,8 @@ import { HoldingPipelineRepository } from '../repositories/holding-pipeline-repo
 import { createHoldingsService } from './holdings-service.js';
 import { createPolicyFactsService, POLICY_FACTS_JOB_KIND, policyFactsDedupeKey } from './policy-facts-service.js';
 import { NORMALISER_VERSION } from '../../features/policy-facts/normalisers.js';
+import { createNetworkHospitalService } from './network-hospital-service.js';
+import { NetworkHospitalRepository } from '../repositories/network-hospital-repository.js';
 import { createHoldingProductService, DETECT_INSURER_JOB_KIND } from './holding-product-service.js';
 import { HOLDING_JOB_MAX_ATTEMPTS } from '../../contracts/holdings.js';
 import { createHash } from 'node:crypto';
@@ -134,8 +136,10 @@ export function createBackendServices(database, options = {}) {
     repository: holdingProductRepository, policyHoldings, policyProfiles, referenceCache: new ReferenceCacheRepository(database), jobQueue, ocr, pipeline: holdings, env: options.env ?? process.env, clock: options.clock, client: options.referenceClient ?? null,
   });
 
+  const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, env: options.env ?? process.env, client: options.referenceClient ?? null });
+
   return {
-    holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
+    networkHospitals, holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     holdings, holdingPipelineRepository, memory, memoryChunks, chatRepository, chatV1, modelGateway,
     emergencyInstruction,
