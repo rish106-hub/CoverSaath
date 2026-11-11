@@ -17,6 +17,7 @@ import { PROFILE_ANSWER_KEYS, PROFILE_ANSWER_SOURCE, parseProfileAnswers } from 
 import { createPersistentCoverageAnalysisService } from '../../features/coverage-analysis/index.js';
 import { handleDataLifecycleRoute } from './data-lifecycle-routes.js';
 import { handleHoldingsRoute } from './holdings-routes.js';
+import { handleHoldingHospitalsRoute } from './holding-hospitals-routes.js';
 import { handleHoldingFactsRoute } from './holding-facts-routes.js';
 import { handleHoldingRecordsRoute } from './holding-records-routes.js';
 import { handleChatV1Route } from './chat-v1-routes.js';
@@ -413,6 +414,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     if (holdingProduct) return holdingProduct;
     const holdingsRoute = await handleHoldingsRoute({ req, url, principal, services });
     if (holdingsRoute) return holdingsRoute;
+    const holdingHospitals = await handleHoldingHospitalsRoute({ req, url, principal, services }); if (holdingHospitals) return holdingHospitals;
     const holdingFacts = await handleHoldingFactsRoute({ req, url, principal, services }); if (holdingFacts) return holdingFacts;
     const holdingRecords = await handleHoldingRecordsRoute({ req, url, principal, services }); if (holdingRecords) return holdingRecords;
     const chatV1 = await handleChatV1Route({ req, url, principal, services }); if (chatV1) return chatV1;
