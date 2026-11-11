@@ -14,12 +14,17 @@ import { HoldingPipelineRepository } from '../repositories/holding-pipeline-repo
 import { createHoldingsService } from './holdings-service.js';
 import { createPolicyFactsService, POLICY_FACTS_JOB_KIND, policyFactsDedupeKey } from './policy-facts-service.js';
 import { NORMALISER_VERSION } from '../../features/policy-facts/normalisers.js';
-import { createHoldingProductService } from './holding-product-service.js';
+import { createHoldingProductService, DETECT_INSURER_JOB_KIND } from './holding-product-service.js';
+import { HOLDING_JOB_MAX_ATTEMPTS } from '../../contracts/holdings.js';
+import { createHash } from 'node:crypto';
 import { createAuthTokenService } from './auth-token-service.js';
 import { createSyncService } from './sync-service.js';
 import { TenantAccessService } from './tenant-access-service.js';
 import { createJwtTokens, readJwtIssuer, readJwtPrivateKeys } from '../security/jwt-tokens.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
+
+// Document kinds that start a holding on upload (a policy wording or schedule).
+const HOLDING_DOCUMENT_KINDS = Object.freeze(['policy_wording', 'policy_schedule']);
 
 export function createBackendServices(database, options = {}) {
   const audit = new AuditRepository(database, options);
@@ -66,7 +71,19 @@ export function createBackendServices(database, options = {}) {
   });
   const authTokens = createAuthTokenService({ repository: authTokenRepository, tokens: jwtTokens, clock: options.clock });
   const identities = new AuthIdentityRepository(database, { ...shared, households, auth, authTokens: authTokenRepository });
-  const ocr = new OcrRepository(database, shared);
+  // Holdings (complete.md 3.2 step 1): when OCR of a policy document completes, create its holding (status uploaded) and queue insurer
+  // detection. One holding per document and one live job per holding; off unless HOLDINGS_ENABLED is exactly "true". `policyHoldings` is built below.
+  const afterOcrComplete = async ({ householdId, documentId, documentKind, consentGrantId }) => {
+    if (!holdingsEnabled(options.env ?? process.env) || !HOLDING_DOCUMENT_KINDS.includes(documentKind)) return;
+    const existing = await database.one('SELECT id FROM policy_holdings WHERE household_id = ? AND document_id = ?', [householdId, documentId]);
+    if (existing) return;
+    const holding = await policyHoldings.create({ householdId, adultId: null, documentId, kind: 'retail_health' });
+    await jobQueue.enqueue({
+      kind: DETECT_INSURER_JOB_KIND, householdId, documentId, consentGrantId, payload: { holdingId: holding.id },
+      dedupeKey: createHash('sha256').update(`${DETECT_INSURER_JOB_KIND}\u0000${holding.id}\u0000${documentId}`).digest('hex'), maxAttempts: HOLDING_JOB_MAX_ATTEMPTS,
+    });
+  };
+  const ocr = new OcrRepository(database, { ...shared, afterComplete: afterOcrComplete });
   const profileAnswers = new ProfileAnswerRepository(database, shared);
   // Policy profile (migration 043, ADR 0024): identity of a policy and its owner confirmation. Off unless POLICY_FACTS_ENABLED=true.
   const policyProfiles = new PolicyProfileRepository(database, shared);
