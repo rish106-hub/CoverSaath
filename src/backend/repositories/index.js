@@ -27,3 +27,4 @@ export { ReferenceCacheRepository } from './reference-cache-repository.js';
 export { SyncRepository } from './sync-repository.js';
 export { setSyncActor } from './sync-actor.js';
 export { PersonRecordRepository } from './person-record-repository.js';
+export { HoldingProductRepository } from './holding-product-repository.js';
