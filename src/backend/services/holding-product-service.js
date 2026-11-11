@@ -71,9 +71,9 @@ export function chunkExport(documents) {
 }
 
 export function createHoldingProductService({
-  repository, policyProfiles, referenceCache, jobQueue, ocr, env = process.env, clock = () => new Date(), client = null,
+  repository, policyHoldings, policyProfiles, referenceCache, jobQueue, ocr, env = process.env, clock = () => new Date(), client = null,
 }) {
-  for (const [name, dep] of Object.entries({ repository, policyProfiles, referenceCache, jobQueue, ocr })) {
+  for (const [name, dep] of Object.entries({ repository, policyHoldings, policyProfiles, referenceCache, jobQueue, ocr })) {
     if (!dep) throw new TypeError(`createHoldingProductService needs ${name}.`);
   }
   const enabled = () => holdingsEnabled(env);
@@ -108,6 +108,12 @@ export function createHoldingProductService({
     return text;
   }
 
+  // uploaded -> insurer_pending only; later statuses stay (the flow never moves backwards). The repository audits the change.
+  async function markInsurerPending({ householdId, adultId, holdingId }) {
+    if ((await repository.get(holdingId))?.status !== 'uploaded') return;
+    await policyHoldings.setStatus({ householdId, adultId, holdingId, status: 'insurer_pending' });
+  }
+
   async function detect({ householdId, document }) {
     const text = await firstPagesText(document);
     if (text === null) throw coded('HOLDING_DOCUMENT_NOT_READABLE', 'The document text is not available yet.', 409);
@@ -123,10 +129,10 @@ export function createHoldingProductService({
     enabled,
 
     /** Owner read: up to three candidates for the holding's document. */
-    async candidates({ holding, document }) {
+    async candidates({ holding, document, adultUserId = null }) {
       requireEnabled();
       const candidates = await detect({ householdId: holding.householdId, document });
-      if (candidates.length > 0) await repository.markInsurerPending({ householdId: holding.householdId, holdingId: holding.id });
+      if (candidates.length > 0) await markInsurerPending({ householdId: holding.householdId, adultId: adultUserId, holdingId: holding.id });
       const profile = await policyProfiles.get({ householdId: holding.householdId, documentId: document.id, sourceVersion: document.sourceVersion });
       return { holdingId: holding.id, profileVersion: profile?.version ?? 0, candidates };
     },
@@ -135,7 +141,7 @@ export function createHoldingProductService({
     async runDetection({ householdId, documentId, holdingId }) {
       requireEnabled();
       const candidates = await detect({ householdId, document: { id: documentId, householdId } });
-      if (candidates.length > 0) await repository.markInsurerPending({ householdId, holdingId });
+      if (candidates.length > 0) await markInsurerPending({ householdId, adultId: null, holdingId });
       return { candidates: candidates.length };
     },
 
@@ -179,7 +185,10 @@ export function createHoldingProductService({
         throw error;
       }
       const profile = await policyProfiles.get({ householdId: holding.householdId, documentId: document.id, sourceVersion });
-      await repository.linkReportedProduct({ householdId: holding.householdId, holdingId: holding.id, policyProfileId: profile.id });
+      await policyHoldings.link({ householdId: holding.householdId, adultId: adultUserId, holdingId: holding.id, policyProfileId: profile.id });
+      if (['uploaded', 'insurer_pending'].includes((await repository.get(holding.id))?.status)) {
+        await policyHoldings.setStatus({ householdId: holding.householdId, adultId: adultUserId, holdingId: holding.id, status: 'product_reported' });
+      }
       // Identifiers only: the job reads the UIN from the profile row, so no UIN, name or text is queued.
       await jobQueue.enqueue({
         kind: REFERENCE_IMPORT_JOB_KIND, householdId: holding.householdId, documentId: document.id, payload: { scope: 'product', policyProfileId: profile.id },

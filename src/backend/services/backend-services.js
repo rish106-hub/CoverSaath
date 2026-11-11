@@ -90,7 +90,7 @@ export function createBackendServices(database, options = {}) {
   // Holdings (migration 048): product detection, owner confirmation and the reference import. Off unless HOLDINGS_ENABLED=true.
   const holdingProductRepository = new HoldingProductRepository(database, shared);
   const holdingProducts = createHoldingProductService({
-    repository: holdingProductRepository, policyProfiles, referenceCache: new ReferenceCacheRepository(database), jobQueue, ocr, env: options.env ?? process.env, clock: options.clock, client: options.referenceClient ?? null,
+    repository: holdingProductRepository, policyHoldings, policyProfiles, referenceCache: new ReferenceCacheRepository(database), jobQueue, ocr, env: options.env ?? process.env, clock: options.clock, client: options.referenceClient ?? null,
   });
 
   return {

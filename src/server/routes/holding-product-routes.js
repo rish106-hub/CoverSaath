@@ -35,7 +35,7 @@ export async function handleHoldingProductRoute({ req, url, principal, services,
     if (NOT_FOUND_CODES.includes(error?.code)) throw notFound();
     throw error;
   }
-  if (candidatesMatch) return { status: 200, body: await holdingsService.candidates({ holding, document }) };
+  if (candidatesMatch) return { status: 200, body: await holdingsService.candidates({ holding, document, adultUserId: principal.adultId }) };
   return {
     status: 200,
     body: await holdingsService.confirmProduct({ holding, document, adultUserId: principal.adultId, body: await readBody(req), idempotencyKey: idempotencyKey(req) }),
