@@ -176,6 +176,39 @@ export const parseRegistryProducts = raw => {
   return { products: array(value.data).map(parseProduct), nextCursor: nextCursor(value.next_cursor) };
 };
 
+const PINCODE = /^[0-9]{6}$/;
+// Network hospital export page (service-only). Public directory fields only; invalid rows fail the whole page closed.
+export function parseNetworkHospitalsExport(raw) {
+  const value = object(raw);
+  const hospitals = array(value.data, 500).map(item => {
+    const row = object(item);
+    const pincode = text(row.pincode, 6);
+    if (!PINCODE.test(pincode)) throw invalid();
+    const coordinate = (v, limit) => {
+      if (v === undefined || v === null) return null;
+      const n = Number(v);
+      if (!Number.isFinite(n) || Math.abs(n) > limit) throw invalid();
+      return n;
+    };
+    return {
+      id: text(row.id, 100),
+      insurerId: optionalText(row.insurer_id, 100),
+      tpaId: optionalText(row.tpa_id, 100),
+      name: text(row.name, 200),
+      address: row.address === undefined || row.address === null || row.address === '' ? '' : text(row.address, 400),
+      city: text(row.city, 100),
+      pincode,
+      lat: coordinate(row.lat, 90),
+      lng: coordinate(row.lng, 180),
+      cashless: bool(row.cashless),
+      sourceRef: text(row.source_ref, 200),
+      validFrom: optionalDate(row.valid_from),
+      validTo: optionalDate(row.valid_to),
+    };
+  });
+  return { hospitals, nextCursor: nextCursor(value.next_cursor) };
+}
+
 export function parseProductNameSearch(raw) {
   const rows = array(object(raw).data, 20).map(item => {
     const value = object(item);

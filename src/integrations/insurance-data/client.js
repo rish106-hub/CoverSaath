@@ -112,6 +112,12 @@ export const SERVICE_ENDPOINTS = Object.freeze({
     request: p => ({ path: '/v1/products/search', query: { q: p.q, insurer: p.insurer, limit: '10' } }),
     parse: schemas.parseProductNameSearch,
   },
+  // Network hospital directory pages (S-C2). Public data, no household input; pages of at most 500 rows.
+  'hospitals.export': {
+    normalize: p => ({ cursor: normalizeCursor(p.cursor) }),
+    request: p => ({ path: '/v1/network-hospitals/export', query: { limit: '100', cursor: p.cursor } }),
+    parse: schemas.parseNetworkHospitalsExport,
+  },
   'products.exportByUin': {
     normalize: p => ({ uin: normalizeUin(p.uin) }),
     request: p => ({ path: `/v1/products/by-uin/${encodeURIComponent(p.uin)}/export`, query: {} }),
