@@ -148,7 +148,7 @@ test('the raw subject is stored nowhere: only sha256(issuer LF subject) is in th
   const first = await app.signIn({ subject });
   assert.equal(first.status, 201);
   const columns = (await app.db.many("SELECT column_name FROM information_schema.columns WHERE table_name = 'auth_identities' ORDER BY ordinal_position")).map(r => r.column_name);
-  assert.deepEqual(columns, ['id', 'adult_user_id', 'issuer', 'subject_sha256', 'created_at', 'last_used_at', 'revoked_at']);
+  assert.deepEqual(columns, ['id', 'adult_user_id', 'issuer', 'subject_sha256', 'created_at', 'last_used_at', 'revoked_at', 'provider', 'linked_via_session_id', 'email_verified']);
   const row = await app.db.one('SELECT * FROM auth_identities');
   assert.equal(row.subject_sha256, createHash('sha256').update(`${issuer}\n${subject}`).digest('hex'));
   assert.equal(row.issuer, issuer);

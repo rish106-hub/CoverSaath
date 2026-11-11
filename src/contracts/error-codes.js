@@ -26,6 +26,12 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   ROUTE_NOT_FOUND: entry(404, 'request', false),
   // Authentication, tenancy and consent.
   AUTHENTICATION_REQUIRED: entry(401, 'authorization', false),
+  // Web sessions (ADR 0027).
+  AUTH_REFRESH_INVALID: entry(401, 'authorization', false),
+  AUTH_HOUSEHOLD_MISMATCH: entry(403, 'authorization', false),
+  AUTH_SESSION_NOT_FOUND: entry(404, 'not_found', false),
+  AUTH_RATE_LIMITED: entry(429, 'capacity', true),
+  SOURCE_ROLE_NOT_AUTHORISED: entry(403, 'authorization', false),
   CONSENT_REQUIRED: entry(403, 'authorization', false),
   CONSENT_SCOPE_REQUIRED: entry(403, 'authorization', false),
   CONSENT_SUBJECT_REQUIRED: entry(403, 'authorization', false),

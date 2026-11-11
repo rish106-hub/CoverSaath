@@ -159,7 +159,8 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
     const grant = caseRecord && reviews ? await reviews.activeGrant(caseRecord.household_id, principal.adultId, caseRecord.id) : null;
     if (!grant || !(await activeHousehold(caseRecord.household_id))) throw notFound();
     if (grant.kind === 'independent_reviewer') {
-      if (!independentEnabled) throw notFound();
+      // A web session is bound to one household; an independent reviewer works across households through an opaque session.
+      if (!independentEnabled || principal.householdId) throw notFound();
     } else {
       // Awaited inside the try: a rejected household check denies (fail closed), it never escapes as a pass.
       try { await services.access.requireHousehold(principal, caseRecord.household_id, { write: false }); } catch { throw notFound(); }
@@ -191,7 +192,7 @@ export function createDecisionCatalogueService({ services, evidence, env = {} } 
   // Only an enabled, active independent grant on an active household opens a case without a household role.
   // Returns { caseRecord, documentsUntil } or null.
   async function independentReviewerCase(principal, caseId) {
-    if (!independentEnabled || !reviews || typeof caseId !== 'string') return null;
+    if (!independentEnabled || !reviews || typeof caseId !== 'string' || principal.householdId) return null;
     const caseRecord = await readCase(caseId);
     const grant = caseRecord && (await activeHousehold(caseRecord.household_id)) ? await reviews.activeGrant(caseRecord.household_id, principal.adultId, caseRecord.id) : null;
     if (grant?.kind !== 'independent_reviewer') return null;

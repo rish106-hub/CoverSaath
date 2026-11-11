@@ -14,11 +14,13 @@ const SEALED_ELSEWHERE = {
   adult_users: ['phone_ciphertext'],
   adult_preferences: ['prefs_ciphertext'],
   app_events: ['payload_enc'],
+  devices: ['label_ciphertext'],
   document_blobs: ['envelope'],
   household_places: ['label_ciphertext', 'payload_ciphertext'],
   onboarding_progress: ['state_ciphertext'],
   profile_answers: ['value_ciphertext'],
   tool_scenarios: ['inputs_ciphertext'],
+  webauthn_credentials: ['label_ciphertext'],
 };
 
 // Columns the migration keeps only for rows not yet backfilled and for rollback. The application never writes them;
@@ -32,7 +34,22 @@ const PLAIN = {
   audit_events: {
     'counts-only audit (ADR 0013 D3); free text is never put in a payload': ['actor_type', 'action', 'resource_type', 'event_payload_json'],
   },
-  auth_identities: { 'identity provider issuer URL, public': ['issuer'] },
+  api_sessions: { 'closed vocabulary: session kind, authentication method and revocation reason (ADR 0027)': ['session_kind', 'amr', 'revoked_reason'] },
+  auth_challenges: { 'closed vocabulary: challenge kind (the code and destination are keyed hashes)': ['kind'] },
+  auth_identities: {
+    'identity provider issuer URL, public': ['issuer'],
+    'closed vocabulary (sign-in provider) and an e-mail verified flag, no address': ['provider', 'email_verified'],
+  },
+  auth_signing_keys: {
+    'public JWK, key id, algorithm and key state: public key material only, the private key lives in the environment (ADR 0027)': ['kid', 'alg', 'public_jwk', 'status'],
+    'rotation time of a signing key': ['retire_after'],
+  },
+  devices: { 'closed vocabulary: client platform (the label is sealed)': ['platform'] },
+  notice_acceptances: { 'closed vocabulary and notice version string: which notice was accepted and where, no content': ['notice_kind', 'notice_version', 'surface'] },
+  webauthn_credentials: {
+    'passkey credential id and public key: public by design in WebAuthn (the private key never leaves the authenticator), random authenticator-chosen handle; the label is sealed': ['credential_id', 'public_key'],
+    'closed vocabulary: authenticator transports': ['transports'],
+  },
   case_participants: { 'closed vocabulary': ['participant_role'] },
   job_queue: { 'job kind, worker id, closed vocabulary and error code, no content': ['kind', 'locked_by', 'status', 'last_error_code', 'dedupe_key'], 'identifier values only, capped at 1 KiB by a check; never document, OCR, model or household content': ['payload_json'] },
   reference_cache: {
@@ -143,6 +160,8 @@ const PLAIN = {
 const PLAIN_NUMBERS = {
   adult_preferences: { 'schema and row revision counters': ['schema_version', 'revision'] },
   app_events: { 'status code and duration, no content': ['status', 'duration_ms'] },
+  auth_challenges: { 'attempt counter and its cap': ['attempts', 'max_attempts'] },
+  webauthn_credentials: { 'passkey signature counter, no content': ['sign_count'] },
   coverage_graph_snapshots: { 'snapshot version counter': ['version'] },
   coverage_parameter_observation_rules: { 'rule flag (0/1)': ['requires_accepted'] },
   coverage_parameter_records: { 'applicability flag (0/1)': ['applicable'] },
@@ -176,6 +195,7 @@ const PLAIN_NUMBERS = {
 // Ids that are not a primary or foreign key in the catalog.
 const PLAIN_REFS = {
   app_events: { 'request correlation id and row references (not keys: events outlive their rows), no content': ['request_id', 'household_id', 'adult_user_id', 'case_id', 'consent_grant_id'] },
+  api_sessions: { 'id of the client device row of the session (not a key: a device can be removed without ending history), no content': ['device_id'] },
   audit_events: { 'actor and resource ids of the audit chain (append only, no content)': ['actor_id', 'resource_id'] },
   consent_scopes: { 'resource id the scope names (a document or field key)': ['resource_id'] },
   coverage_graph_snapshots: { 'id of the run that generated the snapshot': ['generated_by_run_id'] },

@@ -3,7 +3,7 @@
 // succeeded (a failed or foreign request never attributes itself to a household it was refused for).
 
 const PARAM_COLLECTIONS = new Set([
-  'households', 'cases', 'consents', 'documents', 'curated-products', 'ocr-jobs', 'jobs', 'tasks', 'members', 'fields', 'runs', 'passages', 'answers',
+  'households', 'cases', 'consents', 'sessions', 'documents', 'curated-products', 'ocr-jobs', 'jobs', 'tasks', 'members', 'fields', 'runs', 'passages', 'answers',
 ]);
 const LONG_IDENTIFIER = /^[A-Za-z0-9_-]*[0-9][A-Za-z0-9_-]{15,}$/;
 const SLUG = /^[a-z][a-z0-9-]{0,40}$/;
@@ -63,6 +63,7 @@ export const KNOWN_ROUTE_SEGMENTS = new Set([
   'identity-sessions', 'integrations', 'jobs', 'live', 'members', 'metrics', 'notices', 'ocr-jobs', 'onboarding', 'passages', 'permissions',
   'overview', 'places', 'policies', 'policy-facts', 'policy-profile', 'preferences', 'profile-answers', 'questions', 'read-facts', 'ready', 'reference', 'products', 'refresh', 'reviews', 'revoke',
   'runs', 'scenarios', 'sessions', 'source-pack', 'structuring-runs', 'tasks', 'transitions',
+  'auth', 'signout', 'signout-all',
 ]);
 
 export function knownRouteTemplate(pathname) {

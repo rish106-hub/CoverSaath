@@ -14,12 +14,13 @@ export function identityHash(issuer, subject) {
 }
 
 export class AuthIdentityRepository {
-  constructor(database, { clock = () => new Date(), audit, households, auth } = {}) {
+  constructor(database, { clock = () => new Date(), audit, households, auth, authTokens } = {}) {
     this.database = database;
     this.clock = clock;
     this.audit = audit;
     this.households = households;
     this.auth = auth;
+    this.authTokens = authTokens;
   }
 
   /**
@@ -27,10 +28,15 @@ export class AuthIdentityRepository {
    * adult. A returning identity gets a new session for its oldest active owner household; a revoked identity or an
    * inactive adult is refused (401). A session-cap refusal (429) rolls everything back, including a new adult.
    * Resolves { returning, household: { id }, adultId, memberId, session }.
+   * `web` starts a revocable web session with a refresh token (JWT sign-in, ADR 0027) instead of an opaque bearer session;
+   * `amr` is then the recorded authentication method.
    */
-  async signIn({ issuer, subject, displayName, contactEmail = null }) {
+  async signIn({ issuer, subject, displayName, contactEmail = null, web = false, amr = 'beta' }) {
     const hash = identityHash(issuer, subject);
     const db = this.database;
+    const issue = (adultUserId, householdId, authIdentityId) => (web
+      ? this.authTokens.createWebSession({ adultUserId, householdId, amr, authIdentityId })
+      : this.auth.issueSession({ adultUserId }));
     return db.transaction(async () => {
       const at = this.clock().toISOString();
       const existing = await db.one('SELECT * FROM auth_identities WHERE issuer = ? AND subject_sha256 = ?', [issuer, hash]);
@@ -40,7 +46,7 @@ export class AuthIdentityRepository {
         if (!adult || adult.account_status !== 'active') throw unauthenticated();
         const home = await this.#oldestOwnedHousehold(adult.id, at);
         if (!home) throw householdNotFound();
-        const session = await this.auth.issueSession({ adultUserId: adult.id });
+        const session = await issue(adult.id, home.household_id, existing.id);
         await db.run('UPDATE auth_identities SET last_used_at = ? WHERE id = ?', [at, existing.id]);
         return { returning: true, household: { id: home.household_id }, adultId: adult.id, memberId: home.member_id, session };
       }
@@ -52,7 +58,7 @@ export class AuthIdentityRepository {
         VALUES (?, ?, ?, ?, ?, ?)`, [identityId, adult.id, issuer, hash, at, at]);
       // Counts only: neither the issuer nor the subject is written to the audit chain.
       await this.audit?.append({ householdId: household.id, actorType: 'system', actorId: 'identity-service', action: 'auth_identity.created', resourceType: 'auth_identity', resourceId: identityId });
-      const session = await this.auth.issueSession({ adultUserId: adult.id });
+      const session = await issue(adult.id, household.id, identityId);
       return { returning: false, household: { id: household.id }, adultId: adult.id, memberId: member.id, session };
     }, { locks: [authIdentityLock(hash)] });
   }

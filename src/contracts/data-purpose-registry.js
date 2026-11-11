@@ -33,6 +33,7 @@ const ERASE = Object.freeze({
   structuring: erasure('src/backend/repositories/policy-structuring-repository.js', 'PolicyStructuringRepository.eraseDerived', 'tests/policy-structuring-persistence.test.mjs'),
   documentBytes: erasure('src/features/input/encrypted-database-storage.js', 'createEncryptedDatabaseByteStorage', 'tests/document-blobs.test.mjs', 'remove'),
   derivedRun: erasure('src/backend/repositories/consent-repository.js', 'ConsentRepository.eraseDerivedRunData', 'tests/revocation-concurrency.test.mjs'),
+  adultCascade: erasure('src/backend/repositories/erasure-repository.js', 'ErasureRepository.eraseHousehold', 'tests/data-erasure-api.test.mjs'),
   memberDelete: erasure('src/backend/repositories/household-app-repository.js', 'HouseholdAppRepository.deleteMember', 'tests/household-app-api.test.mjs'),
 });
 
@@ -168,6 +169,14 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   }),
   table('tool_scenarios.inputs_ciphertext', {
     category: 'preference', purposes: ['profile_intake'], sealed: true, retention: 'until_household_erased', erasure: ERASE.userData,
+  }),
+  // Migration 045 (ADR 0027): labels a person types for a passkey or a device. Removed by foreign-key cascade when the adult row is
+  // pruned by household erasure.
+  table('webauthn_credentials.label_ciphertext', {
+    category: 'identity', purposes: ['profile_intake'], sealed: true, retention: 'until_account_deleted', erasure: ERASE.adultCascade,
+  }),
+  table('devices.label_ciphertext', {
+    category: 'identity', purposes: ['profile_intake'], sealed: true, retention: 'until_account_deleted', erasure: ERASE.adultCascade,
   }),
 
   // Plain identity columns of a household member. Read only to build the known-identifier list; never sent to a model.

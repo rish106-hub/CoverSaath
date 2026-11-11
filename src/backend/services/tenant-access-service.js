@@ -11,6 +11,14 @@ function bearer(authorization) {
   return match?.[1] ?? null;
 }
 
+// A JWT access token is three base64url segments. It never matches bearer() (that pattern has no dots), so the two credential
+// kinds cannot be confused. The length cap is checked before any parsing.
+function jwtBearer(authorization) {
+  const match = typeof authorization === 'string' && authorization.length <= 2100
+    && authorization.match(/^Bearer ([A-Za-z0-9_-]{8,1000}\.[A-Za-z0-9_-]{8,1000}\.[A-Za-z0-9_-]{8,1000})$/);
+  return match?.[1] ?? null;
+}
+
 function sameSecret(left, right) {
   if (!left || !right) return false;
   const leftDigest = createHash('sha256').update(left).digest();
@@ -19,11 +27,12 @@ function sameSecret(left, right) {
 }
 
 export class TenantAccessService {
-  constructor(database, { auth, households, consents, env = {}, ...options }) {
+  constructor(database, { auth, authTokens = null, households, consents, env = {}, ...options }) {
     this.database = database;
     // Case, run and task rows carry sealed columns (ADR 0013 addendum D2); they are opened here so callers see plain values.
     this.crypto = resolveColumnCrypto(options);
     this.auth = auth;
+    this.authTokens = authTokens;
     this.households = households;
     this.consents = consents;
     this.bootstrapToken = env.KNOWVIA_BOOTSTRAP_TOKEN ?? null;
@@ -57,13 +66,28 @@ export class TenantAccessService {
   // Every check below is async and awaited: an un-awaited check would return a
   // pending Promise (truthy) and let the request through. A rejected query
   // rejects the request (fail closed).
+  // Two credential kinds: the opaque bearer session (scripts, tests; unchanged) and a JWT access token for a web session
+  // (ADR 0027). A JWT principal is bound to one household; a bearer principal has householdId null and is not.
   async authenticate(authorization) {
+    const jwt = jwtBearer(authorization);
+    if (jwt) {
+      if (!this.authTokens) fail('AUTHENTICATION_REQUIRED', 'Valid authentication is required.', 401);
+      return await this.authTokens.authenticate(jwt);
+    }
     const principal = await this.auth.authenticate(bearer(authorization));
     if (!principal) fail('AUTHENTICATION_REQUIRED', 'Valid authentication is required.', 401);
-    return principal;
+    return { ...principal, sessionKind: 'bearer', householdId: null };
   }
 
+  // A web principal reaching a record by its own id (case, job, task) gets the same 404 as a missing record, so the
+  // answer does not say whether another household owns that id. The 403 below is only for ids the caller names as a household.
+  #foreign(principal, householdId) { return Boolean(principal.householdId) && principal.householdId !== householdId; }
+
   async requireHousehold(principal, householdId, options) {
+    // Checked before any lookup, so a token for household A learns nothing about household B.
+    if (principal.householdId && principal.householdId !== householdId) {
+      fail('AUTH_HOUSEHOLD_MISMATCH', 'This session belongs to another household.', 403);
+    }
     return await this.households.requireAccess(householdId, principal.adultId, options);
   }
 
@@ -72,7 +96,7 @@ export class TenantAccessService {
     // A case erased through the deletion ledger is gone for every reader (S3).
     const row = await this.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (
       SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId]);
-    if (!row) fail('CASE_NOT_FOUND', 'Case not found.', 404);
+    if (!row || this.#foreign(principal, row.household_id)) fail('CASE_NOT_FOUND', 'Case not found.', 404);
     // The household check comes before anything is decrypted, so a caller outside the household gets not-found whatever the
     // stored amount looks like (no existence oracle through a decryption error).
     await this.requireHousehold(principal, row.household_id, options);
@@ -83,7 +107,7 @@ export class TenantAccessService {
     const record = openWorkflowRun(this.crypto, await this.database.one(`SELECT workflow_runs.*, service_cases.household_id
       FROM workflow_runs JOIN service_cases ON service_cases.id = workflow_runs.case_id
       WHERE workflow_runs.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [runId]));
-    if (!record) fail('JOB_NOT_FOUND', 'Job not found.', 404);
+    if (!record || this.#foreign(principal, record.household_id)) fail('JOB_NOT_FOUND', 'Job not found.', 404);
     await this.requireHousehold(principal, record.household_id);
     return record;
   }
@@ -94,7 +118,7 @@ export class TenantAccessService {
       JOIN workflow_runs ON workflow_runs.id = workflow_tasks.workflow_run_id
       JOIN service_cases ON service_cases.id = workflow_runs.case_id
       WHERE workflow_tasks.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [taskId]));
-    if (!record) fail('TASK_NOT_FOUND', 'Task not found.', 404);
+    if (!record || this.#foreign(principal, record.household_id)) fail('TASK_NOT_FOUND', 'Task not found.', 404);
     await this.requireHousehold(principal, record.household_id);
     return record;
   }
