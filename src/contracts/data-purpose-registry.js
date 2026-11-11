@@ -34,6 +34,7 @@ const ERASE = Object.freeze({
   documentBytes: erasure('src/features/input/encrypted-database-storage.js', 'createEncryptedDatabaseByteStorage', 'tests/document-blobs.test.mjs', 'remove'),
   derivedRun: erasure('src/backend/repositories/consent-repository.js', 'ConsentRepository.eraseDerivedRunData', 'tests/revocation-concurrency.test.mjs'),
   adultCascade: erasure('src/backend/repositories/erasure-repository.js', 'ErasureRepository.eraseHousehold', 'tests/data-erasure-api.test.mjs'),
+  personRecords: erasure('src/backend/repositories/person-record-erasure.js', 'erasePersonRecordsForCategories', 'tests/person-records-api.test.mjs'),
   memberDelete: erasure('src/backend/repositories/household-app-repository.js', 'HouseholdAppRepository.deleteMember', 'tests/household-app-api.test.mjs'),
 });
 
@@ -150,6 +151,15 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   }),
   table('profile_answers.value_ciphertext', {
     category: 'identity', purposes: ['profile_intake'], sealed: true, retention: 'until_revocation', childData: 'possible', erasure: ERASE.profileAnswers,
+  }),
+  table('person_records.payload_ciphertext', {
+    category: 'health_or_policy_content', purposes: ['profile_intake'], sealed: true, retention: 'until_revocation', childData: 'possible', erasure: ERASE.personRecords,
+  }),
+  table('household_members.mobile_ciphertext', {
+    category: 'contact', purposes: ['profile_intake'], sealed: true, retention: 'until_member_deleted', childData: 'possible', erasure: ERASE.memberDelete,
+  }),
+  table('household_members.email_ciphertext', {
+    category: 'contact', purposes: ['profile_intake'], sealed: true, retention: 'until_member_deleted', childData: 'possible', erasure: ERASE.memberDelete,
   }),
   table('household_places.label_ciphertext', {
     category: 'location', purposes: ['profile_intake'], sealed: true, retention: 'until_member_or_household_erased', erasure: ERASE.userData,

@@ -14,3 +14,4 @@ export { createDataExportService } from './data-export-service.js';
 export { createDataLifecycleService } from './data-lifecycle-service.js';
 export { createRetentionService } from './retention-service.js';
 export { createSyncService } from './sync-service.js';
+export { createPersonRecordService } from './person-record-service.js';

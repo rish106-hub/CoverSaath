@@ -36,6 +36,7 @@ const NOT_IN_SCENARIO = new Set([
   'ocr_jobs.error_message', 'integration_outbox.payload_json', 'integration_outbox.last_error', 'catalogue_reviews.fact_json', 'consent_revocations.reason',
   'workflow_events.event_payload_json', 'workflow_tasks.last_error_message', 'idempotency_keys.response_json', 'household_members.relationship_label',
   'household_members.date_of_birth', 'policies.policy_number_masked', 'policies.policy_version', 'policies.starts_on', 'policies.ends_on',
+  'household_members.mobile_ciphertext', 'household_members.email_ciphertext', 'person_records.payload_ciphertext',
   'service_cases.stated_estimate_ciphertext', 'workflow_runs.input_json', 'workflow_tasks.input_json', 'workflow_tasks.output_json',
 ]);
 

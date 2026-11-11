@@ -29,6 +29,7 @@ const LEGACY_PLAIN = { service_cases: ['stated_estimate_minor'] };
 
 // Plain on purpose: table -> reason -> columns.
 const PLAIN = {
+  person_records: { 'closed vocabulary: record type, slot name, completeness, source and state (ADR 0026); the payload is sealed': ['record_type', 'slot', 'completeness', 'source', 'state'] },
   adult_users: { 'closed vocabulary or setting, no identity': ['locale', 'account_status'] },
   app_events: { 'operational metadata (route template, outcome, code), no content': ['event_name', 'route', 'method', 'provider', 'outcome', 'code'] },
   audit_events: {
@@ -98,7 +99,7 @@ const PLAIN = {
   },
   fact_conflicts: { 'fact key and closed vocabulary': ['fact_key', 'resolution_state'] },
   household_changes: { 'closed vocabulary: synced entity name (a table label matching ^[a-z_]{1,40}$) and operation; the log holds ids and revisions, never values (ADR 0028)': ['entity', 'op'] },
-  household_members: { 'closed vocabulary': ['member_kind'] },
+  household_members: { 'closed vocabulary': ['member_kind'], 'closed vocabulary or flag (ADR 0026): gender, age band, preferred channel, lives-with-household': ['gender', 'age_band', 'preferred_channel', 'lives_with_household'] },
   household_places: { 'closed vocabulary': ['kind', 'slot', 'precision', 'source'] },
   household_roles: { 'closed vocabulary': ['role', 'status'] },
   households: { 'closed vocabulary': ['status'] },
@@ -159,6 +160,8 @@ const PLAIN = {
 
 // Numbers and references that are not a primary or foreign key: each listed so a new one needs a decision.
 const PLAIN_NUMBERS = {
+  household_members: { 'row revision counter': ['revision'] },
+  person_records: { 'schema and row revision counters': ['schema_version', 'revision'] },
   adult_preferences: { 'schema and row revision counters': ['schema_version', 'revision'] },
   app_events: { 'status code and duration, no content': ['status', 'duration_ms'] },
   household_changes: { 'log sequence number, row revision counter and time of the change, no content': ['seq', 'revision', 'at'] },

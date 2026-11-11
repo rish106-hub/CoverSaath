@@ -94,6 +94,7 @@ export const DATA_STORES = Object.freeze([
   store('proposed_parameters', 'redact_only', 'household_id = ?', null, 'Append-only. Label and value cleared.'),
   // User-stated data
   store('profile_answers', 'delete', 'household_id = ?', 'profileAnswers', 'Deleted.'),
+  store('person_records', 'delete', 'household_id = ?', 'userData', 'Deleted by household and member erasure, and when the consent that gated the record type is withdrawn. Payloads are sealed.'),
   store('device_permissions', 'delete', 'household_id = ?', 'userData', 'Deleted.'),
   store('household_places', 'delete', 'household_id = ?', 'userData', 'Deleted.'),
   store('adult_preferences', 'delete', 'household_id = ?', 'userData', 'Deleted.'),

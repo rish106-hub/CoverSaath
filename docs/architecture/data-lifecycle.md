@@ -93,6 +93,7 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `household_places` | delete | userData | Deleted. |
 | `adult_preferences` | delete | userData | Deleted. |
 | `onboarding_progress` | delete | userData | Deleted. |
+| `person_records` | delete | userData | Deleted by household and member erasure, and when the consent that gated the record type is withdrawn. Payloads are sealed. |
 | `tool_scenarios` | delete | userData | Deleted. |
 | `job_queue` | delete | - | Identifiers only (kind, document and grant ids). Deleted on revocation, document erasure and household erasure; never blocks an erasure. |
 | `household_changes` | delete | - | Sync change log (migration 046): ids, revisions and operations only, no values. Deleted on household erasure, after the data erasures that log their own deletes. |

@@ -473,7 +473,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const [, householdId, resource, memberId] = appMatch;
       if (resource === 'members' && !memberId && req.method === 'GET') return { status: 200, body: await services.app.listMembers(principal, householdId) };
       if (resource === 'members' && !memberId && req.method === 'POST') return { status: 201, body: await services.app.addMember(principal, householdId, await readBody(req)) };
-      if (resource === 'members' && memberId && req.method === 'PATCH') return { status: 200, body: await services.app.updateMember(principal, householdId, memberId, await readBody(req)) };
+      if (resource === 'members' && memberId && req.method === 'PATCH') return { status: 200, body: await services.app.updateMember(principal, householdId, memberId, await readBody(req), req.headers['if-match']) };
       if (resource === 'members' && memberId && req.method === 'DELETE') {
         await services.app.removeMember(principal, householdId, memberId);
         return { status: 200, body: { status: 'removed', memberId } };
@@ -511,6 +511,18 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       if (resource === 'changes' && req.method === 'GET') return { status: 200, body: await services.sync.changes(principal, householdId, query) };
       if (resource === 'snapshot' && req.method === 'GET') return { status: 200, body: await services.sync.snapshot(principal, householdId, query) };
       if (resource === 'sync/push' && req.method === 'POST') return { status: 200, body: await services.sync.push(principal, householdId, await readBody(req, { limitBytes: SYNC_LIMITS.pushBodyBytes })) };
+    }
+    // Person records (ADR 0026): the closed capture registry and its sealed records. Same session, ownership, revision and cap rules.
+    if (req.method === 'GET' && url.pathname === '/api/v1/capture-schema') return { status: 200, body: services.personRecords.schema() };
+    const recordMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/records(?:\/([^/]+)\/([^/]+))?$/);
+    if (recordMatch) {
+      const [, householdId, recordType, slot] = recordMatch;
+      const query = Object.fromEntries(url.searchParams);
+      const records = services.personRecords;
+      if (!recordType && req.method === 'GET') return { status: 200, body: await records.list(principal, householdId, query) };
+      if (recordType && req.method === 'GET') return { status: 200, body: await records.get(principal, householdId, recordType, slot, query) };
+      if (recordType && req.method === 'PUT') return { status: 200, body: await records.set(principal, householdId, recordType, slot, query, await readBody(req), req.headers['if-match']) };
+      if (recordType && req.method === 'DELETE') return { status: 200, body: await records.remove(principal, householdId, recordType, slot, query, req.headers['if-match']) };
     }
     const policyMatch = url.pathname.match(/^\/api\/v1\/policies\/([^/]+)$/);
     if (req.method === 'GET' && policyMatch) return { status: 200, body: await services.app.getPolicy(principal, policyMatch[1]) };

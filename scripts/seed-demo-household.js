@@ -14,7 +14,7 @@ const PROTECTED_DATABASE = 'coversaath_dev';
 
 const MEMBERS = Object.freeze([
   { key: 'rohan', displayName: 'Rohan Rao', memberKind: 'adult', relationshipLabel: 'Spouse', dateOfBirth: null },
-  { key: 'kabir', displayName: 'Kabir Rao', memberKind: 'dependent', relationshipLabel: 'Son', dateOfBirth: '2018-05-20' },
+  { key: 'kabir', displayName: 'Kabir Rao', memberKind: 'dependent', relationshipLabel: 'Son', ageBand: '6-12' },
   { key: 'lalitha', displayName: 'Lalitha Rao', memberKind: 'dependent', relationshipLabel: 'Mother', dateOfBirth: '1956-02-11' },
   { key: 'suresh', displayName: 'Suresh Rao', memberKind: 'dependent', relationshipLabel: 'Father', dateOfBirth: '1952-09-03' },
 ]);

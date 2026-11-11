@@ -2,6 +2,9 @@
 // household ownership first, and writes need the owner or member role (a viewer reads only). Derived numbers are counts and
 // day differences computed in this file; no model output and no stored aggregate is involved.
 import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
+import { assertNoSensitiveIdentifier } from '../../contracts/sensitive-identifiers.js';
+import { assertMemberDetailRules, parseMemberDetails, MEMBER_DETAIL_FIELDS } from '../../contracts/capture-registry.js';
+import { parseIfMatch } from './user-data-service.js';
 
 const MEMBER_KINDS = ['adult', 'dependent'];
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -26,6 +29,7 @@ function text(value, field, { max, required = false }) {
   if (!trimmed) { if (required) invalid(`${field} is required.`); return null; }
   // The erased-member marker is reserved: a real name equal to it would read as an erased tombstone.
   if (trimmed.length > max || UNSAFE_TEXT.test(trimmed) || trimmed === ERASED_NAME) invalid(`${field} is invalid.`);
+  assertNoSensitiveIdentifier(trimmed, field);
   return trimmed;
 }
 
@@ -57,12 +61,15 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
 
   // A date of birth is shown to the viewer when it belongs to a dependent, to themselves, or when the subject adult granted
   // field access (same rule as the household matrix). A placeholder adult cannot grant, so theirs stays withheld.
-  async function visibleBirth(principal, householdId, member) {
-    if (!member.date_of_birth) return null;
-    if (!member.adult_user_id || member.adult_user_id === principal.adultId) return member.date_of_birth;
-    const allowed = await consents.canAccessField({ householdId, subjectAdultId: member.adult_user_id, viewerAdultId: principal.adultId, fieldKey: 'date_of_birth' });
-    return allowed === true ? member.date_of_birth : null;
+  // `placeholderVisible`: contact details typed for a not-yet-invited adult are visible to the household that entered them.
+  async function visibleField(principal, householdId, member, value, fieldKey, { placeholderVisible = false } = {}) {
+    if (!value) return null;
+    if (!member.adult_user_id || member.adult_user_id === principal.adultId) return value;
+    if (placeholderVisible && member.adult_account_status === 'invited') return value;
+    const allowed = await consents.canAccessField({ householdId, subjectAdultId: member.adult_user_id, viewerAdultId: principal.adultId, fieldKey });
+    return allowed === true ? value : null;
   }
+  const visibleBirth = (principal, householdId, member) => visibleField(principal, householdId, member, member.date_of_birth, 'date_of_birth');
 
   async function memberDto(principal, householdId, member, ownerIds) {
     const born = await visibleBirth(principal, householdId, member);
@@ -73,6 +80,15 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
       relationshipLabel: member.relationship_label,
       dateOfBirth: born,
       ageYears: ageYears(born, clock()),
+      gender: member.gender ?? null,
+      ageBand: member.age_band ?? null,
+      mobile: await visibleField(principal, householdId, member, member.mobile_ciphertext, 'mobile', { placeholderVisible: true }),
+      email: await visibleField(principal, householdId, member, member.email_ciphertext, 'email', { placeholderVisible: true }),
+      preferredChannel: member.preferred_channel ?? null,
+      livesWithHousehold: member.lives_with_household ?? null,
+      dependentOnMemberId: member.dependent_on_member_id ?? null,
+      guardianMemberId: member.guardian_member_id ?? null,
+      revision: member.revision ?? 1,
       isOwner: ownerIds.includes(member.id),
       isYou: member.adult_user_id === principal.adultId,
       createdAt: member.created_at,
@@ -110,18 +126,22 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
       await requireWrite(principal, householdId);
       if (body === null || typeof body !== 'object' || Array.isArray(body)) invalid('A JSON object is required.');
       if (!MEMBER_KINDS.includes(body.memberKind)) invalid('memberKind must be adult or dependent.');
+      const details = parseMemberDetails(body, { now: clock() });
+      const born = dateOfBirth(body.dateOfBirth, clock());
+      assertMemberDetailRules({ memberKind: body.memberKind, input: { ...details, dateOfBirth: born }, now: clock() });
       const member = await appRepository.createMember({
         householdId,
         actorAdultId: principal.adultId,
         displayName: text(body.displayName, 'displayName', { max: 80, required: true }),
         memberKind: body.memberKind,
         relationshipLabel: text(body.relationshipLabel, 'relationshipLabel', { max: 40 }),
-        dateOfBirth: dateOfBirth(body.dateOfBirth, clock()),
+        dateOfBirth: born,
+        details,
       });
       return memberDto(principal, householdId, member, await appRepository.ownerMemberIds(householdId));
     },
 
-    async updateMember(principal, householdId, memberId, body) {
+    async updateMember(principal, householdId, memberId, body, ifMatchHeader) {
       await requireWrite(principal, householdId);
       if (body === null || typeof body !== 'object' || Array.isArray(body)) invalid('A JSON object is required.');
       if ('memberKind' in body) invalid('memberKind cannot be changed.');
@@ -129,8 +149,9 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
       if ('displayName' in body) changes.displayName = text(body.displayName, 'displayName', { max: 80, required: true });
       if ('relationshipLabel' in body) changes.relationshipLabel = text(body.relationshipLabel, 'relationshipLabel', { max: 40 });
       if ('dateOfBirth' in body) changes.dateOfBirth = dateOfBirth(body.dateOfBirth, clock());
-      if (Object.keys(changes).length === 0) invalid('Send displayName, relationshipLabel or dateOfBirth.');
-      const member = await appRepository.updateMember({ householdId, actorAdultId: principal.adultId, memberId, changes });
+      Object.assign(changes, parseMemberDetails(body, { now: clock() }));
+      if (Object.keys(changes).length === 0) invalid(`Send displayName, relationshipLabel, dateOfBirth or one of ${Object.keys(MEMBER_DETAIL_FIELDS).join(', ')}.`);
+      const member = await appRepository.updateMember({ householdId, actorAdultId: principal.adultId, memberId, changes, ifMatch: parseIfMatch(ifMatchHeader), now: clock() });
       return memberDto(principal, householdId, member, await appRepository.ownerMemberIds(householdId));
     },
 

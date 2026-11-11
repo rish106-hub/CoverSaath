@@ -40,10 +40,13 @@ const add = (app, who, body) => app.call(`/api/v1/households/${who.householdId}/
 
 test('members: add, list, patch; owner flagged; names sealed at rest', opts, async t => {
   const { app, db, owner } = await setup(t);
-  const kid = await add(app, owner, { displayName: 'Kabir Synthetic', relationshipLabel: 'Son', dateOfBirth: '2018-05-20', memberKind: 'dependent' });
+  const kid = await add(app, owner, { displayName: 'Kabir Synthetic', relationshipLabel: 'Son', ageBand: '6-12', memberKind: 'dependent' });
   assert.equal(kid.status, 201, JSON.stringify(kid.data));
   assert.equal(kid.data.displayName, 'Kabir Synthetic');
-  assert.equal(typeof kid.data.ageYears, 'number');
+  // A member under 18 keeps an age band, never a date of birth (ADR 0026, owner decision D5).
+  assert.equal(kid.data.ageBand, '6-12');
+  assert.equal(kid.data.dateOfBirth, null);
+  assert.equal(kid.data.ageYears, null);
   const listed = await app.call(`/api/v1/households/${owner.householdId}/members`, { token: owner.token });
   assert.equal(listed.status, 200);
   assert.equal(listed.data.members.length, 2);
@@ -120,7 +123,7 @@ test('a member named by a case cannot be removed until the case is gone', opts, 
 
 test('policies and overview: shape, derived counts, ownership', opts, async t => {
   const { app, services, owner, other } = await setup(t);
-  const kid = await add(app, owner, { displayName: 'Kabir Synthetic', relationshipLabel: 'Son', memberKind: 'dependent', dateOfBirth: '2018-05-20' });
+  const kid = await add(app, owner, { displayName: 'Kabir Synthetic', relationshipLabel: 'Son', memberKind: 'dependent', ageBand: '6-12' });
   await add(app, owner, { displayName: 'Uncovered', memberKind: 'dependent' });
   const insurer = await services.householdApp.findOrCreateInsurer({ legalName: 'Northstar Synthetic' });
   const policy = await services.householdApp.createPolicy({ householdId: owner.householdId, insurerId: insurer.id, policyKind: 'group', policyNumberMasked: 'XXXX-0001', startsOn: '2026-04-01', endsOn: '2099-03-31', memberIds: [owner.memberId, kid.data.id] });
