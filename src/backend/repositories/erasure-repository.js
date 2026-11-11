@@ -223,7 +223,7 @@ export class ErasureRepository {
       // 8. Rows nothing refers to any more.
       await this.#pruneHousehold(householdId, soleAdultIds);
 
-      // Sync change log and state (ADR 0017): last, because every erasure and prune step above logs its own writes.
+      // Sync change log and state (ADR 0028): last, because every erasure and prune step above logs its own writes.
       await this.#count(ctx, 'syncChanges', 'DELETE FROM household_changes WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'syncState', 'DELETE FROM household_sync_state WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'syncMutations', `DELETE FROM idempotency_keys WHERE scope LIKE 'sync:%' AND starts_with(idempotency_key, ?)`, [`${householdId}:`]);
