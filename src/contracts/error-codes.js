@@ -97,6 +97,20 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   POLICY_FACTS_NOT_READY: entry(409, 'conflict', true),
   POLICY_FACT_NOT_READY: entry(409, 'conflict', true),
   POLICY_FACT_INVALID: entry(400, 'request', false),
+  // Holdings pipeline (complete.md 3.2): collate, conflicts, holding status. Off unless HOLDINGS_ENABLED is exactly "true".
+  HOLDINGS_DISABLED: entry(503, 'configuration', false),
+  HOLDING_NOT_FOUND: entry(404, 'not_found', false),
+  HOLDING_NOT_READY: entry(409, 'conflict', true),
+  HOLDING_INPUT_INVALID: entry(400, 'request', false),
+  HOLDING_TRANSITION_INVALID: entry(409, 'conflict', false),
+  HOLDING_JOB_INPUT_INVALID: entry(null, 'contract', false),
+  HOLDING_COLLATE_INPUT_INVALID: entry(null, 'contract', false),
+  COLLATE_FACT_KEY_UNKNOWN: entry(null, 'contract', false),
+  COLLATE_AUTHORITY_REFUSED: entry(null, 'contract', false),
+  MEMORY_CONFLICT_NOT_FOUND: entry(404, 'not_found', false),
+  MEMORY_CONFLICT_ALREADY_RESOLVED: entry(409, 'conflict', false),
+  MEMORY_CONFLICT_CHOICE_INVALID: entry(400, 'request', false),
+  MEMORY_CONFLICT_STALE: entry(409, 'conflict', false),
   // Document intake (Block 1): upload route, upload service, document repository and the
   // document-intake module errors those surfaces return. ADR 0005.
   DOCUMENT_NOT_FOUND: entry(404, 'not_found', false),

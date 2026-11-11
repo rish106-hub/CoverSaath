@@ -36,16 +36,6 @@ export const CONFLICT_RESOLUTIONS = Object.freeze(['pending', 'user_chose', 'ins
 // Resolved slot statuses a read can return. No bare "confirmed" (AI.md, ADR 0003, ADR 0009).
 export const RESOLVED_STATUSES = Object.freeze(['extracted_unverified', 'conflicting', 'unknown', 'reviewed_reference', 'user_confirmed']);
 
-// Coded, client-safe errors of the holdings routes (append only).
-export const HOLDING_ERROR_CODES = Object.freeze({
-  HOLDINGS_DISABLED: { httpStatus: 503 },
-  HOLDING_NOT_FOUND: { httpStatus: 404 },
-  MEMORY_CONFLICT_NOT_FOUND: { httpStatus: 404 },
-  MEMORY_CONFLICT_ALREADY_RESOLVED: { httpStatus: 409 },
-  MEMORY_CONFLICT_CHOICE_INVALID: { httpStatus: 400 },
-  MEMORY_CONFLICT_STALE: { httpStatus: 409 },
-  HOLDING_TRANSITION_INVALID: { httpStatus: 409 },
-});
+// Coded, client-safe errors of the holdings routes are registered in src/contracts/error-codes.js (HOLDING_*, MEMORY_CONFLICT_*).
 
-/** HOLDINGS_ENABLED is on only when it is exactly "true". */
-export const holdingsEnabled = (env = process.env) => env?.HOLDINGS_ENABLED === 'true';
+// HOLDINGS_ENABLED (off unless exactly "true") lives in src/backend/services/holdings-flag.js.

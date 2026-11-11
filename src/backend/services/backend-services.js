@@ -5,6 +5,8 @@ import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
 import { createPersonRecordService } from './person-record-service.js';
 import { createPolicyProfileService, policyFactsEnabled } from './policy-profile-service.js';
+import { HoldingPipelineRepository } from '../repositories/holding-pipeline-repository.js';
+import { createHoldingsService } from './holdings-service.js';
 import { createPolicyFactsService, POLICY_FACTS_JOB_KIND, policyFactsDedupeKey } from './policy-facts-service.js';
 import { NORMALISER_VERSION } from '../../features/policy-facts/normalisers.js';
 import { createAuthTokenService } from './auth-token-service.js';
@@ -65,6 +67,9 @@ export function createBackendServices(database, options = {}) {
   // Policy facts (migration 044, ADR 0025): datapoints read from a document, each with verified evidence. Same switch as the profile.
   const policyFactsRepository = new PolicyFactsRepository(database, shared);
   const policyFacts = createPolicyFactsService({ repository: policyFactsRepository, ocr, env: options.env ?? process.env, clock: options.clock });
+  // Holdings pipeline (complete.md 3.2, migrations 048-050): collate, conflicts, status. Off unless HOLDINGS_ENABLED=true. No model call.
+  const holdingPipelineRepository = new HoldingPipelineRepository(database, shared);
+  const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, env: options.env ?? process.env });
   const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
   const access = new TenantAccessService(database, { auth, authTokens, households, consents, env: options.env ?? {}, columnCrypto });
   const householdApp = new HouseholdAppRepository(database, shared);
@@ -89,6 +94,7 @@ export function createBackendServices(database, options = {}) {
   return {
     policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
+    holdings, holdingPipelineRepository,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {

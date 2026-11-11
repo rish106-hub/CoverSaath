@@ -26,6 +26,11 @@ const COVERED_FILES = [
   'src/contracts/execution-policy.js',
   'src/contracts/persistence-ports.js',
   'src/contracts/analysis-run-api.js',
+  'src/server/routes/holding-facts-routes.js',
+  'src/backend/services/holdings-service.js',
+  'src/backend/repositories/holding-pipeline-repository.js',
+  'src/features/insurance-rules/collate.js',
+  'src/features/insurance-rules/holding-status.js',
 ];
 
 const source = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
