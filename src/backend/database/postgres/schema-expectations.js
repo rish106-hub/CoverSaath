@@ -23,7 +23,7 @@ export const expectedTables = Object.freeze([
   'household_changes', 'household_sync_state',
   'person_records',
   'policy_holdings', 'household_memory_facts', 'memory_conflicts', 'member_declarations', 'premium_payments', 'premium_dues', 'provider_calls',
-  'memory_chunks', 'chat_threads', 'chat_turns', 'retrieval_traces',
+  'memory_chunks', 'chat_threads', 'chat_turns', 'retrieval_traces', 'network_hospitals',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -93,7 +93,7 @@ export const criticalIndexes = Object.freeze([
   'integration_outbox_consent_status_idx', 'idempotency_keys_expiry_idx', 'idempotency_keys_household_idx', 'idempotency_keys_case_idx',
   'audit_events_household_chain_idx',
   'app_events_time_idx', 'app_events_name_time_idx', 'app_events_household_idx', 'app_events_expiry_idx', 'rate_limit_buckets_window_idx',
-  'model_budget_reservations_scope_idx', 'evidence_claims_expiry_idx', 'reference_cache_stale_after_idx', 'reference_cache_leases_expiry_idx', 'document_uploads_consent_grant_idx', 'consent_grants_household_subject_idx',
+  'model_budget_reservations_scope_idx', 'evidence_claims_expiry_idx', 'reference_cache_stale_after_idx', 'reference_cache_leases_expiry_idx', 'network_hospitals_insurer_pincode_idx', 'document_uploads_consent_grant_idx', 'consent_grants_household_subject_idx',
   'api_sessions_token_status_idx', 'api_sessions_adult_status_idx', 'api_sessions_live_expiry_idx', 'consent_scopes_field_viewer_idx',
   'ocr_jobs_lifecycle_idx',
   'coverage_parameter_records_run_idx', 'coverage_parameter_records_case_idx',
@@ -157,6 +157,7 @@ export const requiredColumns = Object.freeze({
   model_budget_scopes: ['scope', 'reserved_micro_usd', 'spent_micro_usd'],
   reference_cache: ['key', 'etag', 'body', 'signature', 'fetched_at', 'stale_after', 'status'],
   reference_cache_leases: ['key', 'owner', 'expires_at'],
+  network_hospitals: ['insurer_id', 'name', 'address', 'city', 'pincode', 'cashless', 'source_ref'],
   model_budget_reservations: ['scope', 'amount_micro_usd', 'state', 'actual_micro_usd'],
   evidence_claims: ['claim_hash', 'owner', 'expires_at'],
   household_members: ['gender', 'age_band', 'mobile_ciphertext', 'mobile_hash', 'email_ciphertext', 'preferred_channel', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id', 'revision', 'deleted_at'],

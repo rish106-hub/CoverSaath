@@ -327,6 +327,8 @@ export const DATA_REGISTRY = Object.freeze({
   source_curator_grants: entry('reference_data', {}, ['id', 'adult_user_id', 'role', 'status', 'granted_by', 'created_at', 'expires_at', 'revoked_at', 'public_key']),
   reference_cache: entry('reference_data', {}, ['key', 'etag', 'body', 'signature', 'fetched_at', 'stale_after', 'status']),
   reference_cache_leases: entry('reference_data', {}, ['key', 'owner', 'claimed_at', 'expires_at']),
+  // Network hospitals (migration 055): the public hospital directory synced from the reference service; no household link.
+  network_hospitals: entry('reference_data', {}, ['id', 'insurer_id', 'tpa_id', 'name', 'address', 'city', 'pincode', 'lat', 'lng', 'cashless', 'source_ref', 'valid_from', 'valid_to', 'synced_at']),
 });
 
 /** One row per stored column: { table, column, kind: 'personal'|'system', category, purpose, noticeId, legalBasis, retentionClass, consenter }. */

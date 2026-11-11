@@ -121,6 +121,7 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `evidence_claims` | global | - | Short-lived question claims keyed by a hash; no household content, purged at expiry. |
 | `reference_cache` | global | - | Public insurer and product reference data fetched from the reference service; no household, case or consent link. |
 | `reference_cache_leases` | global | - | Expiring refresh lease keyed by reference key; random owner token only. |
+| `network_hospitals` | global | - | Public hospital directory synced from the reference service (migration 055); no household, case or consent link. |
 | `schema_migrations` | global | - | Migration ledger. |
 | `coverage_parameter_registry_versions` | global | - | Registry reference data. |
 | `coverage_parameter_observation_rules` | global | - | Rule reference data. |

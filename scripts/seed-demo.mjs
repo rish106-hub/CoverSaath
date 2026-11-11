@@ -10,6 +10,7 @@ import { createPostgresPool, postgresPoolOptionsFromEnv } from '../src/backend/d
 import { createDatabase } from '../src/backend/database/postgres/db.js';
 import { createBackendServices } from '../src/backend/services/index.js';
 import { createDocumentIntakeService, createEncryptedDatabaseByteStorage } from '../src/features/input/index.js';
+import { NetworkHospitalRepository } from '../src/backend/repositories/network-hospital-repository.js';
 import { DEMO_DECLARATIONS, DEMO_HOUSEHOLD, DEMO_INSURERS, DEMO_PEOPLE, DEMO_PDF_SPECS, DEMO_PRODUCTS } from './demo/demo-data.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -158,7 +159,15 @@ export async function seedDemo(database, { env = process.env, clock } = {}) {
     });
   }
 
-  return { householdId, adultId: adult.id, caseId, documentCount: Object.keys(documentIds).length, policyCount: Object.keys(policyIds).length };
+  // Network hospitals (migration 055): the 30 invented hospitals. Public reference rows, upserted by id, so a second run adds none.
+  // The fixture has no address or cashless flag: tier_1 is cashless, tier_2 is not (reimbursement only).
+  const hospitals = JSON.parse(readFixture('hospitals.json').toString('utf8')).hospitals.map(item => ({
+    id: item.id, insurerId: null, tpaId: null, name: item.name, address: `Synthetic demo address, ${item.city}`, city: item.city, pincode: item.pincode,
+    lat: null, lng: null, cashless: item.networkTier === 'tier_1', sourceRef: 'demo-fixture',
+  }));
+  await new NetworkHospitalRepository(database).upsertMany(hospitals);
+
+  return { householdId, adultId: adult.id, hospitalCount: hospitals.length, caseId, documentCount: Object.keys(documentIds).length, policyCount: Object.keys(policyIds).length };
 }
 
 async function main() {
