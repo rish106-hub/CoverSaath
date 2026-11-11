@@ -47,3 +47,11 @@ Data and erasure: the table holds a hash, a random token and times, no household
 Rollback: set the three variables to `memory` (behaviour of D4 defaults). Migration 032 is additive and can stay unused.
 
 Still per process after B1: the scan worker, the user-data write limiter (`user-data-service.js`), the PDF child processes, and the in-flight cap above.
+
+## Addendum (O-F4, two machines in production)
+
+**D9. Per-adult service limits are shared too.** The session-call and refresh limits (`auth-token-service.js`), user-data writes, sync reads and pushes, and person-record writes now use `createSharedWindowLimiter` (`src/backend/services/shared-window-limiter.js`). It counts in the existing `rate_limit_buckets` table (no migration): the per-process window runs first, then one `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` per check, keyed by a truncated SHA-256 of a namespaced opaque key (adult id or refresh-token hash, never an address or household content). The window follows the service clock. A database failure falls back to the per-process count, as for the request limiter; the call it guards needs the database anyway. `RATE_LIMIT_BACKEND=memory` keeps them per process. Rows are pruned by the existing hourly `purgeRequestWindows` sweep.
+
+**D10. Run budget released on a ledger failure.** If the project ledger throws (database down), `createRunBudget` releases its per-run reservation and rethrows, so the model gateway never dispatches and the run cap is not leaked. The project cap itself still fails closed.
+
+Rollback: revert the change; the table and the request limiter are unchanged. Not hard to reverse, so no new ADR. Still per process: the scan worker, the PDF child processes and the evidence in-flight cap (memory protection, not money).
