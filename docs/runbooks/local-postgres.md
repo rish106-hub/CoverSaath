@@ -68,7 +68,7 @@ podman run --name coversaath-postgres-test --rm -d \
   -e POSTGRES_HOST_AUTH_METHOD=trust \
   -e 'POSTGRES_INITDB_ARGS=--encoding=UTF8 --locale=C' \
   -p 127.0.0.1:54329:5432 \
-  docker.io/library/postgres:17.11@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+  docker.io/pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
 ```
 
 Check and stop it:
@@ -88,7 +88,7 @@ Set `TEST_DATABASE_URL=postgres://coversaath@localhost:54329/postgres` in your s
 npm test
 ```
 
-Without `TEST_DATABASE_URL` the PostgreSQL tests are skipped with a visible reason. CI runs them against a `postgres:17.11` service container with `REQUIRE_POSTGRES=1`, where a missing database is a failure.
+Without `TEST_DATABASE_URL` the PostgreSQL tests are skipped with a visible reason. CI runs them against a pinned `pgvector/pgvector:0.8.6-pg17` service container with `REQUIRE_POSTGRES=1`, where a missing database is a failure.
 
 Tests create one template database per migration set (`coversaath_tpl_…`) and one throwaway database per test, and drop the throwaway ones.
 
@@ -114,4 +114,4 @@ Production, TLS, runtime and migration roles, backups and restore drills (S3.3),
 
 ## pgvector (migration 053, ADR 0031)
 
-Migration 053 runs `CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions`, so the test PostgreSQL needs the pgvector extension files. Homebrew: `brew install pgvector` (builds for the installed `postgresql@17`). Docker: use an image that ships pgvector, for example `pgvector/pgvector:pg17`, instead of the stock `postgres:17.11`. CI needs the same change to its `postgres` service image; pin the replacement by digest like the current one. Supabase allows the extension on the `extensions` schema.
+Migration 053 runs `CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions`, so the test PostgreSQL needs the pgvector extension files. Homebrew: `brew install pgvector` (builds for the installed `postgresql@17`). Container: use an image that ships pgvector (the start command above and the CI service image both use `pgvector/pgvector:0.8.6-pg17`, pinned by digest), not the stock `postgres:17.11`. Supabase allows the extension on the `extensions` schema.

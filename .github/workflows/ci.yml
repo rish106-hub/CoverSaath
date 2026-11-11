@@ -27,7 +27,7 @@ jobs:
     # reachable only from this job's runner; it holds synthetic data only.
     services:
       postgres:
-        image: postgres:17.11@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+        image: pgvector/pgvector:0.8.6-pg17@sha256:cf134a767f474095eeba57e0117be8e568e011a63f33fbf252f14c9b760f8e6f
         env:
           POSTGRES_USER: coversaath
           POSTGRES_DB: postgres
