@@ -11,13 +11,14 @@ import { holdingInputSha, holdingJobDedupeKey } from './holding-pipeline.js';
 //   parseOwnPdf     own-PDF tier = the existing policy_facts (ADR 0025): runs its deterministic extract, then status parsed, then collate
 //   fetchReference  STUB: the IDA reference import body belongs to the reference agent; here it only queues collate
 //   collate         ADR 0023 D3 resolver (collate.js) over own-PDF facts and the reference port's values; writes rows and conflicts
-//   memorise        STUB until Wave B: no embedding and no provider call; moves the status to conflicts or ready
+//   memorise        settles the status (conflicts or ready), then embeds confirmed facts and own-PDF passages into memory_chunks through the
+//                   memory service (privacy gate, model gateway, provider_calls; ADR 0031). Off unless MEMORY_ENABLED; never blocks the status
 //   facts / conflicts / resolveConflict   the owner's reads and choice (routes in holdings-routes.js)
 //
 // Jobs are identifiers only (household, document, the document's processing grant, payload { holdingId, inputSha }). Every handler
 // re-reads the holding by household and id, and every write re-checks the document and its consent inside its transaction. A
 // re-run is a no-op: unchanged readings write nothing and status steps already taken do not move.
-// No model or provider call happens in this file.
+// No model or provider call happens in this file: embedding is delegated to the memory service.
 
 const coded = (code, message, statusCode, extra = {}) => Object.assign(new Error(message), { code, statusCode, ...extra });
 const permanent = (code, message) => coded(code, message, 409, { retryable: false });
@@ -25,7 +26,7 @@ const permanent = (code, message) => coded(code, message, 409, { retryable: fals
 /** The reference port: values deterministic code read from the IDA reference for a holding. Default: none (reference agent wires it). */
 export const emptyReferenceFacts = Object.freeze({ async forHolding() { return []; } });
 
-export function createHoldingsService({ repository, jobQueue, policyFacts = null, referenceFacts = emptyReferenceFacts, env = process.env }) {
+export function createHoldingsService({ repository, jobQueue, policyFacts = null, referenceFacts = emptyReferenceFacts, memory = null, env = process.env }) {
   const enabled = () => holdingsEnabled(env);
   const requireEnabled = () => { if (!enabled()) throw coded('HOLDINGS_DISABLED', 'Holdings are disabled.', 503); };
 
@@ -136,14 +137,15 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       return Object.freeze({ status, ...written });
     },
 
-    // STUB (Wave B): the embedding call goes through the model gateway and its privacy gate. Nothing is embedded and no provider is
-    // called here; the step only settles the status (unresolved conflicts never block).
+    // The status is settled first (unresolved conflicts never block); the embedding step follows and is non-fatal by design.
     async memorise({ householdId, holdingId }) {
       requireEnabled();
       const holding = await loadHolding(householdId, holdingId);
       if (!['parsed', 'conflicts', 'ready'].includes(holding.status)) return Object.freeze({ status: holding.status, skipped: true });
       const open = await repository.openConflictCount({ householdId, holdingId });
-      return Object.freeze({ status: await step(holding, 'memorise', open), embedded: 0 });
+      const status = await step(holding, 'memorise', open);
+      const embedded = memory ? await memory.embedHolding({ householdId, holdingId }) : null;
+      return Object.freeze({ status, embedded: embedded?.embedded ?? 0, ...(embedded?.skipped ? { embedSkipped: embedded.skipped } : {}) });
     },
 
     /**
@@ -213,6 +215,11 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       const fresh = await loadHolding(holding.householdId, holding.id);
       const open = await repository.openConflictCount({ householdId: holding.householdId, holdingId: holding.id });
       const status = await step(fresh, 'resolve', open);
+      // The owner's choice is a new user_confirmed fact: bring the memory chunks in line (a no-op while MEMORY_ENABLED is off).
+      if (memory?.enabled?.()) {
+        const document = await documentOf(fresh);
+        await enqueue(HOLDING_JOB_KINDS.memorise, fresh, document, holdingInputSha([result.resolvingFactId]));
+      }
       return { conflictId: result.conflictId, resolvingFactId: result.resolvingFactId, status: 'user_confirmed', holdingStatus: status, replay: result.replay };
     },
   });

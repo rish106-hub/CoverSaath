@@ -158,7 +158,7 @@ test('routing: deepseek, kimi and openai are config entries that answer typed un
   assert.equal(router.resolve('chat_answer').model, 'claude-sonnet-5-5');
   assert.equal(router.resolve('fact_extract').model, 'claude-sonnet-5-5');
   assert.equal(router.resolve('intent_classify').model, 'claude-haiku-5-5');
-  assert.equal(router.resolve('embed').reason, 'no_route');
+  assert.equal(router.resolve('embed').reason, 'provider_not_enabled');
   assert.equal(createModelRouter({ env: { ...ENV, MODEL_PROVIDERS: 'openai' } }).resolve('chat_answer').reason, 'provider_not_enabled');
   assert.equal(createModelRouter({ env: { ...ENV, ANTHROPIC_OUTPUT_USD_PER_MILLION: '' } }).resolve('chat_answer').reason, 'rates_missing');
   assert.equal(JSON.stringify(createModelRouter({ env: { ...ENV, ANTHROPIC_API_KEY: '' } }).resolve('chat_answer')).includes('test-key'), false);
