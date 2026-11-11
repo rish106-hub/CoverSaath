@@ -77,6 +77,11 @@ BEGIN
   EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM %I', target_schema, runtime_role);
   EXECUTE format('GRANT USAGE, CREATE ON SCHEMA %I TO %I', target_schema, migrator_role);
   EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', target_schema, runtime_role);
+  -- Extensions schema (migration 053, ADR 0031): the pgvector type and operators live in `extensions`, so both roles need USAGE
+  -- there (never CREATE). Skipped when the schema does not exist; the migration creates it, and re-running this file grants it.
+  IF to_regnamespace('extensions') IS NOT NULL THEN
+    EXECUTE format('GRANT USAGE ON SCHEMA extensions TO %I, %I', runtime_role, migrator_role);
+  END IF;
 
   -- An extension-owned table in `public` cannot be handed over or given a policy by this admin. Stop with a clear
   -- message instead of failing halfway; move the extension to another schema first (with a backup).

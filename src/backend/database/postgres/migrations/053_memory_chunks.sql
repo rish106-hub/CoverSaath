@@ -15,8 +15,19 @@
 --   * Insurer wording (shared by reference_cache id, never per household) is NOT stored here: scope insurer_doc is not allowed.
 -- Row level security is on with no policy and the Data API roles get no privileges (see 016_data_api_lockdown.sql).
 -- Rollback: expand-only. Revert the code and turn MEMORY_ENABLED off; a synthetic-only project may drop the table.
-CREATE SCHEMA IF NOT EXISTS extensions;
-CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+-- Both steps are guarded so a migrator that may not create schemas or extensions (a least-privilege role, ADR 0011 D5) still passes
+-- once an admin has installed the extension once: CREATE SCHEMA extensions; CREATE EXTENSION vector WITH SCHEMA extensions (Supabase
+-- ships the schema and allows the extension), then scripts/sql/db-roles.sql grants both roles USAGE on it.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'extensions') THEN
+    CREATE SCHEMA extensions;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+    CREATE EXTENSION vector WITH SCHEMA extensions;
+  END IF;
+END
+$$;
 
 CREATE TABLE IF NOT EXISTS public.memory_chunks (
   id text PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 100),

@@ -72,6 +72,9 @@ BEGIN
     EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I REVOKE ALL ON TABLES FROM %I', migrator_role, target_schema, runtime_role);
     EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I REVOKE ALL ON SEQUENCES FROM %I', migrator_role, target_schema, runtime_role);
   END IF;
+  IF to_regnamespace('extensions') IS NOT NULL THEN
+    EXECUTE format('REVOKE USAGE ON SCHEMA extensions FROM %I, %I', runtime_role, migrator_role);
+  END IF;
   EXECUTE format('REVOKE ALL ON SCHEMA %I FROM %I', target_schema, migrator_role);
   -- TEMPORARY stays revoked from PUBLIC (migration 003); only the migrator's own grants are removed.
   EXECUTE format('REVOKE TEMPORARY ON DATABASE %I FROM %I', current_database(), migrator_role);
