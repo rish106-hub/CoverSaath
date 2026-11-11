@@ -102,10 +102,17 @@ export function createRunBudget(runMaxUsd, project) {
   return Object.freeze({
     async reserve(amount, metadata) {
       // The run scope is local and synchronous; the project scope may be a database ledger. A refusal by the project
-      // releases the run reservation again.
+      // releases the run reservation again. A ledger failure (database down) also releases it and rejects, so the gateway
+      // never dispatches without a project reservation (fail closed).
       const runReservation = run.reserve(amount, metadata);
       if (!runReservation) return null;
-      const projectReservation = await project.reserve(amount, metadata);
+      let projectReservation;
+      try {
+        projectReservation = await project.reserve(amount, metadata);
+      } catch (error) {
+        run.settle(runReservation, 0);
+        throw error;
+      }
       if (!projectReservation) {
         run.settle(runReservation, 0);
         return null;

@@ -1,4 +1,4 @@
-import { createRateLimiter } from '../../shared/http/index.js';
+import { createSharedWindowLimiter } from './shared-window-limiter.js';
 import { householdLock } from '../database/postgres/locks.js';
 import { setSyncActor } from '../repositories/sync-actor.js';
 import { parsePlaceKind, parseScenarioTool, parsePermissionName, assertBodySize } from '../../contracts/user-data.js';
@@ -18,12 +18,13 @@ const sizeOf = value => Buffer.byteLength(JSON.stringify(value), 'utf8');
 const changedKeys = (base, next) => [...new Set([...Object.keys(base), ...Object.keys(next)])]
   .filter(key => canonicalJson(base[key] ?? null) !== canonicalJson(next[key] ?? null) || (key in base) !== (key in next));
 
-export function createSyncService({ database, access, userData, userDataRepository, app, repository, audit, columnCrypto, clock = () => new Date(), limits = {} }) {
+export function createSyncService({ database, access, userData, userDataRepository, app, repository, audit, columnCrypto, clock = () => new Date(), limits = {}, limitStore = null }) {
   const bounds = { ...SYNC_LIMITS, ...limits };
-  const readLimiter = createRateLimiter({ limit: bounds.readsPerMinute, windowMs: 60_000, clock: () => clock().getTime() });
-  const pushLimiter = createRateLimiter({ limit: bounds.pushesPerMinute, windowMs: 60_000, clock: () => clock().getTime() });
-  const throttle = (limiter, scope, adultId) => {
-    try { limiter.check(`${scope}:${adultId}`); } catch { fail('SYNC_RATE_LIMITED', 'Too many sync requests. Wait a moment and try again.', 429); }
+  // Shared by every API machine through `limitStore` (ADR 0014 D9).
+  const readLimiter = createSharedWindowLimiter({ limit: bounds.readsPerMinute, store: limitStore, clock: () => clock().getTime() });
+  const pushLimiter = createSharedWindowLimiter({ limit: bounds.pushesPerMinute, store: limitStore, clock: () => clock().getTime() });
+  const throttle = async (limiter, scope, adultId) => {
+    try { await limiter.check(`${scope}:${adultId}`); } catch { fail('SYNC_RATE_LIMITED', 'Too many sync requests. Wait a moment and try again.', 429); }
   };
   const SKIP = { skipThrottle: true };
 
@@ -65,7 +66,7 @@ export function createSyncService({ database, access, userData, userDataReposito
   async function changes(principal, householdId, query) {
     await access.requireHousehold(principal, householdId);
     const { since, limit, includeData } = parseChangesQuery(query);
-    throttle(readLimiter, 'sync-read', principal.adultId);
+    await throttle(readLimiter, 'sync-read', principal.adultId);
     await assertCursor(householdId, since);
     const rows = await repository.listChanges({ householdId, adultId: principal.adultId, since, limit: limit + 1 });
     // A trim between the check and the read could have removed entries after `since`; check the floor again.
@@ -102,7 +103,7 @@ export function createSyncService({ database, access, userData, userDataReposito
   async function snapshot(principal, householdId, query) {
     await access.requireHousehold(principal, householdId);
     const { cursor } = parseSnapshotQuery(query);
-    throttle(readLimiter, 'sync-read', principal.adultId);
+    await throttle(readLimiter, 'sync-read', principal.adultId);
     let seq; let entityIndex = 0; let after = null;
     if (cursor) {
       ({ seq, entityIndex, after } = decodeSnapshotCursor(cursor, householdId));
@@ -322,7 +323,7 @@ export function createSyncService({ database, access, userData, userDataReposito
   async function push(principal, householdId, body) {
     await access.requireHousehold(principal, householdId);
     const items = parsePushBody(body);
-    throttle(pushLimiter, 'sync-push', principal.adultId);
+    await throttle(pushLimiter, 'sync-push', principal.adultId);
     // One transaction under the household lock: the items run one after another, each in its own savepoint, and the household
     // advisory lock (also taken by the log trigger) keeps the change log in commit order. A retry of the whole call after an
     // unexpected failure is safe because every item carries its mutationId.
