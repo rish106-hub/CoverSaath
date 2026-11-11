@@ -24,14 +24,14 @@ function newKey(kid) {
   return { kid, privateKey, publicJwk: publicJwkFor(privateKey) };
 }
 
-async function start(t, { configured = true, maxActiveSessions } = {}) {
+async function start(t, { configured = true, maxActiveSessions, maxActiveWebSessions } = {}) {
   const fixture = await freshDatabase(t);
   const { db } = fixture;
   const time = { now: Date.parse('2026-11-03T10:00:00.000Z') };
   const clock = () => new Date(time.now);
   const key = newKey('key_one_0001');
   const services = createBackendServices(db, {
-    env, clock, ...(maxActiveSessions ? { maxActiveSessions } : {}),
+    env, clock, ...(maxActiveSessions ? { maxActiveSessions } : {}), ...(maxActiveWebSessions ? { maxActiveWebSessions } : {}),
     ...(configured ? { jwt: { issuer: jwtIssuer, privateKeys: new Map([[key.kid, key.privateKey]]) } } : {}),
   });
   if (configured) {
@@ -387,14 +387,16 @@ test('a token is bound to its household: another household in the path is refuse
   assert.equal((await app.call(`/api/v1/households/${b.household.id}/consents`, { token: bearer.session.token })).status, 404);
 });
 
-test('the active-session cap counts web sessions too', opts, async t => {
-  const app = await start(t, { maxActiveSessions: 2 });
+test('web sessions have their own cap and do not use up the opaque-session cap (migration 039)', opts, async t => {
+  const app = await start(t, { maxActiveSessions: 2, maxActiveWebSessions: 2 });
   assert.equal((await app.signIn('s-one')).status, 201);
-  assert.equal((await app.signIn('s-two', { format: null })).status, 201);
+  assert.equal((await app.signIn('s-two')).status, 201);
   const refused = await app.signIn('s-three');
   assert.equal(refused.status, 429);
   assert.equal(refused.data.error.code, 'SESSION_CAPACITY_REACHED');
   assert.equal(Number((await app.db.one('SELECT count(*) AS count FROM adult_users')).count), 2);
+  // Opaque (bearer) sessions are counted separately: two web sessions leave their cap untouched.
+  assert.equal((await app.signIn('s-four', { format: null })).status, 201);
 });
 
 test('refresh tokens and signing keys are stored as hashes and public halves only; no token, hash or key reaches audit rows or logs', opts, async t => {

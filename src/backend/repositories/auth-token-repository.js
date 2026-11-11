@@ -38,7 +38,7 @@ export class AuthTokenRepository {
 
   /**
    * Starts a web session and its first refresh token in one transaction (a savepoint inside the sign-in transaction). Takes the
-   * household lock, then the same global capacity lock opaque sessions use, so the active-session cap holds across both kinds.
+   * household lock, then the same global capacity lock opaque sessions use, so capacity checks serialise across both kinds. Each kind has its own cap (migration 039).
    * Resolves { sessionId, refreshToken, expiresAt, absoluteExpiresAt }.
    */
   async createWebSession({ adultUserId, householdId, amr, authIdentityId = null }) {
