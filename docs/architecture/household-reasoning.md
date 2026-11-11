@@ -118,7 +118,7 @@ Authenticated bearer session; household read role (`requireAccess`, a foreign or
 
 ## Synthetic journeys and measurements
 
-See `docs/exec-plans/active/block4-acceptance.md` for the matrix, test counts and the local latency baseline.
+See `block4-acceptance.md` (deleted 2026-11-11) for the matrix, test counts and the local latency baseline.
 
 ## Failure behaviour
 

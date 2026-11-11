@@ -1,6 +1,6 @@
 # Decision catalogue (Block 3)
 
-Status: implemented on synthetic data; not accepted on real insurer policies. Code: `src/features/decision-catalogue/` (pure), `src/backend/services/decision-catalogue-service.js`, `src/backend/repositories/catalogue-review-repository.js`, `src/backend/repositories/curated-product-repository.js`. Contracts `decision-catalogue/v1` and `decision-handoff/v1`. Decisions: [ADR 0009](../adr/0009-reviewed-facts-and-decision-catalogue.md). Reviewer and curator authority: [reviewer-security.md](reviewer-security.md). Acceptance status: [block-3-acceptance.md](../exec-plans/active/block-3-acceptance.md). Not legal review.
+Status: implemented on synthetic data; not accepted on real insurer policies. Code: `src/features/decision-catalogue/` (pure), `src/backend/services/decision-catalogue-service.js`, `src/backend/repositories/catalogue-review-repository.js`, `src/backend/repositories/curated-product-repository.js`. Contracts `decision-catalogue/v1` and `decision-handoff/v1`. Decisions: [ADR 0009](../adr/0009-reviewed-facts-and-decision-catalogue.md). Reviewer and curator authority: [reviewer-security.md](reviewer-security.md). Acceptance status: block-3-acceptance.md (deleted 2026-11-11). Not legal review.
 
 ## Decision
 

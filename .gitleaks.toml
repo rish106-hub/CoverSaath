@@ -20,3 +20,10 @@ paths = [
   '''tests/support/corpus-rows\.mjs''',
   '''tests/fakes/fake-gemini-server\.mjs''',  # removed from HEAD, still in history
 ]
+
+[[allowlists]]
+description = "Synthetic Idempotency-Key header value used in route tests (tests/policy-profiles.test.mjs). Not a credential."
+regexTarget = "match"
+regexes = [
+  '''Idempotency-Key': 'key-12345678''',
+]
