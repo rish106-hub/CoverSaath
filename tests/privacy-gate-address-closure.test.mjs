@@ -9,7 +9,7 @@ import { buildClauses, investigate } from '../src/features/policy-evidence/index
 
 const storage = text => sanitizeEvidenceTextForStorage(text).text;
 
-test('gate version is v10', () => assert.equal(PRIVACY_EVIDENCE_GATE_VERSION, 'knowvia-privacy-evidence-v10'));
+test('gate version is v11', () => assert.equal(PRIVACY_EVIDENCE_GATE_VERSION, 'knowvia-privacy-evidence-v11'));
 
 const LEAKS = ['Testville', 'Sample Nagar', 'Example Heights', '560001', '560 001', 'Karnataka', 'टेस्टविले', '560-001', '5 6 0 0 0 1', '56 0001'];
 const CASES = [

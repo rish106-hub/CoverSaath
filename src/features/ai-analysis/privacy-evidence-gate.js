@@ -17,7 +17,7 @@ import { MODEL_INPUT_FIELDS } from './model-input-fields.js';
 // phone number are folded to digits before the rules run; combining marks after a digit and a hyphen at a line end inside a
 // number are normalised; labelled Aadhaar and phone values accept every Unicode hyphen and one line break; a PAN split by
 // spaces or dashes is found.
-export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v10';
+export const PRIVACY_EVIDENCE_GATE_VERSION = 'knowvia-privacy-evidence-v11';
 export const EVIDENCE_DATA_CLASSES = Object.freeze(['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED']);
 // The consent-scope recipient that names the live model provider. A document's
 // derive scope must name this exact recipient before its evidence may be sent
@@ -198,7 +198,7 @@ function createPlaceholderState(seedText = '', known = null) {
   for (const match of seedText.matchAll(PLACEHOLDER)) {
     counters.set(match[1], Math.max(counters.get(match[1]) ?? 0, Number(match[2])));
   }
-  return { counters, assigned: new Map(), known };
+  return { counters, assigned: new Map(), known, originals: new Map() };
 }
 
 const MONTH_NUMBERS = new Map(['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'].map((month, index) => [month, index + 1]));
@@ -246,6 +246,7 @@ function placeholder(state, kind, value) {
     state.counters.set(kind, next);
     assigned = `<${kind}_${next}>`;
     state.assigned.set(key, assigned);
+    state.originals.set(assigned, value);
   }
   return assigned;
 }
@@ -1102,7 +1103,7 @@ function groupedPattern(entries, before, after, flags) {
   };
 }
 
-function compileKnownIdentifiers(entries) {
+function compileKnownIdentifiers(entries, { bareNames = false } = {}) {
   if (entries === undefined || entries === null) return null;
   if (!Array.isArray(entries) || entries.length > MAX_KNOWN_IDENTIFIERS) knownMalformed('Known identifiers must be an array of at most 200 entries.');
   if (entries.length === 0) return null;
@@ -1149,6 +1150,11 @@ function compileKnownIdentifiers(entries) {
     phones: groupedPattern(phones, '(?<![\\p{N}])', '(?![\\p{N}])', 'gu'),
     emails: groupedPattern(emails, '(?<![A-Za-z0-9._%+-])', '(?![A-Za-z0-9_-]|\\.[A-Za-z0-9])', 'gi'),
     nameTokens,
+    // Chat profile: any standalone word equal to a token of a household name is a name, with no neighbour needed
+    // ("what did Priya's claim say"). Off for document text, where a lone first name is often a product word.
+    bare: bareNames && nameTokens.size > 0
+      ? new RegExp(`(?<![\\p{L}\\p{M}\\p{N}_])(${[...nameTokens.keys()].sort((a, b) => b.length - a.length).map(escapeRegExp).join('|')})(?![\\p{L}\\p{M}\\p{N}_])`, 'giu')
+      : null,
   });
 }
 
@@ -1225,6 +1231,9 @@ function redactKnownIdentifiers(text, known, swap) {
   pass(known.names, 'NAME');
   if (known.nameTokens.size > 0) {
     value = outsideTokens(value, segment => redactKnownNameTokens(segment, known.nameTokens, owner => swapKnown('NAME', owner)));
+  }
+  if (known.bare) {
+    value = outsideTokens(value, segment => segment.replace(known.bare, word => swapKnown('NAME', known.nameTokens.get(word.toLowerCase()))));
   }
   return value;
 }
@@ -1681,11 +1690,11 @@ function notAllowed(path, reason) {
   throw Object.assign(new Error(`Model input is not allowed at ${path}: ${reason}.`), { code: 'MODEL_INPUT_NOT_ALLOWED', statusCode: 500 });
 }
 
-function mintGated(text, { reasonCodeCount, inputBytes }) {
+function mintGated(text, { reasonCodeCount, inputBytes, placeholderCount }) {
   const value = {
     text,
     gateVersion: PRIVACY_EVIDENCE_GATE_VERSION,
-    placeholderCount: (text.match(PLACEHOLDER) ?? []).length,
+    placeholderCount: placeholderCount ?? (text.match(PLACEHOLDER) ?? []).length,
     reasonCodeCount,
     inputBytes,
     outputBytes: Buffer.byteLength(text, 'utf8'),
@@ -1706,6 +1715,44 @@ export function gateText(text, { maxBytes = PRIVACY_GATE_SCAN_CAP_BYTES, knownId
   const gated = sanitizeEvidenceTextForStorage(text, { maxBytes, knownIdentifiers, regate });
   if (gated.truncated) fail('EVIDENCE_SOURCE_LIMIT', 'Evidence text exceeds its model byte limit.');
   return mintGated(gated.text, { reasonCodeCount: gated.reasonCodes.length, inputBytes: Buffer.byteLength(text, 'utf8') });
+}
+
+// Household chat gate (ADR 0030). The household's own names are opened here, server-side, through `loadKnownIdentifiers`
+// (a household-scoped loader the composition root supplies); no caller passes names in and no prompt builder ever sees
+// them. Same redaction as every other text, plus: bare known first names, a three-digit pincode prefix, stable
+// {{PERSON_n}}-style tokens, a ciphertext refusal, and a rehydrate() that restores only the PERSON tokens of this call.
+const CIPHERTEXT = /\benc[0-9]\.[A-Za-z0-9_.-]{8,}/;
+const CHAT_TOKEN_SYNTAX = /\{\{\s*[A-Z][A-Z_]*_\d+\s*\}\}/;
+const LABELLED_PINCODE = /\b(pin\s?code|pin|postal\s+code|zip\s?code)(\s*[:=-]?\s*)([1-9]\d{2})\d{3}(?!\d)/giu;
+const TOKEN_KIND = { NAME: 'PERSON' };
+
+export async function gateTextForHousehold(text, { householdId, loadKnownIdentifiers, maxBytes = PRIVACY_GATE_SCAN_CAP_BYTES } = {}) {
+  if (typeof text !== 'string' || text.trim() === '') fail('PRIVACY_GATE_MALFORMED', 'Evidence text must be non-empty text.');
+  if (typeof householdId !== 'string' || householdId === '' || typeof loadKnownIdentifiers !== 'function') {
+    fail('PRIVACY_GATE_MALFORMED', 'The household gate needs a household id and a known-identifier loader.');
+  }
+  if (CIPHERTEXT.test(text)) fail('RESTRICTED_EVIDENCE', 'Sealed column values cannot be sent to a model.');
+  const normalised = normalizeText(text);
+  if (HAS_TOKEN.test(normalised) || CHAT_TOKEN_SYNTAX.test(normalised)) fail('RESTRICTED_EVIDENCE', 'Restricted evidence cannot be sent to a model.');
+  if (Buffer.byteLength(text, 'utf8') > 64_000) fail('EVIDENCE_SOURCE_LIMIT', 'Evidence text exceeds its intake byte limit.');
+  const entries = await loadKnownIdentifiers(householdId);
+  const known = compileKnownIdentifiers(entries, { bareNames: true });
+  // A pincode keeps its first three digits (area, not address); the rest is masked before the address rules run.
+  const prepared = text.replace(LABELLED_PINCODE, (_match, label, sep, prefix) => `${label}${sep}${prefix}XXX`);
+  const state = createPlaceholderState(prepared, known);
+  const redacted = redactText(prepared, state);
+  const excerpt = truncateUtf8(redacted.text, maxBytes);
+  if (excerpt.truncated || redacted.reasons.includes('TEXT_TRUNCATED')) fail('EVIDENCE_SOURCE_LIMIT', 'Evidence text exceeds its model byte limit.');
+  const placeholderCount = (excerpt.text.match(PLACEHOLDER) ?? []).length;
+  const personTokens = new Map();
+  const chatText = excerpt.text.replace(PLACEHOLDER, (token, kind, index) => {
+    const mapped = `{{${TOKEN_KIND[kind] ?? kind}_${index}}}`;
+    if (kind === 'NAME' && state.originals.has(token)) personTokens.set(mapped, state.originals.get(token));
+    return mapped;
+  });
+  const gated = mintGated(chatText, { reasonCodeCount: redacted.reasons.length, inputBytes: Buffer.byteLength(text, 'utf8'), placeholderCount });
+  const rehydrate = reply => (typeof reply === 'string' ? reply.replace(/\{\{PERSON_\d+\}\}/g, token => personTokens.get(token) ?? token) : reply);
+  return Object.freeze({ gated, rehydrate });
 }
 
 /** True only for a GatedText minted by this module in this process at the current gate version. */

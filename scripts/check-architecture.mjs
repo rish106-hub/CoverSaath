@@ -42,7 +42,7 @@ for (const file of sourceFiles) {
   // Any mention of a factory name counts (a call, an aliased or namespace use, an import or a re-export), so renaming at the
   // import site does not dodge the rule. The definitions and, for the gateway factory, the module index are the exceptions.
   const relativeToSource = relative(sourceRoot, file).split(sep).join('/');
-  const gatewayOwners = ['features/ai-analysis/structuring-runtime.js', 'features/ai-analysis/live-coverage-runtime.js'];
+  const gatewayOwners = ['features/ai-analysis/structuring-runtime.js', 'features/ai-analysis/live-coverage-runtime.js', 'features/ai-analysis/chat-runtime.js'];
   const factories = [['createModelGateway', 'features/ai-analysis/model-gateway.js', ['features/ai-analysis/index.js']], ['createAiSdkRunner', 'features/ai-analysis/ai-sdk-runner.js', []]];
   for (const [factory, definition, extra] of factories) {
     // A renamed re-export (`export { createModelGateway as makeGw }`) would hide the factory from every importer, including
@@ -51,11 +51,12 @@ for (const file of sourceFiles) {
       violations.push(`${relative(projectRoot, file)}: ${factory} must not be re-exported under another name.`);
     }
     if (new RegExp(`\\b${factory}\\b`).test(text) && ![definition, ...extra, ...gatewayOwners].includes(relativeToSource)) {
-      violations.push(`${relative(projectRoot, file)}: only structuring-runtime.js and live-coverage-runtime.js may call ${factory}( or import or re-export it.`);
+      violations.push(`${relative(projectRoot, file)}: only structuring-runtime.js, live-coverage-runtime.js and chat-runtime.js may call ${factory}( or import or re-export it.`);
     }
   }
-  if (!relativeToSource.startsWith('features/ai-analysis/') && /(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:@ai-sdk\/[^'"]*|ai)['"]/.test(text)) {
-    violations.push(`${relative(projectRoot, file)}: provider SDK imports (@ai-sdk/*, ai) belong to src/features/ai-analysis/ only.`);
+  // ADR 0030: only the gateway runner may import a provider SDK (`ai`, `@ai-sdk/*`), so no call can skip the gateway.
+  if (relativeToSource !== 'features/ai-analysis/ai-sdk-runner.js' && /(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:@ai-sdk\/[^'"]*|ai)['"]/.test(text)) {
+    violations.push(`${relative(projectRoot, file)}: provider SDK imports (@ai-sdk/*, ai) belong to the gateway runner, src/features/ai-analysis/ai-sdk-runner.js, only.`);
   }
   // A provider request is built under src/integrations only (ADR 0017 review P1-2). This is a text scan for the two
   // tokens `fetch(` and the Gemini hostname (a comment containing either also fails); it does not enforce an allow-list of

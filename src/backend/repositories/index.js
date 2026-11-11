@@ -31,3 +31,4 @@ export { PolicyHoldingRepository } from './policy-holding-repository.js';
 export { MemoryFactRepository } from './memory-fact-repository.js';
 export { DeclarationRepository } from './declaration-repository.js';
 export { PremiumRepository } from './premium-repository.js';
+export { ProviderCallRepository } from './provider-call-repository.js';

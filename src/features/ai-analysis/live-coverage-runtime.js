@@ -1,6 +1,5 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createHash } from 'node:crypto';
-import { createAiSdkRunner } from './ai-sdk-runner.js';
+import { createAiSdkRunner, createProviderModelLoader } from './ai-sdk-runner.js';
 import { createAiEnhancedTaskRegistry, createAiTaskExecutors } from './runtime-adapter.js';
 import { createModelGateway } from './model-gateway.js';
 import { GEMINI_MODEL_RECIPIENT, opaqueSourceId, sanitizeEvidenceForModel } from './privacy-evidence-gate.js';
@@ -448,7 +447,7 @@ export function createGeminiCoverageRegistryFactory({ env = process.env, loadMod
     // Live dispatch without known-value redaction is never allowed.
     if (typeof knownIdentifierLoader !== 'function') fail('LIVE_AI_CONFIG_INVALID', 'A household identifier loader is required for live model dispatch.');
     const modelRunner = createAiSdkRunner({
-      loadModel: loadModel ?? (async () => createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)),
+      loadModel: loadModel ?? createProviderModelLoader({ provider: 'google', apiKey: config.apiKey }),
       provider: 'google', model: config.model, modelVersion: config.modelVersion,
       inputUsdPerMillion: config.inputRate, outputUsdPerMillion: config.outputRate, createAgent,
     });

@@ -10,6 +10,7 @@
 // docs/architecture/dpdp-purpose-registry.md).
 import { CLAUSE_KINDS } from '../../contracts/policy-evidence.js';
 import { POLICY_PARAMETER_REGISTRY_VERSION, POLICY_PARAMETER_VALUE_TYPES, getPolicyParameterRegistry } from '../coverage-analysis/policy-parameter-registry.js';
+import { CHAT_ANSWER_TASK, CHAT_INTENTS, EMBED_TASK, FACT_EXTRACT_TASK, INTENT_CLASSIFY_TASK, MAX_EMBED_TEXTS } from './gateway-contract.js';
 import {
   EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, INVESTIGATION_CHECKLIST_KINDS, STRUCTURING_CHUNK_KINDS,
   MAX_CHUNK_BLOCK_INDEXES, STRUCTURING_EXTRACT_TASK, STRUCTURING_RECONCILE_TASK,
@@ -94,6 +95,17 @@ export const MODEL_INPUT_FIELDS = Object.freeze({
       clauses: array(wireClause, 1, 500),
     }),
   }),
+  // Gateway tasks (ADR 0030). Every free-text slot is a GatedText; fact ids are opaque aliases, never record ids.
+  [CHAT_ANSWER_TASK]: object({
+    payload: object({
+      question: gated,
+      history: array(object({ role: enumOf(['user', 'assistant']), text: gated }), 0, 8),
+      facts: array(object({ fact_id: id(/^fact_[0-9a-f]{24}$/), label: gated, value: gated }), 0, 60),
+    }),
+  }),
+  [INTENT_CLASSIFY_TASK]: object({ payload: object({ text: gated, intents: array(enumOf(CHAT_INTENTS), 1, 20) }) }),
+  [FACT_EXTRACT_TASK]: object({ payload: object({ text: gated, keys: array(id(/^[a-z][a-z0-9_.]{0,79}$/), 1, 40) }) }),
+  [EMBED_TASK]: object({ payload: object({ texts: array(object({ text: gated }), 1, MAX_EMBED_TEXTS) }) }),
   [EVIDENCE_SWEEP_TASK]: object({
     payload: object({
       questions: question,

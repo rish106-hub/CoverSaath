@@ -1,4 +1,5 @@
 import { assertModelTask } from './responsibility-matrix.js';
+import { CHAT_ANSWER_TASK, CHAT_INTENTS, FACT_EXTRACT_TASK, GATEWAY_OUTPUT_SCHEMAS, GATEWAY_PAYLOAD_KEYS, INTENT_CLASSIFY_TASK, MAX_EMBED_TEXTS, MODEL_STATUSES, isGatewayTask } from './gateway-contract.js';
 import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, STRUCTURING_EXTRACT_TASK, STRUCTURING_OUTPUT_SCHEMAS, isStructuringTask } from './structuring-contract.js';
 
 const SOURCE_STATES = Object.freeze(['known', 'unknown', 'conflict']);
@@ -237,8 +238,77 @@ function validateStructuringOutput(task, output) {
   return structuredClone(output);
 }
 
+// Gateway tasks (ADR 0030): the input is a sealed { payload } built by code from gated text; this checks its shape.
+function validateGatewayInput(task, input) {
+  exactObject(input, ['payload'], 'Gateway task input');
+  const payload = input.payload;
+  exactObject(payload, GATEWAY_PAYLOAD_KEYS[task], 'Gateway payload');
+  if (task === CHAT_ANSWER_TASK) {
+    text(payload.question, 2000, 'question');
+    boundedArray(payload.history, 0, 8, 'history');
+    for (const turn of payload.history) { exactObject(turn, ['role', 'text'], 'history turn'); text(turn.text, 2000, 'history text'); if (!['user', 'assistant'].includes(turn.role)) fail('invalid_schema', 'History role is invalid.'); }
+    boundedArray(payload.facts, 0, 60, 'facts');
+    for (const fact of payload.facts) { exactObject(fact, ['fact_id', 'label', 'value'], 'fact'); text(fact.fact_id, 64, 'fact id'); text(fact.label, 200, 'fact label'); text(fact.value, 600, 'fact value'); }
+    if (new Set(payload.facts.map(fact => fact.fact_id)).size !== payload.facts.length) fail('invalid_schema', 'Fact ids must be unique.');
+  } else if (task === INTENT_CLASSIFY_TASK) {
+    text(payload.text, 2000, 'text');
+    boundedArray(payload.intents, 1, 20, 'intents');
+    if (payload.intents.some(intent => !CHAT_INTENTS.includes(intent))) fail('invalid_schema', 'An intent is not in the closed list.');
+  } else if (task === FACT_EXTRACT_TASK) {
+    text(payload.text, 16_000, 'text');
+    boundedArray(payload.keys, 1, 40, 'keys');
+    payload.keys.forEach(key => text(key, 80, 'key'));
+  } else {
+    boundedArray(payload.texts, 1, MAX_EMBED_TEXTS, 'texts');
+    for (const entry of payload.texts) { exactObject(entry, ['text'], 'embed text'); text(entry.text, 8_000, 'embed text'); }
+  }
+  return { input: structuredClone(input), sourceIds: new Set() };
+}
+
+function validateGatewayOutput(task, output, input) {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) fail('invalid_schema', 'Gateway output must be an object.');
+  const payload = input.payload;
+  if (!MODEL_STATUSES.includes(output.status)) fail('invalid_schema', 'Model output status must be extracted_unverified, conflicting or unknown.');
+  if (task === CHAT_ANSWER_TASK) {
+    exactObject(output, ['status', 'answer', 'factsUsed'], 'chat answer');
+    text(output.answer, 2000, 'answer');
+    if (output.status === 'conflicting') fail('invalid_schema', 'A chat answer is extracted_unverified or unknown.');
+    boundedArray(output.factsUsed, 0, 60, 'factsUsed');
+    const known = new Set(payload.facts.map(fact => fact.fact_id));
+    if (output.factsUsed.some(id => !known.has(id)) || new Set(output.factsUsed).size !== output.factsUsed.length) fail('missing_citation', 'factsUsed must hold unique supplied fact ids.');
+    if (output.status === 'extracted_unverified' && output.factsUsed.length === 0) fail('missing_citation', 'An answer must cite the facts it used.');
+    if (assertionHasUnsupportedCertainty(output.answer, payload.facts.map(fact => comparableText(fact.value)))) fail('unsupported_claim', 'Output contains unsupported insurance certainty.');
+  } else if (task === INTENT_CLASSIFY_TASK) {
+    exactObject(output, ['status', 'intent'], 'intent');
+    if (!payload.intents.includes(output.intent) && output.intent !== 'unknown') fail('invalid_schema', 'Intent is not one of the supplied intents.');
+    if (output.status === 'unknown' && output.intent !== 'unknown') fail('unknown_not_preserved', 'An unknown classification must carry the unknown intent.');
+  } else if (task === FACT_EXTRACT_TASK) {
+    exactObject(output, ['status', 'facts'], 'fact extraction');
+    boundedArray(output.facts, 0, 40, 'facts');
+    for (const fact of output.facts) {
+      exactObject(fact, ['key', 'value', 'quote', 'status'], 'fact');
+      if (!payload.keys.includes(fact.key) || !MODEL_STATUSES.includes(fact.status)) fail('field_not_requested', 'Fact key or status is invalid.');
+      if (fact.status === 'extracted_unverified' || fact.status === 'conflicting') {
+        text(fact.quote, 600, 'quote');
+        if (!payload.text.includes(fact.quote)) fail('quote_not_found', 'A fact quote must appear verbatim in the supplied text.');
+      }
+      if (fact.status !== 'extracted_unverified' && fact.value !== null) fail('unknown_not_preserved', 'Unknown or conflicting facts must have a null value.');
+      if (fact.status === 'extracted_unverified' && (typeof fact.value !== 'string' || fact.value === '' || !fact.quote.includes(fact.value))) fail('quote_not_found', 'The value must appear inside its quote.');
+    }
+  } else {
+    exactObject(output, ['status', 'dimensions', 'vectors'], 'embedding');
+    if (output.status === 'unknown') {
+      if (output.vectors.length !== 0 || output.dimensions !== 0) fail('unknown_not_preserved', 'An unknown embedding carries no vectors.');
+    } else if (output.vectors.length !== payload.texts.length || output.vectors.some(vector => vector.length !== output.dimensions || vector.some(value => !Number.isFinite(value)))) {
+      fail('invalid_schema', 'Embedding vectors do not match the request.');
+    }
+  }
+  return structuredClone(output);
+}
+
 export function validateTaskInput(task, input) {
   assertModelTask(task);
+  if (isGatewayTask(task)) return validateGatewayInput(task, input);
   if (isStructuringTask(task)) return validateStructuringInput(task, input);
   exactObject(input, ['context', 'sources', 'upstream'], 'AI task input');
   exactObject(input.context, ['caseId', 'subjectId', 'purpose', 'requestedFields'], 'AI task context');
@@ -322,6 +392,10 @@ function validateQuestions(output, sourceIds, unknownSourceIds) {
 }
 
 export function validateTaskOutput(task, output, input) {
+  if (isGatewayTask(task)) {
+    validateTaskInput(task, input);
+    return validateGatewayOutput(task, output, input);
+  }
   if (isStructuringTask(task)) {
     validateTaskInput(task, input);
     return validateStructuringOutput(task, output);
@@ -360,6 +434,7 @@ const extractionSchema = {
 
 export const TASK_OUTPUT_SCHEMAS = Object.freeze({
   ...STRUCTURING_OUTPUT_SCHEMAS,
+  ...GATEWAY_OUTPUT_SCHEMAS,
   profile_extraction: extractionSchema,
   group_cover_extraction: extractionSchema,
   personal_cover_extraction: extractionSchema,

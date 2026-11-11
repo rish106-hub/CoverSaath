@@ -77,6 +77,7 @@ export const DATA_STORES = Object.freeze([
   store('policy_profiles', 'delete', 'household_id = ?', null, 'Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Names are sealed.'),
   store('policy_facts', 'delete', 'household_id = ?', null, 'Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Exact values are sealed.'),
   store('fact_evidence', 'delete', 'household_id = ?', null, 'Deleted with its fact (document erasure trigger, case and household erasure, consent withdrawal). Quotes are sealed.'),
+  store('provider_calls', 'delete', 'household_id = ?', null, 'Deleted by household erasure (ADR 0030). Counts, a payload digest, usage and cost only; never a prompt or a response.'),
   store('catalogue_reviews', 'delete', 'household_id = ?', null, 'Deleted.'),
   store('catalogue_reviewer_grants', 'delete', 'household_id = ?', null, 'Deleted.'),
   // Policies and evidence

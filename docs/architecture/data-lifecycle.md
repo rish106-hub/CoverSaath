@@ -74,6 +74,7 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `policy_profiles` | delete | - | Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Names are sealed. |
 | `policy_facts` | delete | - | Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Exact values are sealed. |
 | `fact_evidence` | delete | - | Deleted with its fact. Quotes are sealed. |
+| `provider_calls` | delete | - | Deleted by household erasure (ADR 0030). Counts, a payload digest, usage and cost only; never a prompt or a response. |
 | `catalogue_reviews` | delete | - | Deleted. |
 | `catalogue_reviewer_grants` | delete | - | Deleted. |
 | `policies` | scrub_prune | policies | Insurer, number, dates cleared; deleted unless a fact or parameter record names the policy. |

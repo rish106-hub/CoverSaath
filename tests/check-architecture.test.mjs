@@ -41,7 +41,7 @@ for (const [label, text] of [
 }
 
 // ADR 0017 D7: the model boundary rules.
-const GATEWAY_OWNERS = ['features/ai-analysis/structuring-runtime.js', 'features/ai-analysis/live-coverage-runtime.js'];
+const GATEWAY_OWNERS = ['features/ai-analysis/structuring-runtime.js', 'features/ai-analysis/live-coverage-runtime.js', 'features/ai-analysis/chat-runtime.js'];
 
 test('the model boundary rules pass for the allowed owners', () => {
   const result = check({
@@ -56,9 +56,9 @@ test('the model boundary rules pass for the allowed owners', () => {
 });
 
 for (const [label, files, message] of [
-  ['createModelGateway( outside the two runtimes', { 'server/bypass.js': "import { createModelGateway } from '../features/ai-analysis/model-gateway.js';\nexport const gateway = createModelGateway({ mode: 'live' });\n" }, /src\/server\/bypass\.js: only structuring-runtime\.js and live-coverage-runtime\.js may call createModelGateway\(/],
-  ['createAiSdkRunner( outside the two runtimes', { 'features/ai-analysis/other.js': "const runner = createAiSdkRunner({});\n" }, /src\/features\/ai-analysis\/other\.js: only structuring-runtime\.js and live-coverage-runtime\.js may call createAiSdkRunner\(/],
-  ['@ai-sdk imported outside ai-analysis', { 'server/direct.js': "import { google } from '@ai-sdk/google';\nexport default google;\n" }, /src\/server\/direct\.js: provider SDK imports \(@ai-sdk\/\*, ai\) belong to src\/features\/ai-analysis\//],
+  ['createModelGateway( outside the two runtimes', { 'server/bypass.js': "import { createModelGateway } from '../features/ai-analysis/model-gateway.js';\nexport const gateway = createModelGateway({ mode: 'live' });\n" }, /src\/server\/bypass\.js: only structuring-runtime\.js, live-coverage-runtime\.js and chat-runtime\.js may call createModelGateway\(/],
+  ['createAiSdkRunner( outside the two runtimes', { 'features/ai-analysis/other.js': "const runner = createAiSdkRunner({});\n" }, /src\/features\/ai-analysis\/other\.js: only structuring-runtime\.js, live-coverage-runtime\.js and chat-runtime\.js may call createAiSdkRunner\(/],
+  ['@ai-sdk imported outside ai-analysis', { 'server/direct.js': "import { google } from '@ai-sdk/google';\nexport default google;\n" }, /src\/server\/direct\.js: provider SDK imports \(@ai-sdk\/\*, ai\) belong to the gateway runner/],
   ['ai imported outside ai-analysis', { 'features/other/direct.js': "import { generateText } from 'ai';\nexport default generateText;\n" }, /src\/features\/other\/direct\.js: provider SDK imports/],
   ['dynamic ai import outside ai-analysis', { 'features/other/dynamic.js': "const sdk = await import('@ai-sdk/google');\n" }, /src\/features\/other\/dynamic\.js: provider SDK imports/],
   ['isSealedModelInput imported outside the gateway', { 'features/ai-analysis/other.js': "import { isSealedModelInput } from './privacy-evidence-gate.js';\nexport const x = isSealedModelInput;\n" }, /src\/features\/ai-analysis\/other\.js: isSealedModelInput may be used only by model-gateway\.js/],
@@ -108,5 +108,28 @@ for (const [label, files, message] of [
     const result = check(files);
     assert.equal(result.status, 1, result.stdout);
     assert.match(result.stderr, message);
+  });
+}
+
+// ADR 0030: only the gateway runner (ai-sdk-runner.js) may import `ai` or `@ai-sdk/*`; a scratch fixture proves it both ways.
+test('a deliberate direct provider SDK import fails the rule, and passes once removed', () => {
+  const runner = { 'features/ai-analysis/ai-sdk-runner.js': "import { ToolLoopAgent } from 'ai';\nimport { createAnthropic } from '@ai-sdk/anthropic';\nexport const x = [ToolLoopAgent, createAnthropic];\n" };
+  const bypass = { ...runner, 'features/ai-analysis/chat-shortcut.js': "import { createAnthropic } from '@ai-sdk/anthropic';\nexport const model = createAnthropic({ apiKey: 'x' });\n" };
+  const failing = check(bypass);
+  assert.equal(failing.status, 1, failing.stdout);
+  assert.match(failing.stderr, /chat-shortcut\.js: provider SDK imports \(@ai-sdk\/\*, ai\) belong to the gateway runner/);
+  const removed = check({ ...runner, 'features/ai-analysis/chat-shortcut.js': "export const model = null;\n" });
+  assert.equal(removed.status, 0, removed.stderr);
+});
+
+for (const [label, files] of [
+  ['another ai-analysis file importing ai', { 'features/ai-analysis/other.js': "import { generateText } from 'ai';\nexport default generateText;\n" }],
+  ['an integration importing an @ai-sdk provider', { 'integrations/anthropic/direct.js': "import { createAnthropic } from '@ai-sdk/anthropic';\nexport default createAnthropic;\n" }],
+  ['a dynamic @ai-sdk import in a runtime file', { 'features/ai-analysis/chat-runtime.js': "const sdk = await import('@ai-sdk/anthropic');\n" }],
+]) {
+  test(`provider SDK rule: ${label} fails`, () => {
+    const result = check(files);
+    assert.equal(result.status, 1, result.stdout);
+    assert.match(result.stderr, /provider SDK imports/);
   });
 }

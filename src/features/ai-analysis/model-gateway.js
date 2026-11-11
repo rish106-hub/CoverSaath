@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { unknownOutput } from './gateway-contract.js';
 import { buildPromptContract, PROMPT_VERSION } from './prompts.js';
 import { TASK_OUTPUT_SCHEMAS, validateTaskOutput } from './schemas.js';
 import { assertModelTask } from './responsibility-matrix.js';
@@ -58,7 +60,22 @@ function validateExecutionResult(result, request, mode) {
 // outputTokens, costUsd } plus, once the input is known to be sealed, the counts-only gate summary { gateVersion,
 // gatedSlots, placeholders, reasonCodes, gatedBytes } (ADR 0017 D5). It never receives prompt or output text, digests,
 // reason codes or placeholder kinds, and a throwing listener cannot affect the call.
-export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, limits, onEvent } = {}) {
+// A provider runner that cannot call out (no key, no SDK, flag off, no route) returns `{ unavailable: true, provider, model,
+// reason }` instead of throwing. The gateway turns it into the task's typed unknown output: nothing was dispatched, the
+// reservation is released and the metadata records zero calls and zero cost.
+function unavailableResult(task, runnerResult, input) {
+  const output = validateTaskOutput(task, unknownOutput(task), input);
+  return {
+    output,
+    metadata: {
+      contractVersion: AI_CONTRACT_VERSION, mode: 'live', provider: String(runnerResult.provider ?? 'none'), model: String(runnerResult.model ?? 'none'),
+      modelVersion: String(runnerResult.model ?? 'none'), promptVersion: PROMPT_VERSION, inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0,
+      latencyMs: 0, costUsd: 0, unavailableReason: String(runnerResult.reason ?? 'unavailable'),
+    },
+  };
+}
+
+export function createModelGateway({ mode, liveRunner, fixtures = {}, budget: gatewayBudget, limits, onEvent } = {}) {
   if (!['fixture', 'live'].includes(mode)) fail('invalid_gateway_config', 'Choose fixture or live mode explicitly.');
   if (mode === 'live' && typeof liveRunner !== 'function') fail('live_not_configured', 'Live mode needs an explicit model runner.');
   const bounded = limitsWithDefaults(limits);
@@ -90,27 +107,33 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
   return Object.freeze({
     mode,
     limits: bounded,
-    async execute({ task, input, reservationUsd, signal } = {}) {
+    async execute({ task, input, reservationUsd, signal, householdId = null, provider = null, model = null, budget: callBudget } = {}) {
+      // A per-call budget scope (per household per day) overrides the gateway-wide one.
+      const budget = callBudget ?? gatewayBudget;
       assertModelTask(task);
+      const caller = { ...(householdId ? { householdId } : {}), ...(provider ? { provider } : {}), ...(model ? { model } : {}) };
       // ADR 0017 D3: only an input minted by the privacy gate for this exact task reaches a reservation, a prompt or a
       // provider. Enforced in fixture mode as well, so tests prove the seal too.
       try {
         assertGatewayInput(task, input);
       } catch (error) {
-        emit({ task, outcome: 'ungated_model_input', latencyMs: 0, dispatched: false, inputTokens: 0, outputTokens: 0, costUsd: 0 });
+        emit({ task, outcome: 'ungated_model_input', latencyMs: 0, dispatched: false, inputTokens: 0, outputTokens: 0, costUsd: 0, ...caller });
         throw error;
       }
       const gate = sealedInputCounts(input);
       positiveNumber(reservationUsd, 'reservationUsd', { allowZero: mode === 'fixture' });
       if (reservationUsd > bounded.maxReservationUsd) fail('reservation_limit', 'Request exceeds the per-call cost reservation limit.');
       const contract = buildPromptContract(task, input);
+      // Digest of the redacted outbound payload (never the payload itself) for the provider_calls audit row.
+      const payloadSha256 = createHash('sha256').update(`${contract.system}\n${contract.evidence}`).digest('hex');
+      const audit = { ...caller, payloadSha256 };
       if (Buffer.byteLength(contract.evidence, 'utf8') > bounded.maxInputBytes) fail('input_limit', 'Prompt evidence exceeds the gateway limit.');
       if (signal?.aborted) fail('aborted', 'AI task was cancelled before execution.');
       if (mode === 'live') {
         if (!budget || typeof budget.reserve !== 'function' || typeof budget.settle !== 'function') fail('budget_not_configured', 'Live mode needs a reservation ledger.');
         const reservation = await budget.reserve(reservationUsd, { task, promptVersion: PROMPT_VERSION });
         if (!reservation) {
-          emit({ task, outcome: 'budget_refused', latencyMs: 0, dispatched: false, inputTokens: 0, outputTokens: 0, costUsd: 0, ...gate });
+          emit({ task, outcome: 'budget_refused', latencyMs: 0, dispatched: false, inputTokens: 0, outputTokens: 0, costUsd: 0, ...gate, ...audit });
           fail('budget_refused', 'The budget ledger refused this model call.');
         }
         const startedAt = Date.now();
@@ -133,19 +156,26 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget, li
           };
           // The provider runner accepts only a request built here, after the seal check (see isGatewayRequest).
           GATEWAY_REQUESTS.add(request);
-          result = validateExecutionResult(await liveRunner(request), { task, input }, mode);
+          const raw = await liveRunner(request);
+          if (raw?.unavailable === true) {
+            const unavailable = unavailableResult(task, raw, input);
+            emit({ task, outcome: 'provider_unavailable', latencyMs: 0, dispatched: false, inputTokens: 0, outputTokens: 0, costUsd: 0, reason: unavailable.metadata.unavailableReason, ...gate, ...audit, provider: unavailable.metadata.provider, model: unavailable.metadata.model });
+            await budget.settle(reservation, 0);
+            return { ...unavailable, reservation: structuredClone(reservation) };
+          }
+          result = validateExecutionResult(raw, { task, input }, mode);
         } catch (error) {
           // A call that never reached the provider (no concurrency slot, or the
           // runner refused it before dispatch) releases its reservation; any
           // other failure keeps it reserved, since the provider may have charged.
           const dispatched = acquired && error?.modelDispatched !== false;
-          emit({ task, outcome: error?.code ?? 'error', latencyMs: Date.now() - startedAt, dispatched, inputTokens: 0, outputTokens: 0, costUsd: 0, ...gate });
+          emit({ task, outcome: error?.code ?? 'error', latencyMs: Date.now() - startedAt, dispatched, inputTokens: 0, outputTokens: 0, costUsd: 0, ...gate, ...audit });
           await budget.settle(reservation, dispatched ? null : 0, { failed: dispatched });
           throw error;
         } finally {
           if (acquired) release();
         }
-        emit({ task, outcome: 'ok', latencyMs: result.metadata.latencyMs, dispatched: true, inputTokens: result.metadata.inputTokens, outputTokens: result.metadata.outputTokens, costUsd: result.metadata.costUsd, ...gate });
+        emit({ task, outcome: 'ok', latencyMs: result.metadata.latencyMs, dispatched: true, inputTokens: result.metadata.inputTokens, outputTokens: result.metadata.outputTokens, costUsd: result.metadata.costUsd, ...gate, ...audit, provider: result.metadata.provider, model: result.metadata.model });
         await budget.settle(reservation, result.metadata.costUsd);
         if (result.metadata.costUsd > reservation.amountUsd) fail('reservation_exceeded', 'Actual model cost exceeded the reserved amount. Further paid work must stop.');
         return { ...result, reservation: structuredClone(reservation) };
