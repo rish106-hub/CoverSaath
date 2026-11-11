@@ -35,6 +35,7 @@ const ERASE = Object.freeze({
   derivedRun: erasure('src/backend/repositories/consent-repository.js', 'ConsentRepository.eraseDerivedRunData', 'tests/revocation-concurrency.test.mjs'),
   adultCascade: erasure('src/backend/repositories/erasure-repository.js', 'ErasureRepository.eraseHousehold', 'tests/data-erasure-api.test.mjs'),
   personRecords: erasure('src/backend/repositories/person-record-erasure.js', 'erasePersonRecordsForCategories', 'tests/person-records-api.test.mjs'),
+  memory: erasure('src/backend/repositories/memory-erasure.js', 'eraseMemoryForHousehold', 'tests/holdings-memory.test.mjs'),
   memberDelete: erasure('src/backend/repositories/household-app-repository.js', 'HouseholdAppRepository.deleteMember', 'tests/household-app-api.test.mjs'),
 });
 
@@ -111,6 +112,36 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   table('fact_evidence.quote_enc', {
     category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], sealed: true, retention: 'until_revocation',
     childData: 'possible', erasure: ERASE.policyFacts,
+  }),
+  // Holdings and memory (migrations 048-052, ADR 0032). Sealed: memory values and references, declaration labels, premium amounts and
+  // agent name and code. recipients none: a model never receives these rows (modelEligible stays false, the default).
+  table('household_memory_facts.value_enc', {
+    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
+  table('household_memory_facts.reference_ref_enc', {
+    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
+  table('member_declarations.label_enc', {
+    category: 'health_or_policy_content', purposes: ['profile_intake'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
+  table('premium_payments.amount_enc', {
+    category: 'financial', purposes: ['profile_intake'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
+  table('premium_payments.agent_name_enc', {
+    category: 'identity', purposes: ['profile_intake'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
+  table('premium_payments.agent_code_enc', {
+    category: 'identity', purposes: ['profile_intake'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
+  table('premium_dues.amount_enc', {
+    category: 'financial', purposes: ['profile_intake'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
   }),
   table('policy_structuring_runs.*', {
     category: 'insurance_document', purposes: ['document_processing'], recipients: ['none'], retention: 'until_revocation', childData: 'possible',

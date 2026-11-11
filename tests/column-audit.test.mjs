@@ -120,6 +120,20 @@ const PLAIN = {
     'ids and flags only (consent grant id, requesting adult id); read in SQL by revocation erasure, nulled on revocation': ['authorization_json'],
   },
   policies: { 'closed vocabulary': ['policy_kind', 'verification_state'] },
+  policy_holdings: { 'closed vocabulary: holding kind and lifecycle status (ADR 0032); no insurer, plan or number': ['kind', 'status'] },
+  household_memory_facts: {
+    'public registry key, scope slug, key schema, class, tier, status, scope of member, capture method, derivation version and supersession id: closed vocabularies and identifiers, no value (the value and the reference are sealed). NOTE: a declared_* key names that a declaration exists; flagged for owner review (ADR 0032)': [
+      'member_scope', 'fact_key', 'scope_key', 'key_schema', 'fact_class', 'source_tier', 'status', 'capture_method', 'derivation_version', 'supersedes_id'],
+    'ids of the facts this declaration resolves, no content': ['resolves_fact_ids'],
+  },
+  memory_conflicts: {
+    'public registry key and closed vocabulary: reason, resolution, resolver kind; ids of candidate and resolving facts, no value': ['fact_key', 'candidate_fact_ids', 'reason', 'resolution', 'resolving_fact_id', 'resolved_by'],
+  },
+  member_declarations: {
+    'closed vocabulary: declaration kind (alone it says what sort of declaration a member has; flagged for owner review, ADR 0032), calendar day and a flag; the label is sealed': ['kind', 'declared_on', 'declared_to_insurer'],
+  },
+  premium_payments: { 'closed vocabulary, coarse amount band by design (as policy_facts, ADR 0025 D3), currency code and a calendar day; exact amount, agent name and code are sealed': ['amount_band', 'currency', 'paid_on', 'channel', 'paid_via'] },
+  premium_dues: { 'closed vocabulary, coarse amount band by design, currency code and a calendar day; the exact amount is sealed': ['due_on', 'amount_band', 'currency', 'state'] },
   policy_answers: {
     'opaque client idempotency key (<=128 chars)': ['idempotency_key'],
     'closed vocabulary': ['state'],
@@ -162,6 +176,8 @@ const PLAIN = {
 const PLAIN_NUMBERS = {
   household_members: { 'row revision counter': ['revision'] },
   person_records: { 'schema and row revision counters': ['schema_version', 'revision'] },
+  member_declarations: { 'row revision counter': ['revision'] },
+  household_memory_facts: { 'block index of the printed place, no content': ['block_index'] },
   adult_preferences: { 'schema and row revision counters': ['schema_version', 'revision'] },
   app_events: { 'status code and duration, no content': ['status', 'duration_ms'] },
   household_changes: { 'log sequence number, row revision counter and time of the change, no content': ['seq', 'revision', 'at'] },

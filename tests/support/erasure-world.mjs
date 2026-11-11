@@ -59,6 +59,16 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await insert(pool, 'fact_evidence', {
     id: `fev-${key}`, fact_id: `pfact-${key}`, household_id: ids.household, case_id: ids.case, document_id: ids.document, source_version: '1', quote_enc: `enc2.k1.${canary('pfact-quote')}`,
   });
+  // Holdings and memory (migrations 048-052): every store gets a row; the sealed columns hold envelope-shaped values carrying the canary.
+  ids.holding = `holding-${key}`;
+  await insert(pool, 'policy_holdings', { id: ids.holding, household_id: ids.household, policy_id: ids.policy, document_id: ids.document });
+  await insert(pool, 'household_memory_facts', { id: `mfact-a-${key}`, household_id: ids.household, holding_id: ids.holding, consent_grant_id: ids.consent, source_document_id: ids.document, source_page_id: ids.page, value_enc: `enc2.k1.${canary('memory-value')}` });
+  await insert(pool, 'household_memory_facts', { id: `mfact-b-${key}`, household_id: ids.household, holding_id: ids.holding, fact_class: 'product_term', source_tier: 'ida_wording', status: 'reviewed_reference', consent_grant_id: ids.consent, source_document_id: ids.document, reference_ref_enc: `enc2.k1.${canary('memory-ref')}`, value_enc: `enc2.k1.${canary('memory-value2')}`, fact_key: 'room_rent_limit' });
+  await insert(pool, 'household_memory_facts', { id: `mfact-c-${key}`, household_id: ids.household, holding_id: ids.holding, source_tier: 'user_declaration', status: 'user_confirmed', consent_grant_id: ids.consent, declared_by_adult_id: ids.adult, capture_method: 'typed', value_enc: `enc2.k1.${canary('memory-value3')}` });
+  await insert(pool, 'memory_conflicts', { id: `mconf-${key}`, household_id: ids.household, holding_id: ids.holding, candidate_fact_ids: [`mfact-a-${key}`, `mfact-c-${key}`] });
+  await insert(pool, 'member_declarations', { id: `decl-${key}`, household_id: ids.household, member_id: ids.dependent, consent_grant_id: ids.consent, declared_by_adult_id: ids.adult, label_enc: `enc2.k1.${canary('declaration')}` });
+  await insert(pool, 'premium_payments', { id: `ppay-${key}`, household_id: ids.household, holding_id: ids.holding, consent_grant_id: ids.consent, paid_via: 'agent', amount_enc: `enc2.k1.${canary('premium')}`, agent_name_enc: `enc2.k1.${canary('agent-name')}`, agent_code_enc: `enc2.k1.${canary('agent-code')}` });
+  await insert(pool, 'premium_dues', { id: `pdue-${key}`, household_id: ids.household, holding_id: ids.holding, consent_grant_id: ids.consent, amount_enc: `enc2.k1.${canary('due')}` });
   await insert(pool, 'catalogue_reviewer_grants', { id: `crg-${key}`, household_id: ids.household, adult_user_id: ids.adult, granted_by: ids.adult, case_id: ids.case });
 
   await insert(pool, 'catalogue_reviews', { id: `review2-${key}`, household_id: ids.household, case_id: ids.case, grant_id: `crg-${key}`, reviewer_adult_id: ids.adult, document_id: ids.document, fact_key: hex('f'), fact_json: JSON.stringify({ f: canary('review-fact') }) });
