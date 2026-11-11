@@ -5,7 +5,7 @@ import { holdingsEnabled } from './holdings-flag.js';
 //   importHospitals()  job (reference.import, scope 'hospitals'): pages the reference service export into network_hospitals through the
 //                      existing insurance-data client. Idempotent upserts; at most MAX_PAGES pages per run. Needs REFERENCE_DATA_ENABLED=true.
 //   list()             owner read: hospitals in a pincode for one holding. Ownership is checked through the holding's household (404 otherwise).
-// The UIN is never read here. SCALE: PostGIS and radius search later (migration 055 note).
+// The UIN is never read here. SCALE: PostGIS and radius search later (migration 057 note).
 const MAX_PAGES = 100;
 const PINCODE = /^[0-9]{6}$/;
 const coded = (code, message, statusCode, extra = {}) => Object.assign(new Error(message), { code, statusCode, ...extra });

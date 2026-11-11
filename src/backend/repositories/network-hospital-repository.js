@@ -1,4 +1,4 @@
-// Network hospitals (migration 055): PUBLIC reference rows, no household column. Writes come from the sync job only; reads are bounded
+// Network hospitals (migration 057): PUBLIC reference rows, no household column. Writes come from the sync job only; reads are bounded
 // and parameterised. Cashless-first ordering so the useful rows are on top.
 const PINCODE = /^[0-9]{6}$/;
 const MAX_LIST = 50;

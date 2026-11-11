@@ -106,7 +106,7 @@ Reuse first: `app-data-plan.md` already specifies `premium_payments`, `premium_d
 - **052 `premium_payments`** (if not already in 028): `id, household_id, holding_id, amount_paise, paid_on, channel (upi|card|netbanking|cheque|cash|salary_deduction), paid_via (self|agent|employer|bank), agent_name_ciphertext, agent_code_ciphertext, receipt_document_id?, created_at`. + `premium_dues`.
 - **053 `memory_chunks`** (pgvector): `id, household_id, holding_id?, scope (own_pdf|insurer_doc|confirmed_fact|declaration|chat_summary), chunk_text_ciphertext, embedding vector(1024), token_count, source_ref, created_at`. `CREATE EXTENSION IF NOT EXISTS vector`. HNSW index `(embedding vector_cosine_ops)` partial `WHERE scope <> 'insurer_doc'`; insurer chunks shared by `reference_cache` id, not per household. **SCALE:** at >10M rows move insurer chunks to dedicated store; household chunks stay partitioned by `household_id` hash.
 - **054 `chat_threads`, `chat_turns`, `retrieval_traces`**: turn stores `role, content_ciphertext, redacted_prompt_hash, provider, model, tokens_in/out, cost_paise, latency_ms`; trace stores chunk ids + fact ids used. Transcripts of voice notes = a turn with `input_kind='voice'`, `transcript_ciphertext`, `audio_document_id` (store audio only if `VOICE_AUDIO_RETAIN=true`). Erasable with the household. (`app-data-plan.md` D4 recommended not storing transcripts; user has now chosen to store them — record in ADR 0027.)
-- **055 `network_hospitals`** (reference, no PII): `id, insurer_id, tpa_id, name, address, city, pincode, lat, lng, cashless bool, source_ref, valid_from, valid_to`. Index `(insurer_id, pincode)`. **SCALE:** PostGIS + geohash when > 100k rows or radius queries > 50 rps.
+- **057 `network_hospitals`** (reference, no PII): `id, insurer_id, tpa_id, name, address, city, pincode, lat, lng, cashless bool, source_ref, valid_from, valid_to`. Index `(insurer_id, pincode)`. **SCALE:** PostGIS + geohash when > 100k rows or radius queries > 50 rps.
 - **056 `provider_calls`** (audit, every outbound model call): `id, household_id?, purpose, provider, model, redaction_report_json (counts only), payload_sha256, tokens, cost_paise, status, created_at`. This is the "no PII reached the provider" evidence.
 - **057 `analytics_outbox`**: `id, event, distinct_id_hash, properties_json (allowlisted keys), created_at, sent_at`. Worker drains to PostHog.
 
@@ -183,7 +183,7 @@ Common success gate for every builder: `npm run check:architecture` green; new t
 
 ### Wave C (day 2) — Sonnet ×3
 **S-C1 chat + hospitals UI** (Sonnet, app) — screens 5-6, SSE consumer, voice button (MediaRecorder → BFF → backend STT), hospital list. Success: Playwright: ask seeded question → streamed answer with facts chips.
-**S-C2 network hospitals ingest** (Sonnet, IDA + backend) — 055, IDA `network_hospitals` table + CSV/HTML ingest command + export endpoint; backend sync job; route `GET /holdings/:id/hospitals?pincode=`. Success: seeded pincode returns ≥1 cashless hospital. SCALE note: PostGIS.
+**S-C2 network hospitals ingest** (Sonnet, IDA + backend) — 057, IDA `network_hospitals` table + CSV/HTML ingest command + export endpoint; backend sync job; route `GET /holdings/:id/hospitals?pincode=`. Success: seeded pincode returns ≥1 cashless hospital. SCALE note: PostGIS.
 **S-C3 PostHog + analytics outbox** (Sonnet, backend + app) — 057, outbox worker, `posthog-node` (ADR line), event spec §4, app-side `posthog-js` only with the allowlisted props, consent-gated. Success: events visible in PostHog test project with no free text; `ANALYTICS_ENABLED` default false. Failure: any prop not in allowlist (test).
 
 ### Wave D (day 3) — Sonnet ×2 + Haiku ×1
@@ -248,7 +248,7 @@ Owner instruction 2026-11-11: caveman full in every agent prompt and report; wav
 
 ### 9.2 Numbering
 
-- Migrations on `main`: 42 files (031 and 038 are unused numbers). After 045-047: 45. Reserved: **S-A1 048-052, S-A2 056, S-B1 053-054, S-C2 055, S-C3 057.** No agent takes another's number. `migrationCount` in a branch = count of files on that branch; the lead fixes the number at integration.
+- Migrations on `main`: 42 files (031 and 038 are unused numbers). After 045-047: 45. Reserved: **S-A1 048-052, S-A2 056, S-B1 053-054, S-C2 057 (renumbered from 055), S-C3 057.** No agent takes another's number. `migrationCount` in a branch = count of files on that branch; the lead fixes the number at integration.
 - ADRs: `feat/auth-jwt` carries `0016-auth-sessions-and-jwt.md` and `feat/sync-log` carries `0017-sync-change-log.md`; both numbers are taken on `main` (logging, gated text). H1 renames them to **0027** and **0028** and fixes references. `0026` = person records. The plan's ADRs move: **0029** voice transcripts, **0030** model gateway + Anthropic + redaction evidence, **0031** pgvector memory chunks, **0032** thin holdings + memory conflicts. ADR 0023 is edited in place (Proposed to Accepted, with 9.1 changes).
 
 ### 9.3 Branching and parallel work
