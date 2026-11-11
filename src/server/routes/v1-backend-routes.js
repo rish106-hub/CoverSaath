@@ -18,10 +18,7 @@ import { createPersistentCoverageAnalysisService } from '../../features/coverage
 import { handleDataLifecycleRoute } from './data-lifecycle-routes.js';
 import { handleHoldingsRoute } from './holdings-routes.js';
 import { handleHoldingFactsRoute } from './holding-facts-routes.js';
-<<<<<<< HEAD
 import { handleHoldingRecordsRoute } from './holding-records-routes.js';
-=======
->>>>>>> origin/main
 import { handleChatV1Route } from './chat-v1-routes.js';
 import { handleHoldingProductRoute } from './holding-product-routes.js';
 import { parsePolicyType } from '../../contracts/policy-type.js';
@@ -417,10 +414,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     const holdingsRoute = await handleHoldingsRoute({ req, url, principal, services });
     if (holdingsRoute) return holdingsRoute;
     const holdingFacts = await handleHoldingFactsRoute({ req, url, principal, services }); if (holdingFacts) return holdingFacts;
-<<<<<<< HEAD
     const holdingRecords = await handleHoldingRecordsRoute({ req, url, principal, services }); if (holdingRecords) return holdingRecords;
-=======
->>>>>>> origin/main
     const chatV1 = await handleChatV1Route({ req, url, principal, services }); if (chatV1) return chatV1;
 
     if (req.method === 'GET' && url.pathname === '/api/v1/integrations') {
