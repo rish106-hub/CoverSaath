@@ -9,7 +9,7 @@ export {
   UnverifiedConnectorError,
 } from './shared/index.js';
 export { createIntakeConnectorStubs } from './intake/index.js';
-export { createInsuranceDataClient, referenceDataEnabled, REFERENCE_ENDPOINTS, ReferenceDataError } from './insurance-data/index.js';
+export { createInsuranceDataClient, referenceDataEnabled, REFERENCE_ENDPOINTS, SERVICE_ENDPOINTS, ReferenceDataError } from './insurance-data/index.js';
 export { ANTHROPIC_PROVIDER } from './anthropic/index.js';
 export { GEMINI_PROVIDER } from './gemini/index.js';
 export { DEEPSEEK_PROVIDER } from './deepseek/index.js';

@@ -80,6 +80,47 @@ export const REFERENCE_ENDPOINTS = Object.freeze({
   },
 });
 
+// Service-only endpoints for the backend's own detection and reference import (never reachable from the import file
+// allow-list above or from any route). Their responses carry the UIN: callers keep it in server-side rows only.
+const CURSOR = /^[A-Za-z0-9_-]{1,200}$/;
+const normalizeCursor = value => { if (value === undefined) return undefined; if (typeof value !== 'string' || !CURSOR.test(value)) throw invalidRequest(); return value; };
+export const EXPORT_MAX_RESPONSE_BYTES = 8_388_608;
+export const SERVICE_ENDPOINTS = Object.freeze({
+  'registry.insurers': {
+    normalize: p => ({ cursor: normalizeCursor(p.cursor) }),
+    request: p => ({ path: '/v1/insurers', query: { limit: '100', cursor: p.cursor } }),
+    parse: schemas.parseRegistryInsurers,
+  },
+  'registry.products': {
+    normalize: p => ({ cursor: normalizeCursor(p.cursor) }),
+    request: p => ({ path: '/v1/products', query: { limit: '100', cursor: p.cursor } }),
+    parse: schemas.parseRegistryProducts,
+  },
+  // A name FRAGMENT only (at most 80 characters, at most 8 words): never document or OCR text.
+  'products.nameSearch': {
+    normalize: p => {
+      const q = normalizeText(p.q);
+      if (q.length > 80 || q.split(' ').length > 8) throw invalidRequest();
+      const out = { q };
+      if (p.insurer !== undefined) {
+        const insurer = normalizeText(p.insurer);
+        if (insurer.length > 80 || insurer.split(' ').length > 8) throw invalidRequest();
+        out.insurer = insurer;
+      }
+      return out;
+    },
+    request: p => ({ path: '/v1/products/search', query: { q: p.q, insurer: p.insurer, limit: '10' } }),
+    parse: schemas.parseProductNameSearch,
+  },
+  'products.exportByUin': {
+    normalize: p => ({ uin: normalizeUin(p.uin) }),
+    request: p => ({ path: `/v1/products/by-uin/${encodeURIComponent(p.uin)}/export`, query: {} }),
+    parse: schemas.parseProductExport,
+    maxBytes: EXPORT_MAX_RESPONSE_BYTES,
+  },
+});
+const ALL_ENDPOINTS = Object.freeze({ ...REFERENCE_ENDPOINTS, ...SERVICE_ENDPOINTS });
+
 export const referenceDataEnabled = (env = process.env) => env?.REFERENCE_DATA_ENABLED === 'true';
 
 function readConfig(env) {
@@ -136,7 +177,7 @@ export function createInsuranceDataClient({ env = process.env, fetchImpl = globa
     return config;
   };
   const definition = endpoint => {
-    const found = Object.hasOwn(REFERENCE_ENDPOINTS, endpoint) ? REFERENCE_ENDPOINTS[endpoint] : null;
+    const found = Object.hasOwn(ALL_ENDPOINTS, endpoint) ? ALL_ENDPOINTS[endpoint] : null;
     if (!found) throw referenceError('REFERENCE_DATA_ENDPOINT_NOT_ALLOWED', 'Reference data endpoint is not allowed.', { statusCode: 400 });
     return found;
   };
@@ -147,7 +188,7 @@ export function createInsuranceDataClient({ env = process.env, fetchImpl = globa
     normalizeParams(endpoint, params = {}) {
       const def = definition(endpoint);
       if (params === null || typeof params !== 'object') throw invalidRequest();
-      const allowed = new Set(['q', 'uin', 'insurerId', 'productId', 'versionId', 'factType']);
+      const allowed = new Set(['q', 'uin', 'insurerId', 'productId', 'versionId', 'factType', 'cursor', 'insurer']);
       if (Object.keys(params).some(key => !allowed.has(key))) throw invalidRequest();
       return def.normalize(params);
     },
@@ -173,7 +214,7 @@ export function createInsuranceDataClient({ env = process.env, fetchImpl = globa
         }
         if (!response.ok) throw errorForStatus(response.status, response.status === 429 ? retryAfter(response) : null);
         let text;
-        try { text = await readBounded(response, cfg.maxBytes); } catch (error) {
+        try { text = await readBounded(response, Math.max(cfg.maxBytes, def.maxBytes ?? 0)); } catch (error) {
           if (error instanceof ReferenceDataError) throw error;
           throw referenceError('REFERENCE_DATA_UNAVAILABLE', 'Reference data is unavailable.', { retryable: true, statusCode: 503 });
         }
