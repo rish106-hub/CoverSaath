@@ -1099,6 +1099,50 @@ test('holdings and memory triggers (migrations 048-052, ADR 0032)', postgresTest
   proves('policy_holdings_erase_on_document_erasure');
 });
 
+test('memory chunks and chat stay scoped to their household (migrations 053-054, ADR 0031)', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  await insert(pool, 'policy_holdings', { id: 'h-a', household_id: a.household, document_id: a.document });
+  await insert(pool, 'policy_holdings', { id: 'h-b', household_id: b.household, document_id: b.document });
+  const chunk = { household_id: a.household, holding_id: 'h-a', consent_grant_id: a.consent, source_document_id: a.document };
+  await rejects(insert(pool, 'memory_chunks', { ...chunk, id: 'c-grant', consent_grant_id: b.consent }), 'memory chunk must use a consent grant of its household');
+  await rejects(insert(pool, 'memory_chunks', { ...chunk, id: 'c-holding', holding_id: 'h-b' }), 'memory chunk must match a holding of its household');
+  await rejects(insert(pool, 'memory_chunks', { ...chunk, id: 'c-doc', source_document_id: b.document }), 'memory chunk must match an active document of its household');
+  await assert.rejects(insert(pool, 'memory_chunks', { ...chunk, id: 'c-plain', chunk_text_enc: 'plain text' }), /violates check constraint/);
+  await assert.rejects(insert(pool, 'memory_chunks', { ...chunk, id: 'c-scope', scope: 'insurer_doc' }), /violates check constraint/);
+  await assert.rejects(insert(pool, 'memory_chunks', { ...chunk, id: 'c-dim', embedding: '[1,0,0]' }), /expected 1024 dimensions/);
+  await insert(pool, 'memory_chunks', { ...chunk, id: 'c-1' });
+  await assert.rejects(insert(pool, 'memory_chunks', { ...chunk, id: 'c-dup', source_ref: 'ref-c-1' }), /duplicate key/);
+  proves('memory_chunks_scope_insert');
+  await rejects(pool.query("UPDATE memory_chunks SET token_count = 5 WHERE id = 'c-1'"), 'memory chunks are replaced, never edited; erasure deletes them');
+  proves('memory_chunks_immutable');
+
+  await rejects(insert(pool, 'chat_threads', { id: 't-foreign', household_id: b.household, holding_id: 'h-a', created_by_adult_id: b.adult }), 'chat thread must match a holding of its household');
+  await rejects(insert(pool, 'chat_threads', { id: 't-adult', household_id: a.household, created_by_adult_id: b.adult }), 'chat thread creator must be an active adult of the household');
+  await insert(pool, 'chat_threads', { id: 't-a', household_id: a.household, holding_id: 'h-a', created_by_adult_id: a.adult });
+  proves('chat_threads_scope_insert');
+  await rejects(insert(pool, 'chat_turns', { id: 'u-foreign', household_id: b.household, thread_id: 't-a' }), 'chat turn must match a thread of its household');
+  await assert.rejects(insert(pool, 'chat_turns', { id: 'u-plain', household_id: a.household, thread_id: 't-a', content_enc: 'plain' }), /violates check constraint/);
+  await assert.rejects(insert(pool, 'chat_turns', { id: 'u-audio', household_id: a.household, thread_id: 't-a', audio_document_id: a.document }), /chat_turns_voice_check/);
+  await assert.rejects(insert(pool, 'chat_turns', { id: 'u-voice-assistant', household_id: a.household, thread_id: 't-a', role: 'assistant', input_kind: 'voice' }), /chat_turns_voice_check/);
+  await assert.rejects(insert(pool, 'chat_turns', { id: 'u-user-meta', household_id: a.household, thread_id: 't-a', provider: 'anthropic' }), /chat_turns_assistant_check/);
+  await rejects(insert(pool, 'chat_turns', { id: 'u-audio-foreign', household_id: a.household, thread_id: 't-a', input_kind: 'voice', transcript_enc: 'enc2.k1.AAAA.BBBB.CCCC', audio_document_id: b.document }), 'chat turn audio must be an active document of its household');
+  await insert(pool, 'chat_turns', { id: 'u-1', household_id: a.household, thread_id: 't-a', input_kind: 'voice', transcript_enc: 'enc2.k1.AAAA.BBBB.CCCC', audio_document_id: a.document });
+  await insert(pool, 'chat_turns', { id: 'u-2', household_id: a.household, thread_id: 't-a', turn_index: 1, role: 'assistant', intent: 'coverage_question', answer_source: 'deterministic' });
+  await assert.rejects(insert(pool, 'chat_turns', { id: 'u-dup', household_id: a.household, thread_id: 't-a', turn_index: 1, role: 'assistant' }), /duplicate key/);
+  proves('chat_turns_scope_insert');
+  await rejects(pool.query("UPDATE chat_turns SET intent = 'general' WHERE id = 'u-2'"), 'chat turns and retrieval traces are append-only; erasure deletes them');
+  await rejects(pool.query("UPDATE chat_turns SET audio_document_id = NULL, content_enc = 'enc2.k1.AAAA.BBBB.DDDD' WHERE id = 'u-1'"), 'chat turns and retrieval traces are append-only; erasure deletes them');
+  // The one allowed change: the audio reference clears when its document is erased.
+  assert.equal((await pool.query("UPDATE chat_turns SET audio_document_id = NULL WHERE id = 'u-1'")).rowCount, 1);
+  proves('chat_turns_append_only');
+  await rejects(insert(pool, 'retrieval_traces', { id: 'r-foreign', household_id: b.household, thread_id: 't-a', turn_id: 'u-2' }), 'retrieval trace must match a turn of its household and thread');
+  await insert(pool, 'retrieval_traces', { id: 'r-1', household_id: a.household, thread_id: 't-a', turn_id: 'u-2', fact_ids: ['mfact-1'] });
+  await assert.rejects(insert(pool, 'retrieval_traces', { id: 'r-bad', household_id: a.household, thread_id: 't-a', turn_id: 'u-2', mode: 'guess' }), /violates check constraint/);
+  proves('retrieval_traces_scope_insert');
+  await rejects(pool.query("UPDATE retrieval_traces SET mode = 'vector' WHERE id = 'r-1'"), 'chat turns and retrieval traces are append-only; erasure deletes them');
+  proves('retrieval_traces_append_only');
+});
+
 test('provider calls name an existing household and are append-only (ADR 0030)', postgresTestOptions(), async t => {
   const { pool, a } = await worlds(t);
   const row = { id: 'call-1', purpose: 'chat_answer', provider: 'anthropic', model: 'claude-sonnet-5-5', redaction_report_json: '{}', status: 'ok' };

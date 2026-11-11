@@ -77,6 +77,11 @@ export const DATA_STORES = Object.freeze([
   store('policy_profiles', 'delete', 'household_id = ?', null, 'Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Names are sealed.'),
   store('policy_facts', 'delete', 'household_id = ?', null, 'Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Exact values are sealed.'),
   store('fact_evidence', 'delete', 'household_id = ?', null, 'Deleted with its fact (document erasure trigger, case and household erasure, consent withdrawal). Quotes are sealed.'),
+  // Memory chunks and chat (migrations 053-054, ADR 0031 and 0029). Erased by src/backend/repositories/memory-erasure.js.
+  store('memory_chunks', 'delete', 'household_id = ?', null, 'Deleted with its holding or source document, on consent revocation and household erasure. Text is sealed; the embedding is plaintext by necessity (ADR 0031).'),
+  store('chat_threads', 'delete', 'household_id = ?', null, 'Deleted on household erasure, with its holding, and whenever a retrieval trace names an erased holding, fact or chunk (document erasure, consent revocation, member removal).'),
+  store('chat_turns', 'delete', 'household_id = ?', null, 'Deleted with its thread. Content and voice transcript are sealed; audio is kept only under VOICE_AUDIO_RETAIN (ADR 0029).'),
+  store('retrieval_traces', 'delete', 'household_id = ?', null, 'Deleted with its thread. Ids and a retrieval mode only.'),
   store('provider_calls', 'delete', 'household_id = ?', null, 'Deleted by household erasure (ADR 0030). Counts, a payload digest, usage and cost only; never a prompt or a response.'),
   store('catalogue_reviews', 'delete', 'household_id = ?', null, 'Deleted.'),
   store('catalogue_reviewer_grants', 'delete', 'household_id = ?', null, 'Deleted.'),

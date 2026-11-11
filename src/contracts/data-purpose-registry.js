@@ -126,6 +126,24 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
     category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',
     childData: 'possible', erasure: ERASE.memory,
   }),
+  // Memory chunks and chat v1 (migrations 053-054, ADR 0031 and 0029). chunk_text_enc is the REDACTED passage; the embedding is plaintext
+  // by necessity and is classified, not sealed. recipients provider: the embedding provider receives the redacted passage once, at write time.
+  table('memory_chunks.chunk_text_enc', {
+    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
+  table('memory_chunks.embedding', {
+    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: false, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
+  table('chat_turns.content_enc', {
+    category: 'insurance_question', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
+  table('chat_turns.transcript_enc', {
+    category: 'insurance_question', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', erasure: ERASE.memory,
+  }),
   table('member_declarations.label_enc', {
     category: 'health_or_policy_content', purposes: ['profile_intake'], recipients: ['none'], sealed: true, retention: 'until_revocation',
     childData: 'possible', erasure: ERASE.memory,

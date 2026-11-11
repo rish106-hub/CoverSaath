@@ -29,6 +29,16 @@ const LEGACY_PLAIN = { service_cases: ['stated_estimate_minor'] };
 
 // Plain on purpose: table -> reason -> columns.
 const PLAIN = {
+  memory_chunks: {
+    'closed vocabulary and a public slug: chunk scope, source slug (a registry key or a hash of a clause id), embedding model id; no content (the text is sealed)': ['scope', 'source_ref', 'embedding_model'],
+    'the embedding is PLAINTEXT by necessity: pgvector cannot index ciphertext. It leaks some of the content it encodes, so own-PDF passages are redacted before embedding and rows are deleted on erasure (ADR 0031)': ['embedding'],
+  },
+  chat_turns: {
+    'closed vocabulary: turn role, input kind, intent label, answer source, provider and model id; no content (content and transcript are sealed)': ['role', 'input_kind', 'intent', 'answer_source', 'provider', 'model'],
+  },
+  retrieval_traces: {
+    'closed vocabulary and ids only (holding, fact, chunk and conflict ids), no content': ['mode', 'holding_ids', 'fact_ids', 'chunk_ids', 'conflict_ids'],
+  },
   provider_calls: {
     'closed vocabulary: purpose, provider, model id and call status, no content': ['purpose', 'provider', 'model', 'status'],
     'gate counts only (gate version, slots, placeholders, reason-code count, bytes) and a sha256 of the redacted payload; never the payload (ADR 0030)': ['redaction_report_json', 'payload_sha256'],
@@ -178,6 +188,8 @@ const PLAIN = {
 
 // Numbers and references that are not a primary or foreign key: each listed so a new one needs a decision.
 const PLAIN_NUMBERS = {
+  memory_chunks: { 'token count of the redacted passage, no content': ['token_count'] },
+  chat_turns: { 'turn order, token counts, cost in paise and latency of one answer, no content': ['turn_index', 'tokens_in', 'tokens_out', 'cost_paise', 'latency_ms'] },
   provider_calls: { 'token counts and cost in paise, no content': ['input_tokens', 'output_tokens', 'cost_paise'] },
   household_members: { 'row revision counter': ['revision'] },
   person_records: { 'schema and row revision counters': ['schema_version', 'revision'] },

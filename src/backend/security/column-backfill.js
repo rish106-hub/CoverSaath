@@ -72,6 +72,9 @@ export const ENCRYPTED_COLUMNS = Object.freeze([
   { since: 'P1', table: 'person_records', columns: ['payload_ciphertext'], triggers: [], noUnseal: true },
   // Holdings and memory (migrations 049, 051, 052): sealed from the first write, so only a rotation touches them. noUnseal because the column CHECKs refuse plaintext.
   { since: 'M1', table: 'household_memory_facts', columns: ['value_enc', 'reference_ref_enc'], triggers: ['household_memory_facts_immutable'], noUnseal: true },
+  // Memory chunks and chat (migrations 053-054): sealed from the first write.
+  { since: 'M1', table: 'memory_chunks', columns: ['chunk_text_enc'], triggers: ['memory_chunks_immutable'], noUnseal: true },
+  { since: 'M1', table: 'chat_turns', columns: ['content_enc', 'transcript_enc'], triggers: ['chat_turns_append_only'], noUnseal: true },
   { since: 'M1', table: 'member_declarations', columns: ['label_enc'], triggers: [], noUnseal: true },
   { since: 'M1', table: 'premium_payments', columns: ['amount_enc', 'agent_name_enc', 'agent_code_enc'], triggers: [], noUnseal: true },
   { since: 'M1', table: 'premium_dues', columns: ['amount_enc'], triggers: [], noUnseal: true },

@@ -74,6 +74,10 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `policy_profiles` | delete | - | Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Names are sealed. |
 | `policy_facts` | delete | - | Deleted by the document erasure trigger, by case and household erasure, and when processing consent is withdrawn. Exact values are sealed. |
 | `fact_evidence` | delete | - | Deleted with its fact. Quotes are sealed. |
+| `memory_chunks` | delete | - | Deleted with its holding or source document, on consent revocation and household erasure (ADR 0031). Text is sealed; the embedding is plaintext by necessity. |
+| `chat_threads` | delete | - | Deleted on household erasure, with its holding, and whenever a retrieval trace names an erased holding, fact or chunk. |
+| `chat_turns` | delete | - | Deleted with its thread. Content and voice transcript are sealed; audio only under VOICE_AUDIO_RETAIN (ADR 0029). |
+| `retrieval_traces` | delete | - | Deleted with its thread. Ids and a retrieval mode only. |
 | `provider_calls` | delete | - | Deleted by household erasure (ADR 0030). Counts, a payload digest, usage and cost only; never a prompt or a response. |
 | `catalogue_reviews` | delete | - | Deleted. |
 | `catalogue_reviewer_grants` | delete | - | Deleted. |
