@@ -201,3 +201,24 @@ test('provider_calls: ownership scope and erasure', opts, async t => {
   assert.equal((await services.providerCalls.listForHousehold(a.household)).length, 0);
   assert.equal((await services.providerCalls.listForHousehold(b.household)).length, 1, 'household B untouched');
 });
+
+test('embedding calls pass the same gate and audit: gated text, typed unknown without a route, forged input refused', opts, async t => {
+  const { services, handle } = await freshDatabase(t);
+  const { household } = await seedWorld(handle.pool, 'em');
+  const gateway = createChatModelGateway({
+    env: ENV, router: createModelRouter({ env: ENV }), providerCalls: services.providerCalls, budgetFor: createHouseholdDayBudget({ maxUsd: 1 }),
+    createAgent: () => { throw new Error('must not run'); },
+  });
+  const { gated } = await gateTextForHousehold(FIXTURE, { householdId: household, loadKnownIdentifiers }); const gatedText = gated.text ?? gated;
+  for (const pattern of LEAK_PATTERNS) assert.doesNotMatch(gatedText, pattern);
+  const input = sealModelInput('embed', { payload: { texts: [{ text: gated }] } });
+  const result = await gateway.call({ task: 'embed', input, householdId: household });
+  assert.equal(result.output.status, 'unknown');
+  assert.equal(result.metadata.calls, 0);
+  await assert.rejects(gateway.call({ task: 'embed', input: { payload: { texts: [{ text: 'Asha 9876543210' }] } }, householdId: household }), { code: 'ungated_model_input' });
+  const rows = await services.providerCalls.listForHousehold(household);
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every(row => row.purpose === 'embed'));
+  assert.ok(rows.some(row => row.status === 'ungated_model_input' && row.payload_sha256 === null));
+  assert.doesNotMatch(JSON.stringify(rows), /Asha|9876543210/);
+});
