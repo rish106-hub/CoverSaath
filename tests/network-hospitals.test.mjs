@@ -5,7 +5,9 @@ import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 import { createBackendServices } from '../src/backend/services/index.js';
 import { createInsuranceDataClient } from '../src/integrations/index.js';
-import { seedWorld } from './support/postgres-fixtures.mjs';
+import { seedWorld, insert } from './support/postgres-fixtures.mjs';
+import { ReferenceCacheRepository } from '../src/backend/repositories/reference-cache-repository.js';
+import { signatureFor } from '../src/backend/services/reference-data-port.js';
 import { seedDemo } from '../scripts/seed-demo.mjs';
 import { buildJobHandlers } from '../src/server/worker.js';
 
@@ -39,10 +41,19 @@ async function world(t, env = { HOLDINGS_ENABLED: 'true' }) {
     w.token = (await fresh.services.auth.issueSession({ adultUserId: w.adult })).token;
     w.holding = await fresh.services.policyHoldings.create({ householdId: w.household, adultId: w.adult, documentId: w.document, kind: 'retail_health', policyId: w.policy });
   }
+  // Registry snapshot with two insurers; holding a confirms insurer A's UIN, holding b insurer B's.
+  const registry = { insurers: [], products: [{ productId: 'p-a', insurerId: 'ins-a', productName: 'Plan A', uinRaw: 'SYN-A-0001' }, { productId: 'p-b', insurerId: 'ins-b', productName: 'Plan B', uinRaw: 'SYN-B-0001' }] };
+  await new ReferenceCacheRepository(fresh.db).put({ key: 'registry/snapshot-v1', body: registry, signature: signatureFor(registry) });
+  for (const [w, uin] of [[a, 'SYNA0001'], [b, 'SYNB0001']]) {
+    const profile = await insert(fresh.handle.pool, 'policy_profiles', { id: `profile-${w.household}`, household_id: w.household, case_id: w.case, document_id: w.document, source_version: (await fresh.handle.pool.query('SELECT source_version FROM document_uploads WHERE id = $1', [w.document])).rows[0].source_version, uin, uin_state: 'reported', confirmed_at: '2026-10-16T10:00:00.000Z', confirmed_by_adult_id: w.adult, confirmation_source: 'user_statement' });
+    await fresh.handle.pool.query('UPDATE policy_holdings SET policy_profile_id = $1 WHERE id = $2', [profile.id, w.holding.id]);
+  }
   const { NetworkHospitalRepository } = await import('../src/backend/repositories/network-hospital-repository.js');
   await new NetworkHospitalRepository(fresh.db).upsertMany([
     hospital('h1', '990001', true), hospital('h2', '990001', false), hospital('h3', '990002', true),
     hospital('h-expired', '990001', true, { validTo: '2000-01-01' }),
+    hospital('ia1', '990005', true, { insurerId: 'ins-a' }), hospital('ib1', '990005', true, { insurerId: 'ins-b' }), hospital('ib2', '990005', false, { insurerId: 'ins-b' }),
+    hospital('any1', '990005', false),
   ]);
   const app = await startApp(fresh.db, env);
   t.after(() => app.stop());
@@ -59,6 +70,28 @@ test('hospitals route: seeded pincode returns cashless hospitals in the exact sh
   assert.deepEqual(Object.keys(r.data.hospitals[0]).sort(), ['address', 'cashless', 'city', 'id', 'name', 'pincode']);
   assert.doesNotMatch(r.text, /uin/i);
   assert.deepEqual((await w.app.call(`/api/v1/holdings/${w.a.holding.id}/hospitals?pincode=999999`, w.a.token)).data, { hospitals: [] });
+});
+
+test('hospitals route: two insurers in one pincode, only the holding insurer (plus all-insurer rows) come back', opts, async t => {
+  const w = await world(t);
+  const ids = async who => (await w.app.call(`/api/v1/holdings/${who.holding.id}/hospitals?pincode=990005`, who.token)).data.hospitals.map(item => item.id);
+  assert.deepEqual(await ids(w.a), ['ia1', 'any1']);
+  assert.deepEqual(await ids(w.b), ['ib1', 'any1', 'ib2']);
+});
+
+test('hospitals route: no confirmed insurer answers an empty list with a coded reason, never every insurer', opts, async t => {
+  const w = await world(t);
+  await w.handle.pool.query('UPDATE policy_holdings SET policy_profile_id = NULL WHERE id = $1', [w.a.holding.id]);
+  const none = await w.app.call(`/api/v1/holdings/${w.a.holding.id}/hospitals?pincode=990005`, w.a.token);
+  assert.equal(none.status, 200);
+  assert.deepEqual(none.data, { hospitals: [], reason: 'insurer_unknown' });
+});
+
+test('hospital repository: a malformed insurerId is a coded 400 error', opts, async t => {
+  const { NetworkHospitalRepository } = await import('../src/backend/repositories/network-hospital-repository.js');
+  const { db } = await freshDatabase(t);
+  const repository = new NetworkHospitalRepository(db);
+  for (const bad of ['', 'x'.repeat(101), 5, {}]) await assert.rejects(repository.byPincode({ pincode: '990005', insurerId: bad }), { code: 'HOSPITAL_REQUEST_INVALID', statusCode: 400 });
 });
 
 test('hospitals route: another household and a missing holding answer the same 404; no token is 401', opts, async t => {

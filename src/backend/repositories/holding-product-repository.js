@@ -25,4 +25,10 @@ export class HoldingProductRepository {
     const row = await this.database.one('SELECT uin FROM policy_profiles WHERE id = ? AND household_id = ?', [id(policyProfileId), id(householdId)]);
     return row?.uin ?? null;
   }
+
+  /** Like profileUin, but only a UIN the owner confirmed (uin_state 'reported'). Null otherwise. */
+  async confirmedProfileUin({ householdId, policyProfileId }) {
+    const row = await this.database.one("SELECT uin FROM policy_profiles WHERE id = ? AND household_id = ? AND uin_state = 'reported'", [id(policyProfileId), id(householdId)]);
+    return row?.uin ?? null;
+  }
 }
