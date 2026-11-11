@@ -92,6 +92,15 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   POLICY_PROFILE_INVALID_UIN: entry(422, 'request', false),
   POLICY_PROFILE_INVALID: entry(400, 'request', false),
   PAGE_COUNT_INVALID: entry(400, 'request', false),
+  // Holdings (S-A3): detection, owner confirmation of the insurer and plan, reference import.
+  HOLDINGS_DISABLED: entry(503, 'configuration', false),
+  HOLDING_NOT_FOUND: entry(404, 'not_found', false),
+  HOLDING_INVALID: entry(400, 'request', false),
+  HOLDING_PRODUCT_INVALID: entry(400, 'request', false),
+  HOLDING_PRODUCT_NOT_FOUND: entry(404, 'not_found', false),
+  HOLDING_PRODUCT_UNSUPPORTED: entry(422, 'request', false),
+  HOLDING_DOCUMENT_NOT_READABLE: entry(409, 'conflict', true),
+  HOLDING_REGISTRY_UNAVAILABLE: entry(503, 'provider', true),
   // Policy facts (slice 2, ADR 0025): datapoints read from a document, each with verified evidence.
   POLICY_FACTS_NOT_FOUND: entry(404, 'not_found', false),
   POLICY_FACTS_NOT_READY: entry(409, 'conflict', true),

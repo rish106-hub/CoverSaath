@@ -22,7 +22,7 @@ export const expectedTables = Object.freeze([
   'auth_signing_keys', 'auth_refresh_tokens', 'auth_challenges', 'webauthn_credentials', 'devices', 'notice_acceptances',
   'household_changes', 'household_sync_state',
   'person_records',
-  'policy_holdings', 'household_memory_facts', 'memory_conflicts', 'member_declarations', 'premium_payments', 'premium_dues',
+  'policy_holdings', 'household_memory_facts', 'memory_conflicts', 'member_declarations', 'premium_payments', 'premium_dues', 'provider_calls',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -79,6 +79,7 @@ export const criticalTriggers = Object.freeze([
   'memory_conflicts_scope_insert', 'memory_conflicts_scope_update', 'memory_conflicts_guard_update',
   'member_declarations_scope_insert', 'member_declarations_scope_update',
   'premium_payments_scope_insert', 'premium_payments_scope_update', 'premium_dues_scope_insert', 'premium_dues_scope_update',
+  'provider_calls_scope_insert', 'provider_calls_append_only',
 ]);
 
 export const criticalIndexes = Object.freeze([
@@ -155,6 +156,7 @@ export const requiredColumns = Object.freeze({
   model_budget_reservations: ['scope', 'amount_micro_usd', 'state', 'actual_micro_usd'],
   evidence_claims: ['claim_hash', 'owner', 'expires_at'],
   household_members: ['gender', 'age_band', 'mobile_ciphertext', 'mobile_hash', 'email_ciphertext', 'preferred_channel', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id', 'revision', 'deleted_at'],
+  provider_calls: ['household_id', 'purpose', 'provider', 'model', 'redaction_report_json', 'payload_sha256', 'input_tokens', 'output_tokens', 'cost_paise', 'status'],
   person_records: ['household_id', 'subject_member_id', 'record_type', 'slot', 'payload_ciphertext', 'completeness', 'source', 'state', 'revision'],
   policy_holdings: ['household_id', 'policy_id', 'document_id', 'policy_profile_id', 'kind', 'status'],
   household_memory_facts: ['household_id', 'holding_id', 'fact_key', 'source_tier', 'status', 'value_enc', 'consent_grant_id', 'reference_ref_enc', 'superseded_at'],

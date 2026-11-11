@@ -8,7 +8,14 @@ export const AI_TASKS = Object.freeze([
   'policy_structuring_reconcile',
   'policy_evidence_investigate',
   'policy_evidence_override_sweep',
+  'chat_answer',
+  'intent_classify',
+  'fact_extract',
+  'embed',
 ]);
+
+// Tasks that run through the provider-routing gateway (ADR 0030), behind CHAT_MODEL_ENABLED. Not workflow tasks.
+export const GATEWAY_TASKS = Object.freeze(['chat_answer', 'intent_classify', 'fact_extract', 'embed']);
 
 export const DETERMINISTIC_TASKS = Object.freeze([
   'consent_check',
@@ -74,5 +81,9 @@ export const AI_RESPONSIBILITY_MATRIX = Object.freeze({
   policy_structuring_reconcile: 'Flag disagreeing readings and propose which quoted reading applies. Code accepts only grounded selections of real contradictions.',
   policy_evidence_investigate: 'Find cited findings in privacy-gated policy clauses for one question. Code validates ids and quotes; the model decides nothing.',
   policy_evidence_override_sweep: 'Find clauses that limit, exclude, waive or override first-pass findings. Code validates ids and quotes.',
+  chat_answer: 'Draft a short answer to the household question using only the supplied facts, citing fact ids. Code owns every number, eligibility and decision; unknown stays unknown.',
+  intent_classify: 'Label the question with one allowed intent. The label is an unverified hint; code decides routing and never acts on it alone.',
+  fact_extract: 'Propose values for the requested fact keys from the supplied text, each with a verbatim quote. Code validates the quote; the output is never confirmed.',
+  embed: 'Embed already gated text for retrieval. The vector is derived data and is erased with the household.',
   deterministic: 'Code owns consent, authorization, graph construction, arithmetic, classification, review, state, external actions and release.',
 });

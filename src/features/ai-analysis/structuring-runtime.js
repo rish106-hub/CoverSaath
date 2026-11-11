@@ -1,5 +1,4 @@
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createAiSdkRunner } from './ai-sdk-runner.js';
+import { createAiSdkRunner, createProviderModelLoader } from './ai-sdk-runner.js';
 import { createModelGateway } from './model-gateway.js';
 import { createBudgetScope, createRunBudget, positive, readConfig } from './live-coverage-runtime.js';
 import { isStructuringTask } from './structuring-contract.js';
@@ -42,7 +41,7 @@ export function createStructuringModelCallFactory({ env = process.env, loadModel
     const config = readStructuringConfig(env);
     project ||= projectBudget ? projectBudget.get(config.projectBudgetUsd) : createBudgetScope(config.projectBudgetUsd);
     const modelRunner = createAiSdkRunner({
-      loadModel: loadModel ?? (async () => createGoogleGenerativeAI({ apiKey: config.apiKey })(config.model)),
+      loadModel: loadModel ?? createProviderModelLoader({ provider: 'google', apiKey: config.apiKey }),
       provider: 'google', model: config.model, modelVersion: config.modelVersion,
       inputUsdPerMillion: config.inputRate, outputUsdPerMillion: config.outputRate, createAgent,
     });

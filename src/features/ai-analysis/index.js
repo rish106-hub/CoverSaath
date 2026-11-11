@@ -1,4 +1,4 @@
-export { AI_CONTRACT_VERSION, AI_RESPONSIBILITY_MATRIX, AI_TASKS, DETERMINISTIC_TASKS, RUNTIME_AI_TASK_KEYS, RUNTIME_RESPONSIBILITIES, assertModelTask } from './responsibility-matrix.js';
+export { AI_CONTRACT_VERSION, AI_RESPONSIBILITY_MATRIX, AI_TASKS, DETERMINISTIC_TASKS, GATEWAY_TASKS, RUNTIME_AI_TASK_KEYS, RUNTIME_RESPONSIBILITIES, assertModelTask } from './responsibility-matrix.js';
 export { TASK_OUTPUT_SCHEMAS, validateTaskInput, validateTaskOutput } from './schemas.js';
 export { PROMPT_VERSION, buildPromptContract } from './prompts.js';
 export { createMemoryBudget, createModelGateway } from './model-gateway.js';
@@ -11,8 +11,11 @@ export {
 export {
   PRIVACY_EVIDENCE_GATE_VERSION,
   gateText,
+  gateTextForHousehold,
   isGatedText,
   sanitizeEvidenceForModel,
   sanitizeEvidenceTextForStorage,
   sealModelInput,
 } from './privacy-evidence-gate.js';
+export { CHAT_GATEWAY_LIMITS, createChatModelGateway, createHouseholdDayBudget } from './chat-runtime.js';
+export { CHAT_INTENTS, GATEWAY_TASK_LIST, MODEL_STATUSES, unknownOutput } from './gateway-contract.js';

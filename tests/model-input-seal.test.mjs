@@ -1,7 +1,7 @@
 // ADR 0017 D2 / WP2: the model-input allow-list and the seal. Synthetic data only.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { AI_TASKS } from '../src/features/ai-analysis/responsibility-matrix.js';
+import { AI_TASKS, GATEWAY_TASKS } from '../src/features/ai-analysis/responsibility-matrix.js';
 import { registryCatalog } from '../src/features/policy-structuring/extractor.js';
 import { POLICY_PARAMETER_REGISTRY_VERSION } from '../src/features/coverage-analysis/policy-parameter-registry.js';
 import { MODEL_INPUT_FIELDS } from '../src/features/ai-analysis/model-input-fields.js';
@@ -15,7 +15,7 @@ import {
 const RAW_MARKER = 'Synthetic Raw Marker 4417';
 const notAllowed = { code: 'MODEL_INPUT_NOT_ALLOWED', statusCode: 500 };
 const resolveParameterPolicy = () => ({ modelExtraction: true, dataClass: 'INTERNAL' });
-const COVERAGE_TASKS = AI_TASKS.filter(task => !STRUCTURING_DRAFT_TASKS.includes(task));
+const COVERAGE_TASKS = AI_TASKS.filter(task => !STRUCTURING_DRAFT_TASKS.includes(task) && !GATEWAY_TASKS.includes(task));
 
 function coverageSealed(task) {
   return sanitizeEvidenceForModel({

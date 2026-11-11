@@ -150,3 +150,94 @@ export function parseFacts(raw) {
     facts: array(value.facts ?? []).map(fact => parseFact(fact, versionSynthetic, coverageByFamily)),
   };
 }
+
+// ---- Service-only endpoints (registry listing, name search, export by UIN) ---------------------------------------------
+// These feed the backend's own detection and reference import. Their results carry the UIN, so they are never passed to a
+// response body: backend code keeps them in server-side rows only.
+const CURSOR = /^[A-Za-z0-9_-]{1,200}$/;
+const MAX_PAGES_PER_DOCUMENT = 500;
+const MAX_PAGE_TEXT = 40_000;
+const MAX_DOCUMENTS = 20;
+const MAX_TABLES_JSON_CHARS = 100_000;
+
+const nextCursor = value => {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !CURSOR.test(value)) throw invalid();
+  return value;
+};
+
+export const parseRegistryInsurers = raw => {
+  const value = object(raw);
+  return { insurers: array(value.data).map(parseInsurer), nextCursor: nextCursor(value.next_cursor) };
+};
+
+export const parseRegistryProducts = raw => {
+  const value = object(raw);
+  return { products: array(value.data).map(parseProduct), nextCursor: nextCursor(value.next_cursor) };
+};
+
+export function parseProductNameSearch(raw) {
+  const rows = array(object(raw).data, 20).map(item => {
+    const value = object(item);
+    return {
+      productId: text(value.product_id, 100),
+      productName: text(value.product_name),
+      insurerId: text(value.insurer_id, 100),
+      insurerName: text(value.insurer_name),
+      lineOfBusiness: text(value.line_of_business, 100),
+      uinRaw: value.uin_raw === undefined ? null : nullableText(value.uin_raw, 100),
+    };
+  });
+  return { products: rows };
+}
+
+function parseExportPage(raw) {
+  const value = object(raw);
+  if (!Number.isInteger(value.page_number) || value.page_number < 1) throw invalid();
+  if (typeof value.text !== 'string' || value.text.length > MAX_PAGE_TEXT) throw invalid();
+  const contentSha256 = value.content_sha256 === undefined || value.content_sha256 === null ? null : text(value.content_sha256, 64);
+  if (contentSha256 !== null && !SHA256.test(contentSha256)) throw invalid();
+  const tables = value.tables_json === undefined || value.tables_json === null ? [] : value.tables_json;
+  if (!Array.isArray(tables) || JSON.stringify(tables).length > MAX_TABLES_JSON_CHARS) throw invalid();
+  return {
+    pageNumber: value.page_number,
+    text: value.text,
+    contentSha256,
+    parserVersion: text(value.parser_version, 100),
+    extractionStatus: text(value.extraction_status, 100),
+    tablesJson: tables,
+  };
+}
+
+export function parseProductExport(raw) {
+  const value = object(raw);
+  const exportVersion = text(value.export_version, 64);
+  if (!SHA256.test(exportVersion)) throw invalid();
+  const product = object(value.product);
+  const documents = array(value.documents, MAX_DOCUMENTS).map(item => {
+    const doc = object(item);
+    const sha256 = doc.sha256 === undefined || doc.sha256 === null ? null : text(doc.sha256, 64);
+    if (sha256 !== null && !SHA256.test(sha256)) throw invalid();
+    return {
+      documentId: text(doc.document_id, 100),
+      versionId: text(doc.version_id, 100),
+      wordingVersion: text(doc.wording_version, 100),
+      sha256,
+      mediaType: optionalText(doc.media_type, 100),
+      synthetic: bool(doc.synthetic),
+      sourceObservedAt: optionalDate(doc.source_observed_at),
+      sourcePages: array(doc.source_pages, MAX_PAGES_PER_DOCUMENT).map(parseExportPage),
+    };
+  });
+  return {
+    exportVersion,
+    product: {
+      productId: text(product.product_id, 100),
+      productName: text(product.product_name),
+      insurerId: text(product.insurer_id, 100),
+      insurerName: text(product.insurer_name),
+      lineOfBusiness: text(product.line_of_business, 100),
+    },
+    documents,
+  };
+}

@@ -29,6 +29,10 @@ const LEGACY_PLAIN = { service_cases: ['stated_estimate_minor'] };
 
 // Plain on purpose: table -> reason -> columns.
 const PLAIN = {
+  provider_calls: {
+    'closed vocabulary: purpose, provider, model id and call status, no content': ['purpose', 'provider', 'model', 'status'],
+    'gate counts only (gate version, slots, placeholders, reason-code count, bytes) and a sha256 of the redacted payload; never the payload (ADR 0030)': ['redaction_report_json', 'payload_sha256'],
+  },
   person_records: { 'closed vocabulary: record type, slot name, completeness, source and state (ADR 0026); the payload is sealed': ['record_type', 'slot', 'completeness', 'source', 'state'] },
   adult_users: { 'closed vocabulary or setting, no identity': ['locale', 'account_status'] },
   app_events: { 'operational metadata (route template, outcome, code), no content': ['event_name', 'route', 'method', 'provider', 'outcome', 'code'] },
@@ -174,6 +178,7 @@ const PLAIN = {
 
 // Numbers and references that are not a primary or foreign key: each listed so a new one needs a decision.
 const PLAIN_NUMBERS = {
+  provider_calls: { 'token counts and cost in paise, no content': ['input_tokens', 'output_tokens', 'cost_paise'] },
   household_members: { 'row revision counter': ['revision'] },
   person_records: { 'schema and row revision counters': ['schema_version', 'revision'] },
   member_declarations: { 'row revision counter': ['revision'] },
