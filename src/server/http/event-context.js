@@ -63,6 +63,7 @@ export const KNOWN_ROUTE_SEGMENTS = new Set([
   'identity-sessions', 'integrations', 'jobs', 'live', 'members', 'metrics', 'notices', 'ocr-jobs', 'onboarding', 'passages', 'permissions',
   'overview', 'places', 'policies', 'policy-facts', 'policy-profile', 'preferences', 'profile-answers', 'questions', 'read-facts', 'ready', 'reference', 'products', 'refresh', 'reviews', 'revoke',
   'runs', 'scenarios', 'sessions', 'source-pack', 'structuring-runs', 'tasks', 'transitions',
+  'auth', 'signout', 'signout-all',
 ]);
 
 export function knownRouteTemplate(pathname) {

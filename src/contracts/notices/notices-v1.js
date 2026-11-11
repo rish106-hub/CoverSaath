@@ -24,7 +24,9 @@ export const NOTICES_V1 = Object.freeze([
     items: [
       { categories: ['identity'], data: 'Your name and your household name', use: 'To show you your own household and address you correctly.' },
       { categories: ['contact', 'derived_identifier'], data: 'Your email address and phone number, and a scrambled fingerprint of each', use: 'To sign you in and to recognise you if you come back, without storing the same contact twice.' },
-      { categories: ['credential_hash', 'derived_identifier'], data: 'A fingerprint of your sign-in token and of your sign-in provider identity', use: 'To check it is you on each request. We never keep the token itself.' },
+      { categories: ['credential_hash', 'derived_identifier'], data: 'A fingerprint of your sign-in token, of your sign-in provider identity and of any one-time sign-in code, and the public part of any passkey you add', use: 'To check it is you on each request. We never keep the token itself.' },
+      { categories: ['behavioural'], data: 'A scrambled fingerprint of your browser type and of your network address for each sign-in session', use: 'To notice a stolen sign-in and to limit repeated sign-in attempts. Never your name or contact.' },
+      { categories: ['free_text'], data: 'The names you give to your devices and passkeys (stored sealed)', use: 'To let you tell your devices apart and remove one you no longer use.' },
       { categories: ['preference'], data: 'Your language setting', use: 'To show the service in the language you chose.' },
       { categories: ['relationship'], data: 'Your role in the household (for example owner or member)', use: 'To decide who in the household may see or change what.' },
     ],

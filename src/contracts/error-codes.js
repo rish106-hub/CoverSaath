@@ -31,6 +31,7 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   AUTH_HOUSEHOLD_MISMATCH: entry(403, 'authorization', false),
   AUTH_SESSION_NOT_FOUND: entry(404, 'not_found', false),
   AUTH_RATE_LIMITED: entry(429, 'capacity', true),
+  SOURCE_ROLE_NOT_AUTHORISED: entry(403, 'authorization', false),
   CONSENT_REQUIRED: entry(403, 'authorization', false),
   CONSENT_SCOPE_REQUIRED: entry(403, 'authorization', false),
   CONSENT_SUBJECT_REQUIRED: entry(403, 'authorization', false),
