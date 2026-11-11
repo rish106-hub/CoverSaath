@@ -27,3 +27,14 @@ regexTarget = "match"
 regexes = [
   '''Idempotency-Key': 'key-12345678''',
 ]
+
+[[allowlists]]
+description = "Schema version label DECLARATION_KEY_SCHEMA = 'declarations/v1' in src/contracts/policy-facts.js (generic-api-key false positive). Not a credential. Owner approved 2026-11-11."
+condition = "AND"
+regexTarget = "match"
+paths = [
+  '''src/contracts/policy-facts\.js''',
+]
+regexes = [
+  '''DECLARATION_KEY_SCHEMA = 'declarations/v1'''',
+]
