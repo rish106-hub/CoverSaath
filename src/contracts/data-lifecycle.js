@@ -131,7 +131,7 @@ export const DATA_STORES = Object.freeze([
   store('evidence_claims', 'global', null, null, 'Short-lived question claims keyed by a hash; no household content, purged at expiry.'),
   store('reference_cache', 'global', null, null, 'Public insurer and product reference data fetched from the reference service; no household, case or consent link.'),
   store('reference_cache_leases', 'global', null, null, 'Expiring refresh lease keyed by reference key; random owner token only.'),
-  store('network_hospitals', 'global', null, null, 'Public hospital directory synced from the reference service (migration 057); no household, case or consent link.'),
+  store('network_hospitals', 'global', null, null, 'Public hospital directory synced from the reference service (migration 055); no household, case or consent link.'),
   store('schema_migrations', 'global', null, null, 'Migration ledger.'),
   store('coverage_parameter_registry_versions', 'global', null, null, 'Registry reference data.'),
   store('coverage_parameter_observation_rules', 'global', null, null, 'Rule reference data.'),

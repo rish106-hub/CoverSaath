@@ -106,9 +106,9 @@ Reuse first: `app-data-plan.md` already specifies `premium_payments`, `premium_d
 - **052 `premium_payments`** (if not already in 028): `id, household_id, holding_id, amount_paise, paid_on, channel (upi|card|netbanking|cheque|cash|salary_deduction), paid_via (self|agent|employer|bank), agent_name_ciphertext, agent_code_ciphertext, receipt_document_id?, created_at`. + `premium_dues`.
 - **053 `memory_chunks`** (pgvector): `id, household_id, holding_id?, scope (own_pdf|insurer_doc|confirmed_fact|declaration|chat_summary), chunk_text_ciphertext, embedding vector(1024), token_count, source_ref, created_at`. `CREATE EXTENSION IF NOT EXISTS vector`. HNSW index `(embedding vector_cosine_ops)` partial `WHERE scope <> 'insurer_doc'`; insurer chunks shared by `reference_cache` id, not per household. **SCALE:** at >10M rows move insurer chunks to dedicated store; household chunks stay partitioned by `household_id` hash.
 - **054 `chat_threads`, `chat_turns`, `retrieval_traces`**: turn stores `role, content_ciphertext, redacted_prompt_hash, provider, model, tokens_in/out, cost_paise, latency_ms`; trace stores chunk ids + fact ids used. Transcripts of voice notes = a turn with `input_kind='voice'`, `transcript_ciphertext`, `audio_document_id` (store audio only if `VOICE_AUDIO_RETAIN=true`). Erasable with the household. (`app-data-plan.md` D4 recommended not storing transcripts; user has now chosen to store them — record in ADR 0027.)
-- **057 `network_hospitals`** (reference, no PII): `id, insurer_id, tpa_id, name, address, city, pincode, lat, lng, cashless bool, source_ref, valid_from, valid_to`. Index `(insurer_id, pincode)`. **SCALE:** PostGIS + geohash when > 100k rows or radius queries > 50 rps.
+- **055 `network_hospitals`** (reference, no PII): `id, insurer_id, tpa_id, name, address, city, pincode, lat, lng, cashless bool, source_ref, valid_from, valid_to`. Index `(insurer_id, pincode)`. **SCALE:** PostGIS + geohash when > 100k rows or radius queries > 50 rps.
 - **056 `provider_calls`** (audit, every outbound model call): `id, household_id?, purpose, provider, model, redaction_report_json (counts only), payload_sha256, tokens, cost_paise, status, created_at`. This is the "no PII reached the provider" evidence.
-- **058 `analytics_outbox`**: `id, event, distinct_id_hash, properties_json (allowlisted keys), created_at, sent_at`. Worker drains to PostHog.
+- **057 `analytics_outbox`**: `id, event, distinct_id_hash, properties_json (allowlisted keys), created_at, sent_at`. Worker drains to PostHog.
 
 Everything derived (049, 050, 053, 054, 056 household rows) is covered by the existing erasure path (`data-erasure-proof.test.mjs` pattern); each migration adds its table to the erasure classification.
 
@@ -183,11 +183,11 @@ Common success gate for every builder: `npm run check:architecture` green; new t
 
 ### Wave C (day 2) — Sonnet ×3
 **S-C1 chat + hospitals UI** (Sonnet, app) — screens 5-6, SSE consumer, voice button (MediaRecorder → BFF → backend STT), hospital list. Success: Playwright: ask seeded question → streamed answer with facts chips.
-**S-C2 network hospitals ingest** (Sonnet, IDA + backend) — 057, IDA `network_hospitals` table + CSV/HTML ingest command + export endpoint; backend sync job; route `GET /holdings/:id/hospitals?pincode=`. Success: seeded pincode returns ≥1 cashless hospital. SCALE note: PostGIS.
-**S-C3 PostHog + analytics outbox** (Sonnet, backend + app) — 058, outbox worker, `posthog-node` (ADR line), event spec §4, app-side `posthog-js` only with the allowlisted props, consent-gated. Success: events visible in PostHog test project with no free text; `ANALYTICS_ENABLED` default false. Failure: any prop not in allowlist (test).
+**S-C2 network hospitals ingest** (Sonnet, IDA + backend) — 055, IDA `network_hospitals` table + CSV/HTML ingest command + export endpoint; backend sync job; route `GET /holdings/:id/hospitals?pincode=`. Success: seeded pincode returns ≥1 cashless hospital. SCALE note: PostGIS.
+**S-C3 PostHog + analytics outbox** (Sonnet, backend + app) — 057, outbox worker, `posthog-node` (ADR line), event spec §4, app-side `posthog-js` only with the allowlisted props, consent-gated. Success: events visible in PostHog test project with no free text; `ANALYTICS_ENABLED` default false. Failure: any prop not in allowlist (test).
 
 ### Wave D (day 3) — Sonnet ×2 + Haiku ×1
-**S-D1 deploy** — Fly: run 048-058 via `db:init` on Supabase (user approves before), set secrets (user provides keys), deploy, verify `/ready`, run smoke against prod with synthetic household. Vercel: app project env, preview → production. Hard rule: assistant deploys only on explicit "deploy now" per environment.
+**S-D1 deploy** — Fly: run 048-057 via `db:init` on Supabase (user approves before), set secrets (user provides keys), deploy, verify `/ready`, run smoke against prod with synthetic household. Vercel: app project env, preview → production. Hard rule: assistant deploys only on explicit "deploy now" per environment.
 **S-D2 docs** — `docs/iterations/LATEST.md` rewrite to current state; ADR 0027 (voice transcripts stored, erasable), 0028 (model gateway + Anthropic default + redaction evidence), 0029 (pgvector memory), 0030 (EAV facts); `docs/architecture/data.md` updated; runbooks `chat-and-memory.md`, `ida-sync.md`. Delete `app-data-plan.md`, `user-data-store-spec.md` (absorbed).
 **H-D3 secret sweep** — `gitleaks git .` on all four repos + worktrees, grep for the known weak password pattern (hash only, never printed), CodeRabbit/Cubic/CodeQL comments triaged on every open PR, list to user. Success: zero findings or each one addressed in a follow-up commit.
 
@@ -210,12 +210,12 @@ Common success gate for every builder: `npm run check:architecture` green; new t
 ---
 
 ## 7. User-owned blockers (unchanged, need action for Wave D)
-Rotate Supabase password (then delete `.env.local.bak-pre-pooler`); provide `ANTHROPIC_API_KEY` (+ Voyage or Gemini credits); PostHog project key; approve running migrations 045-058 on Supabase; approve stray `postgres` DB cleanup (table list first); dismiss CodeQL #72; legal read of `notices-v1` + new consent copy for declarations/health data/voice.
+Rotate Supabase password (then delete `.env.local.bak-pre-pooler`); provide `ANTHROPIC_API_KEY` (+ Voyage or Gemini credits); PostHog project key; approve running migrations 045-057 on Supabase; approve stray `postgres` DB cleanup (table list first); dismiss CodeQL #72; legal read of `notices-v1` + new consent copy for declarations/health data/voice.
 
 ---
 
 ## 8. Verification (end-to-end, after Wave C)
-1. Fresh local DB: `npm run db:init` → `valid:true`, `migrationCount` = 55 (42 + 045-058). `npm run check`, `npm run eval:safety`, `git diff --check`, `gitleaks git .` all green per repo.
+1. Fresh local DB: `npm run db:init` → `valid:true`, `migrationCount` = 55 (42 + 045-057). `npm run check`, `npm run eval:safety`, `git diff --check`, `gitleaks git .` all green per repo.
 2. `npm run seed:demo` → start backend + app → browser: sign in → upload synthetic group-cover PDF → see 2 insurer candidates → confirm → progress → Review shows ≥25 facts, ≥1 conflict → resolve → status `ready`.
 3. Chat: "Knee replacement planned Feb, am I covered, which hospital near 400053 cashless?" → streamed answer, facts chips (waiting period, sub-limit, room rent, co-pay), 2 hospitals, trace row stored, `provider_calls.redaction_report_json` shows name/phone counts > 0, outbound `payload_sha256` payload (captured in test) contains no fixture PII.
 4. Voice: record 5 s → transcript turn stored encrypted.
@@ -248,7 +248,7 @@ Owner instruction 2026-11-11: caveman full in every agent prompt and report; wav
 
 ### 9.2 Numbering
 
-- Migrations on `main`: 42 files (031 and 038 are unused numbers). After 045-047: 45. Reserved: **S-A1 048-052, S-A2 056, S-B1 053-054, S-C2 057 (renumbered from 055), S-C3 058.** No agent takes another's number. `migrationCount` in a branch = count of files on that branch; the lead fixes the number at integration.
+- Migrations on `main`: 42 files (031 and 038 are unused numbers). After 045-047: 45. Reserved: **S-A1 048-052, S-A2 056, S-B1 053-054, S-C2 055, S-C3 057.** No agent takes another's number. `migrationCount` in a branch = count of files on that branch; the lead fixes the number at integration.
 - ADRs: `feat/auth-jwt` carries `0016-auth-sessions-and-jwt.md` and `feat/sync-log` carries `0017-sync-change-log.md`; both numbers are taken on `main` (logging, gated text). H1 renames them to **0027** and **0028** and fixes references. `0026` = person records. The plan's ADRs move: **0029** voice transcripts, **0030** model gateway + Anthropic + redaction evidence, **0031** pgvector memory chunks, **0032** thin holdings + memory conflicts. ADR 0023 is edited in place (Proposed to Accepted, with 9.1 changes).
 
 ### 9.3 Branching and parallel work

@@ -7,7 +7,7 @@
 
 export const ANALYTICS_PURPOSE = 'analytics';
 export const ANALYTICS_RECIPIENT = 'posthog';
-// The consent scope that opens analytics for a household: a household-wide scope (no resource id), migration 058.
+// The consent scope that opens analytics for a household: a household-wide scope (no resource id), migration 057.
 export const ANALYTICS_CONSENT_SCOPE = Object.freeze({ resourceType: 'household', action: 'share', dataCategory: 'usage_events', recipient: ANALYTICS_RECIPIENT });
 
 const oneOf = (...values) => Object.freeze({ kind: 'enum', values: Object.freeze(values) });

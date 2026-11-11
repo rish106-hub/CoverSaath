@@ -60,8 +60,8 @@ test('R1: consent purposes equal the consent_grants.purpose CHECK list', () => {
   const sql = read(`${MIGRATIONS}001_baseline_schema.sql`);
   const block = sql.match(/CREATE TABLE consent_grants[\s\S]*?purpose text NOT NULL CHECK \(purpose IN \(([\s\S]*?)\)\)/)[1];
   const parsed = [...block.matchAll(/'([a-z_]+)'/g)].map(match => match[1]);
-  // Later migrations widen the CHECK (058 adds 'analytics'): the purposes they add count too.
-  const widened = read(`${MIGRATIONS}058_analytics_outbox.sql`).match(/ADD CONSTRAINT consent_grants_purpose_check CHECK \(purpose IN \(([\s\S]*?)\)\)/)[1];
+  // Later migrations widen the CHECK (057 adds 'analytics'): the purposes they add count too.
+  const widened = read(`${MIGRATIONS}057_analytics_outbox.sql`).match(/ADD CONSTRAINT consent_grants_purpose_check CHECK \(purpose IN \(([\s\S]*?)\)\)/)[1];
   parsed.push(...[...widened.matchAll(/'([a-z_]+)'/g)].map(match => match[1]));
   assert.deepEqual([...new Set(parsed)].sort(), [...CONSENT_PURPOSES].sort());
 });

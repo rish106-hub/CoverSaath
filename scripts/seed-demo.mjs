@@ -159,7 +159,7 @@ export async function seedDemo(database, { env = process.env, clock } = {}) {
     });
   }
 
-  // Network hospitals (migration 057): the 30 invented hospitals. Public reference rows, upserted by id, so a second run adds none.
+  // Network hospitals (migration 055): the 30 invented hospitals. Public reference rows, upserted by id, so a second run adds none.
   // The fixture has no address or cashless flag: tier_1 is cashless, tier_2 is not (reimbursement only).
   const hospitals = JSON.parse(readFixture('hospitals.json').toString('utf8')).hospitals.map(item => ({
     id: item.id, insurerId: null, tpaId: null, name: item.name, address: `Synthetic demo address, ${item.city}`, city: item.city, pincode: item.pincode,
