@@ -100,6 +100,8 @@ export const DATA_STORES = Object.freeze([
   store('onboarding_progress', 'delete', 'household_id = ?', 'userData', 'Deleted.'),
   store('tool_scenarios', 'delete', 'household_id = ?', 'userData', 'Deleted.'),
   // Telemetry, idempotency, ledger and audit
+  store('household_changes', 'delete', 'household_id = ?', null, 'Sync change log (migration 046): ids, revisions and operations only, no values. Deleted on household erasure, after the data erasures that log their own deletes.'),
+  store('household_sync_state', 'delete', 'household_id = ?', null, 'Sync cursor state (migration 046): counters and times only. Deleted on household erasure.'),
   store('job_queue', 'delete', 'household_id = ?', null, 'Identifiers only (kind, document and grant ids). Deleted on revocation, document erasure and household erasure; never blocks an erasure.'),
   store('app_events', 'delete', 'household_id = ?', null, 'Deleted by household, case and adult id.'),
   store('idempotency_keys', 'delete', 'household_id = ?', null, 'Reached by its household_id and case_id columns (migration 040; the response is sealed, so ids inside it cannot be searched), plus legacy needle and upload-scope queries for rows older than 038. Responses can carry document names and job content.'),

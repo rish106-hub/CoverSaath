@@ -49,7 +49,7 @@ test('registry classifies every table of the live catalog, and delete-blocking t
   assert.deepEqual([...registered].filter(name => !live.includes(name)), []);
   // A table the erasure may DELETE from must have no BEFORE DELETE trigger; the others must, or be tombstones/ledger/global.
   const blocked = new Set((await db.many(`SELECT DISTINCT c.relname AS name FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
-    WHERE NOT t.tgisinternal AND c.relnamespace = 'public'::regnamespace AND (t.tgtype & 8) = 8`)).map(row => row.name));
+    WHERE NOT t.tgisinternal AND c.relnamespace = 'public'::regnamespace AND (t.tgtype & 10) = 10`)).map(row => row.name));
   for (const store of DATA_STORES) {
     if (['delete', 'scrub_prune'].includes(store.erasure)) assert.ok(!blocked.has(store.table), `${store.table} cannot be deleted from`);
     if (store.erasure === 'redact_only') assert.ok(blocked.has(store.table), `${store.table} is not append-only`);

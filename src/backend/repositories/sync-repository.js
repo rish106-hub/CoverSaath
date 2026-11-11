@@ -1,7 +1,7 @@
 import { SYNC_FEED_ENTITIES, SYNC_LIMITS } from '../../contracts/sync.js';
 import { householdLock } from '../database/postgres/locks.js';
 
-// Per-household change log, snapshot cursor, push dedupe and log retention (ADR 0017, migration 031). The log holds ids, revisions and
+// Per-household change log, snapshot cursor, push dedupe and log retention (ADR 0017, migration 046). The log holds ids, revisions and
 // operations only, never a value. Entity data is read by the services that already own the readers; this file never opens a sealed
 // column. Push dedupe uses idempotency_keys (scope `sync:<adult>`, key `<household>:<mutation id>`) and stores a status and a
 // revision, never a value, so replaying an old mutation costs a fresh read, not a stored copy.
@@ -22,7 +22,7 @@ export class SyncRepository {
     return (await this.database.one('SELECT min_seq FROM household_sync_state WHERE household_id = ?', [householdId]))?.min_seq ?? 0;
   }
 
-  /** Highest seq logged for the household (0 when none). Seq order is commit order within a household (migration 031). */
+  /** Highest seq logged for the household (0 when none). Seq order is commit order within a household (migration 046). */
   async maxSeq(householdId) {
     return (await this.database.one('SELECT COALESCE(max(seq), 0) AS top FROM household_changes WHERE household_id = ?', [householdId])).top;
   }
