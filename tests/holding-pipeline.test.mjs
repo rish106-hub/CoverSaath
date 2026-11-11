@@ -40,6 +40,9 @@ async function world(t, { env = ON } = {}) {
   const services = createBackendServices(app.database, { env: ON, referenceFacts });
   const at = new Date().toISOString();
   s.holdingId = `hold-${s.documentId}`.slice(0, 100);
+  // OCR completion already made this document's holding and detect job (HOLDINGS_ENABLED); the test seeds its own.
+  await app.database.run("DELETE FROM job_queue WHERE kind = 'holding.detect_insurer'");
+  await app.database.run('DELETE FROM policy_holdings WHERE document_id = ?', [s.documentId]);
   await app.database.run(`INSERT INTO policy_holdings (id, household_id, document_id, kind, status, created_at, updated_at)
     VALUES (?, ?, ?, 'retail_health', 'product_reported', ?, ?)`, [s.holdingId, s.householdId, s.documentId, at, at]);
   const queue = new JobQueueRepository(app.database);

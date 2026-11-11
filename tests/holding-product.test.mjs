@@ -130,6 +130,9 @@ async function world(t, extraEnv = {}) {
   const s = await scenario(app, { name: 'Holding' });
   const holdingId = `hold-${randomUUID()}`;
   const at = new Date().toISOString();
+  // OCR completion already made this document's holding and detect job (HOLDINGS_ENABLED); the test seeds its own.
+  await app.database.run("DELETE FROM job_queue WHERE kind = 'holding.detect_insurer'");
+  await app.database.run('DELETE FROM policy_holdings WHERE document_id = ?', [s.documentId]);
   await app.database.run('INSERT INTO policy_holdings (id, household_id, document_id, kind, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [holdingId, s.householdId, s.documentId, 'retail_health', 'uploaded', at, at]);
   const services = createBackendServices(app.database, { env });
   return { app, s, holdingId, stub, services, env };
@@ -278,6 +281,9 @@ test('confirm-product with HOLDINGS_ENABLED off queues no pipeline jobs', opts, 
   const s = await scenario(app, { name: 'Holding' });
   const holdingId = `hold-${randomUUID()}`;
   const at = new Date().toISOString();
+  // OCR completion already made this document's holding and detect job (HOLDINGS_ENABLED); the test seeds its own.
+  await app.database.run("DELETE FROM job_queue WHERE kind = 'holding.detect_insurer'");
+  await app.database.run('DELETE FROM policy_holdings WHERE document_id = ?', [s.documentId]);
   await app.database.run('INSERT INTO policy_holdings (id, household_id, document_id, kind, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [holdingId, s.householdId, s.documentId, 'retail_health', 'uploaded', at, at]);
   const refused = await app.call(`/api/v1/holdings/${holdingId}/confirm-product`, { method: 'POST', token: s.token, body: { candidateId: 'prod-shield', expectedVersion: 0 }, headers: { 'Idempotency-Key': `confirm-${randomUUID()}` } });
   assert.notEqual(refused.status, 200);
