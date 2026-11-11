@@ -1,14 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
-import { fail, invalid, str } from './holdings-common.js';
+import { fail, invalid, requireScopedGrant, str } from './holdings-common.js';
+import { CHAT_CONSENT_PURPOSE, EMBED_SCOPE } from '../../contracts/data-purpose-registry.js';
 
 // Memory chunks (migration 053, ADR 0031): redacted passages of one household's memory with their embeddings.
 //
 //   * Every query is scoped by household_id first. The text is sealed (AAD memory_chunks.chunk_text_enc.<row id>) and is the REDACTED
 //     passage that was embedded. The embedding is plaintext (pgvector cannot index ciphertext; ADR 0031 records the leak).
-//   * `replace` runs in one transaction under the household lock and re-checks the consent grant the chunks were derived under at
-//     the moment of the write: a revoked or expired grant writes nothing (the privacy invariant "re-check consent before commit").
+//   * `replace` runs in one transaction under the household lock and re-checks, at the moment of the write, the document grant the chunks
+//     were derived from AND the embedding provider's grant (purpose, scope, recipient voyage; rows carry the latter): a revoked, expired or
+//     mismatched grant writes nothing (the privacy invariant "re-check consent before commit").
 //   * Rows are replaced, never edited; erasure DELETES (memory-erasure.js).
 //   * Vectors travel as pgvector text literals "[0.1,0.2,...]" cast to extensions.vector; the operator is schema-qualified because the
 //     extension lives in the `extensions` schema.
@@ -46,8 +48,8 @@ export class MemoryChunkRepository {
    * or whose sha changed, are deleted; `chunks` (the new or changed ones, with embeddings) are inserted. Resolves counts only.
    * desired: [{ scope, sourceRef, contentSha256 }]. chunks: [{ scope, sourceRef, text, contentSha256, embedding, tokenCount, sourceDocumentId }].
    */
-  async replace({ householdId, holdingId, consentGrantId, scopes, desired, chunks, embeddingModel }) {
-    str(householdId, 'householdId'); str(holdingId, 'holdingId'); str(consentGrantId, 'consentGrantId'); str(embeddingModel, 'embeddingModel', 120);
+  async replace({ householdId, holdingId, consentGrantId, embedGrantId, scopes, desired, chunks, embeddingModel }) {
+    str(householdId, 'householdId'); str(holdingId, 'holdingId'); str(consentGrantId, 'consentGrantId'); str(embedGrantId, 'embedGrantId'); str(embeddingModel, 'embeddingModel', 120);
     if (!Array.isArray(scopes) || scopes.some(scope => !SCOPES.has(scope))) invalid('scopes are invalid.');
     if (!Array.isArray(desired) || desired.length > MAX_WRITE || !Array.isArray(chunks) || chunks.length > MAX_WRITE) invalid('Too many passages.');
     for (const item of [...desired, ...chunks]) {
@@ -60,6 +62,8 @@ export class MemoryChunkRepository {
       const grant = await db.one(`SELECT id FROM consent_grants WHERE id = ? AND household_id = ? AND revoked_at IS NULL
         AND (expires_at IS NULL OR julianday(expires_at) > julianday(?)) FOR SHARE`, [consentGrantId, householdId, at]);
       if (!grant) fail('CONSENT_REQUIRED', 'Active consent is required before this information can be stored.', 403);
+      // The embedding provider's own grant (audit F1): purpose, scope and recipient (voyage) must be exact and current at the write.
+      await requireScopedGrant(db, { householdId, grantId: embedGrantId, purpose: CHAT_CONSENT_PURPOSE, scope: EMBED_SCOPE, now: at, lock: true });
       const holding = await db.one('SELECT id FROM policy_holdings WHERE id = ? AND household_id = ?', [holdingId, householdId]);
       if (!holding) fail('HOLDING_NOT_FOUND', 'Holding not found.', 404);
       const existing = await db.many('SELECT id, scope, source_ref, content_sha256 FROM memory_chunks WHERE household_id = ? AND holding_id = ? AND scope = ANY(CAST(? AS text[]))', [householdId, holdingId, scopes]);
@@ -72,7 +76,7 @@ export class MemoryChunkRepository {
             token_count, source_document_id, consent_grant_id, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, CAST(? AS extensions.vector), ?, ?, ?, ?, ?)
           ON CONFLICT DO NOTHING`, [id, householdId, holdingId, chunk.scope, chunk.sourceRef, this.crypto.seal(CHUNKS, 'chunk_text_enc', id, chunk.text), chunk.contentSha256,
-          vectorLiteral(chunk.embedding), embeddingModel, Math.max(0, Math.trunc(chunk.tokenCount ?? 0)), chunk.sourceDocumentId ?? null, consentGrantId, at]);
+          vectorLiteral(chunk.embedding), embeddingModel, Math.max(0, Math.trunc(chunk.tokenCount ?? 0)), chunk.sourceDocumentId ?? null, embedGrantId, at]);
         written += inserted.changes;
       }
       return Object.freeze({ written, removed: drop.length });

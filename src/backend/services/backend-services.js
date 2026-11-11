@@ -5,6 +5,7 @@ import { createModelRouter, createVoyageEmbedClient } from '../../integrations/i
 import { createHouseholdIdentifierLoader } from './household-identifiers.js';
 import { createMemoryService } from './memory-service.js';
 import { createChatV1Service } from './chat-v1-service.js';
+import { createProviderConsent } from './provider-consent.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
@@ -108,10 +109,11 @@ export function createBackendServices(database, options = {}) {
     budgetFor: createHouseholdDayBudget({ ledger: runtimeLimits, maxUsd: Number(env.CHAT_DAILY_BUDGET_USD) > 0 ? Number(env.CHAT_DAILY_BUDGET_USD) : 0.5 }),
     embedClientFor: route => createVoyageEmbedClient({ apiKey: route.apiKey, model: route.model, fetchImpl: options.fetchImpl }),
   });
-  const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, gateway: modelGateway, loadKnownIdentifiers, env });
+  const providerConsent = createProviderConsent({ database, clock: options.clock });
+  const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, gateway: modelGateway, loadKnownIdentifiers, providerConsent, env });
   const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, memory, analytics, env });
   const chatRepository = new ChatRepository(database, { ...shared, households });
-  const chatV1 = createChatV1Service({ chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
+  const chatV1 = createChatV1Service({ chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, providerConsent, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
   const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
   const access = new TenantAccessService(database, { auth, authTokens, households, consents, env: options.env ?? {}, columnCrypto });
   const householdApp = new HouseholdAppRepository(database, shared);

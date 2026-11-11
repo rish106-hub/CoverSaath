@@ -163,7 +163,7 @@ export const requiredColumns = Object.freeze({
   household_members: ['gender', 'age_band', 'mobile_ciphertext', 'mobile_hash', 'email_ciphertext', 'preferred_channel', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id', 'revision', 'deleted_at'],
   memory_chunks: ['household_id', 'holding_id', 'scope', 'source_ref', 'chunk_text_enc', 'content_sha256', 'embedding', 'consent_grant_id'],
   chat_threads: ['household_id', 'holding_id', 'created_by_adult_id'],
-  chat_turns: ['household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'content_enc', 'transcript_enc', 'audio_document_id', 'redacted_prompt_hash'],
+  chat_turns: ['household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'content_enc', 'transcript_enc', 'audio_document_id', 'redacted_prompt_hash', 'consent_grant_id'],
   retrieval_traces: ['household_id', 'thread_id', 'turn_id', 'mode', 'holding_ids', 'fact_ids', 'chunk_ids', 'conflict_ids'],
   analytics_outbox: ['household_id', 'event', 'distinct_id_hash', 'properties_json'],
   provider_calls: ['household_id', 'purpose', 'provider', 'model', 'redaction_report_json', 'payload_sha256', 'input_tokens', 'output_tokens', 'cost_paise', 'status'],

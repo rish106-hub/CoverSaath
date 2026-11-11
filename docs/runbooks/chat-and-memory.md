@@ -44,6 +44,8 @@ Every answer carries `facts_used` (ids of memory rows). Model output is only `ex
 | `memory_chunks` | redacted passage (sealed) and a plaintext embedding (ADR 0031 D2 records the leak) | Deleted, never redacted: with holding, source document, consent grant, household |
 | `provider_calls` | counts, tokens, cost and prompt digest, no payload | Household erasure |
 
+Provider consent (audit F1, migration 058; FOR LEGAL REVIEW): the chat model and the embedding provider each need a current grant of the acting adult with purpose `coverage_reconstruction` and a scope `household / derive / insurance_question` naming the exact recipient (`anthropic` for chat, `voyage` for embeddings). The server resolves it (`provider-consent.js`; request shapes are unchanged), re-checks it before dispatch, and re-checks it inside the commit transaction (`ChatRepository.appendExchange`, `MemoryChunkRepository.replace`). No grant: no provider call; chat answers deterministically (`model_status: consent_required`), embeddings are skipped. A model turn stores the grant id (`chat_turns.consent_grant_id`); revoking that grant deletes its threads. Grants are created through the existing consent API.
+
 Code: `src/backend/repositories/memory-erasure.js`, `erasure-repository.js`; consent revocation calls `eraseMemoryForConsentGrant` in the same transaction.
 
 ## 5. Checks and diagnosis

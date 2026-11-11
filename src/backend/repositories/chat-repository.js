@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
-import { fail, requirePerson, str } from './holdings-common.js';
+import { fail, requirePerson, requireScopedGrant, str } from './holdings-common.js';
+import { CHAT_CONSENT_PURPOSE, CHAT_SCOPE } from '../../contracts/data-purpose-registry.js';
 
 // Chat v1 storage (migration 054, ADR 0029 and 0031): threads, turns and retrieval traces.
 //
@@ -65,8 +66,11 @@ export class ChatRepository {
    * Writes the user turn, the assistant turn and the trace of one exchange atomically. `user`: { text, inputKind, audioDocumentId }.
    * `assistant`: { text, intent, answerSource, provider, model, redactedPromptHash, tokensIn, tokensOut, costPaise, latencyMs }.
    * `trace`: { mode, holdingIds, factIds, chunkIds, conflictIds }. Resolves { userTurnId, assistantTurnId, traceId }.
+   * A model-worded answer (answerSource 'model') needs `consent: { grantId, adultId }`: the chat grant (purpose, scope and recipient exact,
+   * the adult's own) is re-checked FOR SHARE inside the transaction and stored on the assistant turn; a revoked grant writes nothing
+   * (CONSENT_REQUIRED 403). Deterministic answers called no provider and need none.
    */
-  async appendExchange({ householdId, threadId, user, assistant, trace }) {
+  async appendExchange({ householdId, threadId, user, assistant, trace, consent = null }) {
     str(householdId, 'householdId'); str(threadId, 'threadId');
     const db = this.database;
     const at = this.clock().toISOString();
@@ -74,6 +78,8 @@ export class ChatRepository {
     return db.transaction(async () => {
       const thread = await db.one('SELECT id FROM chat_threads WHERE id = ? AND household_id = ? FOR UPDATE', [threadId, householdId]);
       if (!thread) throw notFound();
+      const modelled = assistant.answerSource === 'model';
+      if (modelled) await requireScopedGrant(db, { householdId, grantId: consent?.grantId, purpose: CHAT_CONSENT_PURPOSE, subjectAdultId: consent?.adultId ?? null, scope: CHAT_SCOPE, now: at, lock: true });
       const next = (await db.one('SELECT COALESCE(MAX(turn_index) + 1, 0)::int AS n FROM chat_turns WHERE household_id = ? AND thread_id = ?', [householdId, threadId])).n;
       const userId = `turn-${randomUUID()}`;
       const assistantId = `turn-${randomUUID()}`;
@@ -82,10 +88,10 @@ export class ChatRepository {
         VALUES (?, ?, ?, ?, 'user', ?, ?, ?, ?, ?)`, [userId, householdId, threadId, next, inputKind, this.crypto.seal(TURNS, 'content_enc', userId, user.text),
         inputKind === 'voice' ? this.crypto.seal(TURNS, 'transcript_enc', userId, user.text) : null, inputKind === 'voice' ? user.audioDocumentId ?? null : null, at]);
       await db.run(`INSERT INTO chat_turns (id, household_id, thread_id, turn_index, role, input_kind, content_enc, intent, answer_source, provider, model, redacted_prompt_hash,
-          tokens_in, tokens_out, cost_paise, latency_ms, created_at)
-        VALUES (?, ?, ?, ?, 'assistant', 'text', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [assistantId, householdId, threadId, next + 1, this.crypto.seal(TURNS, 'content_enc', assistantId, assistant.text),
+          tokens_in, tokens_out, cost_paise, latency_ms, created_at, consent_grant_id)
+        VALUES (?, ?, ?, ?, 'assistant', 'text', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [assistantId, householdId, threadId, next + 1, this.crypto.seal(TURNS, 'content_enc', assistantId, assistant.text),
         assistant.intent ?? null, assistant.answerSource ?? null, assistant.provider ?? null, assistant.model ?? null, assistant.redactedPromptHash ?? null,
-        assistant.tokensIn ?? 0, assistant.tokensOut ?? 0, assistant.costPaise ?? 0, assistant.latencyMs ?? 0, at]);
+        assistant.tokensIn ?? 0, assistant.tokensOut ?? 0, assistant.costPaise ?? 0, assistant.latencyMs ?? 0, at, modelled ? consent.grantId : null]);
       await db.run(`INSERT INTO retrieval_traces (id, household_id, thread_id, turn_id, mode, holding_ids, fact_ids, chunk_ids, conflict_ids, created_at)
         VALUES (?, ?, ?, ?, ?, CAST(? AS text[]), CAST(? AS text[]), CAST(? AS text[]), CAST(? AS text[]), ?)`, [traceId, householdId, threadId, assistantId, trace.mode, ids(trace.holdingIds ?? [], 'holdingIds'),
         ids(trace.factIds ?? [], 'factIds'), ids(trace.chunkIds ?? [], 'chunkIds'), ids(trace.conflictIds ?? [], 'conflictIds'), at]);
