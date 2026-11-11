@@ -71,7 +71,7 @@ export function chunkExport(documents) {
 }
 
 export function createHoldingProductService({
-  repository, policyHoldings, policyProfiles, referenceCache, jobQueue, ocr, env = process.env, clock = () => new Date(), client = null,
+  repository, policyHoldings, policyProfiles, referenceCache, jobQueue, ocr, pipeline = null, env = process.env, clock = () => new Date(), client = null,
 }) {
   for (const [name, dep] of Object.entries({ repository, policyHoldings, policyProfiles, referenceCache, jobQueue, ocr })) {
     if (!dep) throw new TypeError(`createHoldingProductService needs ${name}.`);
@@ -194,6 +194,8 @@ export function createHoldingProductService({
         kind: REFERENCE_IMPORT_JOB_KIND, householdId: holding.householdId, documentId: document.id, payload: { scope: 'product', policyProfileId: profile.id },
         dedupeKey: referenceImportDedupeKey({ scope: 'product', identifier: profile.id, version: String(outcome.version) }),
       });
+      // Collate pipeline (A4): parse_own_pdf and fetch_reference, deduped by (holding, step, input). Only after the product is confirmed.
+      if (pipeline) await pipeline.startPipeline({ householdId: holding.householdId, holdingId: holding.id });
       return { holdingId: holding.id, status: 'product_reported', profileVersion: outcome.version, replay: outcome.replay };
     },
 
