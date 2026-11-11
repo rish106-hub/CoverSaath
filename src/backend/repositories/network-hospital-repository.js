@@ -31,6 +31,7 @@ export class NetworkHospitalRepository {
   /** Hospitals in one pincode that are listed today (valid window), cashless first. `insurerId` (optional) keeps insurer-specific and all-insurer rows. */
   async byPincode({ pincode, insurerId = null }) {
     if (typeof pincode !== 'string' || !PINCODE.test(pincode)) throw invalid();
+    if (insurerId !== null && (typeof insurerId !== 'string' || insurerId.length < 1 || insurerId.length > 100)) throw invalid();
     const rows = await this.database.many(
       `SELECT id, name, address, city, pincode, cashless FROM network_hospitals
        WHERE pincode = ? AND (?::text IS NULL OR insurer_id IS NULL OR insurer_id = ?)
