@@ -49,7 +49,15 @@ async function applyRoleScript(db, script, names) {
 const failures = results => results.filter(item => !item.ok);
 
 // Applies the role SQL to `handle`, sets throwaway passwords and opens one pool per role.
+// pgvector (migration 053) is installed once by an admin before a least-privilege migrator runs the migrations, as on Supabase, where
+// the `extensions` schema ships and the postgres role may create the extension. The role SQL then grants both roles USAGE on it.
+async function installVector(pool) {
+  await pool.query('CREATE SCHEMA IF NOT EXISTS extensions');
+  await pool.query('CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions');
+}
+
 async function withRoles(t, handle, names = roleNames()) {
+  await installVector(handle.pool);
   await applyRoleScript(handle.pool, SQL, names);
   const pools = {};
   for (const [kind, role] of [['runtime', names.runtime], ['migrator', names.migrator]]) {
@@ -380,6 +388,12 @@ test('the SQL and its rollback run as a non-superuser admin (the Supabase postgr
   });
   const attributes = (await pool.query('SELECT rolsuper FROM pg_roles WHERE rolname = current_user')).rows[0];
   assert.equal(attributes.rolsuper, false, 'the admin under test is not a superuser');
+  // The extension is installed by a superuser (the stock extension is not trusted); the admin may use it, as the Supabase postgres user may.
+  const installer = createPostgresPool({ connectionString: (() => { const target = new URL(testDatabaseUrl()); target.pathname = `/${admin.database}`; return target.toString(); })(), max: 1, applicationName: 'coversaath-test-extension' });
+  try {
+    await installVector(installer);
+    await installer.query(`GRANT USAGE ON SCHEMA extensions TO "${admin.role}"`);
+  } finally { await installer.end(); }
   // The admin builds the schema and owns it, as the Supabase postgres user does today.
   assert.ok((await runPostgresMigrations(pool)).length > 25);
 

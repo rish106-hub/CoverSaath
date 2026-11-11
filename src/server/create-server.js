@@ -409,6 +409,19 @@ export function createApiServer({
           res.writeHead(backendResult.status);
           return res.end(backendResult.text);
         }
+        // A stream result (chat v1 turns): server-sent events. The turn was validated and authorised before this point, so every
+        // failure here is one `error` event; the connection is closed when the turn ends or the client goes away.
+        if (typeof backendResult.sse === 'function') {
+          res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          res.setHeader('Referrer-Policy', 'no-referrer');
+          res.setHeader('X-Accel-Buffering', 'no');
+          res.writeHead(backendResult.status);
+          res.flushHeaders?.();
+          await backendResult.sse((event, data) => { if (!res.writableEnded && !res.destroyed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); });
+          return res.end();
+        }
         return send(backendResult.status, backendResult.body);
       }
       return send(404, { error: { code: 'ROUTE_NOT_FOUND', message: 'Use the authenticated /api/v1 API.' } });

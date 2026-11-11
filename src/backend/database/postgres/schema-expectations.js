@@ -23,6 +23,7 @@ export const expectedTables = Object.freeze([
   'household_changes', 'household_sync_state',
   'person_records',
   'policy_holdings', 'household_memory_facts', 'memory_conflicts', 'member_declarations', 'premium_payments', 'premium_dues', 'provider_calls',
+  'memory_chunks', 'chat_threads', 'chat_turns', 'retrieval_traces',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -80,6 +81,8 @@ export const criticalTriggers = Object.freeze([
   'member_declarations_scope_insert', 'member_declarations_scope_update',
   'premium_payments_scope_insert', 'premium_payments_scope_update', 'premium_dues_scope_insert', 'premium_dues_scope_update',
   'provider_calls_scope_insert', 'provider_calls_append_only',
+  'memory_chunks_scope_insert', 'memory_chunks_immutable', 'chat_threads_scope_insert', 'chat_turns_scope_insert', 'chat_turns_append_only',
+  'retrieval_traces_scope_insert', 'retrieval_traces_append_only',
 ]);
 
 export const criticalIndexes = Object.freeze([
@@ -126,6 +129,7 @@ export const criticalIndexes = Object.freeze([
   'person_records_unique', 'person_records_household_type_idx', 'household_members_mobile_unique',
   'policy_holdings_household_status_idx', 'household_memory_facts_current_slot', 'household_memory_facts_read_idx', 'memory_conflicts_household_idx',
   'memory_conflicts_one_pending', 'member_declarations_household_idx', 'premium_payments_household_idx', 'premium_dues_household_idx',
+  'memory_chunks_household_idx', 'memory_chunks_source_slot', 'memory_chunks_embedding_hnsw', 'chat_threads_household_idx', 'chat_turns_thread_order', 'retrieval_traces_turn_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
@@ -156,6 +160,10 @@ export const requiredColumns = Object.freeze({
   model_budget_reservations: ['scope', 'amount_micro_usd', 'state', 'actual_micro_usd'],
   evidence_claims: ['claim_hash', 'owner', 'expires_at'],
   household_members: ['gender', 'age_band', 'mobile_ciphertext', 'mobile_hash', 'email_ciphertext', 'preferred_channel', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id', 'revision', 'deleted_at'],
+  memory_chunks: ['household_id', 'holding_id', 'scope', 'source_ref', 'chunk_text_enc', 'content_sha256', 'embedding', 'consent_grant_id'],
+  chat_threads: ['household_id', 'holding_id', 'created_by_adult_id'],
+  chat_turns: ['household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'content_enc', 'transcript_enc', 'audio_document_id', 'redacted_prompt_hash'],
+  retrieval_traces: ['household_id', 'thread_id', 'turn_id', 'mode', 'holding_ids', 'fact_ids', 'chunk_ids', 'conflict_ids'],
   provider_calls: ['household_id', 'purpose', 'provider', 'model', 'redaction_report_json', 'payload_sha256', 'input_tokens', 'output_tokens', 'cost_paise', 'status'],
   person_records: ['household_id', 'subject_member_id', 'record_type', 'slot', 'payload_ciphertext', 'completeness', 'source', 'state', 'revision'],
   policy_holdings: ['household_id', 'policy_id', 'document_id', 'policy_profile_id', 'kind', 'status'],
