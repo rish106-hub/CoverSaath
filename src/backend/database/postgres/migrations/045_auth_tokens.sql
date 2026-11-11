@@ -29,13 +29,14 @@ ALTER TABLE public.api_sessions ADD COLUMN IF NOT EXISTS session_kind text NOT N
   CHECK (session_kind IN ('bearer', 'web', 'demo'));
 ALTER TABLE public.api_sessions ADD COLUMN IF NOT EXISTS household_id text REFERENCES public.households (id) ON DELETE CASCADE;
 ALTER TABLE public.api_sessions ADD COLUMN IF NOT EXISTS device_id text;
+ALTER TABLE public.api_sessions ADD COLUMN IF NOT EXISTS auth_identity_id text REFERENCES public.auth_identities (id) ON DELETE SET NULL;
 ALTER TABLE public.api_sessions ADD COLUMN IF NOT EXISTS amr text
   CHECK (amr IS NULL OR amr IN ('beta', 'google', 'apple', 'email_otp', 'phone_otp', 'passkey', 'demo'));
 ALTER TABLE public.api_sessions ADD COLUMN IF NOT EXISTS absolute_expires_at text;
 ALTER TABLE public.api_sessions ADD COLUMN IF NOT EXISTS user_agent_hash text;
 ALTER TABLE public.api_sessions ADD COLUMN IF NOT EXISTS ip_prefix_hash text;
 ALTER TABLE public.api_sessions ADD COLUMN IF NOT EXISTS revoked_reason text
-  CHECK (revoked_reason IS NULL OR revoked_reason IN ('sign_out', 'sign_out_all', 'refresh_reuse', 'admin', 'expired_demo', 'identity_revoked'));
+  CHECK (revoked_reason IS NULL OR revoked_reason IN ('sign_out', 'sign_out_all', 'refresh_reuse', 'admin', 'expired_demo', 'identity_revoked', 'session_limit'));
 
 DO $$
 BEGIN
@@ -48,6 +49,7 @@ BEGIN
 END
 $$;
 CREATE INDEX IF NOT EXISTS api_sessions_household_idx ON public.api_sessions (household_id) WHERE household_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS api_sessions_identity_idx ON public.api_sessions (auth_identity_id) WHERE auth_identity_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.auth_refresh_tokens (
   id text PRIMARY KEY,

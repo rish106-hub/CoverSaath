@@ -27,7 +27,7 @@ export class AuthRepository {
       // expires_at is fixed-width UTC ISO text (migration 039 check), so the text comparison is exact and uses
       // api_sessions_live_expiry_idx.
       const { count: activeSessions } = await this.database.one(`SELECT count(*) AS count FROM api_sessions
-        WHERE revoked_at IS NULL AND expires_at > ?`, [issuedAt.toISOString()]);
+        WHERE session_kind = 'bearer' AND revoked_at IS NULL AND expires_at > ?`, [issuedAt.toISOString()]);
       if (activeSessions >= this.maxActiveSessions) {
         throw Object.assign(new Error('Session capacity reached.'), { code: 'SESSION_CAPACITY_REACHED', statusCode: 429 });
       }

@@ -79,6 +79,10 @@ export class TenantAccessService {
     return { ...principal, sessionKind: 'bearer', householdId: null };
   }
 
+  // A web principal reaching a record by its own id (case, job, task) gets the same 404 as a missing record, so the
+  // answer does not say whether another household owns that id. The 403 below is only for ids the caller names as a household.
+  #foreign(principal, householdId) { return Boolean(principal.householdId) && principal.householdId !== householdId; }
+
   async requireHousehold(principal, householdId, options) {
     // Checked before any lookup, so a token for household A learns nothing about household B.
     if (principal.householdId && principal.householdId !== householdId) {
@@ -92,7 +96,7 @@ export class TenantAccessService {
     // A case erased through the deletion ledger is gone for every reader (S3).
     const row = await this.database.one(`SELECT * FROM service_cases WHERE id = ? AND NOT EXISTS (
       SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [caseId]);
-    if (!row) fail('CASE_NOT_FOUND', 'Case not found.', 404);
+    if (!row || this.#foreign(principal, row.household_id)) fail('CASE_NOT_FOUND', 'Case not found.', 404);
     // The household check comes before anything is decrypted, so a caller outside the household gets not-found whatever the
     // stored amount looks like (no existence oracle through a decryption error).
     await this.requireHousehold(principal, row.household_id, options);
@@ -103,7 +107,7 @@ export class TenantAccessService {
     const record = openWorkflowRun(this.crypto, await this.database.one(`SELECT workflow_runs.*, service_cases.household_id
       FROM workflow_runs JOIN service_cases ON service_cases.id = workflow_runs.case_id
       WHERE workflow_runs.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [runId]));
-    if (!record) fail('JOB_NOT_FOUND', 'Job not found.', 404);
+    if (!record || this.#foreign(principal, record.household_id)) fail('JOB_NOT_FOUND', 'Job not found.', 404);
     await this.requireHousehold(principal, record.household_id);
     return record;
   }
@@ -114,7 +118,7 @@ export class TenantAccessService {
       JOIN workflow_runs ON workflow_runs.id = workflow_tasks.workflow_run_id
       JOIN service_cases ON service_cases.id = workflow_runs.case_id
       WHERE workflow_tasks.id = ? AND NOT EXISTS (SELECT 1 FROM retention_records WHERE resource_type = 'case' AND resource_id = service_cases.id AND deletion_state IN ('deleted', 'verified'))`, [taskId]));
-    if (!record) fail('TASK_NOT_FOUND', 'Task not found.', 404);
+    if (!record || this.#foreign(principal, record.household_id)) fail('TASK_NOT_FOUND', 'Task not found.', 404);
     await this.requireHousehold(principal, record.household_id);
     return record;
   }

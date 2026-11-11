@@ -34,8 +34,8 @@ export class AuthIdentityRepository {
   async signIn({ issuer, subject, displayName, contactEmail = null, web = false, amr = 'beta' }) {
     const hash = identityHash(issuer, subject);
     const db = this.database;
-    const issue = (adultUserId, householdId) => (web
-      ? this.authTokens.createWebSession({ adultUserId, householdId, amr })
+    const issue = (adultUserId, householdId, authIdentityId) => (web
+      ? this.authTokens.createWebSession({ adultUserId, householdId, amr, authIdentityId })
       : this.auth.issueSession({ adultUserId }));
     return db.transaction(async () => {
       const at = this.clock().toISOString();
@@ -46,7 +46,7 @@ export class AuthIdentityRepository {
         if (!adult || adult.account_status !== 'active') throw unauthenticated();
         const home = await this.#oldestOwnedHousehold(adult.id, at);
         if (!home) throw householdNotFound();
-        const session = await issue(adult.id, home.household_id);
+        const session = await issue(adult.id, home.household_id, existing.id);
         await db.run('UPDATE auth_identities SET last_used_at = ? WHERE id = ?', [at, existing.id]);
         return { returning: true, household: { id: home.household_id }, adultId: adult.id, memberId: home.member_id, session };
       }
@@ -58,7 +58,7 @@ export class AuthIdentityRepository {
         VALUES (?, ?, ?, ?, ?, ?)`, [identityId, adult.id, issuer, hash, at, at]);
       // Counts only: neither the issuer nor the subject is written to the audit chain.
       await this.audit?.append({ householdId: household.id, actorType: 'system', actorId: 'identity-service', action: 'auth_identity.created', resourceType: 'auth_identity', resourceId: identityId });
-      const session = await issue(adult.id, household.id);
+      const session = await issue(adult.id, household.id, identityId);
       return { returning: false, household: { id: household.id }, adultId: adult.id, memberId: member.id, session };
     }, { locks: [authIdentityLock(hash)] });
   }

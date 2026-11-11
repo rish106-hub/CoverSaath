@@ -111,7 +111,7 @@ export const criticalIndexes = Object.freeze([
   'household_members_adult_idx',
   'household_roles_adult_idx',
   'app_events_case_idx',
-  'auth_signing_keys_one_active', 'auth_refresh_session_idx', 'auth_refresh_expiry_idx', 'api_sessions_household_idx',
+  'auth_signing_keys_one_active', 'auth_refresh_session_idx', 'auth_refresh_expiry_idx', 'api_sessions_household_idx', 'api_sessions_identity_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
@@ -132,7 +132,7 @@ export const requiredColumns = Object.freeze({
   proposed_parameters: ['redacted_at', 'redaction_reason_code', 'status'],
   policy_structuring_jobs: ['status', 'evidence_outcome', 'error_code', 'attempt', 'structuring_run_id', 'erased_at'],
   auth_identities: ['adult_user_id', 'issuer', 'subject_sha256', 'created_at', 'last_used_at', 'revoked_at'],
-  api_sessions: ['session_kind', 'household_id', 'amr', 'absolute_expires_at', 'revoked_reason'],
+  api_sessions: ['session_kind', 'household_id', 'amr', 'absolute_expires_at', 'revoked_reason', 'auth_identity_id'],
   auth_refresh_tokens: ['session_id', 'token_hash', 'parent_id', 'expires_at', 'used_at'],
   app_events: ['occurred_at', 'expires_at', 'event_name', 'household_id', 'consent_grant_id', 'payload_enc', 'redacted_at'],
   rate_limit_buckets: ['key_hash', 'window_start', 'request_count'],

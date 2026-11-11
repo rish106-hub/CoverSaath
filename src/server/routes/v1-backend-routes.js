@@ -461,7 +461,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       return { status: 200, body: { householdId: listMatch[1], consents, truncated } };
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/sessions/current/revoke') {
-      await services.auth.revokeSession({ sessionId: principal.sessionId, adultUserId: principal.adultId });
+      // A web session is signed out through the token service (reason and audit event); an opaque one as before.
+      if (principal.sessionKind === 'web') await services.authTokens.signOut(principal);
+      else await services.auth.revokeSession({ sessionId: principal.sessionId, adultUserId: principal.adultId });
       return { status: 200, body: { status: 'revoked' } };
     }
     // App data (plan B-A): members, policies, overview. Ownership is checked inside services.app; writes need owner or member.
@@ -713,7 +715,11 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     // tooling (scripts/curated-source.mjs, ADR 0010): check and publish need an Ed25519 signature by the checker's registered
     // key, which no session can supply, so there is deliberately no approval route.
     const curatedMatch = url.pathname.match(/^\/api\/v1\/curated-products\/([^/]+)$/);
-    if (req.method === 'GET' && curatedMatch) return { status: 200, body: await services.curatedProducts.get({ adultId: principal.adultId, submissionId: curatedMatch[1] }) };
+    if (req.method === 'GET' && curatedMatch) {
+      // Curated-source roles are held by an adult across households; a household-bound web session never exercises them.
+      if (principal.householdId) throw Object.assign(new Error('The caller does not hold an active role for this action.'), { code: 'SOURCE_ROLE_NOT_AUTHORISED', statusCode: 403 });
+      return { status: 200, body: await services.curatedProducts.get({ adultId: principal.adultId, submissionId: curatedMatch[1] }) };
+    }
     // Decision catalogue (Block 3): facts derived on read from one stored answer. No model call and no write.
     // Gated by the source-pack field, same as /questions. Whether that consent purpose is right for coverage facts is pending legal review.
     const catalogueMatch = url.pathname.match(/^\/api\/v1\/cases\/([^/]+)\/decision-catalogue$/);
