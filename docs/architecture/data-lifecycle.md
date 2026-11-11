@@ -42,12 +42,12 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `household_members` | scrub_prune | members | Name, label and date of birth cleared; deleted unless an append-only fact or parameter record names the member. |
 | `api_sessions` | delete | - | Reached by adult id. Deleted for adults who belong to no other household. |
 | `auth_identities` | delete | - | Reached by adult id. Deleted for adults who belong to no other household. |
-| `auth_refresh_tokens` | delete | - | Token hashes only. Deleted by cascade from api_sessions (ADR 0016), which go with the household or the adult. |
+| `auth_refresh_tokens` | delete | - | Token hashes only. Deleted by cascade from api_sessions (ADR 0027), which go with the household or the adult. |
 | `webauthn_credentials` | delete | - | Reached by adult id; sealed label, public key and counter. Deleted by cascade when the adult row goes. |
 | `devices` | delete | - | Reached by adult id; sealed label. Deleted by cascade when the adult row goes. |
 | `notice_acceptances` | delete | - | Reached by adult id; notice version and time only. Deleted by cascade when the adult row goes. |
-| `auth_challenges` | global | - | Keyed hashes that expire in minutes and name no person (ADR 0016). Purged by the housekeeping sweep. |
-| `auth_signing_keys` | global | - | Public key halves and key ids only (ADR 0016). Not personal data. |
+| `auth_challenges` | global | - | Keyed hashes that expire in minutes and name no person (ADR 0027). Purged by the housekeeping sweep. |
+| `auth_signing_keys` | global | - | Public key halves and key ids only (ADR 0027). Not personal data. |
 | `consent_grants` | scrub_prune | consents | All grants revoked, then deleted unless an append-only structuring job still names the grant. |
 | `consent_scopes` | scrub_prune | consents | Deleted with the grant. |
 | `consent_revocations` | scrub_prune | consents | Free-text reason cleared; deleted with the grant. |

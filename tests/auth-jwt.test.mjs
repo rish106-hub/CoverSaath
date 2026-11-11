@@ -9,7 +9,7 @@ import { createJwtTokens, publicJwkFor, readJwtIssuer, readJwtPrivateKeys } from
 import { createApiServer } from '../src/server/server.js';
 import { runPostgresMigrations, loadPostgresMigrations } from '../src/backend/database/postgres/index.js';
 
-// ADR 0016: passwordless web sessions. Short EdDSA access tokens (jose), opaque rotating refresh tokens, instant revocation by
+// ADR 0027: passwordless web sessions. Short EdDSA access tokens (jose), opaque rotating refresh tokens, instant revocation by
 // reading api_sessions on every request. All keys are generated in memory for the test; nothing here is a real secret.
 const bootstrapToken = 'coversaath-test-bootstrap-token-0016';
 const identityToken = 'coversaath-test-identity-credential-0016';

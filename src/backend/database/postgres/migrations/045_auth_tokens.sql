@@ -1,4 +1,4 @@
--- Auth, part 1: revocable web sessions, JWT signing keys, rotating refresh tokens (ADR 0016). Expand-only and rerunnable:
+-- Auth, part 1: revocable web sessions, JWT signing keys, rotating refresh tokens (ADR 0027). Expand-only and rerunnable:
 -- new tables use IF NOT EXISTS, new columns use ADD COLUMN IF NOT EXISTS, constraints are added once inside DO blocks. The one
 -- relaxation of an existing column is api_sessions.token_sha256 losing NOT NULL, because a web session has no opaque bearer
 -- token (its credential is a JWT plus a refresh token); a CHECK keeps it required for session_kind = 'bearer'. Opaque bearer

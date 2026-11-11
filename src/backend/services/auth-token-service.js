@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createRateLimiter } from '../../shared/http/index.js';
 
-// Orchestrates web sessions: mint and verify access tokens, rotate refresh tokens, sign out, list and revoke sessions (ADR 0016).
+// Orchestrates web sessions: mint and verify access tokens, rotate refresh tokens, sign out, list and revoke sessions (ADR 0027).
 // Every rejection of a credential is one generic coded error; why a refresh failed (unknown, expired, reused) is in the audit
 // trail only. Nothing here logs, and no token, hash or key is ever put in an error, an audit payload or a response other than the
 // one that hands the new token to its owner.

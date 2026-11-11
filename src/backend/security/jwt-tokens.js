@@ -1,7 +1,7 @@
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import { SignJWT, jwtVerify, errors } from 'jose';
 
-// Access tokens (ADR 0016). EdDSA (Ed25519) only, signed and verified with `jose`; nothing here parses or builds a JWT by hand.
+// Access tokens (ADR 0027). EdDSA (Ed25519) only, signed and verified with `jose`; nothing here parses or builds a JWT by hand.
 // A token carries ids and a coarse scope, never a name, e-mail or phone number:
 //   { iss, aud:"knowvia-bff", sub:<adult id>, hid:<household id>, sid:<session id>, jti, iat, exp, scp:["household:rw"], amr, knd:"web" }
 // A valid signature is necessary, not sufficient: the caller (AuthTokenService) also checks that session `sid` is still live.

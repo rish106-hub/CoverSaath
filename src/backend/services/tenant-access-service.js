@@ -67,7 +67,7 @@ export class TenantAccessService {
   // pending Promise (truthy) and let the request through. A rejected query
   // rejects the request (fail closed).
   // Two credential kinds: the opaque bearer session (scripts, tests; unchanged) and a JWT access token for a web session
-  // (ADR 0016). A JWT principal is bound to one household; a bearer principal has householdId null and is not.
+  // (ADR 0027). A JWT principal is bound to one household; a bearer principal has householdId null and is not.
   async authenticate(authorization) {
     const jwt = jwtBearer(authorization);
     if (jwt) {

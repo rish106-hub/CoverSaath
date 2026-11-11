@@ -28,7 +28,7 @@ export class AuthIdentityRepository {
    * adult. A returning identity gets a new session for its oldest active owner household; a revoked identity or an
    * inactive adult is refused (401). A session-cap refusal (429) rolls everything back, including a new adult.
    * Resolves { returning, household: { id }, adultId, memberId, session }.
-   * `web` starts a revocable web session with a refresh token (JWT sign-in, ADR 0016) instead of an opaque bearer session;
+   * `web` starts a revocable web session with a refresh token (JWT sign-in, ADR 0027) instead of an opaque bearer session;
    * `amr` is then the recorded authentication method.
    */
   async signIn({ issuer, subject, displayName, contactEmail = null, web = false, amr = 'beta' }) {

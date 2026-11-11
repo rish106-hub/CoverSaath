@@ -43,7 +43,7 @@ export function createBackendServices(database, options = {}) {
   const cases = new CaseRepository(database, shared);
   const workflows = new WorkflowRepository(database, shared);
   const auth = new AuthRepository(database, shared);
-  // Web sessions and JWT access tokens (ADR 0016). Inert unless KNOWVIA_JWT_ISSUER and a private key are configured;
+  // Web sessions and JWT access tokens (ADR 0027). Inert unless KNOWVIA_JWT_ISSUER and a private key are configured;
   // opaque bearer sessions never depend on it. `options.jwt` lets a test inject keys without touching the environment.
   const authTokenRepository = new AuthTokenRepository(database, shared);
   const jwtTokens = createJwtTokens({

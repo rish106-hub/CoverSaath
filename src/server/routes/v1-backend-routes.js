@@ -280,7 +280,7 @@ const JWKS_PATH = '/.well-known/jwks.json';
 export async function handleV1BackendRoute({ req, url, database, services, integrations, intakeConnectors = {}, config, identity, scannerStatus = null, liveRegistryFactory, documentUploads, getOcrService, getStructuringService, getEvidenceService, getCatalogueService, getHouseholdPreviewService, getReferenceDataPort, getChatService, onError, metrics }) {
   if (!url.pathname.startsWith('/api/v1/') && url.pathname !== JWKS_PATH) return null;
   try {
-    // Public half of the access-token signing keys (ADR 0016). The Host guard already ran; nothing here is household data.
+    // Public half of the access-token signing keys (ADR 0027). The Host guard already ran; nothing here is household data.
     if (req.method === 'GET' && url.pathname === JWKS_PATH) {
       return { status: 200, body: await services.authTokens.jwks() };
     }
@@ -363,7 +363,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       if (body.contactEmail !== undefined && body.contactEmail !== null && (typeof body.contactEmail !== 'string' || body.contactEmail.length > 320)) {
         badRequest('contactEmail is invalid.');
       }
-      // ?format=jwt starts a revocable web session and answers with an access and a refresh token (ADR 0016). Anything else
+      // ?format=jwt starts a revocable web session and answers with an access and a refresh token (ADR 0027). Anything else
       // keeps the opaque bearer session and the response shape callers already rely on.
       const format = url.searchParams.get('format');
       if (format !== null && format !== 'jwt') badRequest('format must be jwt or omitted.');

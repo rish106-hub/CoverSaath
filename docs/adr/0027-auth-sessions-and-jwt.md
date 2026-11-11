@@ -1,4 +1,4 @@
-# ADR 0016: Web sessions, JWT access tokens and rotating refresh tokens
+# ADR 0027: Web sessions, JWT access tokens and rotating refresh tokens
 
 Status: accepted for the prototype (synthetic data only). Independent review is mandatory before any real user signs in. Notice and consent wording in `notice_acceptances` is a draft for legal review. Design: `docs/exec-plans/active/full-system-design.md` sections 2, 3, 7 and 10.
 

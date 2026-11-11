@@ -1,4 +1,4 @@
-// auth:keys: JWT signing-key lifecycle for DATABASE_URL (ADR 0016). The database only ever holds public keys.
+// auth:keys: JWT signing-key lifecycle for DATABASE_URL (ADR 0027). The database only ever holds public keys.
 //   node scripts/auth-keys.mjs generate <kid>   new Ed25519 key: registers the public half as `next`, prints ONE line
 //                                               KNOWVIA_JWT_PRIVATE_KEY_<kid>=<base64> on stdout for `fly secrets import`.
 //                                               Pipe it straight to the secret store; never paste it into a chat, ticket or log.
