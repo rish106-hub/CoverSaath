@@ -111,7 +111,7 @@ test('PostgreSQL catalog holds every expected object and the frozen object count
     views: Object.keys(actual.views).length,
     triggers: Object.keys(actual.triggers).length,
   }, {
-    tables: 87, columns: 937, foreignKeys: 198, uniqueConstraints: 32, checkConstraints: 457, namedIndexes: 183, views: 2, triggers: 130,
+    tables: 88, columns: 949, foreignKeys: 199, uniqueConstraints: 32, checkConstraints: 466, namedIndexes: 184, views: 2, triggers: 132,
   });
 });
 
