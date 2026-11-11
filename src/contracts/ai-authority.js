@@ -55,6 +55,11 @@ export const AI_AUTHORITY_MATRIX = freezeAll({
     // They never record parameter observations; answers are cited conditional evidence, not decisions.
     policy_evidence_investigate: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-evidence', recordsParameterObservations: false },
     policy_evidence_override_sweep: { authority: 'propose', workflowTaskKeys: [], pipeline: 'policy-evidence', recordsParameterObservations: false },
+    // Provider-routing gateway tasks (ADR 0030): not workflow tasks. Output is capped at extracted_unverified, conflicting or unknown.
+    chat_answer: { authority: 'propose', workflowTaskKeys: [], pipeline: 'model-gateway', recordsParameterObservations: false },
+    intent_classify: { authority: 'propose', workflowTaskKeys: [], pipeline: 'model-gateway', recordsParameterObservations: false },
+    fact_extract: { authority: 'propose', workflowTaskKeys: [], pipeline: 'model-gateway', recordsParameterObservations: false },
+    embed: { authority: 'propose', workflowTaskKeys: [], pipeline: 'model-gateway', recordsParameterObservations: false },
   },
 
   // Owner of every coverage-analysis workflow task (responsibility-matrix.js RUNTIME_RESPONSIBILITIES).

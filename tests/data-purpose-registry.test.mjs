@@ -87,7 +87,7 @@ test('R3: model-eligible entries are exactly the gated slots of MODEL_INPUT_FIEL
   for (const slot of slots) {
     const item = purposeEntry(slot);
     assert.equal(item.modelEligible, true, slot);
-    assert.ok(item.recipients.includes('google-gemini'), slot);
+    assert.ok(item.recipients.some(recipient => ['google-gemini', 'anthropic'].includes(recipient)), slot);
   }
   const eligible = DATA_PURPOSE_REGISTRY.filter(item => item.modelEligible).map(item => item.field);
   assert.deepEqual(eligible.sort(), [...slots].sort());
@@ -163,7 +163,7 @@ test('R10: fields that can carry member-table content are flagged for children\'
 });
 
 test('R11: provider recipients imply a possible cross-border flag', () => {
-  for (const item of DATA_PURPOSE_REGISTRY.filter(candidate => candidate.recipients.some(recipient => recipient === 'google-gemini' || recipient === 'sarvam'))) {
+  for (const item of DATA_PURPOSE_REGISTRY.filter(candidate => candidate.recipients.some(recipient => recipient === 'google-gemini' || recipient === 'anthropic' || recipient === 'sarvam'))) {
     assert.equal(item.crossBorder, 'possible', item.field);
   }
 });

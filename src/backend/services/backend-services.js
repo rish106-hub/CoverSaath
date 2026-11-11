@@ -1,5 +1,5 @@
 import { holdingsEnabled } from './holdings-flag.js';
-import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, SyncRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository, PersonRecordRepository, HoldingProductRepository, ReferenceCacheRepository, PolicyHoldingRepository, MemoryFactRepository, DeclarationRepository, PremiumRepository } from '../repositories/index.js';
+import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, SyncRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository, PersonRecordRepository, HoldingProductRepository, ReferenceCacheRepository, PolicyHoldingRepository, MemoryFactRepository, DeclarationRepository, PremiumRepository, ProviderCallRepository } from '../repositories/index.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
@@ -20,6 +20,7 @@ export function createBackendServices(database, options = {}) {
   const columnCrypto = resolveColumnCrypto(options);
   // Activity events and shared runtime limits (ADR 0014). Event payloads are sealed with the same column crypto.
   const appEvents = new AppEventRepository(database, { clock: options.clock, columnCrypto });
+  const providerCalls = new ProviderCallRepository(database, { clock: options.clock });
   const runtimeLimits = new RuntimeLimitsRepository(database);
   // Postgres job queue for the worker process group (migration 034). Revocation erases its rows through ConsentRepository.
   const jobQueue = new JobQueueRepository(database, { clock: options.clock });
@@ -95,7 +96,7 @@ export function createBackendServices(database, options = {}) {
 
   return {
     holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
-    personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
+    personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {

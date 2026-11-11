@@ -296,6 +296,9 @@ export const DATA_REGISTRY = Object.freeze({
     ['seq', 'household_id', 'entity', 'entity_id', 'op', 'revision', 'subject_adult_id', 'actor_adult_id', 'at']),
   household_sync_state: entry('service_operations', {},
     ['household_id', 'min_seq', 'updated_at']),
+  // Provider call audit (migration 056, ADR 0030): counts, a sha256 of the redacted payload, usage and cost; never a prompt or a response.
+  provider_calls: entry('service_operations', {},
+    ['id', 'household_id', 'purpose', 'provider', 'model', 'redaction_report_json', 'payload_sha256', 'input_tokens', 'output_tokens', 'cost_paise', 'status', 'created_at']),
   model_budget_scopes: entry('service_operations', {},
     ['scope', 'reserved_micro_usd', 'spent_micro_usd', 'updated_at']),
 

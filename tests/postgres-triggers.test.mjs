@@ -1099,6 +1099,18 @@ test('holdings and memory triggers (migrations 048-052, ADR 0032)', postgresTest
   proves('policy_holdings_erase_on_document_erasure');
 });
 
+test('provider calls name an existing household and are append-only (ADR 0030)', postgresTestOptions(), async t => {
+  const { pool, a } = await worlds(t);
+  const row = { id: 'call-1', purpose: 'chat_answer', provider: 'anthropic', model: 'claude-sonnet-5-5', redaction_report_json: '{}', status: 'ok' };
+  await rejects(insert(pool, 'provider_calls', { ...row, id: 'call-bad', household_id: 'no-such-household' }), 'provider call must name an existing household');
+  await insert(pool, 'provider_calls', { ...row, household_id: a.household });
+  await insert(pool, 'provider_calls', { ...row, id: 'call-system', household_id: null });
+  await assert.rejects(insert(pool, 'provider_calls', { ...row, id: 'call-hash', household_id: a.household, payload_sha256: 'not-a-digest' }), /violates check constraint/);
+  proves('provider_calls_scope_insert');
+  await rejects(pool.query("UPDATE provider_calls SET status = 'other' WHERE id = 'call-1'"), 'provider calls are append-only; household erasure deletes them');
+  proves('provider_calls_append_only');
+});
+
 test('catalogue reviews need an active grant, stay immutable and erase with their document', postgresTestOptions(), async t => {
   const { pool, a, b } = await worlds(t);
   const scope = 'catalogue review must match an active document, case, household and active reviewer grant';

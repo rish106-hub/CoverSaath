@@ -192,6 +192,7 @@ export class ErasureRepository {
       await this.#count(ctx, 'factEvidence', 'DELETE FROM fact_evidence WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyFacts', 'DELETE FROM policy_facts WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyProfiles', 'DELETE FROM policy_profiles WHERE household_id = ?', [householdId]);
+      await this.#count(ctx, 'providerCalls', 'DELETE FROM provider_calls WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'catalogueReviews', 'DELETE FROM catalogue_reviews WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'catalogueReviewerGrants', 'DELETE FROM catalogue_reviewer_grants WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyLinks', 'DELETE FROM policy_members WHERE policy_id IN (SELECT id FROM policies WHERE household_id = ?)', [householdId]);
