@@ -365,7 +365,7 @@ export class ConsentRepository {
       // `auditActor` (household erasure only, never reachable from a request) names who really acted when the owner
       // erases a household that holds another adult's grant; the revocation row still names the subject adult.
       await this.audit?.append({ householdId: grant.household_id, actorType: actor.type, actorId: actor.id, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reasonProvided: reason !== null && reason !== undefined } });
-      // Person records gated by this grant's data categories (health context, nominees) are erased in the same transaction (ADR 0018).
+      // Person records gated by this grant's data categories (health context, nominees) are erased in the same transaction (ADR 0026).
       if (grant.purpose === 'profile_intake') {
         const categories = (await db.many(`SELECT DISTINCT data_category FROM consent_scopes
           WHERE consent_grant_id = ? AND resource_type = 'profile_field' AND action = 'collect'`, [grantId]))

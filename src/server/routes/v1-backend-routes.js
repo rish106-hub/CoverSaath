@@ -512,7 +512,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       if (resource === 'snapshot' && req.method === 'GET') return { status: 200, body: await services.sync.snapshot(principal, householdId, query) };
       if (resource === 'sync/push' && req.method === 'POST') return { status: 200, body: await services.sync.push(principal, householdId, await readBody(req, { limitBytes: SYNC_LIMITS.pushBodyBytes })) };
     }
-    // Person records (ADR 0018): the closed capture registry and its sealed records. Same session, ownership, revision and cap rules.
+    // Person records (ADR 0026): the closed capture registry and its sealed records. Same session, ownership, revision and cap rules.
     if (req.method === 'GET' && url.pathname === '/api/v1/capture-schema') return { status: 200, body: services.personRecords.schema() };
     const recordMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/records(?:\/([^/]+)\/([^/]+))?$/);
     if (recordMatch) {

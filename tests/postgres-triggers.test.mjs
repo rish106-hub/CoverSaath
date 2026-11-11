@@ -1029,7 +1029,7 @@ test('profile answers stay scoped to their case and household; document blobs er
   proves('document_blobs_erase_on_document_erasure');
 });
 
-test('person records stay scoped to their member and household (ADR 0018)', postgresTestOptions(), async t => {
+test('person records stay scoped to their member and household (ADR 0026)', postgresTestOptions(), async t => {
   const { pool, a, b } = await worlds(t);
   const scope = 'person record must match its member and household';
   await rejects(insert(pool, 'person_records', { id: 'prec-foreign', household_id: b.household, subject_member_id: a.member }), scope);

@@ -1,4 +1,4 @@
--- Capture everything, part 1: person records and member details (ADR 0018, design capture-everything-design.md sections 3-5).
+-- Capture everything, part 1: person records and member details (ADR 0026, design capture-everything-design.md sections 3-5).
 -- Expand-only and safe to run more than once: one new table, nullable columns on household_members, no value changes.
 --   person_records  one sealed JSON document per (household, subject member, record type, slot) for the long tail nobody queries
 --                   inside: self profile, health context, nominees, emergency contacts, advisors, member notes, out-of-pocket spend.

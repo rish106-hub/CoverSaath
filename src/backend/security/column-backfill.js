@@ -67,6 +67,9 @@ export const ENCRYPTED_COLUMNS = Object.freeze([
   // ones a re-seal has to step past; noUnseal because the column CHECKs refuse plaintext.
   { since: 'S2', table: 'policy_facts', columns: ['value_enc', 'raw_text_enc'], triggers: ['policy_facts_immutable'], noUnseal: true },
   { since: 'S2', table: 'fact_evidence', columns: ['quote_enc'], triggers: ['fact_evidence_immutable'], noUnseal: true },
+  // Capture slice 1 (migration 047): sealed from the first write, so only a rotation touches them. noUnseal because the column CHECKs refuse plaintext.
+  { since: 'P1', table: 'household_members', columns: ['mobile_ciphertext', 'email_ciphertext'], triggers: [], noUnseal: true },
+  { since: 'P1', table: 'person_records', columns: ['payload_ciphertext'], triggers: [], noUnseal: true },
   { since: 'D2', table: 'service_cases', columns: ['stated_estimate_ciphertext'], fixedSize: { stated_estimate_ciphertext: 64 }, triggers: [], legacy: { column: 'stated_estimate_minor', to: 'stated_estimate_ciphertext' } },
 ]);
 

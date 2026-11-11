@@ -44,6 +44,8 @@ export const NOTICES_V1 = Object.freeze([
       { categories: ['identity', 'demographic'], data: 'Name and date of birth of each household member', use: 'To work out who is covered, and the age-based rules that apply to them.' },
       { categories: ['relationship'], data: 'How each member is related to you, and whether the member is an adult or a dependant', use: 'To match cover to the right person and to know who must give permission.' },
       { categories: ['profile_answer'], data: 'Your answers to profile questions (who is covered, city and state, renewal month, which policies you have)', use: 'To tailor the questions and checks we show you.' },
+      { categories: ['contact', 'derived_identifier'], data: 'Mobile number, email address and preferred contact channel of a household member', use: 'To reach the right person about their cover. FOR LEGAL REVIEW.' },
+      { categories: ['health_or_policy_content'], data: 'Health context, nominees, emergency contacts, advisers and notes you choose to add about a person', use: 'To keep the cover picture complete. Withdrawing permission erases them. FOR LEGAL REVIEW.' },
       { categories: ['preference'], data: 'Your settings and how far you got through set-up', use: 'To remember your choices and not ask twice.' },
     ],
     recipients: ['Our hosting and database providers, as above.'],

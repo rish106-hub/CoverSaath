@@ -1,6 +1,6 @@
 import { RECORD_TYPES } from '../../contracts/capture-registry.js';
 
-// Erasure of person records by consent category (ADR 0018). Used inside the consent revocation transaction and by the repository.
+// Erasure of person records by consent category (ADR 0026). Used inside the consent revocation transaction and by the repository.
 // It needs only the database (no encryption key), so a revocation always has an erasure path. Counts-only audit.
 const CATEGORY_TYPES = Object.freeze(Object.entries(RECORD_TYPES).reduce((map, [type, meta]) => {
   if (meta.consentCategory) (map[meta.consentCategory] ??= []).push(type);

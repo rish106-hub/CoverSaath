@@ -1,4 +1,4 @@
-// Never-collect list (capture design 3.12, ADR 0018): a government number, a payment card, a card verification code, a password or
+// Never-collect list (capture design 3.12, ADR 0026): a government number, a payment card, a card verification code, a password or
 // a one-time code must not be stored in any free-text field. The check is a deliberately blunt safety net run on typed text before
 // it is sealed; it rejects the common shapes, not every possible one. It never returns, logs or echoes the matched text.
 //

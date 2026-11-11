@@ -2,7 +2,7 @@ import { createRateLimiter } from '../../shared/http/index.js';
 import { captureSchema, parseRecordBody, parseRecordType, parseSlot } from '../../contracts/capture-registry.js';
 import { parseIfMatch } from './user-data-service.js';
 
-// Service for person records (ADR 0018): validates the registry shape on the plaintext, then hands off to the repository, which
+// Service for person records (ADR 0026): validates the registry shape on the plaintext, then hands off to the repository, which
 // proves household ownership, the subject, the guardian rule and consent again inside the write transaction. Writes are limited to
 // 60 per adult per minute in this process (the limiter is per process, like the request limiter).
 const WRITES_PER_MINUTE = 60;

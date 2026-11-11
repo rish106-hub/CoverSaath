@@ -100,8 +100,13 @@ export const DATA_REGISTRY = Object.freeze({
 
   // ---- profile_intake ----
   household_members: entry('profile_intake',
-    { identity: ['display_name'], demographic: ['date_of_birth'], relationship: ['relationship_label', 'member_kind'] },
-    ['id', 'household_id', 'adult_user_id', 'created_at', 'updated_at']),
+    { identity: ['display_name'], demographic: ['date_of_birth', 'gender', 'age_band'], relationship: ['relationship_label', 'member_kind', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id'],
+      contact: ['mobile_ciphertext', 'email_ciphertext', 'preferred_channel'], derived_identifier: ['mobile_hash'] },
+    ['id', 'household_id', 'adult_user_id', 'created_at', 'updated_at', 'revision', 'deleted_at']),
+  // Long-tail person records (ADR 0026): one sealed payload per record; the type, slot and state columns are closed enums.
+  person_records: entry('profile_intake',
+    { health_or_policy_content: ['payload_ciphertext'] },
+    ['id', 'household_id', 'subject_member_id', 'record_type', 'slot', 'schema_version', 'completeness', 'source', 'state', 'revision', 'created_at', 'updated_at', 'deleted_at']),
   profile_answers: entry('profile_intake',
     { profile_answer: ['value_ciphertext'] },
     ['id', 'household_id', 'case_id', 'adult_user_id', 'field_key', 'source', 'created_at', 'updated_at']),
