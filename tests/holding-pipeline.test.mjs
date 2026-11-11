@@ -33,8 +33,8 @@ const referenceFacts = {
 
 const count = async (app, sql, params = []) => Number((await app.database.one(sql, params)).n);
 
-async function world(t, { env = ON } = {}) {
-  fixture.pages = [page(SCHEDULE), page(['Schedule of benefits'])];
+async function world(t, { env = ON, pages = [page(SCHEDULE), page(['Schedule of benefits'])] } = {}) {
+  fixture.pages = pages;
   const app = await startApp(t, { env });
   const s = await scenario(app, { name: 'Holding' });
   const services = createBackendServices(app.database, { env: ON, referenceFacts });
@@ -160,6 +160,28 @@ test('pipeline: two sources, one disagreement -> one conflict; resolve -> user_c
   await drain();
   assert.deepEqual(await snapshot(app), before);
   assert.equal((await app.database.one('SELECT status FROM policy_holdings WHERE id = ?', [s.holdingId])).status, 'ready');
+});
+
+test('pipeline: two pages that disagree on one own-PDF value open an in-tier conflict; the holding settles conflicts, not ready; owner can resolve', opts, async t => {
+  const { app, s, services, drain } = await world(t, { pages: [page(['Sum Insured: Rs. 5,00,000/-']), page(['Sum Insured: Rs. 7,00,000/-'])] });
+  await services.holdings.startPipeline({ householdId: s.householdId, holdingId: s.holdingId });
+  const outcomes = await drain();
+  assert.ok(outcomes.every(outcome => outcome === 'succeeded'), JSON.stringify(outcomes));
+  const own = await app.database.one("SELECT * FROM household_memory_facts WHERE fact_key = 'sum_insured' AND source_tier = 'own_pdf' AND superseded_at IS NULL");
+  assert.equal(own.status, 'conflicting');
+  const conflicts = await app.database.many("SELECT * FROM memory_conflicts WHERE fact_key = 'sum_insured'");
+  assert.equal(conflicts.length, 1);
+  assert.equal(conflicts[0].reason, 'two_pages');
+  assert.equal(conflicts[0].resolution, 'pending');
+  assert.ok(conflicts[0].candidate_fact_ids.length >= 2);
+  assert.equal((await app.database.one('SELECT status FROM policy_holdings WHERE id = ?', [s.holdingId])).status, 'conflicts', 'an unresolved in-tier conflict never settles ready');
+  const listed = await app.call(`/api/v1/holdings/${s.holdingId}/conflicts`, { token: s.token });
+  assert.equal(listed.data.conflicts.find(item => item.factKey === 'sum_insured').candidates.length, 1, 'the one row that carries both readings is listed once');
+  const resolved = await app.call(`/api/v1/holdings/${s.holdingId}/conflicts/${conflicts[0].id}/resolve`, { method: 'POST', token: s.token, body: { chosenFactId: own.id, alternativeIndex: 1 } });
+  assert.equal(resolved.status, 200, JSON.stringify(resolved.data));
+  await services.holdings.startPipeline({ householdId: s.householdId, holdingId: s.holdingId });
+  await drain();
+  assert.equal(Number((await app.database.one("SELECT count(*) AS n FROM memory_conflicts WHERE fact_key = 'sum_insured' AND resolution = 'pending'")).n), 0);
 });
 
 test('routes: 401 without a session; foreign household, non-owner member and missing holding answer the same 404', opts, async t => {

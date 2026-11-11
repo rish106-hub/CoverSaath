@@ -282,9 +282,13 @@ export class HoldingPipelineRepository {
       if (pending) await this.#closeByRule(householdId, pending.id, at, counts);
       return;
     }
+    // An in-tier disagreement (two_pages, model_disagree) lives in one own-PDF row that carries the alternatives, so that row is cited twice
+    // (the column needs two ids; the owner chooses an alternative by alternativeIndex).
     const candidates = slot.conflict.reason === 'own_vs_declaration'
       ? [ids.own_pdf, declaration?.id].filter(Boolean)
-      : [ids.own_pdf, ids.ida_wording].filter(Boolean);
+      : slot.conflict.reason === 'two_pages' || slot.conflict.reason === 'model_disagree'
+        ? [ids.own_pdf, ids.own_pdf].filter(Boolean)
+        : [ids.own_pdf, ids.ida_wording].filter(Boolean);
     if (candidates.length < 2) return;
     const signature = JSON.stringify([...candidates].sort());
     if (mine.some(conflict => JSON.stringify([...conflict.candidateFactIds].sort()) === signature)) return;

@@ -138,6 +138,9 @@ export function collateSlot({ factKey, own = [], ida = [], declaration = null })
     }
   }
 
+  // Two readings inside the own-PDF tier (two pages, or deterministic vs model) disagree: record it so the holding cannot settle ready.
+  if (ownRow && !conflict && ownRow.inTierReason) conflict = { reason: ownRow.inTierReason };
+
   for (const row of [ownRow, idaRow]) if (row) assertMachineRowAuthority(row);
   return Object.freeze({ factKey, factClass: entry.factClass, valueType: entry.type, own: ownRow, ida: idaRow, conflict, refused: Object.freeze(refused) });
 }

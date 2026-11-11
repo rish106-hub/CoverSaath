@@ -316,7 +316,7 @@ export const DATA_REGISTRY = Object.freeze({
   // Analytics outbox (migration 057, ADR 0033): the event name, a keyed hash of the household and closed-vocabulary properties. No free text.
   analytics_outbox: entry('analytics',
     { derived_identifier: ['distinct_id_hash'], derived_content: ['properties_json'] },
-    ['id', 'household_id', 'event', 'created_at', 'sent_at']),
+    ['id', 'household_id', 'event', 'created_at', 'sent_at', 'lease_token', 'lease_expires_at']),
   model_budget_scopes: entry('service_operations', {},
     ['scope', 'reserved_micro_usd', 'spent_micro_usd', 'updated_at']),
 

@@ -205,7 +205,7 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
             resolution: conflict.resolution, resolvedAt: conflict.resolvedAt, resolvingFactId: conflict.resolvingFactId,
             // FOR LEGAL REVIEW: a product-term choice is the owner's statement; the insurer's wording still governs.
             checkWithInsurer: entry?.factClass === 'product_term',
-            candidates: conflict.candidateFactIds.map(id => (memory.has(id) ? sourceView(memory.get(id), quotes) : { id, current: false })),
+            candidates: [...new Set(conflict.candidateFactIds)].map(id => (memory.has(id) ? sourceView(memory.get(id), quotes) : { id, current: false })),
           };
         }),
       };

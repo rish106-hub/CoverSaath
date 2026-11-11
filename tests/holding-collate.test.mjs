@@ -78,12 +78,12 @@ test('personal value: IDA is ignored, a differing typed declaration raises own_v
   assert.equal(declared.own.status, 'conflicting');
 });
 
-test('in-tier disagreement -> own row conflicting with alternatives, no cross-tier conflict row', () => {
+test('in-tier disagreement -> own row conflicting with alternatives and an in-tier conflict (audit F4)', () => {
   const slot = collateSlot({ factKey: 'grace_period', own: [own(days(30)), own(days(15), { factId: 'pf-2', origin: 'model_proposed' })] });
   assert.equal(slot.own.status, 'conflicting');
   assert.equal(slot.own.inTierReason, 'model_disagree');
   assert.equal(slot.own.alternatives.length, 2);
-  assert.equal(slot.conflict, null);
+  assert.deepEqual(slot.conflict, { reason: 'model_disagree' });
 });
 
 test('user resolution -> user_confirmed, machine rows stay, product term keeps both values and check-with-insurer', () => {
@@ -173,4 +173,15 @@ test('idempotency key: sha256 hex of (holding, step, input sha), identifier-safe
 test('HOLDINGS_ENABLED is on only when exactly "true"', () => {
   assert.equal(holdingsEnabled({ HOLDINGS_ENABLED: 'true' }), true);
   for (const value of [undefined, '', 'TRUE', '1', 'yes', ' true']) assert.equal(holdingsEnabled({ HOLDINGS_ENABLED: value }), false);
+});
+
+test('in-tier: two own-PDF readings that differ raise one two_pages conflict (a personal value, no other tier needed)', () => {
+  const slot = collateSlot({ factKey: 'sum_insured', own: [own({ amountMinor: 50_000_000 }, { factId: 'pf-a' }), own({ amountMinor: 70_000_000 }, { factId: 'pf-b' })] });
+  assert.deepEqual(slot.conflict, { reason: 'two_pages' });
+  assert.equal(slot.own.status, 'conflicting');
+  assert.equal(slot.own.alternatives.length, 2);
+  const mixed = collateSlot({ factKey: 'sum_insured', own: [own({ amountMinor: 50_000_000 }, { factId: 'pf-a' }), own({ amountMinor: 70_000_000 }, { factId: 'pf-m', origin: 'model_proposed' })] });
+  assert.deepEqual(mixed.conflict, { reason: 'model_disagree' });
+  const same = collateSlot({ factKey: 'sum_insured', own: [own({ amountMinor: 50_000_000 }, { factId: 'pf-a' }), own({ amountMinor: 50_000_000 }, { factId: 'pf-b' })] });
+  assert.equal(same.conflict, null, 'two pages that agree are not a conflict');
 });
