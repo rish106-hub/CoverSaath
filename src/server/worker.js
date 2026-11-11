@@ -64,16 +64,36 @@ export function startAnalyticsDrain({ services, env = process.env, client = crea
   if (!services.analytics.enabled() || !client) return null;
   const everyMs = boundedInteger(env.ANALYTICS_DRAIN_MS, 15_000, 'ANALYTICS_DRAIN_MS', 1_000, 3_600_000);
   let busy = false;
-  const tick = async () => {
-    if (busy) return;
-    busy = true;
+  let stopped = false;
+  let current = null;
+  const run = async () => {
     try { const counts = await services.analytics.drain({ client }); if (counts.sent || counts.failed || counts.dropped) log({ type: 'analytics.drained', ...counts }); }
     catch (error) { log({ type: 'analytics.drain_failed', code: typeof error?.code === 'string' ? error.code : 'ANALYTICS_DRAIN_FAILED' }); }
     finally { busy = false; }
   };
+  const tick = () => {
+    if (stopped) return Promise.resolve();
+    if (busy) return current ?? Promise.resolve();
+    busy = true;
+    current = run().finally(() => { current = null; });
+    return current;
+  };
   const timer = setInterval(tick, everyMs);
   timer.unref?.();
-  return { tick, async stop() { clearInterval(timer); await client.close(); } };
+  return {
+    tick,
+    // No new tick after stop; waits for the in-flight tick (at most stopWaitMs) before closing the client.
+    async stop({ stopWaitMs = 10_000 } = {}) {
+      stopped = true;
+      clearInterval(timer);
+      if (current) {
+        let waitTimer;
+        await Promise.race([current, new Promise(resolve => { waitTimer = setTimeout(resolve, stopWaitMs); })]);
+        clearTimeout(waitTimer);
+      }
+      await client.close();
+    },
+  };
 }
 
 /** Builds and starts a worker on the database from `env`. Returns { worker, stop }. */

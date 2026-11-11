@@ -253,3 +253,45 @@ test('OCR completion: policy document gets one holding and one detect job; retry
   assert.equal((await completeOcr(on, 'doc-med', 'ocr-med', a.consent)).status, 'succeeded');
   assert.deepEqual(await counts(), { holdings: 1, jobs: 1 });
 });
+
+test('declaration PUT and due pay need current profile_intake consent (403 CONSENT_REQUIRED), keep ownership and revision checks', opts, async t => {
+  const { app, a, b, db, handle } = await world(t);
+  const path = `/api/v1/households/${a.household}/declarations`;
+  const created = await app.call(path, { method: 'POST', token: a.token, body: { memberId: a.member, kind: 'habit', label: `${MARK} original` } });
+  assert.equal(created.status, 201, created.text);
+  const row = `${path}/${created.data.id}`;
+  const premium = await app.call(`/api/v1/households/${a.household}/premiums`, { method: 'POST', token: a.token, body: { holdingId: a.holding.id, amountPaise: 50_000, paidOn: '2026-02-01' } });
+  const dues = `/api/v1/households/${a.household}/premium-dues`;
+  const due = await app.call(dues, { method: 'POST', token: a.token, body: { holdingId: a.holding.id, dueOn: '2026-04-01', amountPaise: 50_000 } });
+  assert.equal(due.status, 201, due.text);
+
+  // Revoked grant: both writes are 403 and change nothing.
+  await db.run(`UPDATE consent_grants SET revoked_at = ? WHERE id = ?`, [at, a.profileGrant]);
+  const put = await app.call(row, { method: 'PUT', token: a.token, body: { label: `${MARK} changed`, ifMatch: 1 } });
+  assert.equal(put.status, 403);
+  assert.equal(put.data.error.code, 'CONSENT_REQUIRED');
+  const pay = await app.call(`${dues}/${due.data.id}/pay`, { method: 'POST', token: a.token, body: { paymentId: premium.data.id } });
+  assert.equal(pay.status, 403);
+  assert.equal(pay.data.error.code, 'CONSENT_REQUIRED');
+  assert.equal((await db.one('SELECT state FROM premium_dues WHERE id = ?', [due.data.id])).state, 'expected');
+  assert.equal((await db.one('SELECT revision FROM member_declarations WHERE id = ?', [created.data.id])).revision, 1);
+  // A named revoked grant is refused too; a foreign household's grant id does not help.
+  assert.equal((await app.call(row, { method: 'PUT', token: a.token, body: { label: 'x', consentGrantId: a.profileGrant } })).data.error.code, 'CONSENT_REQUIRED');
+  assert.equal((await app.call(`${dues}/${due.data.id}/pay`, { method: 'POST', token: a.token, body: { paymentId: premium.data.id, consentGrantId: b.profileGrant } })).data.error.code, 'CONSENT_REQUIRED');
+
+  // No active grant to resolve (named none): the same 403.
+  assert.equal((await app.call(row, { method: 'PUT', token: a.token, body: { label: 'x' } })).status, 403);
+  assert.equal((await app.call(`${dues}/${due.data.id}/pay`, { method: 'POST', token: a.token, body: { paymentId: premium.data.id } })).status, 403);
+
+  // Consent restored by a new grant: stale revision is 409, the current one succeeds, pay succeeds.
+  await insert(handle.pool, 'consent_grants', { id: 'pi-restored', household_id: a.household, subject_adult_id: a.adult, purpose: 'profile_intake' });
+  assert.equal((await app.call(row, { method: 'PUT', token: a.token, body: { label: 'x', ifMatch: 5 } })).data.error.code, 'REVISION_CONFLICT');
+  const ok = await app.call(row, { method: 'PUT', token: a.token, body: { label: `${MARK} changed`, ifMatch: 1 } });
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.data.revision, 2);
+  assert.equal((await app.call(`${dues}/${due.data.id}/pay`, { method: 'POST', token: a.token, body: { paymentId: premium.data.id } })).status, 200);
+
+  // Another household: same 404 as a missing row, before any consent answer.
+  assert.equal((await app.call(row, { method: 'PUT', token: b.token, body: { label: 'y' } })).data.error.code, 'HOUSEHOLD_NOT_FOUND');
+  assert.equal((await app.call(`${dues}/${due.data.id}/pay`, { method: 'POST', token: b.token, body: { paymentId: premium.data.id } })).status, 404);
+});

@@ -165,9 +165,9 @@ test('declarations: label sealed, owned by its household, guardian rule on a dep
   await assert.rejects(services.declarations.create({ householdId: b.household, adultId: b.adult, memberId: a.member, kind: 'habit', label: 'x', consentGrantId: b.profileGrant }), code('MEMBER_NOT_FOUND'));
   await assert.rejects(services.declarations.update({ householdId: b.household, adultId: b.adult, declarationId: created.id, label: 'y' }), code('DECLARATION_NOT_FOUND'));
   await assert.rejects(services.declarations.delete({ householdId: b.household, adultId: b.adult, declarationId: created.id }), code('DECLARATION_NOT_FOUND'));
-  const updated = await services.declarations.update({ householdId: a.household, adultId: a.adult, declarationId: created.id, label: 'asthma', ifMatch: 1 });
+  const updated = await services.declarations.update({ householdId: a.household, adultId: a.adult, declarationId: created.id, label: 'asthma', ifMatch: 1, consentGrantId: a.profileGrant });
   assert.equal(updated.revision, 2);
-  await assert.rejects(services.declarations.update({ householdId: a.household, adultId: a.adult, declarationId: created.id, label: 'z', ifMatch: 1 }), code('REVISION_CONFLICT'));
+  await assert.rejects(services.declarations.update({ householdId: a.household, adultId: a.adult, declarationId: created.id, label: 'z', ifMatch: 1, consentGrantId: a.profileGrant }), code('REVISION_CONFLICT'));
   // A second household member (role member, not owner, not guardian) cannot touch a dependant's declaration.
   const other = { adult: 'adult-m', role: 'role-m' };
   await insert(handle.pool, 'adult_users', { id: other.adult });
@@ -204,8 +204,8 @@ test('premiums: amounts and agent sealed, band plain, agent only via agent, dues
   const due = await services.premiums.addDue({ householdId: a.household, adultId: a.adult, holdingId: holding.id, dueOn: '2026-02-15', amountPaise: 1_234_500, consentGrantId: a.profileGrant });
   assert.equal((await services.premiums.addDue({ householdId: a.household, adultId: a.adult, holdingId: holding.id, dueOn: '2026-02-15', amountPaise: 1_234_500, consentGrantId: a.profileGrant })).id, due.id);
   const bPayment = await services.premiums.recordPayment({ ...pay, householdId: b.household, adultId: b.adult, holdingId: bHolding.id, consentGrantId: b.profileGrant });
-  await assert.rejects(services.premiums.markDuePaid({ householdId: a.household, adultId: a.adult, dueId: due.id, paymentId: bPayment.id }), code('PREMIUM_NOT_FOUND'));
-  assert.equal((await services.premiums.markDuePaid({ householdId: a.household, adultId: a.adult, dueId: due.id, paymentId: payment.id })).state, 'paid');
+  await assert.rejects(services.premiums.markDuePaid({ householdId: a.household, adultId: a.adult, dueId: due.id, paymentId: bPayment.id, consentGrantId: a.profileGrant }), code('PREMIUM_NOT_FOUND'));
+  assert.equal((await services.premiums.markDuePaid({ householdId: a.household, adultId: a.adult, dueId: due.id, paymentId: payment.id, consentGrantId: a.profileGrant })).state, 'paid');
   assert.equal((await services.premiums.listDues({ householdId: a.household, adultId: a.adult, state: 'paid' })).length, 1);
   assert.equal(JSON.stringify(await db.one('SELECT * FROM premium_dues WHERE id = ?', [due.id])).includes('1234500'), false);
   await assert.rejects(handle.pool.query(`UPDATE premium_payments SET agent_name_enc = 'plain' WHERE id = $1`, [payment.id]), /violates check constraint/);

@@ -78,15 +78,17 @@ export class DeclarationRepository {
     }, { locks: [householdLock(householdId)] });
   }
 
-  async update({ householdId, adultId, declarationId, label, declaredOn = null, declaredToInsurer = null, ifMatch = null }) {
+  async update({ householdId, adultId, declarationId, label, declaredOn = null, declaredToInsurer = null, ifMatch = null, consentGrantId }) {
     str(label, 'label', 500);
     if (declaredOn !== null && !isDay(declaredOn)) invalid('declaredOn is invalid.');
     const db = this.database;
+    const at = this.clock().toISOString();
     return db.transaction(async () => {
       const role = await requirePerson(this.households, householdId, adultId, { write: true });
       const row = await db.one(`SELECT * FROM ${TABLE} WHERE id = ? AND household_id = ? FOR UPDATE`, [str(declarationId, 'declarationId'), householdId]);
       if (!row) notFound();
       await this.#member(db, { householdId, adultId, role, memberId: row.member_id, kind: row.kind });
+      await requireGrant(db, { householdId, grantId: consentGrantId, purpose: 'profile_intake', subjectAdultId: adultId, now: at });
       if (ifMatch !== null && ifMatch !== row.revision) fail('REVISION_CONFLICT', 'This was changed elsewhere. Reload and try again.', 409);
       await db.run(`UPDATE ${TABLE} SET label_enc = ?, declared_on = ?, declared_to_insurer = ?, revision = revision + 1, updated_at = ? WHERE id = ?`,
         [this.crypto.sealJson(TABLE, 'label_enc', row.id, label), declaredOn, declaredToInsurer, this.clock().toISOString(), row.id]);
