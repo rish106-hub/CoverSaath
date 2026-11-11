@@ -117,12 +117,15 @@ export class PremiumRepository {
   }
 
   /** Settles a due with a payment of the same household and holding. */
-  async markDuePaid({ householdId, adultId, dueId, paymentId }) {
+  async markDuePaid({ householdId, adultId, dueId, paymentId, consentGrantId }) {
     const db = this.database;
+    const at = this.clock().toISOString();
     return db.transaction(async () => {
       await requirePerson(this.households, householdId, adultId, { write: true });
       const due = await db.one('SELECT * FROM premium_dues WHERE id = ? AND household_id = ? FOR UPDATE', [str(dueId, 'dueId'), householdId]);
       if (!due) notFound();
+      // Current profile_intake grant of the acting adult, re-checked inside the transaction under the household lock (before commit).
+      await requireGrant(db, { householdId, grantId: consentGrantId, purpose: 'profile_intake', subjectAdultId: adultId, now: at });
       try {
         await db.run(`UPDATE premium_dues SET state = 'paid', paid_payment_id = ?, updated_at = ? WHERE id = ?`, [str(paymentId, 'paymentId'), this.clock().toISOString(), dueId]);
       } catch (error) {

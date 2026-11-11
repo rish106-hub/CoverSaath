@@ -9,7 +9,7 @@ import { readBody } from '../http/request.js';
 //
 //   GET    /api/v1/households/{id}/declarations[?memberId=]       { declarations: [...], truncated }
 //   POST   /api/v1/households/{id}/declarations                   201 declaration
-//   PUT    /api/v1/households/{id}/declarations/{did}             200 declaration (label, declaredOn, declaredToInsurer; ifMatch = revision)
+//   PUT    /api/v1/households/{id}/declarations/{did}             200 declaration (label, declaredOn, declaredToInsurer; ifMatch = revision; needs the write grant)
 //   DELETE /api/v1/households/{id}/declarations/{did}             200 { deleted: true }
 //   GET    /api/v1/households/{id}/premiums[?holdingId=]          { premiums: [...] }
 //   POST   /api/v1/households/{id}/premiums                       201 premium payment
@@ -25,7 +25,7 @@ const bad = message => Object.assign(new Error(message), { code: 'INVALID_REQUES
 const notFound = (code, message) => Object.assign(new Error(message), { code, statusCode: 404 });
 
 const DECLARATION_KEYS = ['memberId', 'kind', 'label', 'declaredOn', 'declaredToInsurer', 'holdingId', 'consentGrantId'];
-const DECLARATION_UPDATE_KEYS = ['label', 'declaredOn', 'declaredToInsurer', 'ifMatch'];
+const DECLARATION_UPDATE_KEYS = ['label', 'declaredOn', 'declaredToInsurer', 'ifMatch', 'consentGrantId'];
 const PREMIUM_KEYS = ['holdingId', 'amountPaise', 'paidOn', 'channel', 'paidVia', 'payerMemberId', 'agentName', 'agentCode', 'receiptDocumentId', 'consentGrantId'];
 const DUE_KEYS = ['holdingId', 'dueOn', 'amountPaise', 'consentGrantId'];
 
@@ -80,7 +80,8 @@ export async function handleHoldingRecordsRoute({ req, url, principal, services 
     if (method === 'PUT') {
       const body = object(await readBody(req), DECLARATION_UPDATE_KEYS);
       if (body.ifMatch !== undefined && !Number.isInteger(body.ifMatch)) throw bad('ifMatch is invalid.');
-      return { status: 200, body: await repo.update({ householdId, adultId, declarationId: rowId, ...declarationBody(body), ifMatch: body.ifMatch ?? null }) };
+      const consentGrantId = await writeGrant({ services, householdId, principal, named: body.consentGrantId });
+      return { status: 200, body: await repo.update({ householdId, adultId, declarationId: rowId, ...declarationBody(body), ifMatch: body.ifMatch ?? null, consentGrantId }) };
     }
     const body = object(await readBody(req), DECLARATION_KEYS);
     const consentGrantId = await writeGrant({ services, householdId, principal, named: body.consentGrantId });
@@ -111,8 +112,9 @@ export async function handleHoldingRecordsRoute({ req, url, principal, services 
     return { status: 200, body: { dues: await repo.listDues({ householdId, adultId, holdingId: optionalId(query.get('holdingId'), 'holdingId'), state: query.get('state') }) } };
   }
   if (pay) {
-    const body = object(await readBody(req), ['paymentId']);
-    return { status: 200, body: await repo.markDuePaid({ householdId, adultId, dueId: rowId, paymentId: requiredId(body.paymentId, 'paymentId') }) };
+    const body = object(await readBody(req), ['paymentId', 'consentGrantId']);
+    const consentGrantId = await writeGrant({ services, householdId, principal, named: body.consentGrantId });
+    return { status: 200, body: await repo.markDuePaid({ householdId, adultId, dueId: rowId, paymentId: requiredId(body.paymentId, 'paymentId'), consentGrantId }) };
   }
   const body = object(await readBody(req), DUE_KEYS);
   const consentGrantId = await writeGrant({ services, householdId, principal, named: body.consentGrantId });
