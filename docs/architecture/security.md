@@ -101,7 +101,7 @@ Status: describes controls present in the repository at the commit that added th
 - No managed secrets or KMS; keys come from environment variables.
 - Provider keys are server-side, but no live provider call has been exercised (`README.md`).
 - Process-lifetime state: the project model budget and the rate limiter reset on restart.
-- Consent expiry does not erase derived data; retention policy is an owner decision (review F3, `docs/iterations/LATEST.md`).
+- Consent expiry does not erase derived data; retention policy is an owner decision (review F3, listed in `docs/iterations/LATEST.md` open gaps).
 - `docs/evidence/` remains in git history until the owner decides to purge it (`p0-baseline-intake.md` (deleted 2026-11-11)).
 - Conflict detection reads at most 500 observations per parameter (`docs/iterations/LATEST.md`).
 - Over-redaction and known-name limits of the gate are listed in `docs/iterations/LATEST.md` under accepted risks.

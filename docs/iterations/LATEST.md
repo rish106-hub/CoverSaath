@@ -1,380 +1,52 @@
 # Latest iteration
 
-## S3 erasure, export and retention (2026-11-06, branch `patch/s3-erasure`, local, uncommitted)
+State of `origin/main` plus #108 (merged) and #109 (open), written 2026-11-11. Earlier iteration notes (blocks 1 to 5, S3 erasure, app data routes, Supabase) were replaced by this file; they remain in git history. Plan of record: `docs/exec-plans/active/complete.md`, run state `docs/exec-plans/active/complete-run-state.md`. Prototype, synthetic data only. **Not deployed**: Fly app `knowvia-api` is not running and no migration after the baseline has been applied to Supabase (runbook: [fly-deploy](../runbooks/fly-deploy.md)).
 
-Erase a case, a member or a household; export own data; retention sweep (dry run by default). No migration (deletion ledger reuses `retention_records`). Map, residue, retention placeholders and open decisions: [data-lifecycle.md](../architecture/data-lifecycle.md). Routes (all under `/api/v1`): `POST /api/v1/cases/{id}/erasure`, `POST /api/v1/households/{id}/erasure`, `POST /api/v1/households/{id}/members/{memberId}/erasure` (body `{"confirm":"<id>"}`), `GET /api/v1/households/{id}/export`, `GET /api/v1/cases/{id}/export`, `GET /api/v1/households/{id}/members/{memberId}/export`. An erasure over the case cap (5000 cases) is refused with 409 `ERASURE_TOO_LARGE` before anything changes. `npm run retention:sweep [-- --apply]`. Proof: `tests/data-erasure-proof.test.mjs`. Residue after erasure is content-free tombstones pinned by audit foreign keys and append-only tables; dropping the audit foreign keys is an open owner decision. Retention periods and export scope FOR LEGAL REVIEW. Independent review pending.
+## Merged in this run
 
-## App data routes B-A (2026-11-01, branch `feat/app-data-ba`, local, nothing pushed)
-
-New `/api/v1` routes on existing tables, no migration. Session bearer; household ownership checked in `services.app` on every call; write needs owner or member role (viewer reads only, `HOUSEHOLD_WRITE_FORBIDDEN`); a foreign household or policy is 404.
-
-| Method and path | Roles | Notes |
+| PR | What | Where |
 |---|---|---|
-| `GET /households/{id}/members` | owner, member, viewer | date of birth withheld for another adult without field consent |
-| `POST /households/{id}/members` | owner, member | `displayName`, `memberKind` (adult or dependent), `relationshipLabel?`, `dateOfBirth?`; an adult is an `invited` placeholder with no role |
-| `PATCH /households/{id}/members/{memberId}` | owner, member | name, label, date of birth |
-| `DELETE /households/{id}/members/{memberId}` | owner, member | owner and account holders: 409 `MEMBER_PROTECTED`; named by a case, fact or parameter record: 409 `MEMBER_HAS_RECORDS`; else policy links and the placeholder adult are erased |
-| `GET /households/{id}/policies` | all | policy, insurer, dates, covered members |
-| `GET /policies/{policyId}` | all | same shape |
-| `GET /households/{id}/overview` | all | household, members, policies, counts and next policy end (counts and dates only) |
-
-Display names stay sealed (ADR 0013). `SEED_ALLOW=1 npm run seed:demo-household` (refused when NODE_ENV is production) builds the synthetic Rao family on a loopback database other than `coversaath_dev`.
-
-## PostgreSQL on Supabase, consent-race fixes and Fly.io deploy files (2026-10-29, branch `feat/supabase-postgres`, local, nothing pushed)
-
-HEAD `3abaa9f`. Synthetic data only. Decisions: ADR 0004, ADR 0011 (D9 added). Runbook: [fly-deploy.md](../runbooks/fly-deploy.md).
-
-- Done: SQLite is gone from `src/`; the backend runs on async PostgreSQL (`createDatabase(pool)`, READ COMMITTED, savepoints, advisory locks). Supabase project `nxvxkcazzijctusszcjf` (Sydney), master database `coversaath` (C collation), schemas `public` (backend, 15 migrations, validated) and `knowvia_web` (website). Runtime uses the session pooler with TLS pinned to the Supabase Root 2021 CA. Tests run against local PostgreSQL 17 only.
-- Consent fixes merged: the run's coverage grant is re-checked under the household lock; source eligibility is re-checked in `recordModelObservations` (`CONSENT_SCOPE_REQUIRED`); the per-case run cap is counted inside the transaction (`ANALYSIS_CAPACITY_REACHED`, 429); `stopForRevocation` erases the whole run when its own grant is revoked, and `persistent-service.js` calls it with `source_consent_not_current`.
-- Hosting code: local-only by default; `PUBLIC_HOSTS` (exact hostnames) opts a host in; `TRUST_FLY_CLIENT_IP` keys the in-memory rate limit on `Fly-Client-IP`. Files: `Dockerfile`, `docker/`, `.dockerignore`, `fly.toml` (app `knowvia-api`, `syd`, 512 MB, scanner off).
-- S3.3 done (local, uncommitted): the 19 SQLite migrations, `tests/support/sqlite-reference.mjs`, the `local-database.md` runbook and the audit-repository synchronous branch are deleted. The catalog-parity test now freezes the PostgreSQL catalog (53 tables, 103 compared triggers) and the seed rows instead of comparing with SQLite. `.env.example`, README and `data.md` describe PostgreSQL only. `.claude/launch.json` (token, key, stale `DATABASE_PATH`) is untracked and git-ignored; its values remain in git history and should be rotated.
-- Migration 016 (ADR 0011 D10): RLS on every table, all `anon` and `authenticated` privileges revoked; `validatePostgresSchema` adds `tablesWithoutRls` and `apiRoleGrants`. Tested on local PostgreSQL only. **Not applied to Supabase**: apply with `npm run db:init` against `coversaath` after the password is rotated, then run the Supabase advisors. No SQLite-to-Supabase data copy exists; the data is synthetic, so start fresh or write a one-off script.
-- Checks on this branch: `npm run check` 1588 tests, 0 fail, 10 skipped (local PostgreSQL 17, `REQUIRE_POSTGRES=1`); `eval:safety` `failures: []`; `git diff --check` clean.
-- **Deploy is not done.** App, 1 GB volume and three secrets exist on Fly; no machine runs. Every `fly deploy` attempt got a Fly API 503, so the Dockerfile is unbuilt and health, ready and host-guard checks have not run. Retry steps are in the runbook.
-- Unverified: Dockerfile build; live health, ready and host guard; real HTTP concurrency for the run cap; the ranking change from bm25 to `ts_rank_cd`; a real-clamd upload test needs an isolated clamd.
-- Open: independent read-only review (required) of the consent-race fixes in `coverage-analysis-port.js`, the scope-stop in `persistent-service.js`, and the public-host, client-IP and rate-limit code in `src/shared/http/security.js`, `src/server/config.js`, `create-server.js`. Rotate the Supabase password (exposed in chat twice) and move the runtime to a least-privilege role. Per-process `POLICY_EVIDENCE` claim and rate limiter block scaling past one machine. Lease clock skew. A crashed job can stay "running" up to 120 s. ADR 0002 amendment for idempotency inside `createRunWithParameters`.
-- Follow-ups outside this repo: the website branch `feat/waitlist-supabase` (`787ad01`, not pushed) needs the Supabase CA as `DATABASE_SSL_CA` in Vercel and legal review of its consent wording; website PR #4 and CoverSaath PR #49 are not updated. Sydney residency is for synthetic data only: Mumbai or legal sign-off is needed before real Indian health data (ADR 0011 D8).
-
-## Full verification pass, live OCR evidence and idempotency fixes (2026-10-28, local and uncommitted)
-
-Branch `codex/block5-session-isolation`. Synthetic data for every provider call; the parse and retrieval evals use the single real-policy golden under `.local/eval/` (gitignored, not read or printed).
-
-- Verified: `npm run check` with PostgreSQL 17.11 (`REQUIRE_POSTGRES=1`) and real clamd, five full runs: 1,469 tests, 1,466 passed, 0 failed, 3 skipped (custom clamd, live Sarvam, Gemini negative control). `eval:safety` 28/28, `eval:household` pass, `eval:retrieval` recall 1.0 over 62 expected clauses, `RUN_PARSE_EVAL` pass. `npm audit` 0 (lockfile-only: `undici` 7.30.1, `zod` 4.6.7). The first run on a fresh checkout failed 75 files only because `node_modules` was empty (`npm ci`).
-- Live Sarvam: `npm run test:sarvam-live` passed (1 page, 3.2 s, about INR 0.5). A full journey through the website BFF against an isolated CoverSaath (real clamd, real Sarvam) passed: sign-in, consent, upload, scan, OCR refused without consent, OCR succeeded, other household 404, revoke and delete erased the OCR text and file (tombstone only), sign-out revoked the session, and no token or secret appeared in any response, URL or log. This is the first real OCR success on record. Gemini was not run: HTTP 402, prepayment credits depleted (two attempts), so evidence answers and the coverage preview remain unverified against a real model.
-- Changed: `POST /api/v1/consents` accepts an optional `Idempotency-Key` (same request returns the same grant; different, revoked or expired is 409 with `IDEMPOTENCY_CONFLICT`, `CONSENT_REVOKED`, `CONSENT_EXPIRED`; replays audited without content). `PolicyEvidenceService.ask` refuses a duplicate key while the first runs (`409 IDEMPOTENCY_IN_PROGRESS`) so the model is not billed twice. The claim is per process: fine for the SQLite runtime, a PostgreSQL multi-instance deployment needs a database claim. No migration, no new dependency.
-- G4 and the round-4 privacy-scan timing tests: now CPU time, best of up to three attempts, 200 ms bound unchanged plus a 2 s wall-clock backstop. Reproduced the old failure under CPU load. CPU time still reached 198 ms in a loaded full run, so this is mitigated, not immune; a planted-regression mutation check was not run.
-- Two independent read-only reviews of the website BFF and these changes: 0 P0, 0 P1; findings fixed with tests that failed first. Details, remaining open items and the website changes (`next` 16.4.3, retry guard, GET marker header) are in the website worktree's `docs/block5/security-closure.md`. The second round of fixes was not re-reviewed.
-- Still open: Gemini-dependent journeys, D1/D2/D7, holdout evaluation on other insurers, legal review, the pending Block 2 privacy-gate review.
-
-## Local-first distributed-processing migration plan (2026-10-24)
-
-Created [distributed-processing-migration.xml](../../working/distributed-processing-migration.xml), a proposed staged prompt for a local learning and reliability path. It records the current backend, API, dependency and database inventory; reconciles known stale architecture and PostgreSQL-plan counts; and lays out gates for containers, telemetry, PostgreSQL recovery, durable worker processes, parallel parsing, optional Kafka, Redis decision review, local Kubernetes and resilience drills. No application code, database, provider or infrastructure changed. No tests or live provider calls were run. This plan does not authorize cloud resource creation or deployment.
-
-## Block 5 session-isolation security verification (2026-10-22, local and uncommitted)
-
-Added an API regression to `tests/backend-api.test.mjs`: two separately bootstrapped credentials access only their own household, and revoking either session leaves the other live until its own revoke. The targeted test passed (1/1). A loopback smoke across the website BFF and an isolated temporary SQLite database also passed separate sign-in, A logout, B continuity, B logout and repeat logout; the database held three distinct token hashes including a setup session. No CoverSaath application code changed, and no provider call was made. `npm run eval:safety` passed 28/28. The full `npm run check` remains unverified as passing: it failed twice at the G4 200 ms privacy-scan bound under the full suite (1,383 passed, 75 skipped, 1 failed); the isolated G4 test passed at 94.7 ms. See the Knowvia website worktree's `docs/block5/security-closure.md` for dependency dispositions and the full Block 5 record. No commit or remote operation was made.
-
-## Block 5 real-backend smoke test and BFF remediation (2026-10-22)
-
-No CoverSaath source changed. Commit `5676a89` on `block5/frontend-audit` records the smoke findings, lists the three feature switches in `.env.example`, and sets `SARVAM_OCR_ENABLED=false`. The BFF under test lives in `Knowvia_website-block5` (see the exec-plan addendum in block5-frontend-audit.md (deleted 2026-11-11)). The isolated run used Block 4 commit `56f4fa5`, whose content is now merged into `main` through PR #45. Verified: upload, real clamd scan, consents, revocation, deletion and sign-out. OCR success, evidence answers and a real coverage preview were not run because paid providers were not called. BFF defects found by the run and two read-only reviews have regression tests; the final OCR cookie-size probe and non-retryable retry guard still need the required fresh security review before landing. Open: D1 identity, D2 topology, backend list-cases and list-grants routes, and a per-caller backend rate limit.
-
-## Block 4 household reasoning (2026-10-21, branch `block3/synthetic-acceptance`, uncommitted)
-
-Base `434de7e`. Synthetic data only. No provider call, no network, no migration, no new dependency. Status: IMPLEMENTED and AUTOMATED_TESTED; see `block4-acceptance.md` (deleted 2026-11-11) for the gate record and the final status. Not externally validated, not production ready.
-
-- New: `POST /api/v1/households/{householdId}/coverage-preview` (read-only, stateless). Server builds each Block 3 handoff from the live stored answer; the client names `caseId` and `answerId` only. Contract `household-scenario/v1` in, `household-coverage-preview/v1` out. Design and schemas: `docs/architecture/household-reasoning.md`.
-- New pure engine `src/features/household-reasoning/` (validate, normalise, coverage map, comparison, context gaps G01 to G10, question planner, next actions, output contract) and adapter `src/backend/services/household-preview-service.js`.
-- New command `npm run eval:household` (51-case golden matrix; writes `.local/eval/household-reasoning-report.json` and `-summary.md`).
-- Not done and deliberately out of scope: Insurance Data API integration, live network or cashless checks, durable multi-turn state, any frontend, real-policy validation.
-
-## Post-CodeQL engineering closeout (2026-10-21, branch `block3/synthetic-acceptance`, uncommitted)
-
-Base `main` `e5d448c` (PRs #39 to #43). Synthetic PDFs and test identities only. No provider call, no network, no deployment. Not production-validated.
-
-- WP1 CI (P0): `main` CI is red at `e5d448c`. PR #43 resolves `.local/postgres-test-migrations` with `realpathSync`, which throws ENOENT where that directory does not exist (CI: 31 failures; production would fail the same way). The loader now accepts only the repository migration directory and directories inside it (PR #40 containment kept, second root removed). Runner tests use gitignored `migrations/test-scratch/`. New loader tests: outside directory, `..`, directory link escaping the root, file link, nested directory, bad names, and a scratch set never joining the real set. Disabling the containment check fails two of them.
-- WP2 operator workflow (P0, owner chose option A): `POST /api/v1/curated-products/{id}/check|publish` removed (404). Check and publish take an Ed25519-signed action (`curated-action/v1`) verified in the repository against the key on the checker's live grant, inside the write transaction. The action carries a nonce used once, has a validity window of at most 10 minutes, and binds the facts digest and the digest of the checker's own copy (publish too). CLI adds `keygen`, `grant-role ... <publicKey>`, `show`, `sign-check`, `sign-publish`, `check`, `publish`. Migrations SQLite 019 / PostgreSQL 015 (expand-only): `source_curator_grants.public_key` (trigger: an active checker needs a key), `curated_action_nonces` (immutable, never deleted). Design: ADR 0010.
-- WP3 byte-derived text (P1): `src/features/input/pdf-text-extraction.js` (pdf-lib parsing only, no new dependency) runs in a permission-restricted child (`sandboxed-pdf-text.js`). Pages decode only through ToUnicode or standard encodings. Any unmapped glyph, unknown font or no-text page makes the document unestablished, and it is refused. Curator page text is only a candidate that must agree. Rows record `page_text_origin` and `text_extractor_version` (immutable); only derived text from the current extractor supports checks or a verified read. `verify-archives` derives the text again. The no-text human-attestation path (`uinAndVersionReviewed`) is gone. `register`, `revalidate` and `verifyPublishedArchives` are now async.
-- WP4 read-only contract (P1): `verified-product-records/v1` (`buildVerifiedProductRecords`, `assertVerifiedProductRecordsContract`, `CuratedProductRepository.productRecords`). States: verified, unverified, stale, superseded, conflicting, rejected, unknown. Values come only from `listVerified`, with exact citations. Field allowlist; no adult, household or policy-number fields. No route.
-- Independent read-only review: 0 P0, 3 P1, 3 P2, P3s. Fixed: P1 an extractor bump stranded published rows (now `revalidate` on the same bytes re-derives into a new submission; re-registering returns `SOURCE_REVALIDATION_REQUIRED`; also re-opens invalidated reviews); P1 the checker signed an operator-supplied facts digest (CLI now hashes the reviewed facts file; `canonicalCuratedFacts`); P1 invisible text / OCR layers counted as established (rendering mode 3/7 and optional content fail the page); P2 malformed content dropped text silently (now `content_malformed`); P2 ADR overstated separation of duties against database access (reworded); P2 `productRecords` dropped or mislabelled bad published rows (now read as needing revalidation); P3 undefined WinAnsi bytes, empty ToUnicode targets, per-page char limit, ENOENT path in loader errors, nested `pageTexts` in CLI output, unencrypted-key warning, self-review and publish digest refusals audited, stale comment. Open P3: off-page or background-colour text not detected; ToUnicode can still misstate text (the checker reads the source); bfrange cost near the 30 s timeout; signer-chosen validity window; any live checker may publish. Fixes not re-reviewed.
-- Checks (after fixes): `npm run check` 1246 tests, 1171 pass, 0 fail, 75 skipped. PostgreSQL 17.11 (local, `REQUIRE_POSTGRES=1`, full `npm test`): 1246 tests, 1236 pass, 0 fail, 10 skipped (real clamd and live providers only). One earlier PostgreSQL run had a load-timing failure in the unchanged `privacy-gate-r4` scan-cap test (passes alone 3 of 3; later full runs clean). `eval:safety` 0 failures. `git diff --check` clean. GitHub CI not run (nothing pushed).
-- Upgrade: existing published curated rows (curator text) and checker grants without a key stop counting as verified or acting until re-registered or regranted. Only synthetic data exists.
-- Still open, outside engineering: real insurer documents and reuse rights, real curator and checker people and an operator identity model (the operator still registers checker keys), legal review, deployment, holdout evaluation. The `main` CI break needs this branch (or an equivalent fix) merged.
-
-## Block 3 synthetic engineering acceptance (2026-10-21, branch `block3/synthetic-acceptance`, uncommitted)
-
-Base `main` `0922fa4`. No provider call, no network, no migration. Full report: block-3-acceptance.md (deleted 2026-11-11).
-
-- Fixed (each with a regression test that failed first): a published curated product whose archive bytes, archive row or page text was altered outside the application stayed verified (reads now re-check; CLI `verify-archives`); policy ids were an unkeyed hash of the policy number (now keyed HMAC); an independent grant covered documents uploaded after it (`documentsUntil`); applicability U01 (undated query answered from a lower layer), U02 (older wording answered a term the newer one dropped), U03 (policy-wide enrolment or continuity applied to any member).
-- Hardened: `assertHandoffContract` refuses a foreign catalogue version, missing arrays and a non-boolean association.
-- Added: deterministic synthetic PDF fixtures and a 30-case scenario matrix (`tests/support/synthetic-policies.mjs`, `tests/block3-synthetic-matrix.test.mjs`), real-PDF and CLI journeys (`tests/curated-source-integrity.test.mjs`), a two-document upload-to-handoff API journey (`tests/block3-multi-document-api.test.mjs`), an empty-catalogue guard (`tests/curated-sources-empty.test.mjs`).
-- Docs: `decision-catalogue.md` rewritten as the catalogue contract; new `reviewer-security.md` and `runbooks/curated-sources.md`; ADR 0009 addendum (b).
-- Checks: `npm run check` 1197 tests, 1123 pass, 0 fail, 74 skipped (64 PostgreSQL without `TEST_DATABASE_URL`, 10 live/clamd); `eval:safety` 0 failures; `git diff --check` clean. PostgreSQL 17 not run locally.
-- Independent read-only review: 1 P1, 4 P2, 7 P3. Fixed P1 (a not-yet-effective newer version collapsed a conflict to known), P2 continuity scope (waiting-period completion now needs a member-scoped continuity fact and a named member), P2 malformed stored facts, CLI exit status, docs. Open: outward clause digests unkeyed (Block 2 follow-up), per-request archive hashing cost, conservative `as_of_required`. Fixes not re-reviewed.
-- `/docs` is gitignored: ADR 0009, `decision-catalogue.md` and the research note were never committed; new docs need `git add -f`.
-- Upgrade note: policy ids change once (and with any change of `DOCUMENT_ENCRYPTION_KEY_BASE64`); existing reviews then read as `stale`.
-- Still open: all external dependencies in the acceptance file (real insurer evidence, real curator/checker, operator identity model, reuse rights, legal review, holdout evaluation, privacy assessment, deployment). CodeQL fixes are in the separate `codex/codeql-alerts-2026-10-21` worktree.
-
-## CodeQL remediation candidate (2026-10-21, `codex/codeql-final-suppressions-2026-10-21`)
-
-- Prepared fixes for all 10 CodeQL alerts open on `main`: provider smoke scripts no longer read secrets from `.env`; dynamic score maps use `Map`; migration loading is restricted to fixed production and test roots and rejects links and malformed filenames.
-- Removed `.github/workflows/codeql.yml` because GitHub default setup is already configured with the extended query suite and the remote-and-local threat model. This avoids the failing default-versus-advanced setup conflict without changing repository settings.
-- Added synthetic regression coverage for hostile `__proto__` keys and migration-file links. Independent read-only security review found no blocker; its one low reliability finding was fixed and re-reviewed.
-- Checks: `npm run check` passed with 1,083 passed, 74 expected skips and 0 failures; `npm run eval:safety` passed 28/28 with zero network calls; `git diff --check` passed. PostgreSQL integration remained skipped without `TEST_DATABASE_URL`.
-- PRs #39, #40 and #41 merged. Their branch and post-merge scans passed, but `main` still reports path-injection #40 and SQL-injection #6 because CodeQL does not recognize the fixed-root dataflow guards. The final candidate adds narrow inline suppressions at those two guarded sinks. Do not claim closure until a fresh branch scan and post-merge `main` scan both report zero open alerts.
-
-## Closeout status (2026-10-20, `main`)
-
-- Pushed to `main` with CI green (PostgreSQL 17 suite included: migration 013, parity, runner, trigger tests).
-- Done: obfuscated-email privacy fix; typed twins; Phase 3 candidate association; Phase 4 reviewer grants and review API with an independent review (fixed); Phase 5 rules; Phase 7 handoff and journeys; CodeQL script fixes (`smoke-test-gemini` no longer logs key fragments or puts the key in the URL, duplicate function removed; null-prototype score maps).
-- CodeQL workflow still fails: "advanced configurations cannot be processed when the default setup is enabled". Fix needs a repository setting (disable default setup, or delete `.github/workflows/codeql.yml`). Not changed without approval. Remaining alerts are in dev scripts, `migrate.js` (runs repo-owned SQL files) and test support; none were dismissed. Status: CODEQL_PARTIALLY_RESOLVED.
-- Phase 6: `curated-sources.js` stays empty. No official IRDAI or insurer record was independently verified (no external access used). Nothing invented.
-- Still open: fresh independent review of the final privacy gate (BLOCK2_QA_PENDING), holdout evaluation on untouched real policies, multi-insurer accuracy, legal review of consent wording, staff access model for the independent reviewer, full Block 4 engine (out of scope).
-
-## Phase 5: deterministic rule completion (2026-10-20)
-
-- Waiting-period completion needs a verified `continuous_cover` fact (`since`, `uninterrupted`, optional `creditedPriorCover`), a known waiting period and an as-of date. A policy start date, model-reported continuity, an interrupted record or a missing piece gives `unknown` with a reason (`continuity_not_evidenced`, `cover_interrupted`, `as_of_date_missing`, `waiting_period_not_established`). The contract month-counting rule is still unverified.
-- Stricter typed values: zero or negative caps, zero percent limits, zero deductibles, bps above 10000, bad restoration and bonus shapes, impossible dates and non-boolean flags never become `known` (they fall back to `unverified` with `value_malformed`).
-- Results carry `conditional` when conditions, exceptions or overrides apply (also in the handoff). Top-up layers get a coordination note; limits are still never added.
-- Tests: `tests/decision-catalogue-rules-phase5.test.mjs`. One existing test now supplies a `continuous_cover` fact instead of `policy_period/continuous_cover`.
-- Not done: network, cashless and claim-document rules were only re-run, not extended; no real-policy evidence; conflicting override evidence is surfaced through `conflict`/`conditional`, not adjudicated.
-
-## Phase 7: Block 4 handoff and journey tests (2026-10-20)
-
-- `handoff.js`: `toHandoff` / `assertHandoffContract`, contract `decision-handoff/v1`; returned by `GET .../decision-catalogue?answerId=&format=handoff`. States: known, unverified, conflicting, missing, not_permitted, not_selected, available_not_selected, dynamic_check. A value exists only when `known` (needs citations and a verified association); a model or unverified value is `candidateValue` only. Open-ended findings, dynamic checks, reviews, conflicts, completeness counts and processing version are included. No recommendation logic.
-- `tests/block3-journey.test.mjs`: the nine minimum scenarios at facts -> rules -> handoff level. `tests/catalogue-review-api.test.mjs`: one real-endpoint journey (upload, OCR, question, typed candidate, independent review, handoff, consent revocation erasing clauses and reviews).
-- Not covered: multi-document uploads through the API (scenarios 3, 6, 7 use synthetic reviewed batches, not uploaded files), real insurer documents, a Block 4 consumer beyond the contract assertions.
-
-## Phase 3: candidate document-to-policy association (2026-10-20)
-
-`association.js`: a document is a candidate member of a logical policy (`pol-` + digest) only when its own clauses print exactly one policy number; several numbers is `ambiguous`, none is `unestablished`. The number is never returned and the uploader kind is never used. Facts now sit on their candidate policy (personal and corporate separate); the catalogue returns `documentAssociations`. Association is never verified by this path: a reviewer's `attestsPolicyAssociation` (independent grant) names the fact's own policy. Not built: endorsement/version relationships beyond a shared number, member enrolment evidence, a stored association review, ADR 0007. Tests: `tests/decision-catalogue-association.test.mjs`, API assertions in `decision-catalogue-api.test.mjs`.
-
-## Phase 4: reviewer authority and review API (2026-10-20)
-
-On branch `closeout/block2-block3-codeql`, not pushed. Design and limits: [ADR 0009 part 2](../adr/0009-reviewed-facts-and-decision-catalogue.md).
-
-- Migrations SQLite 017 / PostgreSQL 013: `catalogue_reviewer_grants`, `catalogue_reviews` (immutable, scope trigger, erasure trigger). PostgreSQL side not run locally.
-- `CatalogueReviewRepository`, review logic in `decision-catalogue-service.js`, routes `POST .../decision-catalogue/reviews` and `POST /households/{id}/catalogue-reviewers`. Independent reviewers have no route (operator tooling only).
-- `tests/catalogue-review-api.test.mjs` (8 tests): forged authority ignored, household confirmer capped at `reported`, independent reviewer reaches `known` only with source and association attestation, rejection/dispute/supersession, idempotency, audit has no fact content, erasure.
-- Still open: independent read-only review of this slice, a staff access model (no production holder of the independent grant), PostgreSQL run, legal review, verified document-to-policy association beyond the reviewer attestation.
-
-## Closeout slice: obfuscated email, typed twins, CodeQL hardening (2026-10-20)
-
-Base `main` `be3b102`. No provider call, no migration.
-
-- Privacy: spelled-out emails ("name (at) host (dot) com", "[at]", "{at}") are removed from storage and model payloads (`tests/privacy-gate-obfuscated-email.test.mjs`). A probe of phones, Aadhaar, PAN, names, OTP, card, token, split cards and addresses found no other leak; this is a probe, not a fresh independent review. Block 2 security status: **BLOCK2_QA_PENDING** (fresh independent review of the final gate still required; address detection stays heuristic and fail-open for the residuals listed below).
-- Block 3: `typed-candidates.js` adds a typed twin beside a finding only when exactly one cited clause line names the subject and states one unambiguous value (room rent, ICU, copay, waiting period, sublimit, not-opted add-on). `Rs`/`INR`/`₹` is required for money; bare numbers get no twin. Twins stay `extracted_unverified` (model origin) and never become a `known` rule value. API test asserts this through the real endpoint. Status: **BLOCK3_IMPLEMENTED_QA_PENDING**.
-- CodeQL: `js/remote-property-injection` objects in `coverage-report.js` and `eval-scorer.js` now null-prototype. Not re-scanned: the separate CodeQL workflow fails with "advanced configurations cannot be processed when the default setup is enabled". Fix needs a repository setting (disable default setup, or drop `codeql.yml`); not changed without approval. 11 alerts open at start (mostly scripts and tests; `migrate.js` runs repo-owned SQL files). Status: **CODEQL_PARTIALLY_RESOLVED**.
-- Not built in this slice: authenticated reviewer role and fact storage (needs ADR 0009 schema decision), verified document-to-policy association, curated official-source data (none verified, left empty), Block 4 consumer, multi-insurer holdout evaluation, legal review.
-
-## Block 3 first slice: decision catalogue (2026-10-20)
-
-Merged to `main` (PR #37, `be3b102`) with the privacy gate fixes from `optimistic-kare-0c8f4b`. No provider call, no migration. Design: [decision-catalogue.md](../architecture/decision-catalogue.md).
-
-- `src/features/decision-catalogue/`: facts bridge, applicability, 12 typed rules, cross-policy separation, official-source validator, `decision-catalogue/v1` handoff. Derived on read from live clauses, so erasure needs no derived-store path.
-- Authority is a batch attestation (`origin`, `reviewStatus`, `verifiedPolicyIds` set by the calling channel). A candidate cannot claim its own authority. Deterministic facts are never ingested.
-- Two independent read-only reviews: 15 then 10 findings, all fixed with tests. The final fixes (round two) had no third review.
-- Checks: `npm run check` 905 tests, 852 pass, 0 fail, 53 skipped; `eval:safety` 0 failures; `git diff --check` clean.
-- Wiring (same day): `GET /api/v1/cases/{caseId}/decision-catalogue?answerId=&asOf=&memberId=` (`decision-catalogue-service.js`, `readForCatalogue` in the evidence service). Read only, no model call, no write. Same consent re-check, currency check and 404 rules as `/questions`; gated by the source-pack field (same as `/questions`, consent purpose pending legal review; owner chose to keep it). Adapter `from-answer.js`: facts are `model` origin, `user_statement` source type (the upload label is requester-set and kept only as `declaredSourceType`), policy `unresolved`, association unverified. Tests: `tests/decision-catalogue-api.test.mjs`. Wiring review: 2 high, 2 medium fixed. Typed rules stay unknown on this path (findings are open-ended `finding.*` facts); mapping findings to typed values is not built.
-- Not done: official-source curated data, reviewer role and fact storage (proposed in [ADR 0009](../adr/0009-reviewed-facts-and-decision-catalogue.md)), Block 4 consumption, findings-to-typed-values mapping. Facts now carry `sourceDigests` taken from the evidence index. (Superseded by Phase 5: the waiting-period rule no longer assumes a policy start date is continuity; see below.)
-
-## Address residuals R1-R3 and review gaps: privacy gate v9 (2026-10-20)
-
-Uncommitted on `codex/backend-first-layout`. No provider call.
-
-- Gate `knowvia-privacy-evidence-v9` (v8 plus the review-gap fixes below). R1: a capitalised place word right before a contiguous 6-digit PIN ("Sample Nagar, Testville 560001") is an address. R2/R3: `redactAddressFragments` redacts a comma-chained run of address-shaped pieces that holds a house-number start (Flat/House/Door/H.No; Plot/Shop need 3+ pieces), a landmark with a place noun (Near ... Temple), a locality/street name (Nagar, Colony, Road, Heights...) or a bare number start with 3+ pieces. A state line after a run is absorbed.
-- Decision: a standalone state or city name is kept (zone and territorial wording needs it; it does not identify a person). Not legal review.
-- Version pins edited in `privacy-gate-address-closure` and `privacy-gate-r4` tests (v7 to v9). No control weakened.
-- Independent read-only review: no blocker. v9 closes most of its gaps: an inline pass (`redactInlineLocalities`) redacts a locality name inside a sentence or on a long comma-less line (Nagar, Colony, Heights, Gali, Mohalla...; optional house number before and up to two capitalised place words after); hospital/insurer wording is judged per piece, and only a cell or line that OPENS with it (first two words, e.g. "Registered Office:") stays whole, so "Admitted at Sample Hospital, Sample Nagar, Testville" loses the locality; `;` splits runs like `,`; "Sector N, City" qualifies; Gali/Mohalla/Bazaar/Bazar added; a bare house-number line above a redacted address goes with it. Trade-off: an insurer address that does not open with public wording is now redacted (safe side).
-- v9 second pass (same gate version): lowercase/OCR-lowercase lines get a stricter rule (strong suffix or house keyword + number + comma piece; only on lines with no capital letter); Devanagari locality words (नगर, कॉलोनी, विहार, मार्ग, गली...) with optional house keyword/number; spaced PIN "Testville 560 001" (not when amount or benefit words like copay/limit/sum/premium sit in the run); comma-less "Flat 12 Example Apartments Testville"; glued suffixes (Samplepur, ...halli) count only in a 3+ piece run that also holds a digit, because bare city names (Hyderabad, Ahmedabad) must stay for zone wording.
-- Still open (fail-open, by design or unsolved): a comma-less line with no suffix word, no house keyword and no PIN ("12 Foo Bar Testville") is indistinguishable from prose; a bare city or glued-suffix locality with no digit in the run; mixed-case OCR lines with lowercase localities; Devanagari addresses without a listed locality word. Known false positive: "Basic Plan 123456" is redacted.
-- Checks: `npm run check` 881 tests, 828 pass, 0 fail; `eval:safety` 0 failures, `check:architecture`, `git diff --check` clean. The G4 timing test sits near its 200 ms limit under full-suite load (flaked once at ~500 ms from a real O(n^2) in the new inline regex, fixed with a word-start lookbehind; later runs pass).
-
-## Block 2 delta close-out: privacy v7, answer guards, retrieval tuning (2026-10-20)
-
-Uncommitted on `codex/backend-first-layout`, base `d34c44d`. No provider call, no commit.
-
-- Privacy gate `knowvia-privacy-evidence-v7`: PIN with irregular spacing or a "PIN:" label; address-shaped tails with no anchor; up to eight continuation lines; unlabelled "Flat..., City - PIN" lines and table cells; house-number forms ("Plot No 5") are not policy wording. Address-shaped text past the scan limits throws `PRIVACY_ADDRESS_UNCERTAIN` (a clause is withheld; `sanitizeEvidenceForModel` callers fail closed as for other restricted text). Tests: `tests/privacy-gate-address-closure.test.mjs`. Residual (not fixed): an unlabelled address with one comma, no dash, no house number and no PIN-adjacent digits context ("Sample Nagar, Testville 560001" alone); an unlabelled address whose locality has no PIN; non-Latin tails after an unlabelled address.
-- Answer guards: a `covers` finding is demoted to conditions when its own row states a restriction or opt-out, or another row read says the named thing is "Not Opted"; the row is cited. v1 stored answers are served as stored (`pipelineVersion` v1, `pipelineCurrent: false`). Tests: `tests/policy-evidence-answer-regression.test.mjs`.
-- Retrieval: `RETRIEVAL_TUNING` (stop words dropped, insurance synonyms, best hit of each list ahead of endorsement/schedule fill) is the default; `{}` restores the old behaviour. `npm run eval:retrieval -- --tuning '<json>'` measures a variant. Numbers in `retrieval-terms.js`. Tuned on the same 34-question set it was measured on (no untouched holdout).
-- Master policy ingestion (local DB, read-only copy): 20 of 20 pages stored, 45 clauses, 45 FTS rows, one document and version. Only boilerplate header/footer/page-number and image descriptions are dropped. The live gateway limit (64,000) reads the whole policy; 48,000 would not.
-- Checks: `npm run check` 862 tests, 809 pass, 0 fail, 53 skipped. `eval:safety` pass. `check:architecture` pass. `git diff --check` clean.
-
-## Evidence answers: effect bucketing F-B and unnamed-subject unknown F-C (2026-10-20)
-
-First-pass findings now carry a model-reported `effect` (covers, limits, excludes, conditions, informs), validated in code (unknown or missing becomes `conditions`; a `covers` quote that itself states a restriction is routed to `conditions`). Answers bucket by effect, not by the cited clause's keyword kind, so "Room Rent At Actuals" from a table labelled `exclusion` is covered. A deterministic unknown now says when a subject word from the (gated) question is named in no clause read. `INVESTIGATION_VERSION` is `v2`. Tests: `tests/policy-evidence-effect.test.mjs`; the B3 fixture in `policy-evidence-investigate.test.mjs` now supplies `effect` (strictly more accurate than kind-based bucketing). Independent read-only review done; findings resolved. Unverified: no live provider call, so real model effect labelling is unmeasured. Stored answers from `v1` have no `effect`. Subject check is noisy on the retrieved path and ignores words under 5 letters.
-
-## 2026-10-20 — Privacy finding P1 (address tail)
-
-- Privacy gate `knowvia-privacy-evidence-v6`: `<ADDRESS_n>` now absorbs the locality, "CITY-PIN", state and partially masked phone that follow it (same line and up to four continuation lines), but only when anchored by a 6-digit PIN or masked phone. Public insurer numbers (UIN, helplines, stamp references) and policy wording are kept. The change only removes text after a placeholder; it never adds raw data.
-- Evidence: `tests/privacy-gate-address-tail.test.mjs` (red first), three `eval:safety` cases (dataset `2026-10-20.1`, 26 cases), `npm run check` 753 pass, `check:architecture`, `git diff --check`.
-- Existing test edits (pins only, no control weakened): version assertion in `tests/privacy-gate-r4.test.mjs` v5 to v6; case count 23 to 26 in `tests/evals/safety-evaluator.test.mjs`.
-- Independent read-only review found one blocking item (exponential backtracking in the masked-phone pattern); fixed with a regression test.
-- Known residual (not fixed, fail-open recall gaps): tails with no PIN or masked-phone anchor, Devanagari tails, PIN with odd spacing, table-cell tails, tails over 24 words or five lines. Not legal review. No live provider call made.
-
-## Block 2 close-out: baseline audit and document boundaries D1, D1a, D1b, D2, D3 (2026-10-20)
-
-Base: HEAD `5b31739`, equal to `origin/main` `fee77db`.
-Audit: block-2-closeout-audit.md (deleted 2026-11-11). Block 2 decision: **NO-GO** for freeze; single-policy live pipeline PASS.
-
-Live findings fixed (first live question run, 2026-10-20):
-- Every source carries `verbatim`. The model reads gated text, so a quote can hold privacy placeholders (and the
-  gate can normalise the adjacent label). Such a quote cites the right clause and page but is not verbatim source text.
-- Clause-kind "absence" unknowns are no longer emitted when the whole policy was read. On the retrieved path they say
-  only that no clause with that keyword label was retrieved. Kinds are ranking hints, never evidence of absence.
-- Ops: the local DB was backed up (`.local/backups/`), moved from `.local/.local/` to `.local/knowvia.sqlite` and
-  migrated to 16 migrations (valid).
-- Live question run (Gemini live, Sarvam not called, about $1.56): 34 of 34 answered on one real policy. 56 of 62
-  expected quotes exact; 60 of 62 clause-equivalent. 0 fabricated citations in 191. Consent expiry blocks replay and
-  GET (403). 0 names in prompts. p50 38 s. Draft questions are not owner-verified. Detail: audit, section A5.
-- Open from live review: F-B, a finding bucketed by its cited clause's keyword label (the benefits table is labelled
-  `exclusion`, so "At Actuals" lands in `limited_or_excluded`). P1, the privacy gate leaves locality and PIN after
-  a masked address.
-
-Owner decisions applied (all "recommended" options):
-- D1/D1a: a question reads only the latest active version of each logical document. The version is household-wide
-  (`DocumentRepository.latestActiveVersions`), so a newer version in another case still supersedes. Authorised
-  superseded versions are reported (`superseded_version`) and never read. A bad version number or a case over
-  1,000 documents fails closed.
-- D2: with more than one current authorised document, POST must carry `documentIds` (1 to 10). Otherwise it fails
-  with 409 `POLICY_EVIDENCE_DOCUMENTS_REQUIRED`. Every named document must be active in the case (404), granted (403)
-  and current (409). The answer carries `documentAssociation {basis: requester_named, verified: false}`. Granted
-  documents that were not named are reported (`not_named`). `documentIds` is part of the idempotency digest.
-- D3: answers store `access` (grant, subject, read documents) in `answer_json`. It is never returned. Replay and GET
-  re-check the question grant (expired: `CONSENT_REQUIRED`). A row without `access` is never served.
-- D1b: a replay whose documents are no longer active or current gives 409 `POLICY_EVIDENCE_ANSWER_STALE`, with no
-  model call. GET returns `current: false`. Currency is also re-checked at commit, as consent already is.
-- Owner questions from review: a household member may read another adult's answer through the case (pre-existing).
-  An older version becomes current again if the newer one is removed. Pre-change answer rows are refused
-  (no live rows exist: the live DB lacks migration 015).
-- Not done: live question journey, retrieval recall (no golden file), DB still at `.local/.local/`. PostgreSQL has
-  no `latestActiveVersions` (SQLite runtime only).
-- Checks: `npm run check` 782 tests, 729 pass, 0 fail, 53 skipped (PostgreSQL without `TEST_DATABASE_URL`, live
-  services). `eval:safety` 23/23. `git diff --check` clean. Two independent read-only reviews: no blocker. No provider call made.
-- Commits `523ccd1` and `5b31739` (grounding, sweep, budgets, completeness, discoverability) are on `main`.
-
-## Evidence-first review fixes (2026-10-20)
-
-Uncommitted on `codex/backend-first-layout`.
-
-- Claim grounding: finding conditions, exceptions, value and appliesTo must be verbatim in a cited clause or are dropped and counted.
-- Independent sweep: `selectSweepContext` runs fresh FTS searches from the findings and adds unseen clauses to the sweep call (retrieved path only).
-- Document limit (10) now applies after consent filtering.
-- Several documents in one answer add an unknown: document-to-policy association is still unestablished (ADR 0007 blocked by U2). Wire clauses carry `document_id`.
-- `npm run eval:retrieval` and `evaluateRecall` measure retrieval recall from `.local/eval/retrieval-golden.json` (owner-written, not yet created). No numbers exist.
-- `/docs` is gitignored: ADR 0008 and direction-change.md need `git add -f` to be committed.
-- Unverified: live Sarvam -> Gemini -> question journey; recall on real policies; semantic/hybrid comparison.
-
-## Direction change: Phase A S0/S1/S2/S7 and Phase B B0/B1 start (2026-10-20)
-
-Plan: direction-change.md (deleted 2026-11-11). ADR: [0008](../adr/0008-evidence-first-reasoning.md) (Proposed).
-Uncommitted on `codex/backend-first-layout`.
-
-- S0: `correct_unknown` outcome for golden "unknown"; a single duration inside a clause matches.
-- S1: gate v5. Identifier-labelled or non-network-shaped lone digit runs are minimised; card-labelled and real
-  network-shaped runs are still rejected. Existing gate tests unchanged except the version string.
-- S2: exactly one target per item; valid registry key wins over a filled proposal; forbidden key never accepted.
-  Extractor version v4.
-- S7: relative DB path resolves against cwd (no more `.local/.local/`); legacy copy raises `DATABASE_LEGACY_PATH`.
-  Upload metadata field renamed `pageObjectCount` (inspector over-count).
-- B0: ADR 0008, `src/contracts/policy-evidence.js`. Question consent uses `derive` + `insurance_question`
-  (no `answer` action: CHECK rebuild blocked by U2). Wording needs legal review.
-- B1: clause builder, `policy_clauses` + `policy_answers` (SQLite 015, PostgreSQL 012), `ClauseRepository`, erasure on
-  consent revocation (including question-only grants), document erasure and a DB safety-net trigger.
-- B2: FTS5 `policy_clauses_fts` (SQLite 016, trigger-maintained; parity test ignores it; PostgreSQL tsvector deferred).
-- B3: `investigate.js` (checklist, whole-policy or FTS context, privacy gate per clause, mandatory override sweep, code-assembled answer).
-  Two new model tasks registered in the AI authority matrix.
-- B4: `POST/GET /api/v1/cases/:caseId/questions`, `POLICY_EVIDENCE_ENABLED` (default off), idempotent, 404 across households.
-- Not done: B5 recall eval (needs owner-written golden questions and approval for paid calls); S1 eval:safety cases;
-  S3-S6, S8 (deferred by owner); independent read-only review of S1, B3, B4 (required by AGENTS.md).
-- Checks: with a local PostgreSQL 17 (`TEST_DATABASE_URL`) `npm run check` 734 tests, 724 pass, 0 fail, 10 skipped (live services);
-  without it 681 pass, 52 skipped. `eval:safety` pass, `check:architecture` pass, `git diff --check` clean.
-- No live Gemini or Sarvam call was made. Retrieval recall, cost per question and accuracy are unmeasured.
-- Action for owner: live DB sits at `.local/.local/knowvia.sqlite`; the server will refuse to start until moved (runbook).
-
-## Policy structuring hardening S1 to S5 (2026-10-20)
-
-Active plan: policy-structuring-hardening.xml (deleted 2026-11-11). Decisions:
-ADR 0006 addendum (2026-10-20). Uncommitted on `codex/backend-first-layout`; no commit, push, PR or deployment.
-
-### Done
-
-- S1 typed accuracy evaluator: no substring matching; typed comparison through the validator normalisers.
-- S2 run-scoped proposals with provenance (`structuringRunId`, `pipelineVersion`, `registryVersion`, `sourceVersion`).
-- S3 processing status separated from evidence outcome (`complete`, `partial_review_required`, `failed`); failed
-  outcomes are never committed; provisional thresholds 1 and 0.5, unmeasured. The result no longer says `completed`.
-- S4 durable job state: SQLite 013 / PostgreSQL 010 `policy_structuring_jobs`; restart marks running attempts
-  `interrupted`; a new paid attempt needs `restart: true`.
-- S5 explicit blocks upgrade for knowvia.ocr.v1 documents: SQLite 014 / PostgreSQL 011, narrowed blocks
-  immutability trigger, `mode: blocks_upgrade` with `acknowledgeProviderCharge: true`, per-page text hash check
-  (`OCR_UPGRADE_TEXT_CHANGED` fails closed). OCR jobs now record the output contract they stored (v2 with blocks).
-
-### Blocked
-
-- S6 document-to-policy association (ADR 0007) is blocked by U2: the SQLite runner cannot rebuild
-  `coverage_parameter_records` inside its per-file transaction with foreign keys on (probe: plain rebuild
-  `FOREIGN KEY constraint failed`; deferred rebuild fails on trigger references). Re-plan before Block 3.
-
-### Evidence
-
-- `npm run check` with a local PostgreSQL 17 (`TEST_DATABASE_URL`): pass. 697 tests, 687 pass, 10 skips (live
-  services), 0 fail. Catalog parity, PostgreSQL trigger behaviour and runner tests included.
-- `npm run eval:safety`: pass, `failures: []`. `npm run check:architecture`: pass, 132 files. `git diff --check`: clean.
-- Forward migration 012 to 014 on a populated synthetic SQLite database: page ids kept, schema valid, 0 FK errors.
-- Not verified: live Sarvam or Gemini calls (none made), real golden-file accuracy under the typed evaluator,
-  whether Sarvam reproduces page text on a re-run.
-
-Production readiness remains **FAIL**.
-
-## Backend-first repository layout (2026-10-20)
-
-Completed plan: backend-first-layout.md (deleted 2026-11-11).
-
-### State
-
-- Branch: `codex/backend-first-layout`, based on `9cad7d0`.
-- No commit, push, merge or deployment was performed.
-- The active application is backend-only. `src/ui/`, `index.html`, Vite configuration and UI-only tests were removed.
-- `npm run dev` now starts only `src/server/server.js` on `127.0.0.1:8787`.
-- `npm run build` validates the backend entry point. It produces no browser bundle.
-- Business capabilities moved from `src/modules/` to `src/features/`.
-- Document intake moved to `src/features/input/`.
-- Source filenames remain lowercase kebab-case. Architectural categories remain in directory names.
-
-### Repository cleanup
-
-- Removed tracked design prototypes, generated Figma tooling, marketing images, communication drafts and historical research from the active tree.
-- Removed the obsolete landing-design execution plan.
-- Kept product source material in `working/` and `building/`.
-- Moved the two still-referenced product answer documents from `docs/strategy/` into `working/`.
-- Kept ADRs, architecture docs, runbooks, migrations, contracts, tests and active backend plans.
-- Moved untracked design exports and the Figma zip to `/Users/rishavdewan/Developer/Product experiments/CoverSaath-archive-2026-10-20/`.
-- Removed generated `dist/`.
-- Did not touch `.local/`, `.claude/worktrees/`, environment files, `node_modules/` or Git history.
-
-### Behaviour boundary
-
-No API, database, consent, authorization, model authority, provider, retry or erasure behaviour changed. Legacy `knowvia` identifiers remain until a compatibility plan covers stored data and callers.
-
-### Evidence
-
-- Pre-change `npm run check`: pass. 685 tests, 634 pass, 51 PostgreSQL or live-service skips, 0 fail. Vite build passed.
-- Pre-change `npm run eval:safety`: pass, 23 of 23 offline cases, 0 network calls.
-- Post-change `npm test` with loopback permission: pass. 666 tests, 615 pass, 51 skips, 0 fail. The 19 removed tests covered only the deleted UI.
-- Post-change `npm run check:architecture`: pass for 131 source files.
-- Post-change `npm run build`: pass. Backend entry-point syntax validated.
-- The first sandboxed post-change test run failed only with `listen EPERM` on loopback sockets. The same suite passed with loopback permission.
-
-### Production state
-
-Production readiness remains **FAIL**.
-
-Open work includes:
-
-- PostgreSQL runtime migration and recovery proof.
-- Production identity and secret management.
-- Deployment target, observability, backup and restore rehearsal.
-- Live provider validation, OCR accuracy evidence and cost checks.
-- Retention policy and legal review of consent wording.
-- A future UI, only after backend contracts and production boundaries are accepted.
-- Block 3 close-out: handoff/adversarial tests added (`tests/decision-catalogue-handoff.test.mjs`), CodeQL baseline recorded in `docs/architecture/decision-catalogue.md` (11 pre-existing alerts, none in Block 3). Reviewer role/storage and Block 4 consumption remain unbuilt, pending an ADR.
-
-## Curated insurer products and reviewer view audit (2026-10-20)
-
-- Research: [docs/research/2026-10-20-source-data-catalogue-reviewer-access.md](../research/2026-10-20-source-data-catalogue-reviewer-access.md). Most circular details there are secondary-sourced and need a read of the IRDAI primaries.
-- Built: `src/features/decision-catalogue/curated-products.js`. Strict record (UIN, wording version, https URL, SHA-256, retrieval and check dates, page and quote per fact, curator and a different checker). Loads fail closed. `compareToCurated` compares a household's own facts with the curated terms for the one UIN its document prints; output is `curatedComparison` (informs only, never changes a fact or rule result). Tests: `tests/curated-products.test.mjs`.
-- Superseded by the next section: curated records now also live in a checked-and-published workflow table (migration 018). The static list in `curated-sources.js` stays empty and its records can never be `verified`.
-- `CURATED_PRODUCT_RECORDS` is still empty. Nothing was seeded: that needs a person to read each insurer's wording and a second to check it, plus a terms-of-use check per insurer.
-- Independent-reviewer reads now write a `catalogue_reviewer.viewed` audit event before serving (no case content). If the audit write fails the read fails.
-- Not done: redacted evidence packet for reviewers, staff access model, legal review of the reviewer purpose, change-detection fetcher.
-
-## Trusted insurer sources and bounded reviewer access (2026-10-21, uncommitted, pending independent review)
-
-- Verification is no longer derived from record fields. `validateCuratedProduct` always returns `verified: false`. A product is `verified` only when `CuratedProductRepository.listVerified()` reads it from a **published** submission: collected -> candidate -> checked -> published, each a separate state (SQLite 018, PostgreSQL 014, expand-only).
-- Evidence: `source-verification.js` (pure, no network). SHA-256 of the exact bytes, one printed UIN that equals the record's, wording version printed, every quote on its stated page. Page text is curator-asserted, so the checker must also supply the SHA-256 of their own copy and state they read each quotation. Without page text nothing is machine-checked and the record says so.
-- Authority: roles `curator` and `checker` live in `source_curator_grants` (operator tooling only, no route, at most 90 days, re-read on every request). The checker must differ from the collector (DB CHECK plus service check), so one human holding both roles is still refused. Routes: `GET /api/v1/curated-products/{id}`, `POST .../check`, `POST .../publish`; identity is the session, never a body field. Bytes are never returned.
-- Maintenance: `revalidate` takes bytes a person downloaded (no fetcher exists, so no SSRF path). Same digest records the check. A different digest moves the old wording to `needs_revalidation` (it stops informing at once), opens a new collected submission, and needs a new proposal, a different checker and publication. Rows and archived bytes are never deleted (triggers).
-- Reviewer grants: `catalogue_reviewer_grants` gained `expires_at` and `case_id`. An independent grant needs a case of that household and at most 30 days; expiry, revocation and case are re-checked on every read and write and inside the write transaction; an expired or revoked reviewer's past reviews count for nothing. A legacy independent grant with no expiry or case is inactive.
-- Tests: `tests/curated-product-workflow.test.mjs` (13), additions to `catalogue-review-api.test.mjs` (3), PostgreSQL trigger test. Synthetic data only.
-- Independent review (2026-10-21) found 1 P0 and 4 P1; fixed: digest withheld from reads, approval bound to the facts read (`factsSha256`), UIN/version attestation when no page text, PDF magic check, role re-checked inside the write transaction, state-transition and wider immutability triggers, reason/decision pairing, mismatch attempt audited after rollback, only the collector can open a changed-source submission. Also closed: a regranted independent reviewer no longer revives earlier reviews (`granted_at`); database triggers refuse an active independent grant without expiry and household case; optional `CURATED_SOURCE_HOSTS` allowlist; operator CLI `scripts/curated-source.mjs` (grant/revoke role, register, propose, revalidate; local files only, no network). Open by decision: a published product stays verified after its checker's grant ends (publication is a signed historic act; withdraw by revalidating).
-- Not done: nobody holds a role; no curated record exists; register/revalidate are CLI-only, no route; page text is not extracted from the PDF by the server; secure archive is a DB table, not encrypted storage; legal review of the reviewer purpose; the IRDAI primaries are unread; real insurer terms-of-use checks.
-- Rollback: stop using the routes and `curatedProducts`; tables are additive and can stay empty. Dropping them needs a new migration.
+| #97 | IDA reference fetch and insurer detection for a holding | `src/backend/services/holding-product-service.js`, [ida-sync runbook](../runbooks/ida-sync.md) |
+| #98 | Model gateway: provider routing, Anthropic adapter, redaction gate, `provider_calls` (056) | ADR 0030, `src/features/ai-analysis/` |
+| #99 | Collate, conflicts and pipeline orchestration | `src/backend/services/holding-pipeline.js` |
+| #96, #104 | Holdings, memory facts, conflicts, declarations, premium payments and dues (048-052) and their routes; a holding is created when OCR completes | ADR 0032, `src/server/routes/holding*-routes.js` |
+| #102 | `memory_chunks` with pgvector, Voyage embeddings through the gateway, chat v1 threads, SSE turns and traces (053-054), procedure planning | ADR 0029, ADR 0031, [chat-and-memory runbook](../runbooks/chat-and-memory.md) |
+| #105 | `network_hospitals` (055), sync job, `GET /api/v1/holdings/{id}/hospitals?pincode=` | [ida-sync runbook](../runbooks/ida-sync.md) |
+| #106 | Consent-gated `analytics_outbox` (057) and PostHog drain in the worker | ADR 0033 |
+| #108 | CI verify job uses a pinned pgvector PostgreSQL 17 image (merged) | [ci-gates](../runbooks/ci-gates.md) |
+| #109 | Gitleaks allowlist for the secret-scan false positive (open, base main) | `.gitleaks.toml` |
+
+Earlier in the same run (already on main): sessions and JWT (045, ADR 0027), sync change log (046, ADR 0028), person records (047, ADR 0026). Migrations now run 001 to 057; the schema is in [data.md](../architecture/data.md).
+
+## Feature flags
+
+Every flag is off unless the value is exactly `true`.
+
+| Flag | Gates |
+|---|---|
+| `HOLDINGS_ENABLED` | Holdings, declarations, premiums, dues, hospitals routes and the holdings worker jobs (parse, fetch reference, collate, detect insurer, `reference.import`) |
+| `MEMORY_ENABLED` | Memory writes and retrieval, chat v1 threads and turns |
+| `CHAT_MODEL_ENABLED` | The model wording step of a chat turn; without it chat answers from code and stored facts only |
+| `ANALYTICS_ENABLED` | Analytics enqueue and drain; also needs `ANALYTICS_DISTINCT_ID_SALT`, `POSTHOG_API_KEY`, `POSTHOG_HOST` and an active analytics consent grant |
+| `VOICE_AUDIO_RETAIN` | Keeps a voice note's audio document (ADR 0029); the transcript is stored either way, sealed |
+
+Related and pre-existing: `REFERENCE_DATA_ENABLED` (reference import), `SARVAM_OCR_ENABLED`, `POLICY_EVIDENCE_ENABLED`, `POLICY_STRUCTURING_ENABLED`, `POLICY_FACTS_ENABLED`, `CHAT_ENABLED` (chat v0).
+
+## Open gaps
+
+- Chat procedure planning (`planProcedure`) is not wired to `network_hospitals`: a procedure answer does not list hospitals.
+- Analytics events `voice_turn` and `hospital_search` are in the allowlist (`src/contracts/analytics-events.js`) but no code emits them.
+- Analytics consent: no consent UI exists and the consent and notice wording is a draft. **FOR LEGAL REVIEW.**
+- CI `secret-scan` false positive: allowlist fix is #109, open, awaiting owner merge.
+- Retention for expired (not revoked) consent is an open owner decision (review F3): expiry blocks new use but does not erase derived data.
+- Voice transcript storage, cross-border model calls (Anthropic, Voyage) and all consent, privacy and notice wording are drafts. **FOR LEGAL REVIEW.**
+- Not verified against live providers or a hosted database: tests use local stubs and a local PostgreSQL 17 with pgvector.
+- Migrations 048-057 are applied nowhere hosted; applying them to Supabase needs owner approval.
+- Per-process limits still hold (rate limit, model budget): one Fly machine only.
+- Not reviewed: docs and code of this run were built without independent review agents (owner standing order).
+
+## Resume
+
+1. `AI.md`, `AGENTS.md`, this file, then `docs/exec-plans/active/complete-run-state.md`.
+2. Wave D remaining work: deploy (explicit owner "deploy now" per environment), secret sweep.
+3. Checks before claiming done: `npm run check`, `npm run eval:safety`, `git diff --check`, `gitleaks git .`.

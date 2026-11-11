@@ -1,6 +1,6 @@
 # ADR 0029: Voice transcripts are stored, sealed and erasable (migration 054)
 
-Status: accepted for the prototype (synthetic data only). Consent, privacy and notice wording here is a draft that is not final and needs legal review before any real user data. Plan: `docs/exec-plans/active/complete.md` section 3.1 (054). Overrides the recommendation of `docs/exec-plans/active/app-data-plan.md` D4 (do not store transcripts): the owner has chosen to store them.
+Status: accepted for the prototype (synthetic data only). Consent, privacy and notice wording here is a draft that is not final and needs legal review before any real user data. Plan: `docs/exec-plans/active/complete.md` section 3.1 (054). Overrides the earlier app data plan recommendation (do not store transcripts; plan deleted, absorbed into data.md): the owner has chosen to store them.
 
 ## Context
 

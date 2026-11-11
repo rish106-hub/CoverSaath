@@ -128,4 +128,4 @@ User-facing status: `received_pending_checks` (quarantined, pending), `accepted`
 | Identity provider | Open. Phase 2. |
 | Separate queue | Rejected unless measured. |
 | Deployed `DOCUMENT_SCAN_MODE` value | Anything other than `disabled` or `clamd` is a startup error. Check it before deploying (Azure staging runbook, Step 1). |
-| Retention for expired (not revoked) consent | Open. Owner decision F3 in `docs/iterations/LATEST.md`. |
+| Retention for expired (not revoked) consent | Open. Owner decision F3, listed in `docs/iterations/LATEST.md` open gaps. |

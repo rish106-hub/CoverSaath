@@ -1,6 +1,6 @@
 # ADR 0015: User-data store (permissions, places, preferences, onboarding, scenarios, contact lookup)
 
-Status: accepted for the prototype (synthetic data only). Permission and location wording, retention and the 24 hour location expiry are drafts for legal review. Spec: `docs/exec-plans/active/user-data-store-spec.md`.
+Status: accepted for the prototype (synthetic data only). Permission and location wording, retention and the 24 hour location expiry are drafts for legal review. The spec was absorbed into this ADR and [data.md](../architecture/data.md) and deleted.
 
 ## Context
 
