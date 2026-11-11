@@ -5,7 +5,8 @@ import { createApiServer } from '../src/server/server.js';
 import { captureSchema, RECORD_TYPES } from '../src/contracts/capture-registry.js';
 import { containsSensitiveIdentifier } from '../src/contracts/sensitive-identifiers.js';
 
-// Person records and member details (ADR 0018, migration 032): sealed at rest, owned, guardian- and consent-gated, revisioned, capped,
+// Erasure path: erasePersonRecordsForCategories (src/backend/repositories/person-record-erasure.js), exercised by the consent revocation test below.
+// Person records and member details (ADR 0026, migration 047): sealed at rest, owned, guardian- and consent-gated, revisioned, capped,
 // erased. Synthetic data only. Needs PostgreSQL (TEST_DATABASE_URL); REQUIRE_POSTGRES=1 makes a missing server an error.
 
 const bootstrapToken = 'coversaath-test-bootstrap-token-0018';

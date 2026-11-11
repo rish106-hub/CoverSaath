@@ -25,7 +25,7 @@ export class HouseholdAppRepository {
   #policy(row) { return this.crypto.openRow('policies', row, ['policy_number_masked', 'policy_version', 'starts_on', 'ends_on']); }
   #adult(row) { return this.crypto.openRow('adult_users', row, ['display_name', 'contact_email', 'contact_phone']); }
 
-  // Detail columns for a member row (ADR 0018). The mobile is sealed (AAD household_members.mobile_ciphertext.<id>) and keyed-hashed for
+  // Detail columns for a member row (ADR 0026). The mobile is sealed (AAD household_members.mobile_ciphertext.<id>) and keyed-hashed for
   // per-household uniqueness; plain columns are the closed enums, the bool and the member links. Returns column -> value.
   async #detailColumns(db, householdId, memberId, details, { exceptMemberId = null } = {}) {
     const columns = {};
@@ -166,7 +166,7 @@ export class HouseholdAppRepository {
         const links = await db.many('DELETE FROM policy_members WHERE household_member_id = ? RETURNING policy_id', [memberId]);
         // The member's addresses and saved places go with the member (ADR 0015); they are erased, not a reason to refuse.
         const places = await db.run('DELETE FROM household_places WHERE member_id = ? AND household_id = ?', [memberId, householdId]);
-        // Person records about the member (health context, nominees, notes) go with the member (ADR 0018).
+        // Person records about the member (health context, nominees, notes) go with the member (ADR 0026).
         const personRecords = await db.run('DELETE FROM person_records WHERE subject_member_id = ? AND household_id = ?', [memberId, householdId]);
         await db.run('DELETE FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
         if (placeholderAdultId) await db.run('DELETE FROM adult_users WHERE id = ?', [placeholderAdultId]);

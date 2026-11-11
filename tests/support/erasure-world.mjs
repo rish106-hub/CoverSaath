@@ -1,3 +1,4 @@
+import { parseRecordBody } from '../../src/contracts/capture-registry.js';
 // Kitchen-sink synthetic household for the erasure proof (S3). Every household-scoped store gets at least one row, and every
 // content column that can hold text carries a canary string, so "nothing is left" can be proven by SQL. Synthetic data only.
 import { createHash } from 'node:crypto';
@@ -106,6 +107,10 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await userData.setOnboarding({ householdId: ids.household, adultId: ids.adult, state: { step: canary('onboarding') }, completed: true, ifMatch: null });
   await userData.setScenario({ householdId: ids.household, adultId: ids.adult, tool: 'tax', inputs: { v: canary('scenario') }, ifMatch: null });
   await userData.setPlace({ householdId: ids.household, adultId: ids.adult, memberId: ids.dependent, place: { kind: 'registered_address', slot: null, label: canary('place-label'), source: 'user_typed', precision: 'exact', payload: { line: canary('address') } }, ifMatch: null }).catch(error => { throw new Error(`setPlace: ${error.code ?? error.message}`); });
+
+  // A sealed person record about the dependent (ADR 0026); the household sweep and member erasure must reach it.
+  await services.personRecordRepository.set({ householdId: ids.household, adultId: ids.adult, type: 'member_note', slot: 'main', memberId: ids.dependent,
+    parsed: parseRecordBody('member_note', { data: { note: canary('person-record') } }) });
 
   // Queued worker job (identifiers only, no document or grant): only the household sweep reaches it.
   await q(`INSERT INTO job_queue (id, kind, household_id, payload_json) VALUES ($1, 'ocr.page', $2, '{}')`, [`job-${key}`, ids.household]);

@@ -1,4 +1,4 @@
-// Capture registry (ADR 0018, design docs/exec-plans/active/capture-everything-design.md sections 3-5): the closed list of person record
+// Capture registry (ADR 0026, design docs/exec-plans/active/capture-everything-design.md sections 3-5): the closed list of person record
 // types, with a descriptor for every field. One source of truth: the validator below, `completeness`, and GET /api/v1/capture-schema
 // all read the same descriptors, so a form built from the schema cannot drift from what the server accepts.
 //

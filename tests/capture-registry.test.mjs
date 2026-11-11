@@ -5,7 +5,7 @@ import {
 } from '../src/contracts/capture-registry.js';
 import { containsSensitiveIdentifier } from '../src/contracts/sensitive-identifiers.js';
 
-// Pure contract checks for the capture registry and the never-collect detector (ADR 0018). No database, synthetic values only.
+// Pure contract checks for the capture registry and the never-collect detector (ADR 0026). No database, synthetic values only.
 
 const NOW = new Date('2026-11-03T00:00:00.000Z');
 

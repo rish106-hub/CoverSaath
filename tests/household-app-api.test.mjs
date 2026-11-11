@@ -43,7 +43,7 @@ test('members: add, list, patch; owner flagged; names sealed at rest', opts, asy
   const kid = await add(app, owner, { displayName: 'Kabir Synthetic', relationshipLabel: 'Son', ageBand: '6-12', memberKind: 'dependent' });
   assert.equal(kid.status, 201, JSON.stringify(kid.data));
   assert.equal(kid.data.displayName, 'Kabir Synthetic');
-  // A member under 18 keeps an age band, never a date of birth (ADR 0018, owner decision D5).
+  // A member under 18 keeps an age band, never a date of birth (ADR 0026, owner decision D5).
   assert.equal(kid.data.ageBand, '6-12');
   assert.equal(kid.data.dateOfBirth, null);
   assert.equal(kid.data.ageYears, null);

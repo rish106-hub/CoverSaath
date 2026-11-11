@@ -67,7 +67,7 @@ test('erasure routes: confirmation, ownership, role and cross-household denial',
 test('member erasure over HTTP and the old delete route keep working', opts, async t => {
   const app = await startApp(t);
   const a = await household(app, { name: 'Alpha', documents: 1 });
-  const kid = await app.call(`/api/v1/households/${a.householdId}/members`, { method: 'POST', token: a.token, body: { displayName: 'Kid Synthetic', memberKind: 'dependent', dateOfBirth: '2018-01-01' } });
+  const kid = await app.call(`/api/v1/households/${a.householdId}/members`, { method: 'POST', token: a.token, body: { displayName: 'Kid Synthetic', memberKind: 'dependent', ageBand: '6-12' } });
   assert.equal(kid.status, 201);
   const owner = await erase(app, `/api/v1/households/${a.householdId}/members/${a.memberId}/erasure`, a.token, a.memberId);
   assert.equal(owner.status, 409);

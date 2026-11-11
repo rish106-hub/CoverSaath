@@ -3,7 +3,7 @@ import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { RECORD_TYPES, RECORD_TYPE_NAMES } from '../../contracts/capture-registry.js';
 
-// Person records (ADR 0018): the sealed store for health context, nominees, emergency contacts, advisors, member notes, self profile
+// Person records (ADR 0026): the sealed store for health context, nominees, emergency contacts, advisors, member notes, self profile
 // and out-of-pocket spend. The typed payload is sealed (ADR 0013) with AAD person_records.payload_ciphertext.<row id> and opened only
 // here; plain columns are ids, the closed enums, completeness, schema version, timestamps and the revision. Authorisation is proved
 // inside each transaction under the household advisory lock: household access, the subject member's household, the real-adult rule,
