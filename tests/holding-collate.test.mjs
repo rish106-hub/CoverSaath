@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { collateSlot, resolveSlot, assertMachineRowAuthority } from '../src/features/insurance-rules/collate.js';
 import { nextHoldingStatus, holdingStatusTable } from '../src/features/insurance-rules/holding-status.js';
 import { equalityKey, sameFactValue } from '../src/features/policy-facts/fact-equality.js';
-import { HOLDING_STATUSES, holdingsEnabled } from '../src/contracts/holdings.js';
+import { HOLDING_STATUSES } from '../src/contracts/holdings.js';
+import { holdingsEnabled } from '../src/backend/services/holdings-flag.js';
 import { holdingJobDedupeKey, holdingInputSha } from '../src/backend/services/holding-pipeline.js';
 
 // Pure collate, status machine, equality and idempotency key (complete.md 3.2, 9.4; ADR 0023 D3). Synthetic values only.

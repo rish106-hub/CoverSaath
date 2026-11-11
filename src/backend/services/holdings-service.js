@@ -1,4 +1,5 @@
-import { HOLDING_JOB_KINDS, HOLDING_JOB_MAX_ATTEMPTS, HOLDING_JOB_STEPS, holdingsEnabled } from '../../contracts/holdings.js';
+import { HOLDING_JOB_KINDS, HOLDING_JOB_MAX_ATTEMPTS, HOLDING_JOB_STEPS } from '../../contracts/holdings.js';
+import { holdingsEnabled } from './holdings-flag.js';
 import { POLICY_FACT_KEY_NAMES, getPolicyFactKey } from '../../contracts/policy-facts.js';
 import { collateSlot, resolveSlot } from '../../features/insurance-rules/collate.js';
 import { nextHoldingStatus } from '../../features/insurance-rules/holding-status.js';

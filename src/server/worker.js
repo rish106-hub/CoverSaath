@@ -9,7 +9,7 @@ import { POLICY_FACTS_JOB_KIND } from '../backend/services/policy-facts-service.
 import { policyFactsEnabled } from '../backend/services/policy-profile-service.js';
 import { createPolicyFactsHandler } from '../backend/jobs/policy-facts-handler.js';
 import { createHoldingHandlers } from '../backend/jobs/holding-handlers.js';
-import { holdingsEnabled } from '../contracts/holdings.js';
+import { holdingsEnabled } from '../backend/services/holdings-flag.js';
 
 // Worker process entry (plan B4): `npm run worker`. Same image and database as the API, no HTTP listener. It claims jobs from
 // the Postgres queue (job_queue, migration 034) and runs the handler registered for the job's kind.

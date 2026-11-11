@@ -38,5 +38,4 @@ export const RESOLVED_STATUSES = Object.freeze(['extracted_unverified', 'conflic
 
 // Coded, client-safe errors of the holdings routes are registered in src/contracts/error-codes.js (HOLDING_*, MEMORY_CONFLICT_*).
 
-/** HOLDINGS_ENABLED is on only when it is exactly "true". */
-export const holdingsEnabled = (env = process.env) => env?.HOLDINGS_ENABLED === 'true';
+// HOLDINGS_ENABLED (off unless exactly "true") lives in src/backend/services/holdings-flag.js.
