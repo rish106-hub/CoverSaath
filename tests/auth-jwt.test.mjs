@@ -455,7 +455,7 @@ test('every new table is erased with its owner: household erase and adult delete
 
 test('the migration is rerunnable, keeps bearer rows valid and enforces the session shape', opts, async t => {
   const { db, handle } = await freshDatabase(t);
-  const sql = loadPostgresMigrations().find(m => m.version === '030_auth_tokens.sql').sql;
+  const sql = loadPostgresMigrations().find(m => m.version === '045_auth_tokens.sql').sql;
   await handle.pool.query(sql);
   await handle.pool.query(sql);
   await runPostgresMigrations(handle.pool);

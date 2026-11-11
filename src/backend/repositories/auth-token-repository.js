@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { householdLock, sessionCapacityLock } from '../database/postgres/locks.js';
 import { SESSION_CAPACITY_KEY } from './auth-repository.js';
 
-// Web sessions, rotating refresh tokens and JWT signing-key rows (migration 030, ADR 0016). Nothing here logs and no audit
+// Web sessions, rotating refresh tokens and JWT signing-key rows (migration 045, ADR 0016). Nothing here logs and no audit
 // payload carries a token, a hash or a key: events hold ids and counts only. Refresh tokens are 256-bit random values stored
 // only as keyed HMAC hashes (the column-crypto blind index), so a database read cannot replay one.
 
