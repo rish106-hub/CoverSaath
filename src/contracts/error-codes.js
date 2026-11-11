@@ -116,6 +116,11 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   HOLDING_COLLATE_INPUT_INVALID: entry(null, 'contract', false),
   COLLATE_FACT_KEY_UNKNOWN: entry(null, 'contract', false),
   COLLATE_AUTHORITY_REFUSED: entry(null, 'contract', false),
+  // Member declarations and premiums (migrations 051-052): routes in holding-records-routes.js.
+  DECLARATION_NOT_FOUND: entry(404, 'not_found', false),
+  PREMIUM_NOT_FOUND: entry(404, 'not_found', false),
+  GUARDIAN_REQUIRED: entry(403, 'authorization', false),
+  REVISION_CONFLICT: entry(409, 'conflict', false),
   MEMORY_CONFLICT_NOT_FOUND: entry(404, 'not_found', false),
   MEMORY_CONFLICT_ALREADY_RESOLVED: entry(409, 'conflict', false),
   MEMORY_CONFLICT_CHOICE_INVALID: entry(400, 'request', false),

@@ -50,9 +50,11 @@ const jobParams = (next, crypto) => [
 ];
 
 export class OcrRepository {
-  constructor(database, { audit = null, ...options } = {}) {
+  constructor(database, { audit = null, afterComplete = null, ...options } = {}) {
     this.database = database;
     this.audit = audit;
+    // Optional ({ householdId, documentId, documentKind, consentGrantId }) hook run in a savepoint after a new completion (holdings, ADR 0032).
+    this.afterComplete = typeof afterComplete === 'function' ? afterComplete : null;
     this.crypto = resolveColumnCrypto(options);
   }
 
@@ -320,6 +322,16 @@ export class OcrRepository {
       // The provider-reported page count of the document (migration 042); a better source already stored is kept.
       if (pages.length >= 1 && pages.length <= MAX_PAGE_COUNT) await setPageCountOnce(this.database, current.documentUploadId, pages.length, 'ocr');
       await this.appendLifecycleAudit(await this.getJob(jobId), current.status, { pageCount: pages.length });
+      if (this.afterComplete) {
+        // A savepoint: a failure here must never undo the stored OCR pages. Identifiers only.
+        try {
+          const document = await this.database.one('SELECT document_kind FROM document_uploads WHERE id = ?', [current.documentUploadId]);
+          await this.database.transaction(() => this.afterComplete({
+            householdId, documentId: current.documentUploadId, documentKind: document?.document_kind ?? null,
+            consentGrantId: typeof current.authorization?.consentGrantId === 'string' ? current.authorization.consentGrantId : null,
+          }));
+        } catch { /* the holding is best effort; the OCR result stands */ }
+      }
       return this.getJob(jobId);
     }, { locks: [householdLock(householdId)] });
   }
