@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { ERASED_NAME, ERASURE_REASONS, STORE_BY_TABLE } from '../../contracts/data-lifecycle.js';
+import { eraseMemoryForHousehold } from './memory-erasure.js';
 
 // Erasure of a case, a household member or a whole household (S3), and the cleanup that follows the removal of document
 // bytes. Table-by-table treatment: src/contracts/data-lifecycle.js and docs/architecture/data-lifecycle.md.
@@ -185,6 +186,9 @@ export class ErasureRepository {
       await this.#count(ctx, 'jobs', 'DELETE FROM job_queue WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyAnswers', 'DELETE FROM policy_answers WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyClauses', 'DELETE FROM policy_clauses WHERE household_id = ?', [householdId]);
+      // Holdings and memory (migrations 048-052): before the policy facts, profiles and documents they point at.
+      const memory = await eraseMemoryForHousehold(db, { householdId });
+      ctx.counts.memory = Object.values(memory).reduce((sum, value) => sum + Number(value), 0);
       await this.#count(ctx, 'factEvidence', 'DELETE FROM fact_evidence WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyFacts', 'DELETE FROM policy_facts WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyProfiles', 'DELETE FROM policy_profiles WHERE household_id = ?', [householdId]);

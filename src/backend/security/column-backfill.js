@@ -70,6 +70,11 @@ export const ENCRYPTED_COLUMNS = Object.freeze([
   // Capture slice 1 (migration 047): sealed from the first write, so only a rotation touches them. noUnseal because the column CHECKs refuse plaintext.
   { since: 'P1', table: 'household_members', columns: ['mobile_ciphertext', 'email_ciphertext'], triggers: [], noUnseal: true },
   { since: 'P1', table: 'person_records', columns: ['payload_ciphertext'], triggers: [], noUnseal: true },
+  // Holdings and memory (migrations 049, 051, 052): sealed from the first write, so only a rotation touches them. noUnseal because the column CHECKs refuse plaintext.
+  { since: 'M1', table: 'household_memory_facts', columns: ['value_enc', 'reference_ref_enc'], triggers: ['household_memory_facts_immutable'], noUnseal: true },
+  { since: 'M1', table: 'member_declarations', columns: ['label_enc'], triggers: [], noUnseal: true },
+  { since: 'M1', table: 'premium_payments', columns: ['amount_enc', 'agent_name_enc', 'agent_code_enc'], triggers: [], noUnseal: true },
+  { since: 'M1', table: 'premium_dues', columns: ['amount_enc'], triggers: [], noUnseal: true },
   { since: 'D2', table: 'service_cases', columns: ['stated_estimate_ciphertext'], fixedSize: { stated_estimate_ciphertext: 64 }, triggers: [], legacy: { column: 'stated_estimate_minor', to: 'stated_estimate_ciphertext' } },
 ]);
 

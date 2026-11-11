@@ -37,6 +37,8 @@ const NOT_IN_SCENARIO = new Set([
   'workflow_events.event_payload_json', 'workflow_tasks.last_error_message', 'idempotency_keys.response_json', 'household_members.relationship_label',
   'household_members.date_of_birth', 'policies.policy_number_masked', 'policies.policy_version', 'policies.starts_on', 'policies.ends_on',
   'household_members.mobile_ciphertext', 'household_members.email_ciphertext', 'person_records.payload_ciphertext',
+  'household_memory_facts.value_enc', 'household_memory_facts.reference_ref_enc', 'member_declarations.label_enc', 'premium_payments.amount_enc',
+  'premium_payments.agent_name_enc', 'premium_payments.agent_code_enc', 'premium_dues.amount_enc',
   'service_cases.stated_estimate_ciphertext', 'workflow_runs.input_json', 'workflow_tasks.input_json', 'workflow_tasks.output_json',
 ]);
 

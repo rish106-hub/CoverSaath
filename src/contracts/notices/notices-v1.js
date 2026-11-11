@@ -46,6 +46,7 @@ export const NOTICES_V1 = Object.freeze([
       { categories: ['profile_answer'], data: 'Your answers to profile questions (who is covered, city and state, renewal month, which policies you have)', use: 'To tailor the questions and checks we show you.' },
       { categories: ['contact', 'derived_identifier'], data: 'Mobile number, email address and preferred contact channel of a household member', use: 'To reach the right person about their cover. FOR LEGAL REVIEW.' },
       { categories: ['health_or_policy_content'], data: 'Health context, nominees, emergency contacts, advisers and notes you choose to add about a person', use: 'To keep the cover picture complete. Withdrawing permission erases them. FOR LEGAL REVIEW.' },
+      { categories: ['financial'], data: 'Premiums you paid or owe on each policy, the dates, and who you paid through (FOR LEGAL REVIEW)', use: 'To show what you pay, remind you of due dates and help you plan. We do not use them for anything else.' },
       { categories: ['preference'], data: 'Your settings and how far you got through set-up', use: 'To remember your choices and not ask twice.' },
     ],
     recipients: ['Our hosting and database providers, as above.'],
