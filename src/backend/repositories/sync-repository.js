@@ -1,7 +1,7 @@
 import { SYNC_FEED_ENTITIES, SYNC_LIMITS } from '../../contracts/sync.js';
 import { householdLock } from '../database/postgres/locks.js';
 
-// Per-household change log, snapshot cursor, push dedupe and log retention (ADR 0017, migration 046). The log holds ids, revisions and
+// Per-household change log, snapshot cursor, push dedupe and log retention (ADR 0028, migration 046). The log holds ids, revisions and
 // operations only, never a value. Entity data is read by the services that already own the readers; this file never opens a sealed
 // column. Push dedupe uses idempotency_keys (scope `sync:<adult>`, key `<household>:<mutation id>`) and stores a status and a
 // revision, never a value, so replaying an old mutation costs a fresh read, not a stored copy.
@@ -83,7 +83,7 @@ export class SyncRepository {
   /**
    * Removes log entries older than the retention window (30 days) and raises each household's min_seq to the highest seq removed, so
    * older cursors get CURSOR_EXPIRED. Also removes expired push-dedupe records. Safe to run at any time and more than once. Not
-   * scheduled by any code in this repository: a maintenance job calls it (ADR 0017). Resolves counts only.
+   * scheduled by any code in this repository: a maintenance job calls it (ADR 0028). Resolves counts only.
    */
   async purgeChangeLog({ retentionDays = SYNC_LIMITS.retentionDays } = {}) {
     const now = this.clock();

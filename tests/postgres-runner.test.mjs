@@ -34,7 +34,7 @@ test('a fresh database migrates, records checksums, validates, and a repeat run 
     {
       valid: true, missingTables: [], missingViews: [], missingTriggers: [], missingIndexes: [], missingColumns: [],
       disabledTriggers: [], foreignKeyErrors: 0, collation: 'C', localeProvider: 'c', orderingValid: true,
-      collationValid: true, unsafeFunctionSearchPaths: [], tablesWithoutRls: [], apiRoleGrants: [], migrationCount: 43,
+      collationValid: true, unsafeFunctionSearchPaths: [], tablesWithoutRls: [], apiRoleGrants: [], migrationCount: 44,
     },
   );
   const publicTemporary = await one(pool, `SELECT count(*)::int AS n

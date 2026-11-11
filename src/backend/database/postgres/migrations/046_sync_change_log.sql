@@ -1,4 +1,4 @@
--- Sync, part 1: per-household change log (ADR 0017, docs/exec-plans/active/full-system-design.md section 5). Expand-only and rerunnable.
+-- Sync, part 1: per-household change log (ADR 0028, docs/exec-plans/active/full-system-design.md section 5). Expand-only and rerunnable.
 -- (030 is reserved for the auth/session slice that is built in parallel; migration numbers are not required to be contiguous.)
 --
 -- household_changes is an append-only list of "this row changed": entity, id, revision, op, actor id, time. It holds NO values.

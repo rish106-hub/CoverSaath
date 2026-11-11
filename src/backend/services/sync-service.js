@@ -7,7 +7,7 @@ import {
   parseChangesQuery, parsePushBody, parsePushItem, parseSnapshotQuery,
 } from '../../contracts/sync.js';
 
-// Pull, snapshot and push over the per-household change log (ADR 0017). Every call proves the session adult belongs to the household
+// Pull, snapshot and push over the per-household change log (ADR 0028). Every call proves the session adult belongs to the household
 // first (the same check, in the same transaction for push, that the user-data routes make), reads data only through the existing
 // readers, and writes only through the existing user-data service methods, so validation, ownership, roles, sealing, revisions and
 // audit are exactly those of the PUT routes. Nothing here opens a sealed column.

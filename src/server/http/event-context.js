@@ -64,6 +64,7 @@ export const KNOWN_ROUTE_SEGMENTS = new Set([
   'overview', 'places', 'policies', 'policy-facts', 'policy-profile', 'preferences', 'profile-answers', 'questions', 'read-facts', 'ready', 'reference', 'products', 'refresh', 'reviews', 'revoke',
   'runs', 'scenarios', 'sessions', 'source-pack', 'structuring-runs', 'tasks', 'transitions',
   'auth', 'signout', 'signout-all',
+  'changes', 'snapshot', 'sync', 'push',
 ]);
 
 export function knownRouteTemplate(pathname) {
