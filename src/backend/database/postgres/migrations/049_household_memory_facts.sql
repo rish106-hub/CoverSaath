@@ -19,6 +19,7 @@
 --   * Append-only with supersession. A row is immutable except that superseded_at may be stamped once. DELETE is allowed (erasure).
 --     supersedes_id carries no foreign key, like policy_facts.supersedes_fact_id (044): the scope trigger checks it, and erasure may
 --     delete a chain in any order.
+--   * proposed_parameter_id carries no foreign key (see the column comment); every other provenance id does.
 --   * Rows are erased with their holding and document (FK cascade and the trigger below), with a revoked consent grant, the member,
 --     the household (application erasure paths) and when the user deletes a declaration.
 --   * Timestamps are UTC ISO-8601 text like its neighbours (not timestamptz as first sketched in ADR 0023).
@@ -46,7 +47,9 @@ CREATE TABLE IF NOT EXISTS public.household_memory_facts (
   block_index integer CHECK (block_index IS NULL OR block_index BETWEEN 0 AND 100000),
   policy_fact_id text REFERENCES public.policy_facts(id) ON DELETE CASCADE,
   parameter_record_id text REFERENCES public.coverage_parameter_records(id) ON DELETE CASCADE,
-  proposed_parameter_id text REFERENCES public.proposed_parameters(id) ON DELETE CASCADE,
+  -- No foreign key: proposed_parameters is append-only with a TRUNCATE guard, and a referencing table would make Postgres refuse the
+  -- truncate (0A000) before that guard fires. The scope trigger checks the household; rows go with their source document.
+  proposed_parameter_id text CHECK (proposed_parameter_id IS NULL OR length(proposed_parameter_id) BETWEEN 1 AND 100),
   policy_clause_id text REFERENCES public.policy_clauses(id) ON DELETE CASCADE,
   reference_ref_enc text CHECK (reference_ref_enc IS NULL OR reference_ref_enc ~ '^enc2[.]'),
   declared_by_adult_id text REFERENCES public.adult_users(id),

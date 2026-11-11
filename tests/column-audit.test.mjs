@@ -230,6 +230,7 @@ const PLAIN_REFS = {
   idempotency_keys: { 'ids the key is scoped to, not keys so erasure never blocks': ['household_id', 'case_id'] },
   integration_webhook_events: { 'provider event id used for de-duplication': ['provider_event_id'] },
   retention_records: { 'id of the resource the record is about': ['resource_id'] },
+  household_memory_facts: { 'id of the proposed parameter the fact was read from; not a key because that table is append-only with a truncate guard (migration 049); an id, no content': ['proposed_parameter_id'] },
 };
 
 // Recognised by name (a suffix convention in this schema): timestamps (`*_at`, `*_until`) and digests/hashes (`*_digest`, `*_sha256`,
