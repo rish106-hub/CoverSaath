@@ -1,3 +1,4 @@
+import { eraseMemoryForMember } from './memory-erasure.js';
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
@@ -168,6 +169,7 @@ export class HouseholdAppRepository {
         const places = await db.run('DELETE FROM household_places WHERE member_id = ? AND household_id = ?', [memberId, householdId]);
         // Person records about the member (health context, nominees, notes) go with the member (ADR 0026).
         const personRecords = await db.run('DELETE FROM person_records WHERE subject_member_id = ? AND household_id = ?', [memberId, householdId]);
+        await eraseMemoryForMember(db, { householdId, memberId });
         await db.run('DELETE FROM household_members WHERE id = ? AND household_id = ?', [memberId, householdId]);
         if (placeholderAdultId) await db.run('DELETE FROM adult_users WHERE id = ?', [placeholderAdultId]);
         await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.removed', resourceType: 'household_member', resourceId: memberId, payload: { policyLinksErased: links.length, placeholderAdultErased: Boolean(placeholderAdultId), placesErased: places.changes, personRecordsErased: personRecords.changes } });

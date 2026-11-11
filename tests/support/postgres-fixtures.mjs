@@ -41,6 +41,16 @@ const defaults = {
     id, household_id: 'household-a', subject_member_id: null, record_type: 'member_note', slot: 'main', payload_ciphertext: 'enc2.k1.AAAA.AAAA.AAAA',
     source: 'user_typed', created_at: at, updated_at: at,
   }),
+  // Holdings and memory (migrations 048-052). Parents (household, holding, document, consent grant, member) are passed by the caller.
+  policy_holdings: id => ({ id, kind: 'retail_health', status: 'uploaded', created_at: at, updated_at: at }),
+  household_memory_facts: id => ({
+    id, member_scope: 'policy', fact_key: 'sum_insured', key_schema: 'policy-facts/v1', fact_class: 'personal_value', source_tier: 'own_pdf',
+    status: 'extracted_unverified', value_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at,
+  }),
+  memory_conflicts: id => ({ id, fact_key: 'sum_insured', reason: 'two_pages', created_at: at }),
+  member_declarations: id => ({ id, kind: 'habit', label_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at, updated_at: at }),
+  premium_payments: id => ({ id, amount_enc: 'enc2.k1.AAAA.BBBB.CCCC', amount_band: '10k_50k', paid_on: '2026-01-15', channel: 'upi', created_at: at }),
+  premium_dues: id => ({ id, due_on: '2026-02-15', amount_enc: 'enc2.k1.AAAA.BBBB.CCCC', amount_band: '10k_50k', created_at: at, updated_at: at }),
   evidence_facts: id => ({
     id, fact_key: 'room_limit', value_json: null, epistemic_state: 'unknown', evidence_kind: 'adult_statement',
     provenance_kind: 'adult_statement', asserted_by: 'adult', observed_at: at, created_at: at,

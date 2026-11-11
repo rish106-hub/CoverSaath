@@ -22,6 +22,7 @@ export const expectedTables = Object.freeze([
   'auth_signing_keys', 'auth_refresh_tokens', 'auth_challenges', 'webauthn_credentials', 'devices', 'notice_acceptances',
   'household_changes', 'household_sync_state',
   'person_records',
+  'policy_holdings', 'household_memory_facts', 'memory_conflicts', 'member_declarations', 'premium_payments', 'premium_dues',
 ]);
 
 export const expectedViews = Object.freeze(['active_consent_grants', 'unresolved_evidence']);
@@ -73,6 +74,11 @@ export const criticalTriggers = Object.freeze([
   'policy_profiles_scope_insert', 'policy_profiles_update_guard', 'policy_profiles_erase_on_document_erasure',
   'policy_facts_scope_insert', 'policy_facts_immutable', 'policy_facts_erase_on_document_erasure', 'fact_evidence_scope_insert', 'fact_evidence_immutable',
   'person_records_scope_insert', 'person_records_scope_update',
+  'policy_holdings_scope_insert', 'policy_holdings_scope_update', 'policy_holdings_erase_on_document_erasure',
+  'household_memory_facts_scope_insert', 'household_memory_facts_immutable',
+  'memory_conflicts_scope_insert', 'memory_conflicts_scope_update', 'memory_conflicts_guard_update',
+  'member_declarations_scope_insert', 'member_declarations_scope_update',
+  'premium_payments_scope_insert', 'premium_payments_scope_update', 'premium_dues_scope_insert', 'premium_dues_scope_update',
 ]);
 
 export const criticalIndexes = Object.freeze([
@@ -117,6 +123,8 @@ export const criticalIndexes = Object.freeze([
   'auth_signing_keys_one_active', 'auth_refresh_session_idx', 'auth_refresh_expiry_idx', 'api_sessions_household_idx', 'api_sessions_identity_idx',
   'household_changes_cursor_idx',
   'person_records_unique', 'person_records_household_type_idx', 'household_members_mobile_unique',
+  'policy_holdings_household_status_idx', 'household_memory_facts_current_slot', 'household_memory_facts_read_idx', 'memory_conflicts_household_idx',
+  'memory_conflicts_one_pending', 'member_declarations_household_idx', 'premium_payments_household_idx', 'premium_dues_household_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
@@ -148,4 +156,10 @@ export const requiredColumns = Object.freeze({
   evidence_claims: ['claim_hash', 'owner', 'expires_at'],
   household_members: ['gender', 'age_band', 'mobile_ciphertext', 'mobile_hash', 'email_ciphertext', 'preferred_channel', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id', 'revision', 'deleted_at'],
   person_records: ['household_id', 'subject_member_id', 'record_type', 'slot', 'payload_ciphertext', 'completeness', 'source', 'state', 'revision'],
+  policy_holdings: ['household_id', 'policy_id', 'document_id', 'policy_profile_id', 'kind', 'status'],
+  household_memory_facts: ['household_id', 'holding_id', 'fact_key', 'source_tier', 'status', 'value_enc', 'consent_grant_id', 'reference_ref_enc', 'superseded_at'],
+  memory_conflicts: ['household_id', 'holding_id', 'fact_key', 'candidate_fact_ids', 'reason', 'resolution', 'resolving_fact_id', 'resolved_by', 'resolved_at'],
+  member_declarations: ['household_id', 'member_id', 'kind', 'label_enc', 'declared_on', 'declared_to_insurer'],
+  premium_payments: ['household_id', 'holding_id', 'amount_enc', 'amount_band', 'paid_on', 'channel', 'paid_via', 'agent_name_enc', 'agent_code_enc'],
+  premium_dues: ['household_id', 'holding_id', 'due_on', 'amount_enc', 'amount_band', 'state'],
 });

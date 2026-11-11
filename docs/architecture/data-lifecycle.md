@@ -94,6 +94,12 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `adult_preferences` | delete | userData | Deleted. |
 | `onboarding_progress` | delete | userData | Deleted. |
 | `person_records` | delete | userData | Deleted by household and member erasure, and when the consent that gated the record type is withdrawn. Payloads are sealed. |
+| `policy_holdings` | delete | - | Deleted by the document erasure trigger, by household erasure and when the document consent is withdrawn. Ids and closed enums only. |
+| `household_memory_facts` | delete | - | Deleted with its holding, document, member, on consent revocation and household erasure. Values are sealed. |
+| `memory_conflicts` | delete | - | Deleted with its holding or facts, on consent revocation and household erasure. Ids and closed enums only. |
+| `member_declarations` | delete | - | Deleted with its member, on consent revocation and household erasure. The label is sealed. |
+| `premium_payments` | delete | - | Deleted with its holding, on consent revocation and household erasure. Amount and agent name and code are sealed. |
+| `premium_dues` | delete | - | Deleted with its holding, on consent revocation and household erasure. Amount is sealed. |
 | `tool_scenarios` | delete | userData | Deleted. |
 | `job_queue` | delete | - | Identifiers only (kind, document and grant ids). Deleted on revocation, document erasure and household erasure; never blocks an erasure. |
 | `household_changes` | delete | - | Sync change log (migration 046): ids, revisions and operations only, no values. Deleted on household erasure, after the data erasures that log their own deletes. |

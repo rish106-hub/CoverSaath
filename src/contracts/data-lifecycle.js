@@ -95,6 +95,13 @@ export const DATA_STORES = Object.freeze([
   // User-stated data
   store('profile_answers', 'delete', 'household_id = ?', 'profileAnswers', 'Deleted.'),
   store('person_records', 'delete', 'household_id = ?', 'userData', 'Deleted by household and member erasure, and when the consent that gated the record type is withdrawn. Payloads are sealed.'),
+  // Holdings and memory (migrations 048-052, ADR 0032). Erased by src/backend/repositories/memory-erasure.js.
+  store('policy_holdings', 'delete', 'household_id = ?', null, 'Deleted by the document erasure trigger, by household erasure and when the document consent is withdrawn. Ids and closed enums only.'),
+  store('household_memory_facts', 'delete', 'household_id = ?', null, 'Deleted with its holding, document, member, on consent revocation and household erasure. Values are sealed.'),
+  store('memory_conflicts', 'delete', 'household_id = ?', null, 'Deleted with its holding or facts, on consent revocation and household erasure. Ids and closed enums only.'),
+  store('member_declarations', 'delete', 'household_id = ?', null, 'Deleted with its member, on consent revocation and household erasure. The label is sealed.'),
+  store('premium_payments', 'delete', 'household_id = ?', null, 'Deleted with its holding, on consent revocation and household erasure. Amount and agent name and code are sealed.'),
+  store('premium_dues', 'delete', 'household_id = ?', null, 'Deleted with its holding, on consent revocation and household erasure. Amount is sealed.'),
   store('device_permissions', 'delete', 'household_id = ?', 'userData', 'Deleted.'),
   store('household_places', 'delete', 'household_id = ?', 'userData', 'Deleted.'),
   store('adult_preferences', 'delete', 'household_id = ?', 'userData', 'Deleted.'),

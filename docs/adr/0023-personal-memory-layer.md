@@ -1,6 +1,6 @@
 # ADR 0023: Personal memory layer (household facts correlated from own PDF, insurer wording and declarations)
 
-- Status: Proposed (2026-11-10). Design only: no migration, route or code exists. Not independently reviewed. Owner decisions pending (see Open decisions).
+- Status: Accepted (2026-11-11), with the changes recorded under "Accepted changes (2026-11-11)" below. Schema and repositories landed in migrations 049-052 on branch `feat/facts-schema` (see ADR 0032). Not independently reviewed (standing order); the owner decisions below are resolved as recorded.
 - Synthetic data only. Consent, notice, retention and health-declaration wording below is an engineering reading and is **FOR LEGAL REVIEW**.
 - Related: ADR 0006 (structuring), 0008 (evidence-first), 0013 + addendum D2 (column encryption), 0015 (user-data store), 0021 (IDA import-only cache), `docs/architecture/data-lifecycle.md`. Plan: `docs/exec-plans/active/memory-layer-plan.md`.
 
@@ -19,7 +19,7 @@ Chat, plan and emergency need one household-scoped answer per fact ("sum insured
 
 ## Decisions
 
-**D1. One new table, sources reused.** Migration `041_household_memory.sql` (expand-only) adds `household_memory_facts`. Own-PDF values are read from the structuring stores above and copied (sealed) into memory rows that point back to their evidence; IDA values are read from `reference_cache` through the ReferenceDataPort. No change to existing tables. `evidence_facts` stays as is (no new writer).
+**D1. One new table, sources reused.** Migration `049_household_memory_facts.sql` (expand-only; first drafted as 041) adds `household_memory_facts`. Own-PDF values are read from the structuring stores above and copied (sealed) into memory rows that point back to their evidence; IDA values are read from `reference_cache` through the ReferenceDataPort. No change to existing tables. `evidence_facts` stays as is (no new writer).
 
 **D2. Row model.** One row = one value of one fact from one tier for one slot.
 - Slot: `household_id`, `policy_id` (nullable, FK `policies`), `subject_member_id` (nullable, FK `household_members`), `member_scope` (`policy` | `policyholder` | `dependent` | `household`), `fact_key` + `key_schema` (`policy-parameters/v1` registry or `declarations/v1` taxonomy, validated in the app), `fact_class` (`personal_value` | `product_term` | `household_declaration`, derived from the key by a versioned map).
@@ -53,6 +53,20 @@ Rules: `unknown` never conflicts with a value; any in-tier `conflicting` makes t
 - Hard to reverse: written rows and the table. Rollback: flags off, routes unused; drop only with owner approval (declarations are lost).
 - Depends on: R2 policy-type tag (`policies.policy_kind` lacks `term_life`), R3 product confirmation (IDA tier), R5 declaration taxonomy approval.
 - Requires the independent review AGENTS.md demands for migration, consent, security and AI changes; the owner's standing order skips it, so the risk is carried knowingly.
+
+## Accepted changes (2026-11-11)
+
+Recorded when this ADR moved from Proposed to Accepted. They override the text above where they differ. Wording is **FOR LEGAL REVIEW**.
+
+1. **Column names and types.** Sealed columns follow the 044 convention: `value_enc` and `reference_ref_enc` (not `*_ciphertext`), CHECK `enc2.`, AAD `<table>.<column>.<row id>`. Timestamps are UTC ISO-8601 `text` like every neighbouring table, not `timestamptz`. `supersedes_id` has no foreign key (as `policy_facts.supersedes_fact_id`): the scope trigger checks it and erasure may delete a chain in any order. Added: `holding_id` (FK to `policy_holdings`, ADR 0032), `scope_key` (part of the slot, for per-disease or per-procedure facts) and `policy_fact_id` (FK to `policy_facts`, the own-PDF tier source).
+2. **The user may resolve any conflict (replaces D3's "not user-resolvable" for product terms).** The choice is stored as a new `user_declaration` row with `capture_method = conflict_resolution` and `resolves_fact_ids`; the machine rows stay. A user declaration may not set a product term in any other way (`MEMORY_KEY_NOT_DECLARABLE`; a CHECK enforces it). Chat still shows both quotes for a product term with "check with the insurer". O4 is resolved this way.
+3. **Statuses.** Machine rows hold only `extracted_unverified`, `conflicting` or `unknown`; the IDA tier holds `reviewed_reference` (written by deterministic code, never by a model); the user tier holds `user_confirmed`. The bare word "confirmed" is never a status. Two machine tiers agreeing yields `reviewed_reference` citing both. The paired CHECK is in the migration.
+4. **Conflict table name.** `fact_conflicts` is taken (migration 001, no writer). The new table is `memory_conflicts` (ADR 0032).
+5. **No plaintext, no search over values.** No `value_json`, no generated text column, no GIN or full-text index over values (ADR 0013, ADR 0025 D3). The fact key is a public registry name (`src/contracts/policy-facts.js`, append-only, maps onto `src/features/policy-facts/fact-types.js` with a drift test).
+6. **IDA tier writes product terms only**, enforced by CHECK (D3 said "write refused").
+7. **Resolved owner decisions.** O1: reuse `profile_intake` (declarations) and `coverage_reconstruction` (own PDF, IDA) grants; no new purpose. O6: IDA rows are erased with their source document. O2, O3, O5 and O7 stay open for the owner; nothing in the schema depends on them.
+8. **Erasure paths implemented** in `src/backend/repositories/memory-erasure.js`: consent revocation (by `consent_grant_id`), document erasure (holding and facts), member removal, household erasure. Conflicts are deleted before the facts they name. The 30-day retention sweep of superseded rows (D5f) is not built.
+9. **Flag.** `HOLDINGS_ENABLED`, off unless exactly `true`, gates every new behaviour (the resolver, routes and jobs of later slices). `MEMORY_ENABLED` and `MEMORY_CAPTURE_ENABLED` of D6 are not introduced yet.
 
 ## Open decisions (owner)
 

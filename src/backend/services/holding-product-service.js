@@ -4,6 +4,7 @@ import { detectInsurerCandidates, DETECTION_PAGES } from '../../features/insurer
 import { flattenBlock } from '../../features/ai-analysis/eval-extractor.js';
 import { createStoredPagesReader } from './readable-document.js';
 import { cacheKeyFor, signatureFor } from './reference-data-port.js';
+import { holdingsEnabled } from './holdings-flag.js';
 
 // Holding product service (S-A3). Off unless HOLDINGS_ENABLED is exactly "true".
 //
@@ -18,8 +19,7 @@ import { cacheKeyFor, signatureFor } from './reference-data-port.js';
 //                     is read from the household's own policy_profiles row. reference_cache never gets a household column.
 // UIN rule: the UIN stays in backend rows and in calls to the reference service. It is in no response body.
 
-export const HOLDINGS_FLAG = 'HOLDINGS_ENABLED';
-export const holdingsEnabled = (env = process.env) => env?.[HOLDINGS_FLAG] === 'true';
+export { holdingsEnabled };
 export const REFERENCE_IMPORT_JOB_KIND = 'reference.import';
 export const DETECT_INSURER_JOB_KIND = 'holding.detect_insurer';
 export const REGISTRY_CACHE_KEY = 'registry/snapshot-v1';
