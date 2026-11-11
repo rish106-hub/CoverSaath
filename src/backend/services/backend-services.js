@@ -22,6 +22,7 @@ import { createSyncService } from './sync-service.js';
 import { TenantAccessService } from './tenant-access-service.js';
 import { createJwtTokens, readJwtIssuer, readJwtPrivateKeys } from '../security/jwt-tokens.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
+import { createAnalyticsService } from './analytics-service.js';
 
 // Document kinds that start a holding on upload (a policy wording or schedule).
 const HOLDING_DOCUMENT_KINDS = Object.freeze(['policy_wording', 'policy_schedule']);
@@ -34,6 +35,8 @@ export function createBackendServices(database, options = {}) {
   const appEvents = new AppEventRepository(database, { clock: options.clock, columnCrypto });
   const providerCalls = new ProviderCallRepository(database, { clock: options.clock });
   const runtimeLimits = new RuntimeLimitsRepository(database);
+  // Product analytics outbox (migration 057, ADR 0033): off unless ANALYTICS_ENABLED is exactly "true" and the household consented.
+  const analytics = createAnalyticsService({ database, env: options.env ?? process.env });
   // Postgres job queue for the worker process group (migration 034). Revocation erases its rows through ConsentRepository.
   const jobQueue = new JobQueueRepository(database, { clock: options.clock });
   const shared = { ...options, audit, columnCrypto };
@@ -104,7 +107,7 @@ export function createBackendServices(database, options = {}) {
     embedClientFor: route => createVoyageEmbedClient({ apiKey: route.apiKey, model: route.model, fetchImpl: options.fetchImpl }),
   });
   const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, gateway: modelGateway, loadKnownIdentifiers, env });
-  const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, memory, env });
+  const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, memory, analytics, env });
   const chatRepository = new ChatRepository(database, { ...shared, households });
   const chatV1 = createChatV1Service({ chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
   const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
@@ -135,7 +138,7 @@ export function createBackendServices(database, options = {}) {
   });
 
   return {
-    holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
+    analytics, holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     holdings, holdingPipelineRepository, memory, memoryChunks, chatRepository, chatV1, modelGateway,
     emergencyInstruction,

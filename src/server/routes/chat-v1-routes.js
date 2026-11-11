@@ -20,5 +20,14 @@ export async function handleChatV1Route({ req, url, principal, services }) {
   const chat = services.chatV1;
   if (url.pathname === THREADS) return { status: 201, body: await chat.createThread({ principal, body: await readBody(req, { limitBytes: 1024 }) }) };
   const run = await chat.startTurn({ principal, threadId: turn[1], body: await readBody(req, { limitBytes: 4096 }) });
-  return { status: 200, sse: async write => run.run(write) };
+  return {
+    status: 200,
+    sse: async write => {
+      const summary = await run.run(write);
+      // Product analytics (ADR 0033): intent, provider id, counts and a duration. Never the message or the answer.
+      if (summary) {
+        void services.analytics?.track({ householdId: summary.householdId, event: 'chat_turn', properties: { intent: summary.intent, provider: summary.provider, tokens: summary.tokens, ms: summary.ms, facts_used: summary.factsUsed } });
+      }
+    },
+  };
 }

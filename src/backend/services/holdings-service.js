@@ -26,7 +26,7 @@ const permanent = (code, message) => coded(code, message, 409, { retryable: fals
 /** The reference port: values deterministic code read from the IDA reference for a holding. Default: none (reference agent wires it). */
 export const emptyReferenceFacts = Object.freeze({ async forHolding() { return []; } });
 
-export function createHoldingsService({ repository, jobQueue, policyFacts = null, referenceFacts = emptyReferenceFacts, memory = null, env = process.env }) {
+export function createHoldingsService({ repository, jobQueue, policyFacts = null, referenceFacts = emptyReferenceFacts, memory = null, analytics = null, env = process.env }) {
   const enabled = () => holdingsEnabled(env);
   const requireEnabled = () => { if (!enabled()) throw coded('HOLDINGS_DISABLED', 'Holdings are disabled.', 503); };
 
@@ -145,6 +145,15 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       const open = await repository.openConflictCount({ householdId, holdingId });
       const status = await step(holding, 'memorise', open);
       const embedded = memory ? await memory.embedHolding({ householdId, holdingId }) : null;
+      // Product analytics (ADR 0033): counts and a duration only, once per holding, when it first settles.
+      if (analytics && holding.status === 'parsed') {
+        void (async () => {
+          try {
+            const facts = (await repository.currentMemory({ householdId, holdingId })).length;
+            await analytics.track({ householdId, event: 'parse_completed', properties: { facts, conflicts: open, ms: Math.max(0, Date.now() - Date.parse(holding.createdAt)) || 0 } });
+          } catch { /* analytics never breaks the pipeline */ }
+        })();
+      }
       return Object.freeze({ status, embedded: embedded?.embedded ?? 0, ...(embedded?.skipped ? { embedSkipped: embedded.skipped } : {}) });
     },
 

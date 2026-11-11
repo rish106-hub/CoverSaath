@@ -79,6 +79,7 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `chat_turns` | delete | - | Deleted with its thread. Content and voice transcript are sealed; audio only under VOICE_AUDIO_RETAIN (ADR 0029). |
 | `retrieval_traces` | delete | - | Deleted with its thread. Ids and a retrieval mode only. |
 | `provider_calls` | delete | - | Deleted by household erasure (ADR 0030). Counts, a payload digest, usage and cost only; never a prompt or a response. |
+| `analytics_outbox` | delete | - | Deleted by household erasure (ADR 0033). Allowlisted event names, closed-vocabulary properties and a salted hash only; unsent rows are also dropped when analytics consent ends. |
 | `catalogue_reviews` | delete | - | Deleted. |
 | `catalogue_reviewer_grants` | delete | - | Deleted. |
 | `policies` | scrub_prune | policies | Insurer, number, dates cleared; deleted unless a fact or parameter record names the policy. |

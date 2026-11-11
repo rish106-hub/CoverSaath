@@ -83,6 +83,7 @@ export const DATA_STORES = Object.freeze([
   store('chat_turns', 'delete', 'household_id = ?', null, 'Deleted with its thread. Content and voice transcript are sealed; audio is kept only under VOICE_AUDIO_RETAIN (ADR 0029).'),
   store('retrieval_traces', 'delete', 'household_id = ?', null, 'Deleted with its thread. Ids and a retrieval mode only.'),
   store('provider_calls', 'delete', 'household_id = ?', null, 'Deleted by household erasure (ADR 0030). Counts, a payload digest, usage and cost only; never a prompt or a response.'),
+  store('analytics_outbox', 'delete', 'household_id = ?', null, 'Deleted by household erasure (ADR 0033). Allowlisted event names, closed-vocabulary properties and a salted hash only; unsent rows are also dropped when analytics consent ends.'),
   store('catalogue_reviews', 'delete', 'household_id = ?', null, 'Deleted.'),
   store('catalogue_reviewer_grants', 'delete', 'household_id = ?', null, 'Deleted.'),
   // Policies and evidence

@@ -39,6 +39,7 @@ const defaults = {
   chat_threads: id => ({ id, created_at: at, updated_at: at }),
   chat_turns: id => ({ id, turn_index: 0, role: 'user', content_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at }),
   retrieval_traces: id => ({ id, mode: 'facts_only', created_at: at }),
+  analytics_outbox: id => ({ id, event: 'cover_uploaded', distinct_id_hash: 'a'.repeat(64), properties_json: '{}', created_at: at }),
   provider_calls: id => ({ id, purpose: 'chat_answer', provider: 'anthropic', model: 'claude-sonnet-5-5', redaction_report_json: '{}', status: 'ok', created_at: at }),
   fact_evidence: id => ({ id, page: 1, role: 'primary', quote_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at }),
   policies: id => ({ id, policy_kind: 'personal', verification_state: 'unverified', created_at: at, updated_at: at }),

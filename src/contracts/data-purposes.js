@@ -57,6 +57,8 @@ export const PURPOSES = Object.freeze({
   coverage_reconstruction: { noticeId: 'notice_coverage_reconstruction', legalBasis: placeholderBasis('consent'), retentionClass: 'until_consent_ends', consenter: 'self_or_guardian' },
   ai_assisted_analysis: { noticeId: 'notice_ai_assisted_analysis', legalBasis: placeholderBasis('consent'), retentionClass: 'until_consent_ends', consenter: 'self_or_guardian' },
   human_review: { noticeId: 'notice_human_review', legalBasis: placeholderBasis('consent'), retentionClass: 'until_consent_ends', consenter: 'self_or_guardian' },
+  // Product analytics (migration 057, ADR 0033): server-side, allowlisted events sent to PostHog only with this consent. FOR LEGAL REVIEW.
+  analytics: { noticeId: 'notice_analytics', legalBasis: placeholderBasis('consent'), retentionClass: 'until_consent_ends', consenter: 'self' },
   consent_and_audit_record: { noticeId: 'notice_consent_and_audit_record', legalBasis: placeholderBasis('legal_obligation_or_legitimate_use'), retentionClass: 'audit_record', consenter: 'self_or_guardian' },
   service_operations: { noticeId: 'notice_service_operations', legalBasis: placeholderBasis('legitimate_use'), retentionClass: 'operational_short', consenter: 'self' },
   // No personal data: catalogue, registry and migration bookkeeping. Needs no notice.
@@ -311,6 +313,10 @@ export const DATA_REGISTRY = Object.freeze({
   // Provider call audit (migration 056, ADR 0030): counts, a sha256 of the redacted payload, usage and cost; never a prompt or a response.
   provider_calls: entry('service_operations', {},
     ['id', 'household_id', 'purpose', 'provider', 'model', 'redaction_report_json', 'payload_sha256', 'input_tokens', 'output_tokens', 'cost_paise', 'status', 'created_at']),
+  // Analytics outbox (migration 057, ADR 0033): the event name, a keyed hash of the household and closed-vocabulary properties. No free text.
+  analytics_outbox: entry('analytics',
+    { derived_identifier: ['distinct_id_hash'], derived_content: ['properties_json'] },
+    ['id', 'household_id', 'event', 'created_at', 'sent_at']),
   model_budget_scopes: entry('service_operations', {},
     ['scope', 'reserved_micro_usd', 'spent_micro_usd', 'updated_at']),
 

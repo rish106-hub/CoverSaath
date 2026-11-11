@@ -11,6 +11,7 @@ import { createPolicyFactsHandler } from '../backend/jobs/policy-facts-handler.j
 import { createHoldingHandlers } from '../backend/jobs/holding-pipeline-handlers.js';
 import { holdingsEnabled } from '../backend/services/holdings-flag.js';
 import { createDetectInsurerHandler, createReferenceImportHandler } from '../backend/jobs/holding-product-handlers.js';
+import { createPosthogClient } from '../integrations/index.js';
 import { DETECT_INSURER_JOB_KIND, REFERENCE_IMPORT_JOB_KIND } from '../backend/services/holding-product-service.js';
 
 // Worker process entry (plan B4): `npm run worker`. Same image and database as the API, no HTTP listener. It claims jobs from
@@ -54,18 +55,42 @@ export function readWorkerConfig(env = process.env) {
   });
 }
 
+/**
+ * Analytics outbox drain (ADR 0033): every ANALYTICS_DRAIN_MS (default 15 s) sends one batch of allowlisted events through the PostHog adapter.
+ * Off unless ANALYTICS_ENABLED is exactly "true", the salt is set and POSTHOG_API_KEY + POSTHOG_HOST are set; otherwise no timer runs and nothing
+ * is read. Returns { stop } or null.
+ */
+export function startAnalyticsDrain({ services, env = process.env, client = createPosthogClient({ env }), log = () => {} } = {}) {
+  if (!services.analytics.enabled() || !client) return null;
+  const everyMs = boundedInteger(env.ANALYTICS_DRAIN_MS, 15_000, 'ANALYTICS_DRAIN_MS', 1_000, 3_600_000);
+  let busy = false;
+  const tick = async () => {
+    if (busy) return;
+    busy = true;
+    try { const counts = await services.analytics.drain({ client }); if (counts.sent || counts.failed || counts.dropped) log({ type: 'analytics.drained', ...counts }); }
+    catch (error) { log({ type: 'analytics.drain_failed', code: typeof error?.code === 'string' ? error.code : 'ANALYTICS_DRAIN_FAILED' }); }
+    finally { busy = false; }
+  };
+  const timer = setInterval(tick, everyMs);
+  timer.unref?.();
+  return { tick, async stop() { clearInterval(timer); await client.close(); } };
+}
+
 /** Builds and starts a worker on the database from `env`. Returns { worker, stop }. */
 export function startWorker({ env = process.env, handlers = null, log = line => console.log(JSON.stringify(line)) } = {}) {
   const config = readWorkerConfig(env);
   const database = createDatabase(createPostgresPool(postgresPoolOptionsFromEnv(env)));
-  const registered = handlers ?? buildJobHandlers(createBackendServices(database, { env }), env);
+  const services = createBackendServices(database, { env });
+  const registered = handlers ?? buildJobHandlers(services, env);
   const worker = createJobWorker({ queue: new JobQueueRepository(database), handlers: registered, onEvent: event => log({ ...event, workerId: config.workerId }), ...config });
   worker.start();
+  const analyticsDrain = startAnalyticsDrain({ services, env, log });
   log({ type: 'worker.started', workerId: config.workerId, kinds: worker.kinds });
   return {
     worker,
     async stop() {
       const drained = await worker.stop();
+      await analyticsDrain?.stop();
       await database.close();
       log({ type: 'worker.stopped', workerId: config.workerId, drained });
       return drained;

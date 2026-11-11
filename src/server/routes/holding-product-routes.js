@@ -36,8 +36,8 @@ export async function handleHoldingProductRoute({ req, url, principal, services,
     throw error;
   }
   if (candidatesMatch) return { status: 200, body: await holdingsService.candidates({ holding, document, adultUserId: principal.adultId }) };
-  return {
-    status: 200,
-    body: await holdingsService.confirmProduct({ holding, document, adultUserId: principal.adultId, body: await readBody(req), idempotencyKey: idempotencyKey(req) }),
-  };
+  const confirmed = await holdingsService.confirmProduct({ holding, document, adultUserId: principal.adultId, body: await readBody(req), idempotencyKey: idempotencyKey(req) });
+  // Product analytics (ADR 0033): a first confirmation only (a replay adds nothing). The pick is always from the candidate list on this route.
+  if (!confirmed.replay) void services.analytics?.track({ householdId: holding.householdId, event: 'insurer_confirmed', properties: { manual: false } });
+  return { status: 200, body: confirmed };
 }

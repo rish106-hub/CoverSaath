@@ -48,6 +48,8 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await insert(pool, 'policy_answers', { id: `answer-${key}`, household_id: ids.household, case_id: ids.case, requested_by_adult_id: ids.adult, question: canary('question'), document_ids_json: JSON.stringify([ids.document]), answer_json: JSON.stringify({ a: canary('answer') }) });
   // Provider call audit (migration 056): counts and a digest only.
   await insert(pool, 'provider_calls', { id: `call-${key}`, household_id: ids.household, purpose: 'chat_answer', provider: 'anthropic', model: 'claude-sonnet-5-5', redaction_report_json: JSON.stringify({ gatedSlots: 2, placeholders: 3 }), payload_sha256: digest('payload'), status: 'ok' });
+  // Analytics outbox (migration 057): an allowlisted event, a salted hash and closed-vocabulary properties; erased with the household.
+  await insert(pool, 'analytics_outbox', { id: `analytics-${key}`, household_id: ids.household, event: 'cover_uploaded', distinct_id_hash: digest('distinct'), properties_json: JSON.stringify({ kind: 'policy_wording' }) });
   // A confirmed policy profile (migration 043). The sealed columns hold an envelope-shaped value carrying the canary.
   await insert(pool, 'policy_profiles', {
     id: `profile-${key}`, household_id: ids.household, case_id: ids.case, document_id: ids.document, source_version: '1', uin: 'ABCHLIP12345V012021', uin_state: 'reported',
