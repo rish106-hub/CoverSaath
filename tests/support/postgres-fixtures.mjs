@@ -34,6 +34,11 @@ const defaults = {
   }),
   policy_profiles: id => ({ id, created_at: at, updated_at: at }),
   policy_facts: id => ({ id, extraction_run_id: `run-${id}`, fact_type: 'payment_mode_last', origin: 'deterministic', state: 'extracted_unverified', value_type: 'enum', value_enum: 'upi', normaliser_version: 'pf-norm.1', created_at: at }),
+  // Memory chunks and chat (migrations 053-054). Parents (household, holding, document, consent grant, thread, turn) are passed by the caller.
+  memory_chunks: id => ({ id, scope: 'own_pdf', source_ref: `ref-${id}`, chunk_text_enc: 'enc2.k1.AAAA.BBBB.CCCC', content_sha256: '0'.repeat(64), embedding: `[1${',0'.repeat(1023)}]`, embedding_model: 'voyage-3.5', created_at: at }),
+  chat_threads: id => ({ id, created_at: at, updated_at: at }),
+  chat_turns: id => ({ id, turn_index: 0, role: 'user', content_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at }),
+  retrieval_traces: id => ({ id, mode: 'facts_only', created_at: at }),
   provider_calls: id => ({ id, purpose: 'chat_answer', provider: 'anthropic', model: 'claude-sonnet-5-5', redaction_report_json: '{}', status: 'ok', created_at: at }),
   fact_evidence: id => ({ id, page: 1, role: 'primary', quote_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at }),
   policies: id => ({ id, policy_kind: 'personal', verification_state: 'unverified', created_at: at, updated_at: at }),

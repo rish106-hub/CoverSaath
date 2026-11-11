@@ -16,3 +16,4 @@ export { DEEPSEEK_PROVIDER } from './deepseek/index.js';
 export { KIMI_PROVIDER } from './kimi/index.js';
 export { OPENAI_PROVIDER } from './openai/index.js';
 export { MODEL_ROUTES, createModelRouter } from './model-routing/index.js';
+export { VOYAGE_PROVIDER, VOYAGE_EMBED_DIMENSIONS, createVoyageEmbedClient } from './voyage/index.js';

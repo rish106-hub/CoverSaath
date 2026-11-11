@@ -2,6 +2,7 @@ import { createAiSdkRunner, createProviderModelLoader } from './ai-sdk-runner.js
 import { createModelGateway } from './model-gateway.js';
 import { createLedgerScope, createBudgetScope } from './live-coverage-runtime.js';
 import { GATEWAY_TASK_LIST, unknownOutput } from './gateway-contract.js';
+import { createEmbedRunner } from './embed-runner.js';
 import { AI_CONTRACT_VERSION } from './responsibility-matrix.js';
 import { PROMPT_VERSION } from './prompts.js';
 
@@ -35,7 +36,7 @@ export function createHouseholdDayBudget({ ledger = null, maxUsd, clock = () => 
   };
 }
 
-export function createChatModelGateway({ env = process.env, router, providerCalls = null, budgetFor, loadModel, createAgent, limits = CHAT_GATEWAY_LIMITS, onEvent } = {}) {
+export function createChatModelGateway({ env = process.env, router, providerCalls = null, budgetFor, loadModel, createAgent, embedClientFor = null, limits = CHAT_GATEWAY_LIMITS, onEvent } = {}) {
   if (!router || typeof router.resolve !== 'function') throw new TypeError('A model router is required.');
   const enabled = flagOn(env);
   const runners = new Map();
@@ -43,6 +44,12 @@ export function createChatModelGateway({ env = process.env, router, providerCall
 
   const runnerFor = route => {
     const key = `${route.provider}:${route.model}`;
+    if (!runners.has(key) && route.sdk === 'voyage') {
+      // Embeddings (ADR 0031): the client is built by the composition root from the route (key and URL live under src/integrations).
+      const client = embedClientFor?.(route);
+      if (!client) return async () => ({ unavailable: true, provider: route.provider, model: route.model, reason: 'no_embed_client' });
+      runners.set(key, createEmbedRunner({ client, provider: route.provider, model: route.model, inputUsdPerMillion: route.inputUsdPerMillion }));
+    }
     if (!runners.has(key)) {
       runners.set(key, createAiSdkRunner({
         loadModel: loadModel ?? createProviderModelLoader({ provider: route.sdk, apiKey: route.apiKey }),

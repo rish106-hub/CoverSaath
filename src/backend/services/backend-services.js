@@ -1,5 +1,10 @@
 import { holdingsEnabled } from './holdings-flag.js';
-import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, SyncRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository, PersonRecordRepository, HoldingProductRepository, ReferenceCacheRepository, PolicyHoldingRepository, MemoryFactRepository, DeclarationRepository, PremiumRepository, ProviderCallRepository } from '../repositories/index.js';
+import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, SyncRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository, PersonRecordRepository, HoldingProductRepository, ReferenceCacheRepository, PolicyHoldingRepository, MemoryFactRepository, DeclarationRepository, PremiumRepository, ProviderCallRepository, MemoryChunkRepository, ChatRepository } from '../repositories/index.js';
+import { createChatModelGateway, createHouseholdDayBudget } from '../../features/ai-analysis/index.js';
+import { createModelRouter, createVoyageEmbedClient } from '../../integrations/index.js';
+import { createHouseholdIdentifierLoader } from './household-identifiers.js';
+import { createMemoryService } from './memory-service.js';
+import { createChatV1Service } from './chat-v1-service.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
@@ -71,7 +76,20 @@ export function createBackendServices(database, options = {}) {
   const policyFacts = createPolicyFactsService({ repository: policyFactsRepository, ocr, env: options.env ?? process.env, clock: options.clock });
   // Holdings pipeline (complete.md 3.2, migrations 048-050): collate, conflicts, status. Off unless HOLDINGS_ENABLED=true. No model call.
   const holdingPipelineRepository = new HoldingPipelineRepository(database, shared);
-  const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, env: options.env ?? process.env });
+  // Memory and chat v1 (migrations 053-054, ADR 0031). Off unless MEMORY_ENABLED=true; the model path is off unless CHAT_MODEL_ENABLED=true.
+  // The gateway is the existing one (privacy gate, per-household daily budget, provider_calls); `options.modelGateway` lets a test inject a fixture.
+  const env = options.env ?? process.env;
+  const memoryChunks = new MemoryChunkRepository(database, shared);
+  const loadKnownIdentifiers = createHouseholdIdentifierLoader({ database, columnCrypto });
+  const modelGateway = options.modelGateway ?? createChatModelGateway({
+    env, router: createModelRouter({ env }), providerCalls,
+    budgetFor: createHouseholdDayBudget({ ledger: runtimeLimits, maxUsd: Number(env.CHAT_DAILY_BUDGET_USD) > 0 ? Number(env.CHAT_DAILY_BUDGET_USD) : 0.5 }),
+    embedClientFor: route => createVoyageEmbedClient({ apiKey: route.apiKey, model: route.model, fetchImpl: options.fetchImpl }),
+  });
+  const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, gateway: modelGateway, loadKnownIdentifiers, env });
+  const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, memory, env });
+  const chatRepository = new ChatRepository(database, { ...shared, households });
+  const chatV1 = createChatV1Service({ chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
   const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
   const access = new TenantAccessService(database, { auth, authTokens, households, consents, env: options.env ?? {}, columnCrypto });
   const householdApp = new HouseholdAppRepository(database, shared);
@@ -102,7 +120,7 @@ export function createBackendServices(database, options = {}) {
   return {
     holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
-    holdings, holdingPipelineRepository,
+    holdings, holdingPipelineRepository, memory, memoryChunks, chatRepository, chatV1, modelGateway,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {

@@ -111,3 +111,7 @@ Then create the cluster and start it again (above).
 ## Not covered
 
 Production, TLS, runtime and migration roles, backups and restore drills (S3.3), connection pooling limits under load (no workload numbers exist).
+
+## pgvector (migration 053, ADR 0031)
+
+Migration 053 runs `CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions`, so the test PostgreSQL needs the pgvector extension files. Homebrew: `brew install pgvector` (builds for the installed `postgresql@17`). Docker: use an image that ships pgvector, for example `pgvector/pgvector:pg17`, instead of the stock `postgres:17.11`. CI needs the same change to its `postgres` service image; pin the replacement by digest like the current one. Supabase allows the extension on the `extensions` schema.
