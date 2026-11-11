@@ -139,7 +139,7 @@ export function createBackendServices(database, options = {}) {
     repository: holdingProductRepository, policyHoldings, policyProfiles, referenceCache: new ReferenceCacheRepository(database), jobQueue, ocr, pipeline: holdings, env: options.env ?? process.env, clock: options.clock, client: options.referenceClient ?? null,
   });
 
-  const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, env: options.env ?? process.env, client: options.referenceClient ?? null });
+  const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, referenceCache: new ReferenceCacheRepository(database), env: options.env ?? process.env, client: options.referenceClient ?? null });
 
   return {
     analytics, networkHospitals, holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
