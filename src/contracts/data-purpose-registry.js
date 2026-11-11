@@ -20,6 +20,11 @@ const GEMINI = 'google-gemini';
 const ANTHROPIC = 'anthropic';
 // Household chat and fact extraction (ADR 0030, S6). The grant that opens this scope is built with chat v1; FOR LEGAL REVIEW.
 const CHAT_SCOPE = Object.freeze({ resourceType: 'household', action: 'derive', dataCategory: 'insurance_question', recipient: ANTHROPIC });
+// The embedding provider (MODEL_ROUTES routes `embed` to voyage, ADR 0031): its own recipient, so a chat grant never covers it. FOR LEGAL REVIEW.
+const EMBED_SCOPE = Object.freeze({ resourceType: 'household', action: 'derive', dataCategory: 'insurance_question', recipient: 'voyage' });
+// The purpose a chat or embed grant must carry (resolved server side, re-checked at commit; src/backend/services/provider-consent.js).
+export const CHAT_CONSENT_PURPOSE = 'coverage_reconstruction';
+export { CHAT_SCOPE, EMBED_SCOPE };
 const GEMINI_SCOPE = Object.freeze({ resourceType: 'document', action: 'derive', dataCategory: 'insurance_document', recipient: GEMINI });
 const QUESTION_SCOPE = Object.freeze({ resourceType: 'document', action: 'derive', dataCategory: 'insurance_question', recipient: GEMINI });
 const SARVAM_SCOPE = Object.freeze({ resourceType: 'document', action: 'derive', dataCategory: 'insurance_document', recipient: 'sarvam' });
@@ -173,10 +178,14 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   // Gateway tasks (ADR 0030): gated chat, classification, fact-extraction and embedding text. Recipient is the routed provider
   // (anthropic by default). Nothing is stored by this service; provider_calls keeps counts and a digest only.
   ...['chat_answer.payload.question', 'chat_answer.payload.history[].text', 'chat_answer.payload.facts[].label', 'chat_answer.payload.facts[].value',
-    'intent_classify.payload.text', 'fact_extract.payload.text', 'embed.payload.texts[].text'].map(slot => entry({
+    'intent_classify.payload.text', 'fact_extract.payload.text'].map(slot => entry({
     field: `model:${slot}`, category: 'insurance_question', purposes: ['coverage_reconstruction'], consentScope: CHAT_SCOPE, recipients: [ANTHROPIC], modelEligible: true,
     retention: 'not_stored_by_this_service', dataClass: 'CONFIDENTIAL', childData: 'possible', crossBorder: 'possible',
   })),
+  entry({
+    field: 'model:embed.payload.texts[].text', category: 'insurance_question', purposes: ['coverage_reconstruction'], consentScope: EMBED_SCOPE, recipients: ['voyage'], modelEligible: true,
+    retention: 'not_stored_by_this_service', dataClass: 'CONFIDENTIAL', childData: 'possible', crossBorder: 'possible',
+  }),
   modelText('model:policy_structuring_extract.payload.chunks[].text', { purposes: ['document_processing'], scope: GEMINI_SCOPE }),
   modelText('model:policy_structuring_extract.payload.chunks[].title', { purposes: ['document_processing'], scope: GEMINI_SCOPE }),
   modelText('model:policy_structuring_reconcile.payload.groups[].target', { purposes: ['document_processing'], scope: GEMINI_SCOPE }),

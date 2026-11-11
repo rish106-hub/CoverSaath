@@ -65,7 +65,8 @@ function validateProcedure(raw) {
   return procedure;
 }
 
-export function createChatV1Service({ chatRepository, holdingRepository, chunks, clauses, database, memory, gateway = null, loadKnownIdentifiers, env = process.env, clock = () => new Date() }) {
+export function createChatV1Service({ chatRepository, holdingRepository, chunks, clauses, database, memory, providerConsent, gateway = null, loadKnownIdentifiers, env = process.env, clock = () => new Date() }) {
+  if (!providerConsent) throw new TypeError('A provider consent resolver is required.');
   const requireEnabled = () => { if (!memoryEnabled(env)) throw coded('MEMORY_DISABLED', 'Memory is disabled.', 503); };
   const voiceAudioRetained = () => env.VOICE_AUDIO_RETAIN === 'true';
 
@@ -99,7 +100,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
   }
 
   // Words a short answer over redacted facts. Resolves { text, factsUsed, meta } or null (use the deterministic answer).
-  async function modelAnswer({ householdId, message, history, context, relevant, plan, passages, startedAt }) {
+  async function modelAnswer({ householdId, adultId, chatGrantId, message, history, context, relevant, plan, passages, startedAt }) {
     if (!gateway?.enabled) return null;
     let memoLoad;
     const loader = () => (memoLoad ??= loadKnownIdentifiers(householdId));
@@ -134,7 +135,11 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const input = sealModelInput('chat_answer', { payload: { question: question.gated, history: historyGated, facts: slots } });
     const redactedPromptHash = sha256(JSON.stringify({ q: question.gated.text, h: historyGated.map(turn => turn.text.text), f: slots.map(slot => [slot.fact_id, slot.label.text, slot.value.text]) }));
     let result;
-    try { result = await gateway.call({ task: 'chat_answer', input, householdId }); } catch (error) {
+    try {
+      // Re-check the grant right before dispatch (audit F1); the commit re-checks it again inside the transaction.
+      await providerConsent.require({ householdId, adultId, grantId: chatGrantId, kind: 'chat' });
+      result = await gateway.call({ task: 'chat_answer', input, householdId });
+    } catch (error) {
       if (error?.code) return { failed: error.code };
       throw error;
     }
@@ -211,7 +216,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             let passages = [];
             const answersTopic = factKeys.some(key => context.facts.some(fact => fact.factKey === key));
             if (!answersTopic && intent !== 'procedure_planning') {
-              const vector = await memory.embedQuery({ householdId, text: message });
+              const vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: message });
               if (vector) {
                 passages = await chunks.search({ householdId, holdingIds: context.holdingIds.length ? context.holdingIds : null, embedding: vector, limit: VECTOR_K });
                 mode = 'vector';
@@ -227,8 +232,10 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
 
             const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits });
             const history = await chatRepository.recentTurns({ householdId, threadId });
+            // No current chat grant (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
+            const chatGrantId = gateway?.enabled ? await providerConsent.resolve({ householdId, adultId: principal.adultId, kind: 'chat' }) : null;
             const model = (context.facts.length > 0 || passages.length > 0)
-              ? await modelAnswer({ householdId, message, history, context, relevant, plan, passages, startedAt }) : null;
+              ? (gateway?.enabled && !chatGrantId ? { failed: 'consent_required' } : await modelAnswer({ householdId, adultId: principal.adultId, chatGrantId, message, history, context, relevant, plan, passages, startedAt })) : null;
 
             let text = deterministic.text;
             let answerSource = 'deterministic';
@@ -252,6 +259,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
                 costPaise: assistantMeta.costUsd ? Math.ceil(assistantMeta.costUsd * (Number(env.COST_PAISE_PER_USD) > 0 ? Number(env.COST_PAISE_PER_USD) : 9000)) : 0,
                 latencyMs: Date.now() - startedAt,
               },
+              consent: answerSource === 'model' ? { grantId: chatGrantId, adultId: principal.adultId } : null,
               trace: { mode, holdingIds: context.holdingIds, factIds, chunkIds: [...new Set([...passages.map(item => item.id)])], conflictIds: context.conflicts.map(item => item.id) },
             });
 

@@ -25,6 +25,34 @@ export async function requireGrant(db, { householdId, grantId, purpose, subjectA
   if (!grant) fail('CONSENT_REQUIRED', 'Active consent is required before this information can be stored.', 403);
 }
 
+const SCOPE_MATCH = `EXISTS (SELECT 1 FROM consent_scopes AS scope WHERE scope.consent_grant_id = grant_record.id
+  AND scope.resource_type = ? AND scope.action = ? AND scope.data_category = ? AND scope.recipient = ?)`;
+const scopeArgs = scope => [scope.resourceType, scope.action, scope.dataCategory, scope.recipient];
+
+/**
+ * Provider-call consent (audit F1, invariant 2): a grant of the household for the purpose, not revoked, not expired, whose scope names
+ * exactly this resource type, action, data category and RECIPIENT (a NULL recipient never matches). With `subjectAdultId` the grant must
+ * be that adult's. `lock: true` takes FOR SHARE so a concurrent revoke waits for the commit. Throws CONSENT_REQUIRED (403) otherwise.
+ */
+export async function requireScopedGrant(db, { householdId, grantId, purpose, subjectAdultId = null, scope, now, lock = false }) {
+  const grant = typeof grantId === 'string' && grantId ? await db.one(`SELECT grant_record.id FROM consent_grants AS grant_record
+    WHERE grant_record.id = ? AND grant_record.household_id = ? AND grant_record.purpose = ? AND grant_record.revoked_at IS NULL
+      AND (grant_record.expires_at IS NULL OR julianday(grant_record.expires_at) > julianday(?))
+      AND (?::text IS NULL OR grant_record.subject_adult_id = ?) AND ${SCOPE_MATCH}${lock ? ' FOR SHARE OF grant_record' : ''}`,
+  [grantId, householdId, purpose, now, subjectAdultId, subjectAdultId, ...scopeArgs(scope)]) : null;
+  if (!grant) fail('CONSENT_REQUIRED', 'Active consent is required before this information can leave for the provider.', 403);
+}
+
+/** The id of the newest matching grant (same rules as requireScopedGrant), or null. Never throws for "none". */
+export async function findScopedGrant(db, { householdId, purpose, subjectAdultId = null, scope, now }) {
+  const row = await db.one(`SELECT grant_record.id FROM consent_grants AS grant_record
+    WHERE grant_record.household_id = ? AND grant_record.purpose = ? AND grant_record.revoked_at IS NULL
+      AND (grant_record.expires_at IS NULL OR julianday(grant_record.expires_at) > julianday(?))
+      AND (?::text IS NULL OR grant_record.subject_adult_id = ?) AND ${SCOPE_MATCH}
+    ORDER BY grant_record.granted_at DESC, grant_record.id DESC LIMIT 1`, [householdId, purpose, now, subjectAdultId, subjectAdultId, ...scopeArgs(scope)]);
+  return row?.id ?? null;
+}
+
 export const str = (value, name, max = 200) => {
   if (typeof value !== 'string' || !value || value.length > max) invalid(`${name} is invalid.`);
   return value;

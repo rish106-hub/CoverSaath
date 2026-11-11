@@ -48,8 +48,9 @@ export function resolvedConfirmedFacts(memoryRows) {
   return out;
 }
 
-export function createMemoryService({ holdingRepository, chunks, clauses, database, gateway = null, loadKnownIdentifiers, env = process.env }) {
+export function createMemoryService({ holdingRepository, chunks, clauses, database, gateway = null, loadKnownIdentifiers, providerConsent, env = process.env }) {
   if (!holdingRepository || !chunks) throw new TypeError('A holding repository and a chunk repository are required.');
+  if (!providerConsent) throw new TypeError('A provider consent resolver is required.');
 
   async function gatePassage(text, householdId) {
     try {
@@ -71,16 +72,22 @@ export function createMemoryService({ holdingRepository, chunks, clauses, databa
   return Object.freeze({
     enabled: () => memoryEnabled(env),
 
-    /** Embeds one query text. Resolves a vector, or null when embeddings are unavailable (flag, key, budget, gate refusal). */
-    async embedQuery({ householdId, text }) {
+    /**
+     * Embeds one query text. Resolves a vector, or null when embeddings are unavailable (flag, key, budget, gate refusal) or the acting
+     * adult holds no current embedding-provider grant (audit F1: nothing is sent without one, and the grant is re-checked at dispatch).
+     */
+    async embedQuery({ householdId, adultId, text }) {
       if (!memoryEnabled(env) || !gateway?.enabled) return null;
+      const grantId = await providerConsent.resolve({ householdId, adultId, kind: 'embed' });
+      if (!grantId) return null;
       const gated = await gatePassage(text, householdId);
       if (!gated) return null;
       try {
+        await providerConsent.require({ householdId, adultId, grantId, kind: 'embed' });
         const embedded = await embedGated(householdId, [gated]);
         return embedded ? embedded.vectors[0] : null;
       } catch (error) {
-        if (error?.code) return null;
+        if (error?.code) return null; // includes CONSENT_REQUIRED: revoked since the grant was resolved
         throw error;
       }
     },
@@ -94,6 +101,9 @@ export function createMemoryService({ holdingRepository, chunks, clauses, databa
       if (!holding) return result({ skipped: 'holding_not_found' });
       const document = await holdingRepository.holdingDocument({ householdId, documentId: holding.documentId });
       if (!document?.consentGrantId) return result({ skipped: 'document_not_available' });
+      // The embedding provider needs its own current, exact grant (audit F1). Worker path: no acting adult, any adult's grant of the household.
+      const embedGrantId = await providerConsent.resolve({ householdId, kind: 'embed' });
+      if (!embedGrantId) return result({ skipped: 'consent_required' });
 
       // 1. Candidate passages (plain text, then gated).
       const candidates = [];
@@ -130,6 +140,7 @@ export function createMemoryService({ holdingRepository, chunks, clauses, databa
       let skipped = null;
       try {
         for (let start = 0; start < fresh.length; start += BATCH) {
+          await providerConsent.require({ householdId, grantId: embedGrantId, kind: 'embed' });
           const batch = fresh.slice(start, start + BATCH);
           const embedded = await embedGated(householdId, batch.map(passage => passage.gated));
           if (!embedded) { skipped = 'embeddings_unavailable'; break; }
@@ -147,7 +158,7 @@ export function createMemoryService({ holdingRepository, chunks, clauses, databa
       const desired = passages.filter(passage => stored.get(`${passage.scope}|${passage.sourceRef}`) === passage.contentSha256 || toWrite.some(item => item.sourceRef === passage.sourceRef && item.scope === passage.scope))
         .map(passage => ({ scope: passage.scope, sourceRef: passage.sourceRef, contentSha256: passage.contentSha256 }));
       try {
-        const written = await chunks.replace({ householdId, holdingId, consentGrantId: document.consentGrantId, scopes: ['confirmed_fact', 'own_pdf'], desired, chunks: toWrite, embeddingModel: model ?? 'none' });
+        const written = await chunks.replace({ householdId, holdingId, consentGrantId: document.consentGrantId, embedGrantId, scopes: ['confirmed_fact', 'own_pdf'], desired, chunks: toWrite, embeddingModel: model ?? 'none' });
         return result({ embedded: written.written, removed: written.removed, refused, ...(skipped ? { skipped } : {}) });
       } catch (error) {
         if (error?.code === 'CONSENT_REQUIRED') return result({ refused, skipped: 'consent_not_current' });

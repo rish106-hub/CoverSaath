@@ -81,6 +81,8 @@ export async function eraseMemoryForConsentGrant(db, { householdId, consentGrant
   counts.conflicts = await deleteConflictsOfFacts(db, householdId, facts);
   const chunkIds = (await db.many('SELECT id FROM memory_chunks WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId])).map(row => row.id);
   counts.threads = await deleteChatDerivedFrom(db, { householdId, factIds: facts, chunkIds });
+  // A thread with a model-worded turn made under this grant (chat_turns.consent_grant_id, migration 058) goes whole (turns, traces cascade).
+  counts.threads += count(await db.run('DELETE FROM chat_threads WHERE household_id = ? AND id IN (SELECT thread_id FROM chat_turns WHERE household_id = ? AND consent_grant_id = ?)', [householdId, householdId, consentGrantId]));
   counts.chunks = count(await db.run('DELETE FROM memory_chunks WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId]));
   counts.dues = count(await db.run('DELETE FROM premium_dues WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId]));
   counts.payments = count(await db.run('DELETE FROM premium_payments WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId]));

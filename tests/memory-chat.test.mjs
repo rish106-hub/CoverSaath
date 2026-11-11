@@ -31,9 +31,10 @@ const vectorOf = text => {
   const digest = createHash('sha256').update(text).digest();
   return Array.from({ length: 1024 }, (_, i) => ((digest[i % 32] - 127.5) / 127.5) + (i % 7) * 0.001);
 };
-const embedClient = calls => ({ model: 'voyage-3.5', async embed({ texts }) { calls.push(...texts); return { vectors: texts.map(vectorOf), totalTokens: texts.length * 10, model: 'voyage-3.5' }; } });
-const answerStub = (sent, answer = 'Hello {{PERSON_1}}. Your room rent limit is INR 5,000 per day, from the insurer wording.') => settings => ({
+const embedClient = (calls, hook) => ({ model: 'voyage-3.5', async embed({ texts }) { calls.push(...texts); await hook?.(); return { vectors: texts.map(vectorOf), totalTokens: texts.length * 10, model: 'voyage-3.5' }; } });
+const answerStub = (sent, answer = 'Hello {{PERSON_1}}. Your room rent limit is INR 5,000 per day, from the insurer wording.', hook = null) => settings => ({
   async generate({ prompt }) {
+    await hook?.();
     sent.push(`${settings.instructions}\n${prompt}`);
     const facts = JSON.parse(prompt).facts ?? [];
     const room = facts.find(fact => /room rent/i.test(JSON.stringify(fact.label)));
@@ -41,7 +42,13 @@ const answerStub = (sent, answer = 'Hello {{PERSON_1}}. Your room rent limit is 
   },
 });
 
-async function scenario(t, { env: override = {}, budget = 1, facts = true, clauses = true } = {}) {
+const SCOPE = recipient => ({ resource_type: 'household', action: 'derive', data_category: 'insurance_question', recipient });
+// FOR LEGAL REVIEW: the grant that opens the chat and embedding providers (purpose coverage_reconstruction, one scope per recipient).
+async function grantProviders(pool, id, recipients = ['anthropic', 'voyage']) {
+  for (const recipient of recipients) await insert(pool, 'consent_scopes', { id: `scope-${id}-${recipient}`, consent_grant_id: id, ...SCOPE(recipient) });
+}
+
+async function scenario(t, { env: override = {}, budget = 1, facts = true, clauses = true, recipients = ['anthropic', 'voyage'], onGenerate = null, onEmbed = null } = {}) {
   const fresh = await freshDatabase(t);
   const { db, handle } = fresh;
   const a = await seedWorld(handle.pool, 'a');
@@ -52,13 +59,14 @@ async function scenario(t, { env: override = {}, budget = 1, facts = true, claus
     await insert(handle.pool, 'consent_grants', { id: w.profileGrant, household_id: w.household, subject_adult_id: w.adult, purpose: 'profile_intake' });
     await insert(handle.pool, 'consent_grants', { id: w.coverageGrant, household_id: w.household, subject_adult_id: w.adult, purpose: 'coverage_reconstruction' });
   }
+  await grantProviders(handle.pool, a.coverageGrant, recipients);
   const env = { ...ENV, ...override };
   const sent = [];
   const embedded = [];
   const providerCalls = new ProviderCallRepository(db);
   const gateway = createChatModelGateway({
     env, router: createModelRouter({ env }), providerCalls, budgetFor: createHouseholdDayBudget({ maxUsd: budget }),
-    loadModel: async () => ({ stub: true }), createAgent: answerStub(sent), embedClientFor: () => embedClient(embedded),
+    loadModel: async () => ({ stub: true }), createAgent: answerStub(sent, undefined, () => onGenerate?.(handle, a)), embedClientFor: () => embedClient(embedded, () => onEmbed?.(handle, a)),
   });
   const services = createBackendServices(db, { env, modelGateway: gateway });
   const crypto = services.columnCrypto;
@@ -270,8 +278,9 @@ test('erasure: household, document and consent erasure delete chunks, threads, t
   assert.equal(await s.count('chat_threads'), 0);
   assert.equal(await s.count('chat_turns'), 0);
   assert.equal(await s.count('retrieval_traces'), 0);
-  assert.ok(await s.count('memory_chunks') > 0, 'chunks hang on the document grant, not this one');
-  // 2. Document erasure deletes its chunks.
+  assert.equal(await s.count('memory_chunks'), 0, 'chunks hang on the embedding grant (audit F1), so revoking it erases them');
+  // 2. Document erasure deletes its chunks (a chunk under the document grant, as before F1).
+  await insert(handle.pool, 'memory_chunks', { id: 'c-a1', household_id: a.household, holding_id: s.holding.id, consent_grant_id: a.consent, source_document_id: a.document });
   const documents = await eraseMemoryForDocuments(db, { householdId: a.household, documentIds: [a.document] });
   assert.ok(documents.chunks > 0);
   assert.equal(await s.count('memory_chunks'), 0);
@@ -401,4 +410,140 @@ test('routes: threads and an SSE turn; a foreign household is the same 404; off 
   const bad = await on.call(turnPath, { method: 'POST', token: owners.one.token, body: { message: 'hi', surprise: true } });
   assert.deepEqual([bad.status, bad.data.error.code], [400, 'CHAT_REQUEST_INVALID']);
   assert.equal((await on.call(turnPath, { method: 'POST', body: { message: 'hi' } })).status, 401);
+});
+
+// ---- Provider consent (audit F1, invariant 2): no chat or embed call without a current, exact grant. FOR LEGAL REVIEW (wording). ----
+const revoke = (pool, id) => pool.query('UPDATE consent_grants SET revoked_at = $1 WHERE id = $2', [new Date().toISOString(), id]);
+const providerCalls = async s => (await s.providerCalls.listForHousehold(s.a.household)).length;
+const assistantTurns = s => s.db.many("SELECT * FROM chat_turns WHERE household_id = ? AND role = 'assistant'", [s.a.household]);
+
+test('provider consent: no grant means no embed call and no chat model call (deterministic answer, coded status)', opts, async t => {
+  const s = await scenario(t, { recipients: [] });
+  const memorised = await s.services.memory.embedHolding({ householdId: s.a.household, holdingId: s.holding.id });
+  assert.deepEqual([memorised.embedded, memorised.skipped], [0, 'consent_required']);
+  assert.equal(s.embedded.length, 0, 'nothing went to the embedding provider');
+  assert.equal(await s.count('memory_chunks'), 0);
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(answer.answer_source, 'deterministic');
+  assert.equal(answer.model_status, 'consent_required');
+  assert.equal(answer.facts_used[0].fact_key, 'room_rent_limit', 'the confirmed fact still answers');
+  assert.equal(s.sent.length, 0, 'nothing went to the chat model');
+  assert.equal(await providerCalls(s), 0, 'no provider_calls row: nothing was dispatched');
+  assert.equal((await assistantTurns(s))[0].consent_grant_id, null);
+  // A turn that would have retrieved passages by vector also sends nothing.
+  await s.turn({ threadId: conversation.id, body: { message: 'what does the policy say about ambulance?' } });
+  assert.equal(s.embedded.length, 0);
+});
+
+test('provider consent: purpose, recipient, subject, revocation and expiry must all match exactly', opts, async t => {
+  // Wrong recipient: a voyage-only grant opens embeddings but not the chat model; an anthropic-only grant the reverse.
+  const embedOnly = await scenario(t, { recipients: ['voyage'] });
+  assert.ok((await embedOnly.services.memory.embedHolding({ householdId: embedOnly.a.household, holdingId: embedOnly.holding.id })).embedded > 0);
+  const c1 = await embedOnly.thread();
+  assert.equal(answerOf(await embedOnly.turn({ threadId: c1.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'deterministic');
+  assert.equal(embedOnly.sent.length, 0);
+
+  const chatOnly = await scenario(t, { recipients: ['anthropic'] });
+  assert.equal((await chatOnly.services.memory.embedHolding({ householdId: chatOnly.a.household, holdingId: chatOnly.holding.id })).skipped, 'consent_required');
+  assert.equal(chatOnly.embedded.length, 0);
+  const c2 = await chatOnly.thread();
+  assert.equal(answerOf(await chatOnly.turn({ threadId: c2.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'model');
+  assert.equal(chatOnly.sent.length, 1);
+
+  // Wrong purpose: the right scopes on a profile_intake grant do not open a provider.
+  const wrongPurpose = await scenario(t, { recipients: [] });
+  await grantProviders(wrongPurpose.handle.pool, wrongPurpose.a.profileGrant);
+  const c3 = await wrongPurpose.thread();
+  assert.equal(answerOf(await wrongPurpose.turn({ threadId: c3.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'deterministic');
+  assert.equal((await wrongPurpose.services.memory.embedHolding({ householdId: wrongPurpose.a.household, holdingId: wrongPurpose.holding.id })).skipped, 'consent_required');
+  assert.equal(wrongPurpose.sent.length + wrongPurpose.embedded.length, 0);
+
+  // A NULL-recipient scope never authorises a named recipient.
+  const nullRecipient = await scenario(t, { recipients: [] });
+  await insert(nullRecipient.handle.pool, 'consent_scopes', { id: 'scope-null', consent_grant_id: nullRecipient.a.coverageGrant, ...SCOPE(null) });
+  const c4 = await nullRecipient.thread();
+  assert.equal(answerOf(await nullRecipient.turn({ threadId: c4.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'deterministic');
+
+  // Foreign grant, revoked and expired grants do not open it. Revoked and expired grants do not open it either.
+  for (const [name, change] of [
+    // A foreign household's grant, scopes and all, opens nothing here.
+    ['foreign household', async s => { await revoke(s.handle.pool, s.a.coverageGrant); await grantProviders(s.handle.pool, s.b.coverageGrant); }],
+    ['revoked', (s) => revoke(s.handle.pool, s.a.coverageGrant)],
+    ['expired', (s) => s.handle.pool.query('UPDATE consent_grants SET expires_at = $1 WHERE id = $2', ['2020-01-01T00:00:00.000Z', s.a.coverageGrant])],
+  ]) {
+    const s = await scenario(t);
+    await change(s);
+    const conversation = await s.thread();
+    assert.equal(answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'deterministic', name);
+    assert.equal((await s.services.memory.embedHolding({ householdId: s.a.household, holdingId: s.holding.id })).skipped, 'consent_required', name);
+    assert.equal(s.sent.length + s.embedded.length, 0, name);
+  }
+});
+
+test('provider consent: happy path stores the grant on the model turn and on the chunks', opts, async t => {
+  const s = await scenario(t);
+  assert.ok((await s.services.memory.embedHolding({ householdId: s.a.household, holdingId: s.holding.id })).embedded > 0);
+  const chunkGrants = await s.db.many('SELECT DISTINCT consent_grant_id FROM memory_chunks WHERE household_id = ?', [s.a.household]);
+  assert.deepEqual(chunkGrants.map(row => row.consent_grant_id), [s.a.coverageGrant]);
+  const conversation = await s.thread();
+  assert.equal(answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'model');
+  assert.equal(s.sent.length, 1);
+  assert.deepEqual((await assistantTurns(s)).map(row => row.consent_grant_id), [s.a.coverageGrant]);
+});
+
+test('provider consent: a grant revoked after resolve and before commit writes nothing', opts, async t => {
+  // Chat: revoked while the model call is in flight. The turn fails with a coded error; no turn, trace or thread update is written.
+  const chat = await scenario(t, { onGenerate: (handle, a) => revoke(handle.pool, a.coverageGrant) });
+  const conversation = await chat.thread();
+  const out = await chat.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } });
+  assert.deepEqual(out.map(([event]) => event).filter(event => event !== 'meta'), ['error']);
+  assert.equal(out.find(([event]) => event === 'error')[1].code, 'CONSENT_REQUIRED');
+  assert.equal(await chat.count('chat_turns'), 0);
+  assert.equal(await chat.count('retrieval_traces'), 0);
+  // The repository itself refuses without a current grant for a model answer, and a deterministic turn needs none.
+  const base = { householdId: chat.a.household, threadId: conversation.id, user: { text: 'q', inputKind: 'text' }, trace: { mode: 'facts_only' } };
+  const model = { text: 'a', intent: 'unknown', answerSource: 'model' };
+  const refuse = error => { assert.equal(error.code, 'CONSENT_REQUIRED'); assert.equal(error.statusCode, 403); return true; };
+  await assert.rejects(chat.services.chatRepository.appendExchange({ ...base, assistant: model }), refuse);
+  await assert.rejects(chat.services.chatRepository.appendExchange({ ...base, assistant: model, consent: { grantId: chat.a.coverageGrant, adultId: chat.a.adult } }), refuse);
+  await assert.rejects(chat.services.chatRepository.appendExchange({ ...base, assistant: model, consent: { grantId: chat.a.coverageGrant, adultId: chat.b.adult } }), refuse); // subject mismatch
+  assert.equal(await chat.count('chat_turns'), 0);
+  await chat.services.chatRepository.appendExchange({ ...base, assistant: { ...model, answerSource: 'deterministic' } });
+  assert.equal(await chat.count('chat_turns'), 2);
+
+  // Embed: revoked while the embedding call is in flight. Nothing is written.
+  const embed = await scenario(t, { onEmbed: (handle, a) => revoke(handle.pool, a.coverageGrant) });
+  const result = await embed.services.memory.embedHolding({ householdId: embed.a.household, holdingId: embed.holding.id });
+  assert.equal(result.embedded, 0);
+  assert.equal(await embed.count('memory_chunks'), 0);
+  // The chunk repository re-checks purpose and recipient itself: a document grant is not an embedding grant.
+  const wrong = await scenario(t);
+  const written = { householdId: wrong.a.household, holdingId: wrong.holding.id, consentGrantId: wrong.a.consent, scopes: ['confirmed_fact'], desired: [], chunks: [], embeddingModel: 'none' };
+  await assert.rejects(wrong.services.memoryChunks.replace({ ...written, embedGrantId: wrong.a.consent }), refuse);
+  await assert.rejects(wrong.services.memoryChunks.replace({ ...written, embedGrantId: wrong.a.profileGrant }), refuse);
+  await wrong.services.memoryChunks.replace({ ...written, embedGrantId: wrong.a.coverageGrant });
+});
+
+test('provider consent: revoking the chat grant erases the chat it made possible (and only that)', opts, async t => {
+  const s = await scenario(t, { recipients: ['voyage'] });
+  // A separate chat grant for the anthropic recipient: the facts hang on the other grant, so only chat_turns.consent_grant_id can reach the thread.
+  await insert(s.handle.pool, 'consent_grants', { id: 'cg-chat', household_id: s.a.household, subject_adult_id: s.a.adult, purpose: 'coverage_reconstruction' });
+  await grantProviders(s.handle.pool, 'cg-chat', ['anthropic']);
+  const modelled = await s.thread();
+  assert.equal(answerOf(await s.turn({ threadId: modelled.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'model');
+  assert.deepEqual((await assistantTurns(s)).map(row => row.consent_grant_id), ['cg-chat']);
+  const erased = await eraseMemoryForConsentGrant(s.db, { householdId: s.a.household, consentGrantId: 'cg-chat' });
+  assert.equal(erased.threads, 1);
+  for (const table of ['chat_threads', 'chat_turns', 'retrieval_traces']) assert.equal(await s.count(table), 0, table);
+  // Through the consent service: revoke erases the same way, and a later turn falls back to the deterministic answer.
+  await insert(s.handle.pool, 'consent_grants', { id: 'cg-chat2', household_id: s.a.household, subject_adult_id: s.a.adult, purpose: 'coverage_reconstruction' });
+  await grantProviders(s.handle.pool, 'cg-chat2', ['anthropic']);
+  const next = await s.thread();
+  assert.equal(answerOf(await s.turn({ threadId: next.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'model');
+  await s.services.consents.revoke({ grantId: 'cg-chat2', revokedByAdultId: s.a.adult });
+  assert.equal(await s.count('chat_turns'), 0);
+  await revoke(s.handle.pool, 'cg-chat'); // the first grant was only erased from, not revoked
+  const after = await s.thread();
+  assert.equal(answerOf(await s.turn({ threadId: after.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'deterministic');
 });
