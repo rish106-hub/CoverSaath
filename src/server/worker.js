@@ -8,8 +8,10 @@ import { createBackendServices } from '../backend/services/index.js';
 import { POLICY_FACTS_JOB_KIND } from '../backend/services/policy-facts-service.js';
 import { policyFactsEnabled } from '../backend/services/policy-profile-service.js';
 import { createPolicyFactsHandler } from '../backend/jobs/policy-facts-handler.js';
-import { createDetectInsurerHandler, createReferenceImportHandler } from '../backend/jobs/holdings-handlers.js';
-import { DETECT_INSURER_JOB_KIND, REFERENCE_IMPORT_JOB_KIND, holdingsEnabled } from '../backend/services/holding-product-service.js';
+import { createHoldingHandlers } from '../backend/jobs/holding-pipeline-handlers.js';
+import { holdingsEnabled } from '../backend/services/holdings-flag.js';
+import { createDetectInsurerHandler, createReferenceImportHandler } from '../backend/jobs/holding-product-handlers.js';
+import { DETECT_INSURER_JOB_KIND, REFERENCE_IMPORT_JOB_KIND } from '../backend/services/holding-product-service.js';
 
 // Worker process entry (plan B4): `npm run worker`. Same image and database as the API, no HTTP listener. It claims jobs from
 // the Postgres queue (job_queue, migration 034) and runs the handler registered for the job's kind.
@@ -23,6 +25,8 @@ export const jobHandlers = Object.freeze({});
 export function buildJobHandlers(services, env = process.env) {
   const handlers = {};
   if (policyFactsEnabled(env)) handlers[POLICY_FACTS_JOB_KIND] = createPolicyFactsHandler({ service: services.policyFacts });
+  // Holdings pipeline (complete.md 3.2): parse_own_pdf, fetch_reference (stub), collate, memorise (stub). Only while HOLDINGS_ENABLED is exactly "true".
+  if (holdingsEnabled(env)) Object.assign(handlers, createHoldingHandlers({ service: services.holdings }));
   // Holdings (HOLDINGS_ENABLED=true): detection, and the reference import (also needs REFERENCE_DATA_ENABLED=true to do any work).
   if (holdingsEnabled(env)) {
     handlers[DETECT_INSURER_JOB_KIND] = createDetectInsurerHandler({ service: services.holdingProducts });

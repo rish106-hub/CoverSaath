@@ -1,0 +1,2 @@
+# Generated synthetic PDFs (scripts/demo/build-fixtures.mjs): binary, so xref whitespace is not flagged.
+tests/fixtures/demo/*.pdf binary

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { LIST_LIMIT, fail, invalid, requirePerson, str } from './holdings-common.js';
+import { HOLDING_STATUSES } from '../../contracts/holdings.js';
 
 // Policy holdings (migration 048, ADR 0032): the thin link of a household's policy to its upload and policy profile. It stores no
 // insurer, plan, UIN or number. Every read and write is scoped to a household the acting adult can see (a foreign household, or a
@@ -9,7 +10,6 @@ import { LIST_LIMIT, fail, invalid, requirePerson, str } from './holdings-common
 // applies, the role check does not.
 
 export const HOLDING_KINDS = Object.freeze(['retail_health', 'group_health', 'top_up', 'critical_illness', 'other']);
-export const HOLDING_STATUSES = Object.freeze(['uploaded', 'insurer_pending', 'product_reported', 'parsed', 'conflicts', 'ready']);
 const STATUS_FLOW = Object.freeze({
   uploaded: ['insurer_pending', 'product_reported', 'parsed'],
   insurer_pending: ['product_reported', 'parsed'],

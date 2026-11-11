@@ -1,0 +1,215 @@
+{
+  "banner": "DEMO FIXTURE - INVENTED TEXT - NOT A REAL POLICY DOCUMENT",
+  "hospitals": [
+    {
+      "id": "demo-hospital-01",
+      "name": "Demo Hospital 01 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-02",
+      "name": "Demo Hospital 02 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-03",
+      "name": "Demo Hospital 03 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_2"
+    },
+    {
+      "id": "demo-hospital-04",
+      "name": "Demo Hospital 04 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-05",
+      "name": "Demo Hospital 05 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-06",
+      "name": "Demo Hospital 06 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_2"
+    },
+    {
+      "id": "demo-hospital-07",
+      "name": "Demo Hospital 07 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-08",
+      "name": "Demo Hospital 08 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-09",
+      "name": "Demo Hospital 09 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_2"
+    },
+    {
+      "id": "demo-hospital-10",
+      "name": "Demo Hospital 10 (synthetic)",
+      "pincode": "990001",
+      "city": "Demo City 1",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-11",
+      "name": "Demo Hospital 11 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-12",
+      "name": "Demo Hospital 12 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-13",
+      "name": "Demo Hospital 13 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_2"
+    },
+    {
+      "id": "demo-hospital-14",
+      "name": "Demo Hospital 14 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-15",
+      "name": "Demo Hospital 15 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-16",
+      "name": "Demo Hospital 16 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_2"
+    },
+    {
+      "id": "demo-hospital-17",
+      "name": "Demo Hospital 17 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-18",
+      "name": "Demo Hospital 18 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-19",
+      "name": "Demo Hospital 19 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_2"
+    },
+    {
+      "id": "demo-hospital-20",
+      "name": "Demo Hospital 20 (synthetic)",
+      "pincode": "990002",
+      "city": "Demo City 2",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-21",
+      "name": "Demo Hospital 21 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-22",
+      "name": "Demo Hospital 22 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-23",
+      "name": "Demo Hospital 23 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_2"
+    },
+    {
+      "id": "demo-hospital-24",
+      "name": "Demo Hospital 24 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-25",
+      "name": "Demo Hospital 25 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-26",
+      "name": "Demo Hospital 26 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_2"
+    },
+    {
+      "id": "demo-hospital-27",
+      "name": "Demo Hospital 27 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-28",
+      "name": "Demo Hospital 28 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_1"
+    },
+    {
+      "id": "demo-hospital-29",
+      "name": "Demo Hospital 29 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_2"
+    },
+    {
+      "id": "demo-hospital-30",
+      "name": "Demo Hospital 30 (synthetic)",
+      "pincode": "990003",
+      "city": "Demo City 3",
+      "networkTier": "tier_1"
+    }
+  ]
+}

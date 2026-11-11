@@ -6,7 +6,7 @@ import { postgresTestOptions } from './support/pg.mjs';
 import { startApp, scenario, fixture, bootstrapToken } from './support/read-back-harness.mjs';
 import { createBackendServices } from '../src/backend/services/index.js';
 import { exportCacheKey, referenceImportDedupeKey, chunkExport, REGISTRY_CACHE_KEY } from '../src/backend/services/holding-product-service.js';
-import { createReferenceImportHandler, createDetectInsurerHandler } from '../src/backend/jobs/holdings-handlers.js';
+import { createReferenceImportHandler, createDetectInsurerHandler } from '../src/backend/jobs/holding-product-handlers.js';
 import { buildJobHandlers } from '../src/server/worker.js';
 import { createInsuranceDataClient, REFERENCE_ENDPOINTS, SERVICE_ENDPOINTS } from '../src/integrations/index.js';
 import { detectInsurerCandidates } from '../src/features/insurer-detection/index.js';
@@ -150,7 +150,7 @@ test('flow: registry import, candidates, confirm-product, reference import (UIN 
 
   // The queued job runs through the registered handler: registry paged (two product pages), stored once, idempotent.
   const handlers = buildJobHandlers(services, env);
-  assert.deepEqual(Object.keys(handlers).sort(), ['holding.detect_insurer', 'policy_facts.extract', 'reference.import']);
+  assert.deepEqual(Object.keys(handlers).sort(), ['holding.collate', 'holding.detect_insurer', 'holding.fetch_reference', 'holding.memorise', 'holding.parse_own_pdf', 'policy_facts.extract', 'reference.import']);
   await handlers['reference.import']({ job: { kind: 'reference.import', householdId: s.householdId, payload: { scope: 'registry' } } });
   await handlers['reference.import']({ job: { kind: 'reference.import', householdId: s.householdId, payload: { scope: 'registry' } } });
   const registryRow = await app.database.one('SELECT body FROM reference_cache WHERE key = ?', [REGISTRY_CACHE_KEY]);
@@ -249,4 +249,37 @@ test('holdings routes are off unless HOLDINGS_ENABLED is exactly "true"', opts, 
   assert.equal(off.status, 503);
   assert.equal(off.data.error.code, 'HOLDINGS_DISABLED');
   assert.deepEqual(Object.keys(buildJobHandlers(createBackendServices(app.database, { env: { HOLDINGS_ENABLED: 'yes' } }), { HOLDINGS_ENABLED: 'yes' })), []);
+});
+
+// Integration (A3 + A4): a confirmed product starts the collate pipeline, behind HOLDINGS_ENABLED.
+async function confirmWithRegistry(t, extraEnv) {
+  const w = await world(t, extraEnv);
+  const handlers = buildJobHandlers(createBackendServices(w.app.database, { env: { ...w.env, HOLDINGS_ENABLED: 'true' } }), { ...w.env, HOLDINGS_ENABLED: 'true' });
+  await handlers['reference.import']({ job: { kind: 'reference.import', householdId: w.s.householdId, payload: { scope: 'registry' } } });
+  const url = `/api/v1/holdings/${w.holdingId}/confirm-product`;
+  const confirmed = await w.app.call(url, { method: 'POST', token: w.s.token, body: { candidateId: 'prod-shield', expectedVersion: 0 }, headers: { 'Idempotency-Key': `confirm-${randomUUID()}` } });
+  const jobs = await w.app.database.many("SELECT kind, dedupe_key FROM job_queue WHERE kind LIKE 'holding.%' AND kind <> 'holding.detect_insurer' ORDER BY kind");
+  return { confirmed, jobs };
+}
+
+test('confirm-product starts the pipeline: parse_own_pdf and fetch_reference queued once', opts, async t => {
+  const { confirmed, jobs } = await confirmWithRegistry(t, {});
+  assert.equal(confirmed.status, 200);
+  assert.deepEqual(jobs.map(job => job.kind), ['holding.fetch_reference', 'holding.parse_own_pdf']);
+  for (const job of jobs) assert.match(job.dedupe_key, /^[a-f0-9]{64}$/);
+});
+
+test('confirm-product with HOLDINGS_ENABLED off queues no pipeline jobs', opts, async t => {
+  const stub = await referenceStub();
+  t.after(() => new Promise(resolve => stub.server.close(resolve)));
+  fixture.pages = [BROCHURE.split('\n').map(text => ({ text, tag: 'paragraph' })), [{ text: 'Schedule of benefits', tag: 'paragraph' }]];
+  const env = { HOLDINGS_ENABLED: 'false', REFERENCE_DATA_ENABLED: 'true', REFERENCE_DATA_BASE_URL: `http://127.0.0.1:${stub.port}`, REFERENCE_DATA_API_KEY: 'test-key-not-real' };
+  const app = await startApp(t, { env });
+  const s = await scenario(app, { name: 'Holding' });
+  const holdingId = `hold-${randomUUID()}`;
+  const at = new Date().toISOString();
+  await app.database.run('INSERT INTO policy_holdings (id, household_id, document_id, kind, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', [holdingId, s.householdId, s.documentId, 'retail_health', 'uploaded', at, at]);
+  const refused = await app.call(`/api/v1/holdings/${holdingId}/confirm-product`, { method: 'POST', token: s.token, body: { candidateId: 'prod-shield', expectedVersion: 0 }, headers: { 'Idempotency-Key': `confirm-${randomUUID()}` } });
+  assert.notEqual(refused.status, 200);
+  assert.equal((await app.database.many("SELECT id FROM job_queue WHERE kind LIKE 'holding.%'")).length, 0);
 });
