@@ -1045,6 +1045,60 @@ test('person records stay scoped to their member and household (ADR 0026)', post
   proves('person_records_scope_update');
 });
 
+test('holdings and memory triggers (migrations 048-052, ADR 0032)', postgresTestOptions(), async t => {
+  const { pool, a, b } = await worlds(t);
+  const ok = 'enc2.k1.AAAA.BBBB.CCCC';
+  await rejects(insert(pool, 'policy_holdings', { id: 'h-foreign', household_id: b.household, document_id: a.document }), 'policy holding must match an active document of its household');
+  await rejects(insert(pool, 'policy_holdings', { id: 'h-policy', household_id: b.household, document_id: b.document, policy_id: a.policy }), 'policy holding must match a policy of its household');
+  await insert(pool, 'policy_holdings', { id: 'h-a', household_id: a.household, document_id: a.document, policy_id: a.policy });
+  await insert(pool, 'policy_holdings', { id: 'h-b', household_id: b.household, document_id: b.document });
+  proves('policy_holdings_scope_insert');
+  await rejects(pool.query('UPDATE policy_holdings SET policy_id = $1 WHERE id = $2', [b.policy, 'h-a']), 'policy holding must match a policy of its household');
+  proves('policy_holdings_scope_update');
+  const fact = { household_id: a.household, holding_id: 'h-a', consent_grant_id: a.consent, source_document_id: a.document, source_page_id: a.page };
+  await rejects(insert(pool, 'household_memory_facts', { ...fact, id: 'f-grant', consent_grant_id: b.consent }), 'memory fact must use a consent grant of its household');
+  await rejects(insert(pool, 'household_memory_facts', { ...fact, id: 'f-holding', holding_id: 'h-b' }), 'memory fact must match a holding of its household');
+  await rejects(insert(pool, 'household_memory_facts', { ...fact, id: 'f-sup', supersedes_id: 'nope' }), 'a superseded memory fact must belong to the same household and key');
+  await insert(pool, 'household_memory_facts', { ...fact, id: 'f-1', value_enc: ok });
+  await insert(pool, 'household_memory_facts', { ...fact, id: 'f-2', source_tier: 'user_declaration', status: 'user_confirmed', declared_by_adult_id: a.adult, capture_method: 'typed', source_page_id: null, value_enc: ok });
+  proves('household_memory_facts_scope_insert');
+  await rejects(pool.query(`UPDATE household_memory_facts SET status = 'conflicting' WHERE id = 'f-1'`), 'memory facts are immutable; only superseded_at may be stamped once; erasure deletes them');
+  assert.equal((await pool.query(`UPDATE household_memory_facts SET superseded_at = '2026-01-01T00:00:00.000Z' WHERE id = 'f-1'`)).rowCount, 1);
+  await rejects(pool.query(`UPDATE household_memory_facts SET superseded_at = '2026-02-01T00:00:00.000Z' WHERE id = 'f-1'`), 'memory facts are immutable; only superseded_at may be stamped once; erasure deletes them');
+  proves('household_memory_facts_immutable');
+  await rejects(insert(pool, 'memory_conflicts', { id: 'c-foreign', household_id: b.household, holding_id: 'h-a', candidate_fact_ids: ['f-1', 'f-2'] }), 'memory conflict must match a holding of its household');
+  await rejects(insert(pool, 'memory_conflicts', { id: 'c-cand', household_id: a.household, holding_id: 'h-a', candidate_fact_ids: ['f-1', 'nope'] }), 'memory conflict candidates must be facts of its household and key');
+  await insert(pool, 'memory_conflicts', { id: 'c-1', household_id: a.household, holding_id: 'h-a', candidate_fact_ids: ['f-1', 'f-2'] });
+  proves('memory_conflicts_scope_insert');
+  await rejects(pool.query(`UPDATE memory_conflicts SET resolution = 'user_chose', resolving_fact_id = 'f-2', resolved_by = 'user', resolved_by_adult_id = $1, resolved_at = '2026-01-01T00:00:00.000Z' WHERE id = 'c-1'`, [a.adult]), 'a resolving fact must be a conflict-resolution declaration of its household and key');
+  proves('memory_conflicts_scope_update');
+  assert.equal((await pool.query(`UPDATE memory_conflicts SET resolution = 'dismissed', resolved_by = 'rule', resolved_at = '2026-01-01T00:00:00.000Z' WHERE id = 'c-1'`)).rowCount, 1);
+  await rejects(pool.query(`UPDATE memory_conflicts SET fact_key = 'deductible' WHERE id = 'c-1'`), 'a memory conflict can only be resolved once; its candidates and slot are immutable');
+  proves('memory_conflicts_guard_update');
+  await rejects(insert(pool, 'member_declarations', { id: 'd-foreign', household_id: b.household, member_id: a.member, consent_grant_id: b.consent, declared_by_adult_id: b.adult, label_enc: ok }), 'declaration must match a member of its household');
+  await insert(pool, 'member_declarations', { id: 'd-1', household_id: a.household, member_id: a.member, consent_grant_id: a.consent, declared_by_adult_id: a.adult, label_enc: ok });
+  proves('member_declarations_scope_insert');
+  await rejects(pool.query('UPDATE member_declarations SET member_id = $1 WHERE id = $2', [b.member, 'd-1']), 'declaration must match a member of its household');
+  proves('member_declarations_scope_update');
+  await rejects(insert(pool, 'premium_payments', { id: 'p-foreign', household_id: b.household, holding_id: 'h-a', consent_grant_id: b.consent }), 'premium payment must match a holding of its household');
+  await insert(pool, 'premium_payments', { id: 'p-1', household_id: a.household, holding_id: 'h-a', consent_grant_id: a.consent });
+  proves('premium_payments_scope_insert');
+  await rejects(pool.query('UPDATE premium_payments SET consent_grant_id = $1 WHERE id = $2', [b.consent, 'p-1']), 'premium payment must use a consent grant of its household');
+  proves('premium_payments_scope_update');
+  await rejects(insert(pool, 'premium_dues', { id: 'du-foreign', household_id: b.household, holding_id: 'h-a', consent_grant_id: b.consent }), 'premium due must match a holding of its household');
+  await insert(pool, 'premium_dues', { id: 'du-1', household_id: a.household, holding_id: 'h-a', consent_grant_id: a.consent });
+  proves('premium_dues_scope_insert');
+  await insert(pool, 'premium_payments', { id: 'p-b', household_id: b.household, holding_id: 'h-b', consent_grant_id: b.consent });
+  await rejects(pool.query(`UPDATE premium_dues SET state = 'paid', paid_payment_id = 'p-b' WHERE id = 'du-1'`), 'premium due must be settled by a payment of its household and holding');
+  proves('premium_dues_scope_update');
+  // Document erasure removes the holding and everything hanging on it.
+  await pool.query(`UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = $1`, [a.document]);
+  for (const table of ['policy_holdings', 'household_memory_facts', 'memory_conflicts', 'premium_payments', 'premium_dues']) {
+    assert.equal(Number((await pool.query(`SELECT count(*) AS c FROM ${table} WHERE household_id = $1`, [a.household])).rows[0].c), 0, table);
+  }
+  proves('policy_holdings_erase_on_document_erasure');
+});
+
 test('catalogue reviews need an active grant, stay immutable and erase with their document', postgresTestOptions(), async t => {
   const { pool, a, b } = await worlds(t);
   const scope = 'catalogue review must match an active document, case, household and active reviewer grant';

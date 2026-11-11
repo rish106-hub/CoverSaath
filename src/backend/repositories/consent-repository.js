@@ -8,6 +8,7 @@ import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { openWorkflowRun } from '../security/sealed-records.js';
 import { GEMINI_MODEL_RECIPIENT } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { normalizeRevocationReason } from '../../contracts/data-lifecycle.js';
+import { eraseMemoryForConsentGrant, eraseMemoryForDocuments } from './memory-erasure.js';
 import { PERSON_RECORD_CATEGORIES, erasePersonRecordsForCategories } from './person-record-erasure.js';
 
 const id = prefix => `${prefix}-${randomUUID()}`;
@@ -365,6 +366,8 @@ export class ConsentRepository {
       // `auditActor` (household erasure only, never reachable from a request) names who really acted when the owner
       // erases a household that holds another adult's grant; the revocation row still names the subject adult.
       await this.audit?.append({ householdId: grant.household_id, actorType: actor.type, actorId: actor.id, action: 'consent.revoked', resourceType: 'consent_grant', resourceId: grantId, payload: { reasonProvided: reason !== null && reason !== undefined } });
+      // Holdings and memory written under this grant (migrations 048-052) are erased in the same transaction (ADR 0032).
+      await eraseMemoryForConsentGrant(db, { householdId: grant.household_id, consentGrantId: grantId });
       // Person records gated by this grant's data categories (health context, nominees) are erased in the same transaction (ADR 0026).
       if (grant.purpose === 'profile_intake') {
         const categories = (await db.many(`SELECT DISTINCT data_category FROM consent_scopes
@@ -564,6 +567,8 @@ export class ConsentRepository {
         householdId, documentIds: [...documents], reasonCode: redactionReason, caseId, resourceType, resourceId, actorType, actorId,
       });
     }
+    // Holdings and memory (migrations 048-052) read from or linked to the affected documents.
+    if (documents.size > 0) await eraseMemoryForDocuments(db, { householdId, documentIds: [...documents] });
     // Policy profiles (migration 043) of the affected documents: the confirmed names are derived from the withdrawn documents.
     let policyProfiles = 0;
     if (documents.size > 0 && householdId) {
