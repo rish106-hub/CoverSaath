@@ -50,7 +50,7 @@ test('link after the wording own holding exists: one holding, its derived data e
   assert.equal(await n(app, 'SELECT count(*) AS n FROM memory_chunks WHERE holding_id = ?', [standalone.id]), 0, 'derived data erased');
   assert.equal(await n(app, "SELECT count(*) AS n FROM job_queue WHERE document_id = ? AND kind LIKE 'holding.%' AND status = 'queued'", [wordingId]), 0);
   assert.equal(await n(app, "SELECT count(*) AS n FROM audit_events WHERE action = 'holding.absorbed' AND resource_id = ?", [standalone.id]), 1);
-  assert.deepEqual((await app.call(`/api/v1/holdings/${schedule.id}/documents`, { token: s.token })).data.documents, [{ documentId: wordingId, kind: 'wording' }]);
+  assert.deepEqual((await app.call(`/api/v1/holdings/${schedule.id}/documents`, { token: s.token })).data.documents, [{ documentId: wordingId, kind: 'wording', factsState: 'none' }]);
 
   // Duplicate delivery: idempotent, still one holding.
   const again = await link(schedule.id, wordingId);
@@ -147,7 +147,7 @@ test('summary: names null until confirmed, headline facts filled after, no UIN; 
   const sources = facts.facts.flatMap(fact => fact.sources).filter(source => source.page);
   assert.ok(sources.length >= 1);
   for (const source of sources) assert.equal(source.page.documentKind, 'policy_schedule');
-  assert.deepEqual((await app.call(`/api/v1/holdings/${schedule.id}/documents`, { token: s.token })).data.documents, [{ documentId: wordingId, kind: 'wording' }]);
+  assert.deepEqual((await app.call(`/api/v1/holdings/${schedule.id}/documents`, { token: s.token })).data.documents, [{ documentId: wordingId, kind: 'wording', factsState: 'none' }]);
 });
 
 test('revocation erasure still removes holdings and linked wording chunks', opts, async t => {

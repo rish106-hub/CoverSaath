@@ -73,7 +73,7 @@ function validateProcedure(raw) {
   return procedure;
 }
 
-export function createChatV1Service({ chatRepository, holdingRepository, chunks, clauses, database, memory, providerConsent, gateway = null, loadKnownIdentifiers, env = process.env, clock = () => new Date() }) {
+export function createChatV1Service({ chatRepository, holdingRepository, chunks, clauses, database, memory, providerConsent, gateway = null, loadKnownIdentifiers, env = process.env, clock = () => new Date(), onEvent = null }) {
   if (!providerConsent) throw new TypeError('A provider consent resolver is required.');
   const requireEnabled = () => { if (!memoryEnabled(env)) throw coded('MEMORY_DISABLED', 'Memory is disabled.', 503); };
   const voiceAudioRetained = () => env.VOICE_AUDIO_RETAIN === 'true';
@@ -280,7 +280,11 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             if (mayReadFacts && !answersTopic && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
               // An embedding failure is not a turn failure: it leaves the vector undefined and the keyword path below answers.
               let vector = null;
-              try { vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: message }); } catch { vector = null; }
+              try { vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: message }); } catch (error) {
+                vector = null;
+                // One coded operational line (fixed shape): never the message, the query or any identifier. Behaviour is unchanged.
+                try { onEvent?.({ event: 'chat_embed_failed', code: /^[A-Z][A-Z0-9_]{2,63}$/.test(error?.code ?? '') ? error.code : 'EMBED_FAILED' }); } catch { /* logging never breaks a turn */ }
+              }
               if (vector) {
                 passages = await chunks.search({ householdId, holdingIds: context.holdingIds.length ? context.holdingIds : null, embedding: vector, limit: VECTOR_K });
                 // Zero vector hits fall through to the keyword path (same household scope); only a vector that found passages stays 'vector'.
