@@ -12,8 +12,8 @@ primary_region = "sin"
   PORT = "8080"
   # Document bytes are encrypted in the application and stored in PostgreSQL (ADR 0013 D8). No volume, no file path.
   DOCUMENT_STORAGE_BACKEND = "database"
-  # The request limit and the model spend cap are shared through the database across both machines (per-process state
-  # remains: see the [[vm]] note).
+  # The request limits and the model spend cap are shared through the database across both machines (database is also the
+  # code default; per-process state that remains: see the [[vm]] note).
   RATE_LIMIT_BACKEND = "database"
   MODEL_BUDGET_BACKEND = "database"
   # Malware scanning on: clamd runs in the same container (docker/entrypoint.sh) and uploads are scanned before OCR.
@@ -61,10 +61,9 @@ primary_region = "sin"
     [http_service.checks.headers]
       Host = "knowvia-api.fly.dev"
 
-# Two machines in sin. Each runs its own clamd. Run claims for the evidence service and the document scan worker are still per
-# process (two machines can scan the same pending document; the persistence guards make that harmless, and the evidence
-# service can make a second paid model call on another machine). The request limit, the model spend cap and document bytes
-# are in PostgreSQL. Sizing is an estimate, not a measurement: clamd needs roughly 1.2 GB resident for the signature
+# Two machines in sin. Each runs its own clamd. The document scan worker is still per process (two machines can scan the same
+# pending document; the persistence guards make that harmless). The request limit, the per-adult service limits, the model
+# spend cap, the evidence claim and document bytes are in PostgreSQL (ADR 0014). Sizing is an estimate, not a measurement: clamd needs roughly 1.2 GB resident for the signature
 # database, plus Node, the PDF sandbox children and headroom. Watch `fly machine status` memory and any OOM kill after the
 # first deploy and adjust (docs/runbooks/fly-deploy.md, "Real workflow").
 [[vm]]
