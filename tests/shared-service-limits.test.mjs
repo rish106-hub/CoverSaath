@@ -31,15 +31,40 @@ test('two limiter instances sharing one database enforce one combined window and
   await two.check('user-data:adult-synthetic-1');
 });
 
-test('a database failure falls back to the per-process window and never blocks on its own', async () => {
+test('two machines checking in parallel never admit more than the shared limit', postgresTestOptions(), async t => {
+  const { db } = await freshDatabase(t);
+  const now = 1_000_000_000_000;
+  const store = new RuntimeLimitsRepository(db);
+  // Each machine's local window is wide (20), so only the shared count (limit 5) can refuse.
+  const machine = () => createSharedWindowLimiter({ limit: 5, store, clock: () => now });
+  const [one, two] = [machine(), machine()];
+  const results = await Promise.allSettled(Array.from({ length: 10 }, (_, index) => (index % 2 ? one : two).check('sync-push:adult-synthetic-1')));
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 5, 'exactly the limit is admitted across both machines');
+  assert.ok(results.filter(result => result.status === 'rejected').every(result => result.reason.status === 429));
+  const row = await db.one('SELECT request_count FROM rate_limit_buckets');
+  assert.equal(Number(row.request_count), 10, 'every check was counted once by the atomic upsert');
+});
+
+test('a database failure fails closed: the call is refused, not judged on the local count', async () => {
   let fallbacks = 0;
   const limiter = createSharedWindowLimiter({
     limit: 2, store: { consumeRequest: async () => { throw new Error('database down'); } }, onFallback: () => { fallbacks += 1; },
   });
-  await limiter.check('k');
-  await limiter.check('k');
-  await assert.rejects(limiter.check('k'), { status: 429 }, 'the local limit still applies');
+  await assert.rejects(limiter.check('k'), { status: 503 });
+  await assert.rejects(limiter.check('k'), { status: 503 });
+  await assert.rejects(limiter.check('k'), { status: 429 }, 'the local limit still refuses first');
   assert.equal(fallbacks, 2, 'refused locally, the third check never reached the store');
+});
+
+test('a user-data write is refused when the shared limit store fails', async () => {
+  const access = { requireHousehold: async () => ({ role: { role: 'owner' } }) };
+  let writes = 0;
+  const repository = { setPermission: async () => { writes += 1; return { ok: true }; } };
+  const limitStore = { consumeRequest: async () => { throw new Error('database down'); } };
+  const service = createUserDataService({ access, repository, limitStore });
+  await assert.rejects(service.setPermission({ adultId: 'adult-synthetic-1' }, 'household-synthetic-1', 'notifications', { state: 'granted', surface: 'settings' }),
+    { code: 'USER_DATA_RATE_LIMITED', statusCode: 429 });
+  assert.equal(writes, 0, 'no write without a shared count');
 });
 
 test('two user-data services sharing one database enforce one combined write limit', postgresTestOptions(), async t => {
