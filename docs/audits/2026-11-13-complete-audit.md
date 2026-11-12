@@ -1,3 +1,5 @@
+> **Note on scope and date.** This audit was done at backend `origin/main` `378b1ee` (merge of #111) and committed on 2026-11-11 (`d13d0d3`, 2026-11-11 23:18 +05:30), although the file name says 2026-11-13. Main has moved since: PRs #113 to #125 merged on 2026-11-11 and 2026-11-12, and some findings may already be fixed there (for example #114 for F1, #115 for F2, F5 and F7, #113 for F3); this file was not updated to say which. It is a point-in-time review, not a production sign-off: nothing here says the product is safe or ready to deploy, and the full suite was not re-run. For current state read [LATEST.md](../iterations/LATEST.md).
+
 # Wave E audit: complete.md MVP run (O-E1)
 
 Read-only staff-engineer audit of every PR landed by `docs/exec-plans/active/complete.md` (Waves A-D), done at backend `origin/main`

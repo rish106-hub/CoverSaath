@@ -45,6 +45,7 @@ Tests need PostgreSQL 17 in `TEST_DATABASE_URL` (see [local-postgres runbook](do
 | Column encryption, DB document bytes, profile answers | `src/backend/security/`, `src/features/input/encrypted-database-storage.js`, ADR 0013 |
 | Decisions | `docs/adr/` (0011 = Supabase + Fly, 0013 = encryption + RLS) |
 | Deploy and recovery | `docs/runbooks/fly-deploy.md` |
+| Run the demo journey (schedule + wording PDF, holding, chat) | `docs/runbooks/demo-journey.md` |
 | Product behaviour sources | `working/`, `building/` |
 
 Check `AGENTS.md` in the directory you edit; `src/backend/` and `src/integrations/` have their own.
