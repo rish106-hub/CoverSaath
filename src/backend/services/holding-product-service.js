@@ -167,11 +167,17 @@ export function createHoldingProductService({
       let resolved;
       try {
         const product = (await reference().read('products.get', { productId: candidateId })).data;
-        const matches = (await reference().read('products.nameSearch', { q: product.productName.slice(0, 80) })).data.products;
-        const named = matches.find(item => item.productId === product.productId);
-        if (!named || !product.uinRaw) throw coded('HOLDING_PRODUCT_NOT_FOUND', 'That product was not found.', 404);
-        resolved = { productName: product.productName, insurerName: named.insurerName, uin: profileUin(product.uinRaw) };
+        // The insurer name comes from the cached registry snapshot (FSS has no name-search route). No snapshot yet: ask again later.
+        const registry = await readRegistry();
+        if (!registry) {
+          await enqueueRegistryRefresh(holding.householdId);
+          throw coded('HOLDING_REGISTRY_UNAVAILABLE', 'The product list is not ready yet. Try again shortly.', 503, { retryable: true });
+        }
+        const insurer = registry.insurers.find(item => item.id === product.insurerId);
+        if (!insurer || !product.uinRaw) throw coded('HOLDING_PRODUCT_NOT_FOUND', 'That product was not found.', 404);
+        resolved = { productName: product.productName, insurerName: insurer.canonicalName, uin: profileUin(product.uinRaw) };
       } catch (error) {
+        if (error?.code === 'HOLDING_REGISTRY_UNAVAILABLE') throw error;
         if (error instanceof ReferenceDataError) {
           throw error.code === 'REFERENCE_DATA_NOT_FOUND' ? coded('HOLDING_PRODUCT_NOT_FOUND', 'That product was not found.', 404) : coded('HOLDING_REGISTRY_UNAVAILABLE', 'The product list is not ready yet. Try again shortly.', 503, { retryable: true });
         }
