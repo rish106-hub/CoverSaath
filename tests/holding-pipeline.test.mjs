@@ -227,3 +227,22 @@ test('erasure: deleting the document removes the holding and every row the pipel
     assert.equal(await count(app, `SELECT count(*) AS n FROM ${table} WHERE household_id = ?`, [s.householdId]), 0, table);
   }
 });
+
+test('wordingState: fss while insurer-tier rows are current; revocation erases them and the state falls back to missing', opts, async t => {
+  const { app, s, services, drain } = await world(t);
+  await services.holdings.startPipeline({ householdId: s.householdId, holdingId: s.holdingId });
+  await drain();
+  const summaryOf = async () => {
+    const holdings = await services.policyHoldings.list({ householdId: s.householdId, adultId: s.adultId });
+    return (await services.holdings.summaries({ householdId: s.householdId, holdings })).get(s.holdingId);
+  };
+  const view = await summaryOf();
+  assert.deepEqual([view.wordingState, view.wordingReason], ['fss', null]);
+  assert.equal(await count(app, "SELECT count(*) AS n FROM household_memory_facts WHERE holding_id = ? AND source_tier = 'ida_wording' AND superseded_at IS NULL", [s.holdingId]), 2);
+  // This reader has no refresh(): the check columns stay empty, and no refresh job is ever queued from a read.
+  assert.equal((await app.database.one('SELECT reference_outcome FROM policy_holdings WHERE id = ?', [s.holdingId])).reference_outcome, null);
+
+  const grant = (await app.database.one('SELECT consent_grant_id FROM document_uploads WHERE id = ?', [s.documentId])).consent_grant_id;
+  await services.consents.revoke({ grantId: grant, revokedByAdultId: s.adultId, reason: 'user_request' });
+  assert.equal(await count(app, "SELECT count(*) AS n FROM household_memory_facts WHERE household_id = ? AND source_tier = 'ida_wording'", [s.householdId]), 0);
+});

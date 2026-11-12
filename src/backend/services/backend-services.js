@@ -1,7 +1,7 @@
 import { holdingsEnabled } from './holdings-flag.js';
 import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, SyncRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository, PersonRecordRepository, HoldingProductRepository, ReferenceCacheRepository, PolicyHoldingRepository, MemoryFactRepository, DeclarationRepository, PremiumRepository, ProviderCallRepository, MemoryChunkRepository, ChatRepository } from '../repositories/index.js';
 import { createChatModelGateway, createHouseholdDayBudget } from '../../features/ai-analysis/index.js';
-import { createModelRouter, createVoyageEmbedClient } from '../../integrations/index.js';
+import { createModelRouter, createVoyageEmbedClient, createInsuranceDataClient } from '../../integrations/index.js';
 import { createHouseholdIdentifierLoader } from './household-identifiers.js';
 import { createMemoryService } from './memory-service.js';
 import { createChatV1Service } from './chat-v1-service.js';
@@ -13,6 +13,8 @@ import { createPersonRecordService } from './person-record-service.js';
 import { createPolicyProfileService, policyFactsEnabled } from './policy-profile-service.js';
 import { HoldingPipelineRepository } from '../repositories/holding-pipeline-repository.js';
 import { createHoldingsService } from './holdings-service.js';
+import { createFssReferenceFacts } from './fss-reference-facts.js';
+import { createReferenceDataPort } from './reference-data-port.js';
 import { createPolicyFactsService, POLICY_FACTS_JOB_KIND, policyFactsDedupeKey } from './policy-facts-service.js';
 import { NORMALISER_VERSION } from '../../features/policy-facts/normalisers.js';
 import { createNetworkHospitalService } from './network-hospital-service.js';
@@ -138,7 +140,13 @@ export function createBackendServices(database, options = {}) {
   });
   const providerConsent = createProviderConsent({ database, clock: options.clock });
   const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, ocr, database, gateway: modelGateway, loadKnownIdentifiers, providerConsent, env });
-  const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, memory, analytics, env });
+  // The insurer tier (ADR 0034): the FSS reference reader over the cached reference port. Cache only on reads; the fetch_reference job refreshes it.
+  // `options.referenceFacts` replaces it (tests); `options.referenceClient` replaces the live client (tests use a local stub, never the network).
+  const referenceFacts = options.referenceFacts ?? createFssReferenceFacts({
+    port: createReferenceDataPort({ repository: new ReferenceCacheRepository(database), client: options.referenceClient ?? createInsuranceDataClient({ env }), env }),
+    repository: holdingPipelineRepository, env,
+  });
+  const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts, memory, analytics, env, clock: options.clock });
   holdingsHook = holdings;
   const chatRepository = new ChatRepository(database, { ...shared, households });
   const chatV1 = createChatV1Service({ onEvent: options.onWarn, chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, providerConsent, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
