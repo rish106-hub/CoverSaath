@@ -278,10 +278,13 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             let passages = [];
             const answersTopic = factKeys.some(key => context.facts.some(fact => fact.factKey === key));
             if (mayReadFacts && !answersTopic && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
-              const vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: message });
+              // An embedding failure is not a turn failure: it leaves the vector undefined and the keyword path below answers.
+              let vector = null;
+              try { vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: message }); } catch { vector = null; }
               if (vector) {
                 passages = await chunks.search({ householdId, holdingIds: context.holdingIds.length ? context.holdingIds : null, embedding: vector, limit: VECTOR_K });
-                mode = 'vector';
+                // Zero vector hits fall through to the keyword path (same household scope); only a vector that found passages stays 'vector'.
+                if (passages.length > 0) mode = 'vector';
               }
             }
             let clauseHits = [];

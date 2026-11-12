@@ -727,3 +727,53 @@ test('failover: an unconfigured first provider (no key) falls to the next withou
   assert.equal(answer.answer_source, 'model', answer.model_status);
   assert.deepEqual((await chatRows(s)).map(row => row.provider), ['anthropic']);
 });
+
+// Pipeline reliability (fix F1): the keyword path answers whenever the vector path yields nothing, under the same household scope.
+const ambulanceQuestion = { message: 'what does the policy say about the ambulance?' };
+
+test('keyword fallback: zero vector hits (no chunks embedded) fall back to clauses, citing document and page', opts, async t => {
+  const s = await scenario(t, { facts: false });
+  assert.equal(await s.count('memory_chunks'), 0);
+  const answer = answerOf(await s.turn({ threadId: (await s.thread()).id, body: ambulanceQuestion }));
+  assert.equal(answer.status, 'evidence_found');
+  assert.match(answer.answer, /From your policy document \(page 2\)/);
+  assert.ok(answer.sources.some(source => source.kind === 'wording' && source.document_id === s.a.document && source.page === 2));
+  assert.equal((await s.services.chatRepository.trace({ householdId: s.a.household, turnId: answer.turn_id })).mode, 'keyword');
+});
+
+test('keyword fallback: an embedding failure does not fail the turn', opts, async t => {
+  const s = await scenario(t, { facts: false, onEmbed: () => { throw new Error('embedding provider down'); } });
+  const out = await s.turn({ threadId: (await s.thread()).id, body: ambulanceQuestion });
+  assert.equal(out.some(([event]) => event === 'error'), false, JSON.stringify(out.find(([event]) => event === 'error')));
+  const answer = answerOf(out);
+  assert.match(answer.answer, /From your policy document \(page 2\)/);
+  assert.equal((await s.services.chatRepository.trace({ householdId: s.a.household, turnId: answer.turn_id })).mode, 'keyword');
+});
+
+test('keyword fallback: another household clauses are never returned', opts, async t => {
+  const s = await scenario(t, { facts: false, clauses: false });
+  await insert(s.handle.pool, 'policy_clauses', { id: 'clause-b-1', household_id: s.b.household, case_id: s.b.case, document_id: s.b.document, page: 4,
+    text: s.services.columnCrypto.seal('policy_clauses', 'text', 'clause-b-1', 'Ambulance charges are paid up to INR 9,999 per trip.'), digest: createHash('sha256').update('b').digest('hex'), kind: 'benefit' }).catch(() => {});
+  const answer = answerOf(await s.turn({ threadId: (await s.thread()).id, body: ambulanceQuestion }));
+  assert.equal(answer.status, 'unknown');
+  assert.doesNotMatch(JSON.stringify(answer), /9,999/);
+  assert.ok(answer.sources.every(source => source.document_id !== s.b.document));
+});
+
+test('keyword fallback: a document no longer active (consent revoked, erasure requested) yields no clauses', opts, async t => {
+  const s = await scenario(t, { facts: false });
+  const conversation = await s.thread();
+  await s.db.run("UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = ?", [s.a.document]);
+  const out = await s.turn({ threadId: conversation.id, body: ambulanceQuestion }).catch(error => error);
+  // Either the thread is refused outright (holding no longer readable) or the answer has no clause evidence; never the erased wording.
+  if (out instanceof Error) assert.equal(out.code, 'CHAT_THREAD_NOT_FOUND');
+  else assert.deepEqual([answerOf(out).status, answerOf(out).sources], ['unknown', []]);
+});
+
+test('keyword fallback: no vector hit and no keyword hit is "unknown", never an ungrounded answer', opts, async t => {
+  const s = await scenario(t, { facts: false });
+  const answer = answerOf(await s.turn({ threadId: (await s.thread()).id, body: { message: 'tell me about zzzqx dragons' } }));
+  assert.equal(answer.status, 'unknown');
+  assert.equal(answer.answer_source, 'deterministic');
+  assert.deepEqual(answer.sources, []);
+});
