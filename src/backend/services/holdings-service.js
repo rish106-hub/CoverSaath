@@ -1,4 +1,4 @@
-import { HOLDING_JOB_KINDS, HOLDING_JOB_MAX_ATTEMPTS, HOLDING_JOB_STEPS } from '../../contracts/holdings.js';
+import { HOLDING_SUMMARY_HEADLINES as HEADLINE_KEYS, HOLDING_JOB_KINDS, HOLDING_JOB_MAX_ATTEMPTS, HOLDING_JOB_STEPS } from '../../contracts/holdings.js';
 import { holdingsEnabled } from './holdings-flag.js';
 import { POLICY_FACT_KEY_NAMES, getPolicyFactKey } from '../../contracts/policy-facts.js';
 import { collateSlot, resolveSlot } from '../../features/insurance-rules/collate.js';
@@ -166,6 +166,7 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       const memory = await repository.currentMemory({ householdId: holding.householdId, holdingId: holding.id });
       const quotes = await repository.ownQuotes({ householdId: holding.householdId, policyFactIds: memory.filter(row => row.tier === 'own_pdf').map(row => row.policyFactId) });
       const conflicts = await repository.listConflicts({ householdId: holding.householdId, holdingId: holding.id, pendingOnly: true });
+      const kinds = await repository.pageDocumentKinds({ householdId: holding.householdId, pageIds: memory.map(row => row.sourcePageId) });
       const bySlot = new Map();
       for (const row of memory) {
         if (row.scopeKey !== '') continue;
@@ -183,10 +184,35 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
           status: resolved.status, value: resolved.value, sourceTier: resolved.sourceTier, sourceIds: resolved.sourceIds,
           alternatives: resolved.alternatives, checkWithInsurer: resolved.checkWithInsurer,
           openConflictId: conflicts.find(conflict => conflict.factKey === factKey)?.id ?? null,
-          sources: Object.values(tiers).map(row => sourceView(row, quotes)),
+          sources: Object.values(tiers).map(row => sourceView(row, quotes, kinds)),
         });
       }
       return { holdingId: holding.id, status: holding.status, facts, unknownKeys: POLICY_FACT_KEY_NAMES.filter(key => !bySlot.has(key)) };
+    },
+
+    /**
+     * The `summary` of each holding for the dashboard (the route has proved ownership): Map holding id -> summary. Deterministic code over
+     * stored data only: the insurer and product name the owner confirmed (null until then, never a candidate, never the UIN) and the
+     * headline facts, each { factKey, value, status } resolved like facts() (null when no fact exists for that key).
+     */
+    async summaries({ householdId, holdings }) {
+      requireEnabled();
+      const names = await repository.confirmedNames({ householdId, holdings });
+      const out = new Map();
+      for (const holding of holdings) {
+        const rows = await repository.currentMemory({ householdId, holdingId: holding.id, factKeys: Object.values(HEADLINE_KEYS) });
+        const headline = {};
+        for (const [field, factKey] of Object.entries(HEADLINE_KEYS)) {
+          const tiers = {};
+          for (const row of rows) if (row.factKey === factKey && row.scopeKey === '') tiers[row.tier] = row;
+          if (Object.keys(tiers).length === 0) { headline[field] = null; continue; }
+          const resolved = resolveSlot({ factKey, own: memoryView(tiers.own_pdf), ida: memoryView(tiers.ida_wording), declaration: memoryView(tiers.user_declaration) });
+          headline[field] = { factKey, value: resolved.value, status: resolved.status };
+        }
+        const confirmed = names.get(holding.id);
+        out.set(holding.id, { insurerName: confirmed?.insurerName ?? null, productName: confirmed?.productName ?? null, ...headline });
+      }
+      return out;
     },
 
     /**
@@ -221,6 +247,7 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       const rows = await repository.currentMemory({ householdId: holding.householdId, holdingId: holding.id });
       const quotes = await repository.ownQuotes({ householdId: holding.householdId, policyFactIds: rows.filter(row => row.tier === 'own_pdf').map(row => row.policyFactId) });
       const memory = new Map(rows.map(row => [row.id, row]));
+      const kinds = await repository.pageDocumentKinds({ householdId: holding.householdId, pageIds: rows.map(row => row.sourcePageId) });
       const conflicts = await repository.listConflicts({ householdId: holding.householdId, holdingId: holding.id });
       return {
         holdingId: holding.id,
@@ -232,7 +259,7 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
             resolution: conflict.resolution, resolvedAt: conflict.resolvedAt, resolvingFactId: conflict.resolvingFactId,
             // FOR LEGAL REVIEW: a product-term choice is the owner's statement; the insurer's wording still governs.
             checkWithInsurer: entry?.factClass === 'product_term',
-            candidates: conflict.candidateFactIds.map(id => (memory.has(id) ? sourceView(memory.get(id), quotes) : { id, current: false })),
+            candidates: conflict.candidateFactIds.map(id => (memory.has(id) ? sourceView(memory.get(id), quotes, kinds) : { id, current: false })),
           };
         }),
       };
@@ -263,10 +290,10 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
 
 // One source row for the owner's response: its tier, status, value, page locator and printed quote (own PDF: its evidence; IDA: the
 // public wording quote only, never the cache key, version or UIN).
-function sourceView(row, quotes = new Map()) {
+function sourceView(row, quotes = new Map(), kinds = new Map()) {
   return {
     id: row.id, tier: row.tier, status: row.status, value: row.value, alternatives: row.alternatives,
-    page: row.sourcePageId ? { pageId: row.sourcePageId, blockIndex: row.blockIndex } : null,
+    page: row.sourcePageId ? { pageId: row.sourcePageId, blockIndex: row.blockIndex, documentKind: kinds.get(row.sourcePageId) ?? null } : null,
     quote: row.tier === 'ida_wording' ? (typeof row.reference?.quote === 'string' ? row.reference.quote : null)
       : row.tier === 'own_pdf' ? quotes.get(row.policyFactId) ?? null : null,
     captureMethod: row.captureMethod ?? null, current: true,

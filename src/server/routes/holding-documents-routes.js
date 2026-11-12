@@ -8,6 +8,8 @@ import { readBody } from '../http/request.js';
 //   POST   /api/v1/holdings/{id}/documents                 body { documentId, kind: wording | endorsement | other }
 //                                                          -> 200 { holdingId, documentId, kind, linked } (linked false on a repeat)
 //   DELETE /api/v1/holdings/{id}/documents/{documentId}    -> 200 { holdingId, documentId, unlinked }; the chunks it fed are deleted
+// One policy, one holding: linking absorbs the linked document's own standalone holding (never acted on: deleted with its derived data, one
+// transaction) or answers 409 HOLDING_DOCUMENT_HAS_HOLDING when the owner already acted on it. Unlinking does not recreate it.
 // Linking queues memorise: the linked document's clauses are derived and embedded for this holding, so chat can cite its wording with
 // the page. Unlinking deletes those chunks. Both ends must belong to the holding's household.
 

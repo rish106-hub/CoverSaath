@@ -41,8 +41,12 @@ export class PolicyHoldingRepository {
     if (adultId !== null) await requirePerson(this.households, householdId, adultId, { write });
   }
 
-  /** Creates the holding of an upload, or returns the one that exists (one per document). */
-  async create({ householdId, adultId, documentId, kind, policyId = null, policyProfileId = null }) {
+  /**
+   * Creates the holding of an upload, or returns the one that exists (one per document). With `unlessLinked` (the OCR pipeline), a document
+   * that is already linked to another holding (its policy's holding, migration 065) gets no holding of its own: resolves null. The check runs
+   * inside the same household-locked transaction as linkDocument, so link-then-create and create-then-link both end with one holding.
+   */
+  async create({ householdId, adultId, documentId, kind, policyId = null, policyProfileId = null, unlessLinked = false }) {
     str(documentId, 'documentId');
     if (!HOLDING_KINDS.includes(kind)) invalid('kind is invalid.');
     const db = this.database;
@@ -53,6 +57,7 @@ export class PolicyHoldingRepository {
       if (!document) fail('DOCUMENT_NOT_FOUND', 'Document not found.', 404);
       const existing = await db.one('SELECT * FROM policy_holdings WHERE household_id = ? AND document_id = ?', [householdId, documentId]);
       if (existing) return this.#dto(existing);
+      if (unlessLinked && await db.one('SELECT 1 AS linked FROM holding_documents WHERE household_id = ? AND document_id = ? LIMIT 1', [householdId, documentId])) return null;
       const holdingId = `hold-${randomUUID()}`;
       try {
         await db.run(`INSERT INTO policy_holdings (id, household_id, policy_id, document_id, policy_profile_id, kind, status, created_at, updated_at)
@@ -94,6 +99,7 @@ export class PolicyHoldingRepository {
       JOIN document_uploads doc ON doc.id = job.document_id AND doc.household_id = job.household_id AND doc.lifecycle_state = 'active'
       WHERE job.household_id = ? AND job.kind = ? AND job.status IN ('queued', 'running', 'dead') AND job.document_id IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM policy_holdings holding WHERE holding.household_id = job.household_id AND holding.document_id = job.document_id)
+        AND NOT EXISTS (SELECT 1 FROM holding_documents link WHERE link.household_id = job.household_id AND link.document_id = job.document_id)
       ORDER BY job.created_at, job.id LIMIT ?`, [householdId, HOLDING_CREATE_JOB_KIND, LIST_LIMIT]);
     return rows.map(row => row.status === 'dead'
       ? { document_id: row.document_id, state: 'failed', code: HOLDING_CREATE_FAILED }

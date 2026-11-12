@@ -14,7 +14,7 @@ Sources used: `src/server/config.js`, `src/server/worker.js`, `src/server/routes
 6. Link the wording PDF to the schedule's holding.
 7. Read facts. Chat.
 
-The code creates **two holdings** (one per OCR'd schedule or wording document, `HOLDING_DOCUMENT_KINDS` in `backend-services.js`). Use the schedule's holding as "the" holding and link the wording to it (step 6); the wording's own holding is left alone.
+OCR creates one holding per policy document (`HOLDING_DOCUMENT_KINDS` in `backend-services.js`), so right after both uploads the household lists two. Linking the wording (step 6) makes it one: `POST /api/v1/holdings/{id}/documents` deletes the wording's own standalone holding in the same transaction (its derived data goes with it; its queued jobs are dropped), and a document that is already linked never gets a holding of its own (a late `holding.create` retry is a no-op). If the owner already acted on the standalone holding (confirmed a product, resolved a conflict, linked documents, payments, chat) the link answers `409 HOLDING_DOCUMENT_HAS_HOLDING` and changes nothing. Unlinking does not recreate the standalone holding. `GET .../holdings` then lists exactly one holding, with a `summary` (confirmed insurer and product name, sum insured, policy period, premium).
 
 ## 1. Processes
 

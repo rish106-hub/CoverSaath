@@ -5,7 +5,8 @@ import { readBody } from '../http/request.js';
 // HOLDING_NOT_FOUND. Values are opened only for the owning household's own response. No UIN, cache key or reference locator is ever
 // in a body. No model call.
 //
-//   GET  /api/v1/holdings/{id}/facts                        resolved facts with their sources and alternatives
+//   GET  /api/v1/holdings/{id}/facts                        resolved facts with their sources and alternatives; each source `page` is
+//                                                           { pageId, blockIndex, documentKind: 'policy_schedule' | 'policy_wording' | ... | null }
 //   GET  /api/v1/holdings/{id}/conflicts                    every conflict of the holding (pending and closed)
 //   POST /api/v1/holdings/{id}/conflicts/{cid}/resolve      body { chosenFactId, alternativeIndex? }: the owner's choice
 //
