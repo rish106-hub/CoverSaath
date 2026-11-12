@@ -8,8 +8,8 @@ Every step marked **OWNER APPROVAL REQUIRED** deploys, changes a remote system, 
 
 - Prepared, not deployed. `fly.toml` now describes the target: region `sin` (owner decision: Fly has no Mumbai region and Singapore is the nearest), two `shared-cpu-2x` machines with 3 GB each (clamd on, see Real workflow), no volume, no document file path.
 - Document bytes live in PostgreSQL (ADR 0013 D8, `DOCUMENT_STORAGE_BACKEND=database`, which is also the code default). Verified in code: `src/server/create-server.js` builds the database store as the primary and the filesystem store only as a read fallback, and `src/features/input/encrypted-local-storage.js` creates its directory only on a write. With the volume gone, nothing is written to disk.
-- The request limit and the model spend cap are in PostgreSQL (`RATE_LIMIT_BACKEND=database`, `MODEL_BUDGET_BACKEND=database`, migration 023), so two machines share them.
-- Still per process (duplicate work, never corruption; for the evidence service a duplicate run can bill a second paid model call, so live model runs wait for a database-backed claim): the evidence claim guard and in-flight cap in `policy-evidence-service.js`, and the document scan worker. The scanner is now on in `fly.toml` (ADR 0022); before that change every upload stayed quarantined.
+- Shared through PostgreSQL, so two machines enforce one limit (ADR 0014 D7 to D9, migrations 023 and 032): the request limit, the per-adult session, user-data, sync and person-record limits, the model spend cap (fails closed when the database is down) and the evidence claim guard.
+- Still per process (duplicate work, never corruption): the evidence in-flight cap in `policy-evidence-service.js` (memory protection, not money) and the document scan worker. The scanner is now on in `fly.toml` (ADR 0022); before that change every upload stayed quarantined.
 - App `knowvia-api` and volume `coversaath_data` (1 GB, syd) exist from October; no machine has ever run, so the volume holds nothing. Secrets staged on the app: `DATABASE_URL`, `DOCUMENT_ENCRYPTION_KEY_BASE64`, `KNOWVIA_BOOTSTRAP_TOKEN`. Not yet set: `DATA_ENCRYPTION_KEY_BASE64` (required in production; without it the server stops at startup), `KNOWVIA_IDENTITY_TOKEN`, `IDENTITY_ISSUERS`.
 - The Dockerfile has never been built. Every October `fly deploy` failed with a Fly API 503.
 
@@ -101,7 +101,7 @@ Dockerfile build (including clamd, the signature download and `docker/entrypoint
 
 ## Operate
 
-- Two machines is the supported shape. Do not scale past two before the scan worker moves to the database (the request limit, model budget and evidence claim guard are already shared through the database, migrations 023 and 032).
+- Two machines is the supported shape. Do not scale past two before the scan worker moves to the database (the request limit, the per-adult service limits, model budget and evidence claim guard are already shared through the database, migrations 023 and 032, ADR 0014 D9).
 - The scanner is enabled in `fly.toml` (3 GB machines, `DOCUMENT_SCAN_MODE=clamd`, `DOCUMENT_SCAN_REQUIRED=true`). Redeploy at least weekly so the baked-in signatures never age past what the runtime updater (freshclam) can replace; watch `fly logs` for `freshclam_stopped` loops.
 - Rotate the Supabase password (it was pasted into chat twice), update `DATABASE_URL` in `.env.local` and with `fly secrets set` (**OWNER APPROVAL REQUIRED**), then move the runtime to a least-privilege role.
 - Abandon: `fly apps destroy knowvia-api` removes the app, volume and secrets. Destructive; needs explicit owner approval.
@@ -162,7 +162,7 @@ Rollback of this step: `fly secrets unset SARVAM_OCR_ENABLED POLICY_STRUCTURING_
 
 - Production (`NODE_ENV=production` in the Dockerfile) needs the secret `DATA_ENCRYPTION_KEY_BASE64` (32 bytes, base64; name only) because activity events seal their payloads. Without it the server stops at startup. To boot without it, set both `APP_EVENTS_ENABLED=false` and `RATE_LIMIT_BACKEND=memory` (the database rate limiter also needs the key).
 - `APP_EVENTS_RETENTION_DAYS` (default 30) sets how long events live; the server purges expired rows hourly. Retention is a draft for legal review.
-- `RATE_LIMIT_BACKEND`, `MODEL_BUDGET_BACKEND` and `EVIDENCE_CLAIM_BACKEND` default to `database` (migrations 023 and 032, ADR 0014 addendum): the request limit, the model spend cap and the evidence-question claim (an expiring lease) hold across machines and restarts. `memory` turns one off and is for tests only. The scan worker and the user-data write limiter are still per process (duplicate work, not corruption).
+- `RATE_LIMIT_BACKEND`, `MODEL_BUDGET_BACKEND` and `EVIDENCE_CLAIM_BACKEND` default to `database` (migrations 023 and 032, ADR 0014 addendum): the request limit, the model spend cap and the evidence-question claim (an expiring lease) hold across machines and restarts. `RATE_LIMIT_BACKEND` also covers the per-adult service limits (sessions, user data, sync, person records; ADR 0014 D9). If the database errors, these limiters refuse (fail closed, ADR 0014 D11). `memory` turns one off and is for tests only. The scan worker is still per process (duplicate work, not corruption).
 - Run `npm run db:init` against the hosted database before the first deploy that includes migrations 022 to 024, then check `GET /api/v1/ready`.
 
 ## Rollback

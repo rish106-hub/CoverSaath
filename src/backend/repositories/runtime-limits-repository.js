@@ -13,9 +13,12 @@ export class RuntimeLimitsRepository {
     this.clock = clock;
   }
 
-  /** Counts one request for `keyHash` in the fixed window containing now. Returns the window count after this request. */
-  async consumeRequest(keyHash, windowMs) {
-    const windowStart = Math.floor(this.clock() / windowMs) * windowMs;
+  /**
+   * Counts one request for `keyHash` in the fixed window containing `nowMs` (default: this repository's clock; a service passes
+   * its own clock so its windows match its per-process limiter). Returns the window count after this request.
+   */
+  async consumeRequest(keyHash, windowMs, nowMs = this.clock()) {
+    const windowStart = Math.floor(nowMs / windowMs) * windowMs;
     const { rows } = await this.database.query(
       `INSERT INTO rate_limit_buckets AS bucket (key_hash, window_start, request_count) VALUES (?, CAST(? AS bigint), 1)
        ON CONFLICT (key_hash, window_start) DO UPDATE SET request_count = bucket.request_count + 1

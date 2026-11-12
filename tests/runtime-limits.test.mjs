@@ -37,15 +37,16 @@ test('two machines share one request limit and the counters hold no address', po
   assert.ok(await store.purgeRequestWindows(30_000) >= 2);
 });
 
-test('a database failure falls back to the per-process limiter and never blocks the request', async () => {
+test('a database failure fails closed: the request is refused, not judged on the local count', async () => {
   let fallbacks = 0;
   const limiter = createSharedRateLimiter({
     local: createRateLimiter({ limit: 2 }), store: { consumeRequest: async () => { throw new Error('database down'); } }, hmacKey, limit: 2, onFallback: () => { fallbacks += 1; },
   });
-  await limiter.check('k');
-  await limiter.check('k');
-  await assert.rejects(limiter.check('k'), { status: 429 }, 'the local limit still applies');
+  await assert.rejects(limiter.check('k'), { status: 503 });
+  await assert.rejects(limiter.check('k'), { status: 503 });
+  await assert.rejects(limiter.check('k'), { status: 429 }, 'the local limit still refuses first');
   assert.equal(fallbacks, 2);
+  await limiter.check('health', { shared: false });
 });
 
 test('the spend cap is atomic across concurrent machines, survives a restart and settles once', postgresTestOptions(), async t => {

@@ -2,9 +2,9 @@ import { createHmac } from 'node:crypto';
 import { failure } from '../../shared/http/index.js';
 
 /**
- * Request limiter shared by every API machine (ADR 0014). The per-process limiter always runs first and stays the
- * fallback: if the database counter fails, the request is judged by the local count alone and onFallback is told, so a
- * database outage never blocks the API. Keys reach the database only as a keyed hash. Pass { shared: false } for traffic
+ * Request limiter shared by every API machine (ADR 0014). The per-process limiter always runs first. It fails
+ * closed: if the database counter fails, onFallback is told and the request is refused (503), never judged by the local
+ * count alone. Keys reach the database only as a keyed hash. Pass { shared: false } for traffic
  * that should not cost a database write (health probes).
  * `store.consumeRequest(keyHash, windowMs)` resolves { count, resetAt }.
  */
@@ -20,7 +20,7 @@ export function createSharedRateLimiter({ local, store, hmacKey, limit, windowMs
         counted = await store.consumeRequest(keyHash, windowMs);
       } catch (error) {
         onFallback(error);
-        return localResult;
+        throw failure(503, 'Request limit unavailable.');
       }
       if (counted.count > limit) throw failure(429, 'Request rate limit exceeded.');
       return { limit, remaining: Math.max(0, limit - counted.count), resetAt: counted.resetAt };
