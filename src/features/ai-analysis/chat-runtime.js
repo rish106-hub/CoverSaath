@@ -16,6 +16,11 @@ import { PROMPT_VERSION } from './prompts.js';
 export const CHAT_GATEWAY_LIMITS = Object.freeze({ maxInputBytes: 48_000, maxOutputTokens: 1_500, timeoutMs: 30_000, maxConcurrentCalls: 2 });
 const UNAVAILABLE_RESERVATION_USD = 0.000001;
 
+// A failure that must stop the chain rather than move to the next provider: the gate, the budget, the caller's own abort and
+// consent are the same for every provider, so retrying elsewhere would not help (or would bypass them).
+const NO_FAILOVER = new Set(['ungated_model_input', 'budget_refused', 'budget_not_configured', 'reservation_limit', 'reservation_exceeded', 'input_limit', 'aborted',
+  'invalid_gateway_config', 'live_not_configured', 'unsupported_ai_task', 'CONSENT_REQUIRED']);
+
 function flagOn(env) { return env.CHAT_MODEL_ENABLED === 'true'; }
 
 function reservationFor(route, limits) {
@@ -61,7 +66,8 @@ export function createChatModelGateway({ env = process.env, router, providerCall
   };
 
   const liveRunner = async request => {
-    const route = router.resolve(request.task);
+    // `request.provider` pins the attempt to one provider (callRouted); absent, the first ready route answers.
+    const route = router.resolve(request.task, request.provider ? { provider: request.provider } : undefined);
     if (route.status !== 'ready') return { unavailable: true, provider: route.provider, model: route.model, reason: route.reason };
     return runnerFor(route)(request);
   };
@@ -78,15 +84,50 @@ export function createChatModelGateway({ env = process.env, router, providerCall
     limits: { ...limits, maxRetries: 0, maxReservationUsd: 0.5 },
   });
 
-  return Object.freeze({
+  const unknownResult = (task, reason) => ({ output: unknownOutput(task), metadata: { contractVersion: AI_CONTRACT_VERSION, mode: 'live', provider: 'none', model: 'none', modelVersion: 'none', promptVersion: PROMPT_VERSION, inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0, latencyMs: 0, costUsd: 0, unavailableReason: reason } });
+
+  const api = {
     enabled,
-    /** call({ task, input, householdId, signal }) -> { output, metadata }. `input` must be a sealed model input for `task`. */
-    async call({ task, input, householdId = null, signal } = {}) {
+    /** The ready routes for `task` in failover order: [{ provider, model }] (no key, no rate, no SDK or not enabled: absent). */
+    candidates(task) { return (router.candidates?.(task) ?? []).map(({ provider, model }) => ({ provider, model })); },
+    /**
+     * Failover chain (Gemini, then anthropic, openai, deepseek, kimi: MODEL_ROUTES). For each ready provider in order:
+     * `authorize(provider)` must resolve the caller's current exact consent for THAT provider and re-check it (a non-null value, or null to skip
+     * the provider: nothing is sent to it); then the gated input is dispatched to it alone. The chain moves on only when the provider answers
+     * a typed unavailable or its call fails; a gate, budget, abort or consent failure stops it. Resolves the first answered call as
+     * { output, metadata, authorization } (authorization = what `authorize` returned for the provider that answered), or a typed unknown.
+     */
+    async callRouted({ task, input, householdId = null, signal, authorize } = {}) {
+      if (typeof authorize !== 'function') throw new TypeError('authorize is required.');
       if (!GATEWAY_TASK_LIST.includes(task)) throw Object.assign(new Error(`Task ${task} is not a gateway task.`), { code: 'unsupported_ai_task' });
-      if (!enabled) {
-        return { output: unknownOutput(task), metadata: { contractVersion: AI_CONTRACT_VERSION, mode: 'live', provider: 'none', model: 'none', modelVersion: 'none', promptVersion: PROMPT_VERSION, inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0, latencyMs: 0, costUsd: 0, unavailableReason: 'flag_off' } };
+      if (!enabled) return unknownResult(task, 'flag_off');
+      const candidates = router.candidates?.(task) ?? [];
+      // No ready provider: one pinned-free call records the typed unavailable (reason, audit row) exactly as a single route does.
+      if (candidates.length === 0) return api.call({ task, input, householdId, signal });
+      let consentSkips = 0;
+      let lastUnavailable = null;
+      let lastError = null;
+      for (const route of candidates) {
+        const authorization = await authorize(route.provider);
+        if (authorization === null || authorization === undefined || authorization === false) { consentSkips += 1; continue; }
+        try {
+          const result = await api.call({ task, input, householdId, signal, provider: route.provider });
+          if (result.metadata.calls === 0) { lastUnavailable = result; continue; }
+          return { ...result, authorization };
+        } catch (error) {
+          if (signal?.aborted || NO_FAILOVER.has(error?.code)) throw error;
+          lastError = error;
+        }
       }
-      const route = router.resolve(task);
+      // Every consented provider failed: a typed failure (never the provider's own message), so the caller falls back to its deterministic path.
+      if (lastError) throw Object.assign(new Error('Every routed model provider failed.'), { code: 'provider_failure' });
+      return lastUnavailable ?? unknownResult(task, 'consent_required');
+    },
+    /** call({ task, input, householdId, signal }) -> { output, metadata }. `input` must be a sealed model input for `task`. */
+    async call({ task, input, householdId = null, signal, provider = null } = {}) {
+      if (!GATEWAY_TASK_LIST.includes(task)) throw Object.assign(new Error(`Task ${task} is not a gateway task.`), { code: 'unsupported_ai_task' });
+      if (!enabled) return unknownResult(task, 'flag_off');
+      const route = provider ? router.resolve(task, { provider }) : router.resolve(task);
       const budget = budgetFor ? budgetFor(householdId) : undefined;
       try {
         return await gateway.execute({
@@ -98,5 +139,6 @@ export function createChatModelGateway({ env = process.env, router, providerCall
         await Promise.all(writes);
       }
     },
-  });
+  };
+  return Object.freeze(api);
 }

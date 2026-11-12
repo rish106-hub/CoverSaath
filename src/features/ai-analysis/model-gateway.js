@@ -146,6 +146,7 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget: ga
           acquired = true;
           const request = {
             task,
+            provider: provider ?? null,
             input: structuredClone(input),
             prompt: contract,
             outputSchema: TASK_OUTPUT_SCHEMAS[task],
