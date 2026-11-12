@@ -117,7 +117,7 @@ test('summary: names null until confirmed, headline facts filled after, no UIN; 
   const [first] = (await list()).holdings;
   const schedule = (await list()).holdings.find(item => item.documentId === s.documentId);
   assert.ok(first);
-  assert.deepEqual(schedule.summary, { insurerName: null, productName: null, sumInsured: null, policyPeriod: null, premium: null });
+  assert.deepEqual(schedule.summary, { insurerName: null, productName: null, sumInsured: null, policyPeriod: null, premium: null, wordingState: 'missing', wordingReason: 'not_checked' });
 
   // The owner confirms the product (policy profile in state reported), then the pipeline reads and collates the schedule.
   const UIN = 'ACMHLIP25001V012526';
