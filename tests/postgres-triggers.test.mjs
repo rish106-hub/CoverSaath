@@ -1091,6 +1091,24 @@ test('holdings and memory triggers (migrations 048-052, ADR 0032)', postgresTest
   await insert(pool, 'premium_payments', { id: 'p-b', household_id: b.household, holding_id: 'h-b', consent_grant_id: b.consent });
   await rejects(pool.query(`UPDATE premium_dues SET state = 'paid', paid_payment_id = 'p-b' WHERE id = 'du-1'`), 'premium due must be settled by a payment of its household and holding');
   proves('premium_dues_scope_update');
+  // Holding documents (migration 065): a link joins another active document of the same household to a holding.
+  const wording = id => insert(pool, 'document_uploads', { id, household_id: a.household, case_id: a.case, uploaded_by_adult_id: a.adult, consent_grant_id: a.consent });
+  await wording('d-wording');
+  await wording('d-wording-2');
+  const link = extra => insert(pool, 'holding_documents', { id: 'hd-x', household_id: a.household, holding_id: 'h-a', document_id: 'd-wording', kind: 'wording', created_at: '2026-01-01T00:00:00.000Z', ...extra });
+  await rejects(link({ household_id: b.household }), 'holding document must link another document to a holding of its household');
+  await rejects(link({ holding_id: 'h-b' }), 'holding document must link another document to a holding of its household');
+  await rejects(link({ document_id: a.document }), 'holding document must link another document to a holding of its household');
+  await rejects(link({ document_id: b.document }), 'holding document must match an active document of its household');
+  await rejects(link({ document_id: 'd-missing' }), 'holding document must match an active document of its household');
+  await link({ id: 'hd-1' });
+  await link({ id: 'hd-2', document_id: 'd-wording-2', kind: 'endorsement' });
+  proves('holding_documents_scope_insert');
+  // Withdrawing or erasing a linked document removes its link and leaves the other link and the holding.
+  await pool.query(`UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = 'd-wording'`);
+  assert.deepEqual((await pool.query('SELECT id FROM holding_documents WHERE holding_id = $1 ORDER BY id', ['h-a'])).rows.map(row => row.id), ['hd-2']);
+  assert.equal(Number((await pool.query(`SELECT count(*) AS c FROM policy_holdings WHERE id = 'h-a'`)).rows[0].c), 1);
+  proves('holding_documents_erase_on_document_erasure');
   // Document erasure removes the holding and everything hanging on it.
   await pool.query(`UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = $1`, [a.document]);
   for (const table of ['policy_holdings', 'household_memory_facts', 'memory_conflicts', 'premium_payments', 'premium_dues']) {
