@@ -34,6 +34,7 @@ export async function eraseMemoryForHousehold(db, { householdId }) {
   counts.conflicts = count(await db.run('DELETE FROM memory_conflicts WHERE household_id = ?', [householdId]));
   counts.facts = count(await db.run('DELETE FROM household_memory_facts WHERE household_id = ?', [householdId]));
   counts.declarations = count(await db.run('DELETE FROM member_declarations WHERE household_id = ?', [householdId]));
+  await db.run('DELETE FROM holding_documents WHERE household_id = ?', [householdId]);
   counts.holdings = count(await db.run('DELETE FROM policy_holdings WHERE household_id = ?', [householdId]));
   return counts;
 }
@@ -45,6 +46,8 @@ export async function eraseMemoryForHousehold(db, { householdId }) {
 export async function eraseMemoryForDocuments(db, { householdId = null, documentIds }) {
   const counts = empty();
   if (documentIds.length === 0) return counts;
+  // Links to the documents (a wording or endorsement linked to another holding); chunks that came from them go below (source_document_id).
+  await db.run(`DELETE FROM holding_documents WHERE document_id = ANY(CAST(? AS text[]))${householdId ? ' AND household_id = ?' : ''}`, [documentIds, ...(householdId ? [householdId] : [])]);
   const scope = householdId ? ' AND household_id = ?' : '';
   const extra = householdId ? [householdId] : [];
   const facts = (await db.many(`SELECT id, household_id FROM household_memory_facts WHERE source_document_id = ANY(CAST(? AS text[]))${scope}`, [documentIds, ...extra]));

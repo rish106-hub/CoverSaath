@@ -50,8 +50,14 @@ const structuringDriver = requests => ({
 const chatAgent = sent => () => ({ async generate({ prompt }) {
   sent.push(prompt);
   const input = JSON.parse(prompt);
-  // Answers only a question about the waiting period; anything else gets no fact, like an honest model.
-  const fact = /pre-existing/i.test(JSON.stringify(input.question)) ? (input.facts ?? []).find(item => /pre-existing/i.test(JSON.stringify(item.label))) : null;
+  // Answers only a question about the waiting period, the sum insured or an exclusion in the wording; anything else gets no fact, like an honest model.
+  const question = JSON.stringify(input.question);
+  const pick = (asked, shown) => (asked.test(question) ? (input.facts ?? []).find(item => shown.test(JSON.stringify(item.label) + JSON.stringify(item.value))) : null);
+  const fact = pick(/pre-existing/i, /pre-existing/i);
+  const insured = pick(/sum insured/i, /sum insured/i);
+  const clause = pick(/cosmetic/i, /cosmetic surgery is excluded/i);
+  if (insured) return { output: { status: 'extracted_unverified', answer: 'Your sum insured reads Rs. 5,00,000 on the schedule (not yet confirmed).', factsUsed: [insured.fact_id] }, totalUsage: { inputTokens: 80, outputTokens: 20 } };
+  if (clause) return { output: { status: 'extracted_unverified', answer: 'Cosmetic surgery is excluded under the wording.', factsUsed: [clause.fact_id] }, totalUsage: { inputTokens: 80, outputTokens: 20 } };
   return fact
     ? { output: { status: 'extracted_unverified', answer: 'The pre-existing disease waiting period is 36 months.', factsUsed: [fact.fact_id] }, totalUsage: { inputTokens: 80, outputTokens: 20 } }
     : { output: { status: 'unknown', answer: 'No answer.', factsUsed: [] }, totalUsage: { inputTokens: 80, outputTokens: 5 } };
@@ -171,12 +177,16 @@ async function journey(t) {
   const confirmed = await app.call(`/api/v1/holdings/${w.holdingId}/confirm-product`, { method: 'POST', token: s.token, headers: { 'Idempotency-Key': `confirm-${randomUUID()}` }, body: { candidateId: 'prod-shield', expectedVersion: candidates.data.profileVersion } });
   assert.equal(confirmed.status, 200, JSON.stringify(confirmed.data));
   w.outcomes = await drain();
+  // The wording is linked to the schedule's holding (owner route); memorise then derives and embeds its clauses for that holding.
+  w.link = await app.call(`/api/v1/holdings/${w.holdingId}/documents`, { method: 'POST', token: s.token, body: { documentId: wordingId, kind: 'wording' } });
+  assert.equal(w.link.status, 200, JSON.stringify(w.link.data));
+  w.linkOutcomes = await drain();
   return w;
 }
 
 test('journey: schedule and wording uploaded, OCR, structuring, holdings jobs, memorise, chat cites the holding facts', opts, async t => {
   const { app, s, holdingId, wordingHoldingId, holdings, structured, outcomes, drain, embedded, chatSent } = await journey(t);
-  assert.equal(holdings.length, 2, 'one holding per document: the wording is NOT linked to the schedule holding');
+  assert.equal(holdings.length, 2, 'one holding per document; the wording is linked to the schedule holding (holding_documents), not merged');
   assert.ok(wordingHoldingId !== holdingId);
   for (const review of Object.values(structured)) assert.equal(review.status, 'finished');
   assert.ok(structured.schedule.parameters.some(parameter => parameter.key === 'f.ped_waiting_period'));
@@ -215,22 +225,72 @@ test('journey: schedule and wording uploaded, OCR, structuring, holdings jobs, m
   assert.deepEqual(unknown.facts_used, []);
 });
 
-// GAP 1: a personal value read from the schedule (sum insured) is only extracted_unverified, and chat serves only user_confirmed or
-// reviewed_reference facts (memory-service.js SERVED_STATUSES), so "what is my sum insured?" is unknown until the owner confirms it.
-test('chat answers a schedule fact question (sum insured)', { ...opts, todo: 'own-PDF personal values are never served by chat until confirmed' }, async t => {
-  const { app, s, holdingId } = await journey(t);
+test('chat answers a schedule fact question (sum insured) with the schedule page cited, status kept unverified', opts, async t => {
+  const { app, s, holdingId, scheduleId, chatSent } = await journey(t);
   const thread = await app.call('/api/v1/chat/threads', { method: 'POST', token: s.token, body: { household_id: s.householdId, holding_id: holdingId } });
   const answer = await ask(app, s, thread.data.thread.id, 'What is my sum insured?');
   assert.equal(answer.status, 'evidence_found');
+  assert.equal(answer.answer_source, 'model');
+  assert.deepEqual(answer.facts_used.map(item => [item.fact_key, item.status]), [['sum_insured', 'extracted_unverified']], 'never presented as confirmed');
+  const source = answer.sources.find(item => item.kind === 'fact');
+  assert.equal(source.status, 'extracted_unverified');
+  assert.equal(source.document_id, scheduleId);
+  assert.equal(source.page, 1);
+  assert.match(source.quote, /Sum Insured: Rs\. 5,00,000/);
+  assert.match(chatSent.at(-1), /not confirmed/, 'the model is told the reading is not confirmed');
+  assert.doesNotMatch(chatSent.at(-1), new RegExp(UIN));
 });
 
-// GAP 2: a wording clause question. The wording is its own holding (UNIQUE household_id, document_id), clauses are derived only lazily by the
-// read-back or question routes (policy-evidence-service.js:216,348,536), memorise embeds only the holding's own document clauses
-// (memory-service.js:117-125), and the answer carries no page citation for a passage.
-test('chat answers a wording clause question citing the wording page', { ...opts, todo: 'wording never reaches chat retrieval for the schedule holding, and answers carry no passage page' }, async t => {
-  const { app, s, holdingId } = await journey(t);
+test('chat answers a wording clause question citing the wording document and page', opts, async t => {
+  const { app, s, holdingId, wordingId } = await journey(t);
   const thread = await app.call('/api/v1/chat/threads', { method: 'POST', token: s.token, body: { household_id: s.householdId, holding_id: holdingId } });
   const answer = await ask(app, s, thread.data.thread.id, 'Is cosmetic surgery excluded?');
   assert.equal(answer.status, 'evidence_found');
-  assert.ok(answer.passages_used?.some(item => item.page === 2), 'a wording passage with its page is cited');
+  const passage = answer.sources.find(item => item.kind === 'passage');
+  assert.ok(passage, JSON.stringify(answer.sources));
+  assert.equal(passage.document_id, wordingId);
+  assert.equal(passage.page, 2, 'the wording page is cited');
+  assert.match(passage.quote, /Cosmetic surgery is excluded/);
+});
+
+test('an unrelated question stays unknown with no sources', opts, async t => {
+  const { app, s, holdingId } = await journey(t);
+  const thread = await app.call('/api/v1/chat/threads', { method: 'POST', token: s.token, body: { household_id: s.householdId, holding_id: holdingId } });
+  const answer = await ask(app, s, thread.data.thread.id, 'What colour is my car?');
+  assert.equal(answer.status, 'unknown');
+  assert.deepEqual(answer.sources, []);
+});
+
+test('holding documents: link is idempotent, owner scoped and household scoped; unlink and document erasure remove the wording chunks', opts, async t => {
+  const { app, s, holdingId, wordingId, scheduleId } = await journey(t);
+  const base = `/api/v1/holdings/${holdingId}/documents`;
+  const chunksOf = documentId => app.database.one('SELECT count(*)::int AS n FROM memory_chunks WHERE source_document_id = ? AND holding_id = ?', [documentId, holdingId]);
+  assert.ok((await chunksOf(wordingId)).n >= 1, 'wording chunks exist for the schedule holding');
+  assert.equal((await app.call(base, { token: s.token })).data.documents[0].documentId, wordingId);
+  const again = await app.call(base, { method: 'POST', token: s.token, body: { documentId: wordingId, kind: 'wording' } });
+  assert.equal(again.status, 200);
+  assert.equal(again.data.linked, false, 'a repeat is a no-op');
+  assert.equal((await app.call(base, { method: 'POST', token: s.token, body: { documentId: scheduleId, kind: 'wording' } })).status, 400, 'a holding is not linked to its own document');
+  assert.equal((await app.call(base, { method: 'POST', token: s.token, body: { documentId: wordingId, kind: 'nonsense' } })).status, 400);
+  assert.equal((await app.call(base, { method: 'POST', token: s.token, body: { documentId: wordingId, extra: 1 } })).status, 400);
+
+  // Another household can neither see nor change the link, and cannot link its own document to this holding.
+  const other = await scenario(app, { name: 'Other' });
+  assert.equal((await app.call(base, { token: other.token })).status, 404);
+  assert.equal((await app.call(base, { method: 'POST', token: other.token, body: { documentId: other.documentId, kind: 'wording' } })).status, 404);
+  assert.equal((await app.call(`${base}/${wordingId}`, { method: 'DELETE', token: other.token })).status, 404);
+  assert.equal((await app.call(base, { method: 'POST', token: s.token, body: { documentId: other.documentId, kind: 'wording' } })).status, 404, 'a foreign document answers 404');
+
+  // Withdrawing the wording document erases its link and the chunks it fed.
+  await app.database.run(`UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = ?`, [wordingId]);
+  assert.equal((await app.database.one('SELECT count(*)::int AS n FROM holding_documents WHERE document_id = ?', [wordingId])).n, 0, 'the link goes with the document');
+});
+
+test('unlinking a holding document deletes the chunks it fed for that holding', opts, async t => {
+  const { app, s, holdingId, wordingId } = await journey(t);
+  const chunks = () => app.database.one('SELECT count(*)::int AS n FROM memory_chunks WHERE source_document_id = ? AND holding_id = ?', [wordingId, holdingId]);
+  assert.ok((await chunks()).n >= 1);
+  const removed = await app.call(`/api/v1/holdings/${holdingId}/documents/${wordingId}`, { method: 'DELETE', token: s.token });
+  assert.deepEqual([removed.status, removed.data.unlinked], [200, true]);
+  assert.equal((await chunks()).n, 0);
 });

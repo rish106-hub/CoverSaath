@@ -46,7 +46,7 @@ export class MemoryChunkRepository {
   /**
    * Makes the stored passages of a holding match `desired` for the given scopes: rows whose (scope, sourceRef) is no longer desired,
    * or whose sha changed, are deleted; `chunks` (the new or changed ones, with embeddings) are inserted. Resolves counts only.
-   * desired: [{ scope, sourceRef, contentSha256 }]. chunks: [{ scope, sourceRef, text, contentSha256, embedding, tokenCount, sourceDocumentId }].
+   * desired: [{ scope, sourceRef, contentSha256 }]. chunks: [{ scope, sourceRef, text, contentSha256, embedding, tokenCount, sourceDocumentId, sourcePage }].
    */
   async replace({ householdId, holdingId, consentGrantId, embedGrantId, scopes, desired, chunks, embeddingModel }) {
     str(householdId, 'householdId'); str(holdingId, 'holdingId'); str(consentGrantId, 'consentGrantId'); str(embedGrantId, 'embedGrantId'); str(embeddingModel, 'embeddingModel', 120);
@@ -73,10 +73,10 @@ export class MemoryChunkRepository {
       for (const chunk of chunks) {
         const id = `mchunk-${randomUUID()}`;
         const inserted = await db.run(`INSERT INTO memory_chunks (id, household_id, holding_id, scope, source_ref, chunk_text_enc, content_sha256, embedding, embedding_model,
-            token_count, source_document_id, consent_grant_id, created_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, CAST(? AS extensions.vector), ?, ?, ?, ?, ?)
+            token_count, source_document_id, source_page, consent_grant_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, CAST(? AS extensions.vector), ?, ?, ?, ?, ?, ?)
           ON CONFLICT DO NOTHING`, [id, householdId, holdingId, chunk.scope, chunk.sourceRef, this.crypto.seal(CHUNKS, 'chunk_text_enc', id, chunk.text), chunk.contentSha256,
-          vectorLiteral(chunk.embedding), embeddingModel, Math.max(0, Math.trunc(chunk.tokenCount ?? 0)), chunk.sourceDocumentId ?? null, embedGrantId, at]);
+          vectorLiteral(chunk.embedding), embeddingModel, Math.max(0, Math.trunc(chunk.tokenCount ?? 0)), chunk.sourceDocumentId ?? null, Number.isInteger(chunk.sourcePage) && chunk.sourcePage > 0 ? chunk.sourcePage : null, embedGrantId, at]);
         written += inserted.changes;
       }
       return Object.freeze({ written, removed: drop.length });
@@ -85,7 +85,7 @@ export class MemoryChunkRepository {
 
   /**
    * The k passages of this household nearest to `embedding` (cosine), optionally only for some holdings. The text is opened for the
-   * owning household's own answer: it is redacted already. Resolves [{ id, scope, sourceRef, holdingId, text, score }].
+   * owning household's own answer: it is redacted already. Resolves [{ id, scope, sourceRef, holdingId, sourceDocumentId, page, text, score }].
    */
   async search({ householdId, holdingIds = null, embedding, limit = 5 }) {
     str(householdId, 'householdId');
@@ -93,13 +93,13 @@ export class MemoryChunkRepository {
     if (holdingIds !== null && (!Array.isArray(holdingIds) || holdingIds.length === 0 || holdingIds.length > 50)) invalid('holdingIds are invalid.');
     const literal = vectorLiteral(embedding);
     const scoped = holdingIds ? 'AND holding_id = ANY(CAST(? AS text[]))' : '';
-    const rows = await this.database.many(`SELECT id, scope, source_ref, holding_id, chunk_text_enc,
+    const rows = await this.database.many(`SELECT id, scope, source_ref, holding_id, chunk_text_enc, source_document_id, source_page,
         1 - (embedding OPERATOR(extensions.<=>) CAST(? AS extensions.vector)) AS score
       FROM memory_chunks WHERE household_id = ? ${scoped} AND scope IN ('own_pdf', 'confirmed_fact', 'declaration')
       ORDER BY embedding OPERATOR(extensions.<=>) CAST(? AS extensions.vector) LIMIT ?`,
     [literal, householdId, ...(holdingIds ? [holdingIds] : []), literal, limit]);
     return rows.map(row => Object.freeze({
-      id: row.id, scope: row.scope, sourceRef: row.source_ref, holdingId: row.holding_id,
+      id: row.id, scope: row.scope, sourceRef: row.source_ref, holdingId: row.holding_id, sourceDocumentId: row.source_document_id, page: row.source_page,
       text: this.crypto.open(CHUNKS, 'chunk_text_enc', row.id, row.chunk_text_enc), score: Number(row.score),
     }));
   }

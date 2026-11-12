@@ -77,14 +77,19 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const facts = [];
     const conflicts = [];
     const documents = [];
+    const places = new Map();
     for (const { id: holdingId } of holdingRows) {
       const rows = await holdingRepository.currentMemory({ householdId, holdingId });
-      for (const fact of resolvedConfirmedFacts(rows)) facts.push({ ...fact, holdingId });
+      // Own-document readings still unverified are served too, with their status kept (never presented as confirmed).
+      for (const fact of resolvedConfirmedFacts(rows, { includeUnverified: true })) facts.push({ ...fact, holdingId });
+      for (const [id, place] of await holdingRepository.ownFactSources({ householdId, rows })) places.set(id, place);
       for (const conflict of await holdingRepository.listConflicts({ householdId, holdingId, pendingOnly: true })) conflicts.push({ id: conflict.id, factKey: conflict.factKey, holdingId });
       const holding = await holdingRepository.getHolding({ householdId, holdingId });
       if (holding?.documentId) documents.push({ holdingId, documentId: holding.documentId });
+      // Documents linked to the holding (its wording, endorsements) are searched too.
+      for (const linked of await holdingRepository.linkedDocuments({ householdId, holdingId })) documents.push({ holdingId, documentId: linked.documentId });
     }
-    return { holdingIds: holdingRows.map(row => row.id), facts, conflicts, documents };
+    return { holdingIds: holdingRows.map(row => row.id), facts, conflicts, documents, places };
   }
 
   async function keywordClauses({ householdId, documents, message }) {
@@ -94,7 +99,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
       const row = await database.one(`SELECT case_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
       if (!row?.case_id) continue;
       const hits = await clauses.searchClauses({ householdId, caseId: row.case_id, documentIds: [documentId], query: message, limit: KEYWORD_K });
-      for (const hit of hits) found.push({ id: hit.clauseId, page: hit.page ?? null, text: hit.text });
+      for (const hit of hits) found.push({ id: hit.clauseId, page: hit.page ?? null, text: hit.text, documentId });
     }
     return found.slice(0, KEYWORD_K);
   }
@@ -118,7 +123,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     };
     for (const fact of relevant.slice(0, MAX_FACTS_TO_MODEL)) {
       const value = formatFactValue(fact.entry.type, fact.value);
-      if (value !== null) await addSlot({ id: fact.sourceIds[0], label: fact.entry.label, value, fact });
+      // The model is told, in the label, that a reading from the household's own document is not confirmed.
+      if (value !== null) await addSlot({ id: fact.sourceIds[0], label: fact.status === 'extracted_unverified' ? `${fact.entry.label} (read from the policy document, not confirmed)` : fact.entry.label, value, fact });
     }
     for (const check of plan?.checks ?? []) await addSlot({ id: `check:${check.id}`, label: 'Planning check (computed)', value: check.detail, checkFactIds: check.factIds });
     for (const passage of passages) {
@@ -207,9 +213,9 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             const context = await gatherContext({ householdId, thread });
             const conflictKeys = new Set(context.conflicts.map(item => item.factKey));
             const byKey = new Set(factKeys);
-            const relevant = intent === 'procedure_planning' ? context.facts : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
+            const relevant = intent === 'procedure_planning' ? context.facts.filter(fact => fact.status !== 'extracted_unverified') : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
             const plan = intent === 'procedure_planning'
-              ? planProcedure({ facts: Object.fromEntries(context.facts.map(fact => [fact.factKey, { id: fact.sourceIds[0], status: fact.status, value: fact.value }])), procedure: procedure ?? {} }) : null;
+              ? planProcedure({ facts: Object.fromEntries(context.facts.filter(fact => fact.status !== 'extracted_unverified').map(fact => [fact.factKey, { id: fact.sourceIds[0], status: fact.status, value: fact.value }])), procedure: procedure ?? {} }) : null;
 
             // Retrieval beyond facts: vector top-k, else a keyword match over clauses (only when no confirmed fact answers the topic).
             let mode = 'facts_only';
@@ -250,6 +256,12 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             // Code owns the status: an answer that rests on no fact, chunk or computed check is "unknown".
             const status = usedFacts.length > 0 || usedChunks.length > 0 || (plan?.checks.length ?? 0) > 0 ? 'evidence_found' : 'unknown';
             const factIds = [...new Set(usedFacts.map(fact => fact.sourceIds[0]))];
+            // Where the answer rests, for the client to cite: own-document readings with their verbatim quote, document and page; wording
+            // passages with their document and printed page. Status is the fact's own (an own-document reading stays extracted_unverified).
+            const sources = [
+              ...usedFacts.map(fact => ({ kind: 'fact', fact_id: fact.sourceIds[0], fact_key: fact.factKey, status: fact.status, document_id: context.places.get(fact.sourceIds[0])?.documentId ?? null, page: context.places.get(fact.sourceIds[0])?.page ?? null, quote: context.places.get(fact.sourceIds[0])?.quote ?? null })),
+              ...passages.filter(item => usedChunks.includes(item.id)).map(item => ({ kind: 'passage', chunk_id: item.id, document_id: item.sourceDocumentId ?? null, page: item.page ?? null, quote: item.text.replace(/\s+/g, ' ').slice(0, 300) })),
+            ];
             const stored = await chatRepository.appendExchange({
               householdId, threadId,
               user: { text: message, inputKind, audioDocumentId },
@@ -268,6 +280,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               turn_id: stored.assistantTurnId, status, intent, answer: text, answer_source: answerSource,
               ...(assistantMeta.modelStatus ? { model_status: assistantMeta.modelStatus } : {}),
               facts_used: usedFacts.map(factView),
+              sources,
               computed: plan ? { version: plan.version, checks: plan.checks.map(check => ({ id: check.id, status: check.status, detail: check.detail, fact_ids: check.factIds })), summary: plan.summary, missing_inputs: plan.missingInputs } : null,
               open_conflicts: context.conflicts.filter(item => byKey.has(item.factKey)).map(item => ({ conflict_id: item.id, fact_key: item.factKey, holding_id: item.holdingId })),
               audio_retained: audioDocumentId !== null, created_at: clock().toISOString(),

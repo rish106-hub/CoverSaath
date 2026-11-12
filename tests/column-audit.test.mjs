@@ -31,6 +31,7 @@ const LEGACY_PLAIN = { service_cases: ['stated_estimate_minor'] };
 const PLAIN = {
   memory_chunks: {
     'closed vocabulary and a public slug: chunk scope, source slug (a registry key or a hash of a clause id), embedding model id; no content (the text is sealed)': ['scope', 'source_ref', 'embedding_model'],
+    'the printed page number a passage came from (migration 065), so an answer can cite it; no content': ['source_page'],
     'the embedding is PLAINTEXT by necessity: pgvector cannot index ciphertext. It leaks some of the content it encodes, so own-PDF passages are redacted before embedding and rows are deleted on erasure (ADR 0031)': ['embedding'],
   },
   chat_turns: {
@@ -138,6 +139,7 @@ const PLAIN = {
     'ids and flags only (consent grant id, requesting adult id); read in SQL by revocation erasure, nulled on revocation': ['authorization_json'],
   },
   policies: { 'closed vocabulary': ['policy_kind', 'verification_state'] },
+  holding_documents: { 'closed vocabulary: the kind of linked document (wording, endorsement, other); ids only': ['kind'] },
   policy_holdings: { 'closed vocabulary: holding kind and lifecycle status (ADR 0032); no insurer, plan or number': ['kind', 'status'] },
   household_memory_facts: {
     'public registry key, scope slug, key schema, class, tier, status, scope of member, capture method, derivation version and supersession id: closed vocabularies and identifiers, no value (the value and the reference are sealed). NOTE: a declared_* key names that a declaration exists; flagged for owner review (ADR 0032)': [
