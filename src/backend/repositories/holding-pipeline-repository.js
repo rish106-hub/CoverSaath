@@ -37,9 +37,12 @@ function requireId(value, name) {
   return value;
 }
 
+const isoOrNull = value => (value instanceof Date ? value.toISOString() : typeof value === 'string' ? value : null);
+
 const holdingShape = row => (row ? Object.freeze({
   id: row.id, householdId: row.household_id, policyId: row.policy_id, documentId: row.document_id, policyProfileId: row.policy_profile_id,
   kind: row.kind, status: row.status, createdAt: row.created_at, updatedAt: row.updated_at,
+  referenceOutcome: row.reference_outcome ?? null, referenceCheckedAt: isoOrNull(row.reference_checked_at),
 }) : null);
 
 export class HoldingPipelineRepository {
@@ -280,6 +283,46 @@ export class HoldingPipelineRepository {
     return out;
   }
 
+  /** The UIN the owner confirmed for a profile of the household (uin_state 'reported'), or null. Server side only: never returned to a caller of the API. */
+  async confirmedUin({ householdId, policyProfileId }) {
+    requireId(householdId, 'householdId'); requireId(policyProfileId, 'policyProfileId');
+    const row = await this.database.one("SELECT uin FROM policy_profiles WHERE id = ? AND household_id = ? AND uin_state = 'reported'", [policyProfileId, householdId]);
+    return row?.uin ?? null;
+  }
+
+  /** Stores the outcome of one reference check (migration 066). A closed code and a timestamp: nothing else. */
+  async recordReferenceOutcome({ householdId, holdingId, outcome }) {
+    requireId(householdId, 'householdId'); requireId(holdingId, 'holdingId');
+    const at = this.clock().toISOString();
+    return (await this.database.run('UPDATE policy_holdings SET reference_outcome = ?, reference_checked_at = ? WHERE id = ? AND household_id = ?',
+      [outcome, at, holdingId, householdId])).changes === 1;
+  }
+
+  /**
+   * Per holding, what the wording state is derived from: the last reference check (outcome and time), whether a current insurer-tier
+   * (ida_wording) memory row exists, and whether the owner linked a wording document. Map holding id -> { referenceOutcome, referenceCheckedAt,
+   * hasInsurerRows, hasWordingLink }. Household scoped; reads only.
+   */
+  async wordingInputs({ householdId, holdingIds }) {
+    requireId(householdId, 'householdId');
+    const ids = [...new Set(holdingIds.filter(Boolean))];
+    const out = new Map();
+    if (ids.length === 0) return out;
+    const holdings = await this.database.many('SELECT id, reference_outcome, reference_checked_at FROM policy_holdings WHERE household_id = ? AND id = ANY(CAST(? AS text[]))', [householdId, ids]);
+    const insurer = await this.database.many(`SELECT DISTINCT holding_id FROM ${MEMORY} WHERE household_id = ? AND holding_id = ANY(CAST(? AS text[]))
+      AND source_tier = 'ida_wording' AND superseded_at IS NULL AND status <> 'unknown'`, [householdId, ids]);
+    const wording = await this.database.many("SELECT DISTINCT holding_id FROM holding_documents WHERE household_id = ? AND holding_id = ANY(CAST(? AS text[])) AND kind = 'wording'", [householdId, ids]);
+    const withRows = new Set(insurer.map(row => row.holding_id));
+    const withLink = new Set(wording.map(row => row.holding_id));
+    for (const row of holdings) {
+      out.set(row.id, Object.freeze({
+        referenceOutcome: row.reference_outcome ?? null, referenceCheckedAt: isoOrNull(row.reference_checked_at),
+        hasInsurerRows: withRows.has(row.id), hasWordingLink: withLink.has(row.id),
+      }));
+    }
+    return out;
+  }
+
   /** The kind of the document each source page belongs to: Map page id -> document_kind (household scoped). */
   async pageDocumentKinds({ householdId, pageIds }) {
     const ids = [...new Set(pageIds.filter(Boolean))];
@@ -385,7 +428,9 @@ export class HoldingPipelineRepository {
           assertMachineRowAuthority(intent);
           const payload = canonicalJson({ alternatives: intent.alternatives ?? [], value: intent.value ?? null });
           const reference = intent.tier === 'ida_wording'
-            ? { cacheKey: intent.reference.cacheKey ?? null, quote: intent.reference.quote ?? null, refId: intent.reference.refId, version: intent.reference.version ?? null }
+            // The reader's own evidence is sealed with it (FSS: ids, page numbers and hashes only, never the UIN); the four keys keep their shape.
+            ? { cacheKey: intent.reference.cacheKey ?? null, quote: intent.reference.quote ?? null, refId: intent.reference.refId, version: intent.reference.version ?? null,
+              ...(intent.reference.reference ?? {}) }
             : null;
           const existing = currentBy.get(`${slot.factKey}|${tier}`);
           const same = existing && existing.status === intent.status && existing.sealedPayload === payload

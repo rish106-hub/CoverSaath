@@ -1,5 +1,5 @@
-import { HOLDING_SUMMARY_HEADLINES as HEADLINE_KEYS, HOLDING_JOB_KINDS, HOLDING_JOB_MAX_ATTEMPTS, HOLDING_JOB_STEPS } from '../../contracts/holdings.js';
-import { LINKED_DOCUMENT_FACTS_STATES } from '../../contracts/holdings.js';
+import { HOLDING_SUMMARY_HEADLINES as HEADLINE_KEYS, HOLDING_JOB_KINDS, HOLDING_JOB_MAX_ATTEMPTS, HOLDING_JOB_STEPS, REFERENCE_REFRESH_MS, REFERENCE_RETRY_MS, REFERENCE_TRANSIENT_OUTCOMES } from '../../contracts/holdings.js';
+import { LINKED_DOCUMENT_FACTS_STATES, WORDING_STATES } from '../../contracts/holdings.js';
 import { holdingsEnabled } from './holdings-flag.js';
 import { POLICY_FACT_KEY_NAMES, getPolicyFactKey } from '../../contracts/policy-facts.js';
 import { collateSlot, resolveSlot } from '../../features/insurance-rules/collate.js';
@@ -10,7 +10,10 @@ import { holdingInputSha, holdingJobDedupeKey } from './holding-pipeline.js';
 //
 //   startPipeline   after the owner reported the insurer and plan (status product_reported): fan out parse_own_pdf and fetch_reference
 //   parseOwnPdf     own-PDF tier = the existing policy_facts (ADR 0025): runs its deterministic extract, then status parsed, then collate
-//   fetchReference  only queues collate (it never waits for reference data). The import itself is the reference.import job (holding-product-service.js)
+//   fetchReference  the insurer tier (ADR 0034): asks the reference reader to refresh (match the confirmed product to one FSS version, read its facts
+//                   through the cached port), stores the outcome code on the holding, then queues collate. A failure is an outcome code, never a thrown
+//                   error, so there is no retry storm. Without a reader (emptyReferenceFacts) it only queues collate. The own-product import is the
+//                   reference.import job (holding-product-service.js)
 //   collate         ADR 0023 D3 resolver (collate.js) over own-PDF facts and the reference port's values; writes rows and conflicts.
 //                   Own-PDF facts are those of the holding's document AND of every readable document linked to it (wording, endorsement):
 //                   same tier, no precedence between documents. Equal values collapse; different values make the slot `conflicting` with
@@ -30,7 +33,7 @@ const permanent = (code, message) => coded(code, message, 409, { retryable: fals
 /** The reference port: values deterministic code read from the IDA reference for a holding. Default: none (reference agent wires it). */
 export const emptyReferenceFacts = Object.freeze({ async forHolding() { return []; } });
 
-export function createHoldingsService({ repository, jobQueue, policyFacts = null, referenceFacts = emptyReferenceFacts, memory = null, analytics = null, env = process.env }) {
+export function createHoldingsService({ repository, jobQueue, policyFacts = null, referenceFacts = emptyReferenceFacts, memory = null, analytics = null, env = process.env, clock = () => new Date() }) {
   const enabled = () => holdingsEnabled(env);
   const requireEnabled = () => { if (!enabled()) throw coded('HOLDINGS_DISABLED', 'Holdings are disabled.', 503); };
 
@@ -131,6 +134,28 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
     return out;
   }
 
+  // wordingState: fss (a current insurer-tier row), else manual (a linked wording), else missing. wordingReason: why it is missing.
+  function wordingView(inputs) {
+    if (inputs?.hasInsurerRows) return { wordingState: WORDING_STATES[0], wordingReason: null };
+    if (inputs?.hasWordingLink) return { wordingState: WORDING_STATES[1], wordingReason: null };
+    const outcome = inputs?.referenceOutcome ?? null;
+    return { wordingState: WORDING_STATES[2], wordingReason: outcome && outcome !== 'attached' ? outcome : 'not_checked' };
+  }
+
+  // Holding open: queue fetch_reference when the last check is older than 24 h (1 h after unavailable or rate_limited). One job per holding
+  // and UTC day (the queue keeps one live job per key). Only for a holding whose product the owner confirmed, and only with a reader wired.
+  async function queueReferenceRefresh(holding, inputs) {
+    if (typeof referenceFacts.refresh !== 'function' || !referenceFacts.enabled?.() || !holding?.policyProfileId || !inputs) return null;
+    if (['uploaded', 'insurer_pending'].includes(holding.status)) return null;
+    const now = clock().getTime();
+    const checked = inputs.referenceCheckedAt ? Date.parse(inputs.referenceCheckedAt) : null;
+    const window = REFERENCE_TRANSIENT_OUTCOMES.includes(inputs.referenceOutcome) ? REFERENCE_RETRY_MS : REFERENCE_REFRESH_MS;
+    if (checked !== null && Number.isFinite(checked) && now - checked < window) return null;
+    const document = await repository.holdingDocument({ householdId: holding.householdId, documentId: holding.documentId });
+    if (!document) return null;
+    return enqueue(HOLDING_JOB_KINDS.fetchReference, holding, document, holdingInputSha([`utc-${new Date(now).toISOString().slice(0, 10)}`]));
+  }
+
   function memoryView(row) {
     return row ? { id: row.id, status: row.status, value: row.value, alternatives: row.alternatives, captureMethod: row.captureMethod, resolvesFactIds: row.resolvesFactIds } : null;
   }
@@ -165,11 +190,17 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       return Object.freeze({ status });
     },
 
-    // Does not wait on the reference import: collate runs with whatever the reference port returns (none by default, see emptyReferenceFacts).
+    // Refreshes the insurer tier (when a reader is wired), then queues collate, which reads what the reader cached. Collate runs with whatever
+    // the reference port returns (none by default, see emptyReferenceFacts). The job runs the reader at most once per attempt and never retries a
+    // reference failure: the outcome code is stored and the state stays `missing`.
     async fetchReference({ householdId, holdingId }) {
       requireEnabled();
       const holding = await loadHolding(householdId, holdingId);
       const document = await documentOf(holding);
+      if (typeof referenceFacts.refresh === 'function') {
+        const outcome = await referenceFacts.refresh({ householdId, holding });
+        await repository.recordReferenceOutcome({ householdId, holdingId, outcome });
+      }
       const { inputSha } = await gather(holding, document);
       await enqueue(HOLDING_JOB_KINDS.collate, holding, document, inputSha);
       return Object.freeze({ status: holding.status });
@@ -267,6 +298,7 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
     async summaries({ householdId, holdings }) {
       requireEnabled();
       const names = await repository.confirmedNames({ householdId, holdings });
+      const wording = await repository.wordingInputs({ householdId, holdingIds: holdings.map(item => item.id) });
       const out = new Map();
       for (const holding of holdings) {
         const rows = await repository.currentMemory({ householdId, holdingId: holding.id, factKeys: Object.values(HEADLINE_KEYS) });
@@ -279,7 +311,10 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
           headline[field] = { factKey, value: resolved.value, status: resolved.status };
         }
         const confirmed = names.get(holding.id);
-        out.set(holding.id, { insurerName: confirmed?.insurerName ?? null, productName: confirmed?.productName ?? null, ...headline });
+        const inputs = wording.get(holding.id);
+        // A read never calls FSS. It only queues the refresh job when the last check is old enough (a queue failure never fails the read).
+        await queueReferenceRefresh(holding, inputs).catch(() => null);
+        out.set(holding.id, { insurerName: confirmed?.insurerName ?? null, productName: confirmed?.productName ?? null, ...headline, ...wordingView(inputs) });
       }
       return out;
     },
@@ -399,5 +434,12 @@ function sourceView(row, quotes = new Map(), kinds = new Map()) {
     quote: row.tier === 'ida_wording' ? (typeof row.reference?.quote === 'string' ? row.reference.quote : null)
       : row.tier === 'own_pdf' ? quotes.get(row.policyFactId) ?? null : null,
     captureMethod: row.captureMethod ?? null, current: true,
+    // FSS insurer tier: only the source name, the cited page number and the verification status. No ids, hashes, reviewer or locator.
+    ...(row.tier === 'ida_wording' && row.reference?.source === 'fss' ? { reference: fssSourceView(row.reference) } : {}),
   };
+}
+
+function fssSourceView(reference) {
+  const pageNumber = reference.evidence?.[0]?.pageNumber;
+  return { source: 'fss', pageNumber: Number.isInteger(pageNumber) ? pageNumber : null, verificationStatus: typeof reference.verificationStatus === 'string' ? reference.verificationStatus : null };
 }

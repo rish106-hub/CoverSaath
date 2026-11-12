@@ -58,3 +58,17 @@ export const HOLDING_SUMMARY_HEADLINES = Object.freeze({ sumInsured: 'sum_insure
 // Coded, client-safe errors of the holdings routes are registered in src/contracts/error-codes.js (HOLDING_*, MEMORY_CONFLICT_*).
 
 // HOLDINGS_ENABLED (off unless exactly "true") lives in src/backend/services/holdings-flag.js.
+
+// Insurer wording state of a holding (ADR 0034), derived at read time, never stored: `fss` when a current ida_wording row exists (insurer terms
+// read from the FSS reference service), else `manual` when the owner linked a wording document, else `missing`.
+// `wordingReason` says why a `missing` holding has no insurer terms: the closed codes of policy_holdings.reference_outcome (migration 066)
+// other than `attached`, or `not_checked` when no check has run (or its rows are gone). It is null when the state is `fss` or `manual`.
+export const WORDING_STATES = Object.freeze(['fss', 'manual', 'missing']);
+export const REFERENCE_OUTCOMES = Object.freeze([
+  'attached', 'unavailable', 'rate_limited', 'unauthorized', 'no_match', 'version_unresolved', 'synthetic_only', 'invalid_response', 'disabled', 'no_usable_facts',
+]);
+export const WORDING_REASONS = Object.freeze([...REFERENCE_OUTCOMES.filter(code => code !== 'attached'), 'not_checked']);
+// Refresh rule: a holding open queues fetch_reference when the last check is older than 24 h (1 h after a transient failure).
+export const REFERENCE_REFRESH_MS = 24 * 60 * 60 * 1000;
+export const REFERENCE_RETRY_MS = 60 * 60 * 1000;
+export const REFERENCE_TRANSIENT_OUTCOMES = Object.freeze(['unavailable', 'rate_limited']);
