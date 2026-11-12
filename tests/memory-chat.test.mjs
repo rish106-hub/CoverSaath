@@ -37,7 +37,7 @@ const answerStub = (sent, answer = 'Hello {{PERSON_1}}. Your room rent limit is 
     await hook?.();
     sent.push(`${settings.instructions}\n${prompt}`);
     const facts = JSON.parse(prompt).facts ?? [];
-    const room = facts.find(fact => /room rent/i.test(JSON.stringify(fact.label)));
+    const room = facts.find(fact => /room rent/i.test(JSON.stringify(fact.label))) ?? facts.find(fact => /passage/i.test(JSON.stringify(fact.label)) && /ambulance/i.test(JSON.stringify(fact.value)));
     return { output: room ? { status: 'extracted_unverified', answer, factsUsed: [room.fact_id] } : { status: 'unknown', answer: 'No model answer.', factsUsed: [] }, totalUsage: { inputTokens: 100, outputTokens: 20 } };
   },
 });
@@ -48,7 +48,7 @@ async function grantProviders(pool, id, recipients = ['anthropic', 'voyage']) {
   for (const recipient of recipients) await insert(pool, 'consent_scopes', { id: `scope-${id}-${recipient}`, consent_grant_id: id, ...SCOPE(recipient) });
 }
 
-async function scenario(t, { env: override = {}, budget = 1, facts = true, clauses = true, recipients = ['anthropic', 'voyage'], onGenerate = null, onEmbed = null } = {}) {
+async function scenario(t, { env: override = {}, budget = 1, facts = true, clauses = true, recipients = ['anthropic', 'voyage'], onGenerate = null, onEmbed = null, answer = undefined } = {}) {
   const fresh = await freshDatabase(t);
   const { db, handle } = fresh;
   const a = await seedWorld(handle.pool, 'a');
@@ -66,7 +66,7 @@ async function scenario(t, { env: override = {}, budget = 1, facts = true, claus
   const providerCalls = new ProviderCallRepository(db);
   const gateway = createChatModelGateway({
     env, router: createModelRouter({ env }), providerCalls, budgetFor: createHouseholdDayBudget({ maxUsd: budget }),
-    loadModel: async () => ({ stub: true }), createAgent: answerStub(sent, undefined, () => onGenerate?.(handle, a)), embedClientFor: () => embedClient(embedded, () => onEmbed?.(handle, a)),
+    loadModel: async () => ({ stub: true }), createAgent: answerStub(sent, answer, () => onGenerate?.(handle, a)), embedClientFor: () => embedClient(embedded, () => onEmbed?.(handle, a)),
   });
   const services = createBackendServices(db, { env, modelGateway: gateway });
   const crypto = services.columnCrypto;
@@ -128,7 +128,7 @@ test('success: memorise embeds redacted passages, a room-rent question cites the
   const out = await turn({ threadId: conversation.id, body: { message: 'Asha asks: how much room rent does my policy allow per day?' } });
   assert.deepEqual(out.map(([event]) => event).filter((event, i, all) => all.indexOf(event) === i), ['meta', 'delta', 'answer', 'done']);
   const answer = answerOf(out);
-  assert.equal(answer.answer_source, 'model');
+  assert.equal(answer.answer_source, 'model', answer.model_status);
   assert.equal(answer.status, 'evidence_found');
   assert.equal(answer.intent, 'coverage_question');
   assert.deepEqual(answer.facts_used.map(item => [item.fact_id, item.fact_key, item.status]), [[ids.room_rent_limit, 'room_rent_limit', 'reviewed_reference']]);
@@ -233,6 +233,8 @@ test('ownership: another household cannot read, write or probe a thread, holding
   await assert.rejects(s.services.chatV1.createThread({ principal: { adultId: s.b.adult }, body: { household_id: s.b.household, holding_id: s.holding.id } }), code('HOLDING_NOT_FOUND'));
   assert.deepEqual(await s.services.chatRepository.recentTurns({ householdId: s.b.household, threadId: conversation.id }), []);
   assert.equal(await s.services.memoryChunks.count({ householdId: s.b.household }), 0);
+  assert.equal(await s.services.chatRepository.mayReadHoldingFacts({ householdId: s.a.household, adultId: s.b.adult }), false, 'another household\'s adult may not read this household\'s facts (F7)');
+  assert.equal(await s.services.chatRepository.mayReadHoldingFacts({ householdId: s.a.household, adultId: s.a.adult }), true);
   assert.ok(await s.services.memoryChunks.count({ householdId: s.a.household }) > 0);
   // Input is validated: unknown fields, empty and oversized messages, bad procedure.
   for (const body of [{ message: 'x', extra: 1 }, { message: '' }, { message: 'y'.repeat(1001) }, { message: 'x', input_kind: 'video' }, { message: 'x', procedure: { stay_days: -1 } }, { message: 'x', procedure: { name: 'knee' } }, { message: 'x', audio_document_id: 'doc' }]) {
@@ -546,4 +548,85 @@ test('provider consent: revoking the chat grant erases the chat it made possible
   await revoke(s.handle.pool, 'cg-chat'); // the first grant was only erased from, not revoked
   const after = await s.thread();
   assert.equal(answerOf(await s.turn({ threadId: after.id, body: { message: 'what is the room rent limit?' } })).answer_source, 'deterministic');
+});
+
+// ---- Audit F5: numbers in a model answer must come from cited facts or computed checks. ----
+test('numbers check: an answer whose numbers match the cited fact keeps the model wording', opts, async t => {
+  const s = await scenario(t, { answer: 'Your room rent limit is INR 5,000 per day.' });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(answer.answer_source, 'model', answer.model_status);
+  assert.equal(answer.model_status, undefined);
+  assert.equal(answer.status, 'evidence_found');
+});
+
+test('numbers check: a number the cited fact does not hold falls back to the deterministic answer (numbers_unverified)', opts, async t => {
+  const s = await scenario(t, { answer: 'Your room rent limit is INR 9,000 per day.' });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(answer.answer_source, 'deterministic');
+  assert.equal(answer.model_status, 'numbers_unverified');
+  assert.doesNotMatch(answer.answer, /9,000/);
+  assert.match(answer.facts_used[0].value_text, /5,000/);
+  assert.equal((await assistantTurns(s))[0].consent_grant_id, null, 'no model wording was stored');
+});
+
+// ---- Audit F7: holding facts are owner-only in chat, like GET /holdings/{id}/facts. ----
+test('non-owner member chats without holding facts, conflicts or passages; the owner still gets them', opts, async t => {
+  const s = await scenario(t);
+  await insert(s.handle.pool, 'adult_users', { id: 'adult-a2' });
+  await insert(s.handle.pool, 'household_roles', { id: 'role-a2', household_id: s.a.household, adult_user_id: 'adult-a2', role: 'member' });
+  await insert(s.handle.pool, 'household_members', { id: 'member-a2', household_id: s.a.household, adult_user_id: 'adult-a2' });
+  const conversation = await s.thread();
+  const asMember = await s.turn({ adultId: 'adult-a2', threadId: conversation.id, body: { message: 'what is the room rent limit?' } });
+  const meta = asMember.find(([event]) => event === 'meta')[1];
+  const memberAnswer = answerOf(asMember);
+  assert.equal(meta.facts_available, 0);
+  assert.deepEqual(memberAnswer.facts_used, []);
+  assert.equal(memberAnswer.answer_source, 'deterministic');
+  assert.equal(s.sent.length, 0, 'no fact value went to the model for a non-owner');
+  assert.doesNotMatch(JSON.stringify(memberAnswer), /reviewed_reference|room_rent_limit/, 'no holding fact or key is shown');
+  const asOwner = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(asOwner.facts_used[0].fact_key, 'room_rent_limit');
+});
+
+// ---- Owner scope: chat answers from the policy wording too, names document and page, and never invents. Synthetic wording only. ----
+test('wording, keyword path: a clause answer names the wording document and page', opts, async t => {
+  const s = await scenario(t, { env: { ANTHROPIC_API_KEY: '', VOYAGE_API_KEY: '' } });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what does the policy say about the ambulance?' } }));
+  assert.equal(answer.status, 'evidence_found');
+  assert.deepEqual(answer.sources.map(item => [item.kind, item.document_id, item.page]), [['wording', s.a.document, 2]]);
+});
+
+test('wording, no support: a question the wording and facts do not answer is unknown with no sources', opts, async t => {
+  const s = await scenario(t, { env: { ANTHROPIC_API_KEY: '', VOYAGE_API_KEY: '' } });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'is dental treatment covered?' } }));
+  assert.equal(answer.status, 'unknown');
+  assert.deepEqual(answer.sources, []);
+  assert.deepEqual(answer.facts_used, []);
+  assert.doesNotMatch(answer.answer, /INR \d/);
+});
+
+test('wording, vector path: a model answer whose numbers sit in the cited passage is kept and cites document and page', opts, async t => {
+  const s = await scenario(t, { facts: false, answer: 'Ambulance charges are paid up to INR 2,000 per trip.' });
+  await s.services.memory.embedHolding({ householdId: s.a.household, holdingId: s.holding.id });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what does the policy say about the ambulance?' } }));
+  assert.equal(answer.answer_source, 'model', answer.model_status);
+  assert.equal(answer.status, 'evidence_found');
+  assert.deepEqual(answer.sources.map(item => [item.document_id, item.page]), [[s.a.document, 2]]);
+});
+
+test('wording, vector path: a number absent from the cited passage falls back (numbers_unverified), nothing invented', opts, async t => {
+  const s = await scenario(t, { facts: false, answer: 'Ambulance charges are paid up to INR 7,000 per trip.' });
+  await s.services.memory.embedHolding({ householdId: s.a.household, holdingId: s.holding.id });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what does the policy say about the ambulance?' } }));
+  assert.equal(answer.answer_source, 'deterministic');
+  assert.equal(answer.model_status, 'numbers_unverified');
+  assert.doesNotMatch(answer.answer, /7,000/);
+  assert.equal(answer.status, 'unknown');
+  assert.deepEqual(answer.sources, []);
 });

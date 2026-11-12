@@ -7,6 +7,7 @@ import { QUESTION_CONSENT_SCOPE } from '../src/contracts/policy-evidence.js';
 import {
   CONSENT_PURPOSES, DATA_PURPOSE_REGISTRY, DATA_PURPOSE_REGISTRY_VERSION, LEGAL_REVIEW, purposeEntry,
 } from '../src/contracts/data-purpose-registry.js';
+import { MODEL_ROUTES } from '../src/integrations/model-routing/index.js';
 import { MODEL_INPUT_FIELDS } from '../src/features/ai-analysis/model-input-fields.js';
 import { sealModelInput, sealedInputCounts } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { documentGrantCheck } from '../src/features/policy-structuring/index.js';
@@ -169,4 +170,24 @@ test('R11: provider recipients imply a possible cross-border flag', () => {
   for (const item of DATA_PURPOSE_REGISTRY.filter(candidate => candidate.recipients.some(recipient => recipient === 'google-gemini' || recipient === 'anthropic' || recipient === 'sarvam'))) {
     assert.equal(item.crossBorder, 'possible', item.field);
   }
+});
+
+// Audit F2: the registry names the processor that really receives each payload and each store whose opened values become payload slots.
+test('F2: every MODEL_ROUTES route has its payload slots registered with the routed provider as recipient', () => {
+  for (const [task, routes] of Object.entries(MODEL_ROUTES)) {
+    const slots = DATA_PURPOSE_REGISTRY.filter(item => item.field.startsWith(`model:${task}.`));
+    assert.ok(slots.length > 0, `${task} has registry slots`);
+    for (const slot of slots) {
+      const routed = routes.map(route => route.provider);
+      assert.ok(slot.recipients.every(recipient => routed.includes(recipient)) && routed.some(provider => slot.recipients.includes(provider)), `${slot.field} recipient matches route ${routed}`);
+      assert.equal(slot.consentScope?.recipient, slot.recipients[0], `${slot.field} scope names the same recipient`);
+    }
+  }
+  assert.deepEqual(purposeEntry('model:embed.payload.texts[].text').recipients, ['voyage']);
+});
+
+test('F2: stores whose opened values become model slots list the real recipients, not none (FOR LEGAL REVIEW)', () => {
+  assert.deepEqual([...purposeEntry('db:household_memory_facts.value_enc').recipients].sort(), ['anthropic', 'voyage']);
+  assert.deepEqual([...purposeEntry('db:memory_chunks.chunk_text_enc').recipients].sort(), ['anthropic', 'voyage']);
+  assert.deepEqual([...purposeEntry('db:memory_chunks.embedding').recipients], ['voyage']);
 });
