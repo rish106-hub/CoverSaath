@@ -169,7 +169,7 @@ async function journey(t) {
   const holdings = (await app.call(`/api/v1/households/${s.householdId}/holdings`, { token: s.token })).data.holdings;
   w.holdings = holdings;
   w.holdingId = holdings.find(item => item.documentId === scheduleId).id;
-  w.wordingHoldingId = holdings.find(item => item.documentId === wordingId).id;
+  w.wordingHoldingId = holdings.find(item => item.documentId === wordingId).id; // exists until the wording is linked (below), then absorbed
   assert.equal((await app.call(`/api/v1/holdings/${w.holdingId}/product-candidates`, { token: s.token })).status, 503, 'registry not imported yet');
   await drain();
   const candidates = await app.call(`/api/v1/holdings/${w.holdingId}/product-candidates`, { token: s.token });
@@ -187,8 +187,10 @@ async function journey(t) {
 
 test('journey: schedule and wording uploaded, OCR, structuring, holdings jobs, memorise, chat cites the holding facts', opts, async t => {
   const { app, s, holdingId, wordingHoldingId, holdings, structured, outcomes, drain, embedded, chatSent } = await journey(t);
-  assert.equal(holdings.length, 2, 'one holding per document; the wording is linked to the schedule holding (holding_documents), not merged');
+  assert.equal(holdings.length, 2, 'before linking, OCR made a holding per document');
   assert.ok(wordingHoldingId !== holdingId);
+  const afterLink = (await app.call(`/api/v1/households/${s.householdId}/holdings`, { token: s.token })).data.holdings;
+  assert.deepEqual(afterLink.map(item => item.id), [holdingId], 'linking the wording absorbed its standalone holding: one policy, one holding');
   for (const review of Object.values(structured)) assert.equal(review.status, 'finished');
   assert.ok(structured.schedule.parameters.some(parameter => parameter.key === 'f.ped_waiting_period'));
 

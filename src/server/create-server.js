@@ -244,6 +244,8 @@ export function createApiServer({
       env,
       // One metadata-only log line per audit-chain append (never the audit payload).
       onAudit: entry => logger.audit(entry),
+      // Fixed-shape operational events from services (event name and a code, never free text).
+      onWarn: logEvent,
       sessionDurationMs: config.sessionTtlMs,
       maxActiveSessions: config.maxSessions,
       // A sealed value that cannot be decrypted on an erasure path is reported by table and column only.

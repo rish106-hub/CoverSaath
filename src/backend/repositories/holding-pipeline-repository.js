@@ -94,21 +94,80 @@ export class HoldingPipelineRepository {
       const document = await db.one(`SELECT id, consent_grant_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
       if (!document) throw coded('DOCUMENT_NOT_FOUND', 'The document was not found.', 404);
       if (document.id === holding.document_id) throw coded('HOLDING_INPUT_INVALID', 'The holding already has this document.', 400);
+      await this.#absorbStandaloneHolding({ householdId, holdingId, documentId });
       const inserted = await db.run(`INSERT INTO holding_documents (id, household_id, holding_id, document_id, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT (holding_id, document_id) DO NOTHING`, [`hdoc-${randomUUID()}`, householdId, holdingId, documentId, kind, at]);
       return Object.freeze({ linked: inserted.changes === 1 });
     }, { locks: [householdLock(householdId)] });
   }
 
-  /** Removes a link and the memory chunks that came from the unlinked document for this holding. Resolves { unlinked }. */
+  // One policy, one holding. The linked document may already have a standalone holding of its own (created at OCR, or by a late holding.create
+  // job). Inside the link transaction (household lock held): if the owner never acted on it, delete it (foreign keys cascade its memory facts,
+  // conflicts, chunks and chat threads; its queued jobs go too) with a counts-only audit event. If the owner acted on it, refuse with a coded
+  // conflict and change nothing. A document linked to another holding is not a holding of its own, so it is never touched.
+  async #absorbStandaloneHolding({ householdId, holdingId, documentId }) {
+    const db = this.database;
+    const own = await db.one('SELECT id, status FROM policy_holdings WHERE household_id = ? AND document_id = ? FOR UPDATE', [householdId, documentId]);
+    if (!own || own.id === holdingId) return;
+    const acted = await db.one(`SELECT (
+        ? NOT IN ('uploaded', 'insurer_pending')
+        OR EXISTS (SELECT 1 FROM policy_profiles profile WHERE profile.household_id = ? AND profile.document_id = ?
+          AND (profile.uin_state = 'reported' OR profile.insurer_state = 'reported' OR profile.policy_name_state = 'reported'))
+        OR EXISTS (SELECT 1 FROM household_memory_facts fact WHERE fact.household_id = ? AND fact.holding_id = ? AND fact.source_tier = 'user_declaration')
+        OR EXISTS (SELECT 1 FROM memory_conflicts conflict WHERE conflict.household_id = ? AND conflict.holding_id = ? AND conflict.resolution <> 'pending')
+        OR EXISTS (SELECT 1 FROM holding_documents link WHERE link.household_id = ? AND link.holding_id = ?)
+        OR EXISTS (SELECT 1 FROM premium_payments payment WHERE payment.household_id = ? AND payment.holding_id = ?)
+        OR EXISTS (SELECT 1 FROM premium_dues due WHERE due.household_id = ? AND due.holding_id = ?)
+        OR EXISTS (SELECT 1 FROM chat_threads thread WHERE thread.household_id = ? AND thread.holding_id = ?)
+        OR EXISTS (SELECT 1 FROM member_declarations declaration WHERE declaration.household_id = ? AND declaration.holding_id = ?)
+      ) AS acted`, [own.status, householdId, documentId, householdId, own.id, householdId, own.id, householdId, own.id, householdId, own.id,
+      householdId, own.id, householdId, own.id, householdId, own.id]);
+    if (acted.acted) throw coded('HOLDING_DOCUMENT_HAS_HOLDING', 'That document already has its own holding that you have worked on.', 409);
+    await db.run(`DELETE FROM job_queue WHERE household_id = ? AND document_id = ? AND status = 'queued' AND kind LIKE 'holding.%'`, [householdId, documentId]);
+    await db.run('DELETE FROM policy_holdings WHERE id = ? AND household_id = ?', [own.id, householdId]);
+    await this.audit?.append({
+      householdId, actorType: 'system', actorId: 'holding-pipeline-repository', action: 'holding.absorbed',
+      resourceType: 'policy_holding', resourceId: own.id, payload: {},
+    });
+  }
+
+  /**
+   * Removes a link, the memory chunks that came from the unlinked document for this holding, and the own-PDF memory rows that cite it
+   * (retired, so no fact read only from that document stays current; the caller re-collates to rebuild what the other documents give).
+   * A user declaration or a resolved conflict is never touched. Resolves { unlinked }.
+   */
   async unlinkDocument({ householdId, holdingId, documentId }) {
     requireId(householdId, 'householdId'); requireId(holdingId, 'holdingId'); requireId(documentId, 'documentId');
     return this.database.transaction(async () => {
       const db = this.database;
       const removed = await db.run('DELETE FROM holding_documents WHERE household_id = ? AND holding_id = ? AND document_id = ?', [householdId, holdingId, documentId]);
-      if (removed.changes === 1) await db.run('DELETE FROM memory_chunks WHERE household_id = ? AND holding_id = ? AND source_document_id = ?', [householdId, holdingId, documentId]);
+      if (removed.changes === 1) {
+        await db.run('DELETE FROM memory_chunks WHERE household_id = ? AND holding_id = ? AND source_document_id = ?', [householdId, holdingId, documentId]);
+        await db.run(`UPDATE ${MEMORY} SET superseded_at = ? WHERE household_id = ? AND holding_id = ? AND source_document_id = ? AND source_tier = 'own_pdf' AND superseded_at IS NULL`,
+          [this.clock().toISOString(), householdId, holdingId, documentId]);
+      }
       return Object.freeze({ unlinked: removed.changes === 1 });
     }, { locks: [householdLock(householdId)] });
+  }
+
+  /** Which of these documents may be read now (active, current version, clean, current processing grant): Set of document ids. Household scoped. */
+  async readableDocuments({ householdId, documentIds }) {
+    requireId(householdId, 'householdId');
+    if (documentIds.length === 0) return new Set();
+    const at = this.clock().toISOString();
+    const rows = await this.database.many(`SELECT document.id FROM document_uploads document
+      JOIN consent_grants consent ON consent.id = document.consent_grant_id
+      WHERE document.id = ANY(CAST(? AS text[])) AND document.household_id = ? AND document.lifecycle_state = 'active'
+        AND document.malware_status IN ('clean', 'not_scanned_fixture')
+        AND consent.purpose = 'document_processing' AND consent.revoked_at IS NULL
+        AND (consent.expires_at IS NULL OR julianday(consent.expires_at) > julianday(CAST(? AS text)))`, [documentIds, householdId, at]);
+    return new Set(rows.map(row => row.id));
+  }
+
+  /** The holdings of the household that a document is linked to (ids only). */
+  async holdingsLinkingDocument({ householdId, documentId }) {
+    requireId(householdId, 'householdId'); requireId(documentId, 'documentId');
+    return (await this.database.many('SELECT holding_id FROM holding_documents WHERE household_id = ? AND document_id = ? ORDER BY created_at, id LIMIT 20', [householdId, documentId])).map(row => row.holding_id);
   }
 
   /**
@@ -190,7 +249,7 @@ export class HoldingPipelineRepository {
         alternatives = [...seen.values()].slice(0, 4);
       }
       out.push(Object.freeze({
-        factKey: row.fact_type, factId: row.id, origin: row.origin, state: row.state,
+        factKey: row.fact_type, factId: row.id, documentId, origin: row.origin, state: row.state,
         value: row.state === 'extracted_unverified' ? this.#policyFactValue(row) : null, alternatives,
         pageId: first.page_id, blockIndex: first.block_index ?? null,
       }));
@@ -198,10 +257,44 @@ export class HoldingPipelineRepository {
     return out;
   }
 
+  /**
+   * The insurer and product name the owner confirmed for each holding: Map holding id -> { insurerName, productName } (each null unless that
+   * field is in state 'reported'; never an extracted candidate, never the UIN). Opened for the owning household's own response only.
+   */
+  async confirmedNames({ householdId, holdings }) {
+    requireId(householdId, 'householdId');
+    const ids = holdings.map(item => item.policyProfileId).filter(Boolean);
+    const out = new Map();
+    if (ids.length === 0) return out;
+    const rows = await this.database.many(`SELECT id, insurer_state, insurer_name_enc, policy_name_state, policy_name_enc FROM policy_profiles
+      WHERE household_id = ? AND id = ANY(CAST(? AS text[]))`, [householdId, ids]);
+    const byProfile = new Map(rows.map(row => [row.id, row]));
+    for (const holding of holdings) {
+      const row = byProfile.get(holding.policyProfileId);
+      if (!row) continue;
+      out.set(holding.id, Object.freeze({
+        insurerName: row.insurer_state === 'reported' && row.insurer_name_enc ? this.crypto.open('policy_profiles', 'insurer_name_enc', row.id, row.insurer_name_enc) : null,
+        productName: row.policy_name_state === 'reported' && row.policy_name_enc ? this.crypto.open('policy_profiles', 'policy_name_enc', row.id, row.policy_name_enc) : null,
+      }));
+    }
+    return out;
+  }
+
+  /** The kind of the document each source page belongs to: Map page id -> document_kind (household scoped). */
+  async pageDocumentKinds({ householdId, pageIds }) {
+    const ids = [...new Set(pageIds.filter(Boolean))];
+    if (ids.length === 0) return new Map();
+    const rows = await this.database.many(`SELECT page.id, document.document_kind FROM source_pages page
+      JOIN document_uploads document ON document.id = page.document_upload_id
+      WHERE document.household_id = ? AND page.id = ANY(CAST(? AS text[]))`, [householdId, ids]);
+    return new Map(rows.map(row => [row.id, row.document_kind]));
+  }
+
   /** Current memory rows of a holding, opened (server side only). */
-  async currentMemory({ householdId, holdingId }) {
+  async currentMemory({ householdId, holdingId, factKeys = null }) {
     const rows = await this.database.many(`SELECT * FROM ${MEMORY} WHERE household_id = ? AND holding_id = ? AND superseded_at IS NULL
-      ORDER BY fact_key, source_tier, id LIMIT ?`, [householdId, holdingId, MAX_ROWS]);
+      AND (CAST(? AS text[]) IS NULL OR fact_key = ANY(CAST(? AS text[])))
+      ORDER BY fact_key, source_tier, id LIMIT ?`, [householdId, holdingId, factKeys, factKeys, MAX_ROWS]);
     return rows.map(row => {
       const sealed = row.value_enc ? JSON.parse(this.crypto.open(MEMORY, 'value_enc', row.id, row.value_enc)) : { value: null, alternatives: [] };
       return Object.freeze({
@@ -260,11 +353,21 @@ export class HoldingPipelineRepository {
    * Writes one collation of a holding. `slots` are collateSlot() results; `ownByFactId` maps policy fact id -> own candidate (page);
    * `consentGrantId` is the document's processing grant. Unchanged readings are kept; changed ones supersede. Returns counts.
    */
-  async writeCollation({ holding, sourceVersion, consentGrantId, slots, ownByFactId }) {
+  async writeCollation({ holding, sourceVersion, consentGrantId, slots, ownByFactId, linkedDocuments = [] }) {
     const householdId = holding.householdId;
     return this.database.transaction(async () => {
       const at = this.clock().toISOString();
       await this.#requireReadableDocument({ householdId, documentId: holding.documentId, sourceVersion, at });
+      // Linked documents that contributed a candidate: each is re-checked inside the transaction (consent, version, state). A document that
+      // stopped being readable since the read fails this attempt (retryable); the next attempt reads without it.
+      const linkedBy = new Map(linkedDocuments.map(item => [item.documentId, item]));
+      for (const item of linkedBy.values()) {
+        try { await this.#requireReadableDocument({ householdId, documentId: item.documentId, sourceVersion: item.sourceVersion, at }); }
+        catch { throw coded('HOLDING_COLLATE_RETRY', 'A linked document changed while collating.', 409); }
+      }
+      const linkedLive = await this.database.many('SELECT document_id FROM holding_documents WHERE household_id = ? AND holding_id = ?', [householdId, holding.id]);
+      const stillLinked = new Set(linkedLive.map(row => row.document_id));
+      for (const item of linkedBy.values()) if (!stillLinked.has(item.documentId)) throw coded('HOLDING_COLLATE_RETRY', 'A linked document was unlinked while collating.', 409);
       const live = await this.database.one('SELECT status FROM policy_holdings WHERE id = ? AND household_id = ?', [holding.id, householdId]);
       if (!live) throw notReady();
       const current = await this.currentMemory({ householdId, holdingId: holding.id });
@@ -296,7 +399,8 @@ export class HoldingPipelineRepository {
           await this.#insertMemory({
             id, household_id: householdId, holding_id: holding.id, policy_id: holding.policyId, subject_member_id: null, member_scope: 'policy',
             fact_key: slot.factKey, scope_key: '', key_schema: POLICY_FACT_REGISTRY_VERSION, fact_class: slot.factClass, source_tier: tier, status: intent.status,
-            value_enc: this.crypto.seal(MEMORY, 'value_enc', id, payload), consent_grant_id: consentGrantId, source_document_id: holding.documentId,
+            value_enc: this.crypto.seal(MEMORY, 'value_enc', id, payload), consent_grant_id: (page && linkedBy.get(page.documentId)?.consentGrantId) || consentGrantId,
+            source_document_id: (page && linkedBy.has(page.documentId)) ? page.documentId : holding.documentId,
             source_page_id: page?.pageId ?? null, block_index: page?.blockIndex ?? null, policy_fact_id: intent.policyFactId ?? null,
             reference_ref_enc: reference ? this.crypto.seal(MEMORY, 'reference_ref_enc', id, canonicalJson(reference)) : null,
             derivation_version: COLLATE_VERSION, supersedes_id: existing?.id ?? null, created_at: at,
