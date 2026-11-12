@@ -18,7 +18,7 @@ import { NORMALISER_VERSION } from '../../features/policy-facts/normalisers.js';
 import { createNetworkHospitalService } from './network-hospital-service.js';
 import { NetworkHospitalRepository } from '../repositories/network-hospital-repository.js';
 import { createHoldingProductService, DETECT_INSURER_JOB_KIND } from './holding-product-service.js';
-import { HOLDING_JOB_MAX_ATTEMPTS } from '../../contracts/holdings.js';
+import { HOLDING_CREATE_JOB_KIND, HOLDING_JOB_MAX_ATTEMPTS } from '../../contracts/holdings.js';
 import { createHash } from 'node:crypto';
 import { createAuthTokenService } from './auth-token-service.js';
 import { createSyncService } from './sync-service.js';
@@ -82,17 +82,37 @@ export function createBackendServices(database, options = {}) {
   const identities = new AuthIdentityRepository(database, { ...shared, households, auth, authTokens: authTokenRepository });
   // Holdings (complete.md 3.2 step 1): when OCR of a policy document completes, create its holding (status uploaded) and queue insurer
   // detection. One holding per document and one live job per holding; off unless HOLDINGS_ENABLED is exactly "true". `policyHoldings` is built below.
-  const afterOcrComplete = async ({ householdId, documentId, documentKind, consentGrantId }) => {
-    if (!holdingsEnabled(options.env ?? process.env) || !HOLDING_DOCUMENT_KINDS.includes(documentKind)) return;
-    const existing = await database.one('SELECT id FROM policy_holdings WHERE household_id = ? AND document_id = ?', [householdId, documentId]);
-    if (existing) return;
+  // Idempotent: one holding per document (unique household + document), one live detect job per holding (dedupe key). Safe to retry or deliver twice.
+  const ensureHolding = async ({ householdId, documentId, documentKind, consentGrantId = null }) => {
+    if (!holdingsEnabled(options.env ?? process.env) || !HOLDING_DOCUMENT_KINDS.includes(documentKind)) return null;
     const holding = await policyHoldings.create({ householdId, adultId: null, documentId, kind: 'retail_health' });
     await jobQueue.enqueue({
       kind: DETECT_INSURER_JOB_KIND, householdId, documentId, consentGrantId, payload: { holdingId: holding.id },
       dedupeKey: createHash('sha256').update(`${DETECT_INSURER_JOB_KIND}\u0000${holding.id}\u0000${documentId}`).digest('hex'), maxAttempts: HOLDING_JOB_MAX_ATTEMPTS,
     });
+    return holding;
   };
-  const ocr = new OcrRepository(database, { ...shared, afterComplete: afterOcrComplete });
+  // The retry job knows only identifiers: it reads the document kind itself (active document of that household only).
+  const ensureHoldingForDocument = async ({ householdId, documentId, consentGrantId = null }) => {
+    const document = await database.one(`SELECT document_kind FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
+    if (!document) return null;
+    return ensureHolding({ householdId, documentId, documentKind: document.document_kind, consentGrantId });
+  };
+  const afterOcrComplete = async hook => {
+    if (!holdingsEnabled(options.env ?? process.env) || !HOLDING_DOCUMENT_KINDS.includes(hook.documentKind)) return;
+    const existing = await database.one('SELECT id FROM policy_holdings WHERE household_id = ? AND document_id = ?', [hook.householdId, hook.documentId]);
+    if (existing) return;
+    await ensureHolding(hook);
+  };
+  // The step above threw after the OCR pages were stored: queue it for retry (existing job retry and backoff; identifiers only; one live job per document).
+  const afterOcrCompleteFailed = async ({ householdId, documentId, documentKind, consentGrantId }) => {
+    if (!holdingsEnabled(options.env ?? process.env) || !HOLDING_DOCUMENT_KINDS.includes(documentKind)) return;
+    await jobQueue.enqueue({
+      kind: HOLDING_CREATE_JOB_KIND, householdId, documentId, consentGrantId, payload: {},
+      dedupeKey: createHash('sha256').update(`${HOLDING_CREATE_JOB_KIND}\u0000${documentId}`).digest('hex'), maxAttempts: HOLDING_JOB_MAX_ATTEMPTS,
+    });
+  };
+  const ocr = new OcrRepository(database, { ...shared, afterComplete: afterOcrComplete, afterCompleteFailed: afterOcrCompleteFailed });
   const profileAnswers = new ProfileAnswerRepository(database, shared);
   // Policy profile (migration 043, ADR 0024): identity of a policy and its owner confirmation. Off unless POLICY_FACTS_ENABLED=true.
   const policyProfiles = new PolicyProfileRepository(database, shared);
@@ -147,7 +167,7 @@ export function createBackendServices(database, options = {}) {
   const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, referenceCache: new ReferenceCacheRepository(database), env: options.env ?? process.env, client: options.referenceClient ?? null });
 
   return {
-    analytics, networkHospitals, holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
+    ensureHolding, ensureHoldingForDocument, analytics, networkHospitals, holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     holdings, holdingPipelineRepository, memory, memoryChunks, chatRepository, chatV1, modelGateway,
     emergencyInstruction,

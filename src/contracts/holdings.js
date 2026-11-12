@@ -24,6 +24,12 @@ export const HOLDING_JOB_STEPS = Object.freeze({
   [HOLDING_JOB_KINDS.memorise]: 'memorise',
 });
 export const HOLDING_JOB_MAX_ATTEMPTS = 3;
+// Retry of holding creation after OCR: when creating the holding (or queuing its insurer detection) throws after the OCR pages are stored,
+// a `holding.create` job re-runs it (identifiers only, dedupe per document, HOLDING_JOB_MAX_ATTEMPTS attempts). After the last attempt the job
+// is dead with this code, and GET /households/{id}/holdings lists the document under `creation_issues` with state 'failed'.
+export const HOLDING_CREATE_JOB_KIND = 'holding.create';
+export const HOLDING_CREATE_FAILED = 'HOLDING_CREATE_FAILED';
+export const HOLDING_CREATION_STATES = Object.freeze(['retrying', 'failed']);
 
 // policy_holdings.status (migration 048). A holding status, never a fact status: the step after the owner states the insurer and
 // plan is product_reported (written to policy_profiles in state reported, ADR 0024), not "confirmed".

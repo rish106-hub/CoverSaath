@@ -8,10 +8,11 @@ import { createBackendServices } from '../backend/services/index.js';
 import { POLICY_FACTS_JOB_KIND } from '../backend/services/policy-facts-service.js';
 import { policyFactsEnabled } from '../backend/services/policy-profile-service.js';
 import { createPolicyFactsHandler } from '../backend/jobs/policy-facts-handler.js';
-import { createHoldingHandlers } from '../backend/jobs/holding-pipeline-handlers.js';
+import { createHoldingCreateHandler, createHoldingHandlers } from '../backend/jobs/holding-pipeline-handlers.js';
 import { holdingsEnabled } from '../backend/services/holdings-flag.js';
 import { createDetectInsurerHandler, createReferenceImportHandler } from '../backend/jobs/holding-product-handlers.js';
 import { createPosthogClient } from '../integrations/index.js';
+import { HOLDING_CREATE_JOB_KIND } from '../contracts/holdings.js';
 import { DETECT_INSURER_JOB_KIND, REFERENCE_IMPORT_JOB_KIND } from '../backend/services/holding-product-service.js';
 
 // Worker process entry (plan B4): `npm run worker`. Same image and database as the API, no HTTP listener. It claims jobs from
@@ -28,6 +29,8 @@ export function buildJobHandlers(services, env = process.env) {
   if (policyFactsEnabled(env)) handlers[POLICY_FACTS_JOB_KIND] = createPolicyFactsHandler({ service: services.policyFacts });
   // Holdings pipeline (complete.md 3.2): parse_own_pdf, fetch_reference (queues collate only), collate, memorise (embeds through the memory service). Only while HOLDINGS_ENABLED is exactly "true".
   if (holdingsEnabled(env)) Object.assign(handlers, createHoldingHandlers({ service: services.holdings }));
+  // holding.create: retry of holding creation that failed after OCR (bounded, idempotent).
+  if (holdingsEnabled(env)) handlers[HOLDING_CREATE_JOB_KIND] = createHoldingCreateHandler({ ensure: services.ensureHoldingForDocument });
   // Holdings (HOLDINGS_ENABLED=true): detection, and the reference import (also needs REFERENCE_DATA_ENABLED=true to do any work).
   if (holdingsEnabled(env)) {
     handlers[DETECT_INSURER_JOB_KIND] = createDetectInsurerHandler({ service: services.holdingProducts });
