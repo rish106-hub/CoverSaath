@@ -28,11 +28,15 @@ test('freshclam.conf keeps signatures current without exceeding the mirror rate 
   assert.ok(Number(conf.get('Checks')) >= 1 && Number(conf.get('Checks')) <= 24);
 });
 
-test('entrypoint starts clamd and the updater only in clamd mode and lets only the API and clamd stop the container', () => {
+test('entrypoint starts clamd and the updater only in clamd mode and lets only the API, the worker and clamd stop the container', () => {
   const script = read('entrypoint.sh');
   assert.match(script, /DOCUMENT_SCAN_MODE:-disabled\}" = "clamd"/);
   assert.match(script, /freshclam --config-file=\/app\/docker\/freshclam\.conf --daemon/);
-  assert.match(script, /wait -n "\$node_pid" \$\{clamd_pid:\+"\$clamd_pid"\}/);
+  // The worker is supervised with the API (ADR 0014); WORKER_IN_CONTAINER=false is the kill switch.
+  assert.match(script, /WORKER_IN_CONTAINER:-true\}" != "false"/);
+  assert.match(script, /wait -n "\$node_pid" \$\{worker_pid:\+"\$worker_pid"\} \$\{clamd_pid:\+"\$clamd_pid"\}/);
+  assert.doesNotMatch(script, /wait -n[^\n]*freshclam_pid/);
+  assert.match(script, /runuser -u node -- node \/app\/src\/server\/worker\.js/);
   // The API never runs as root.
   assert.match(script, /runuser -u node -- node \/app\/src\/server\/server\.js/);
 });

@@ -142,7 +142,7 @@ async function listen(t, options) {
   const out = sink();
   const reports = [];
   const server = createApiServer({
-    database: {}, env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken }, logger: createLogger({ destination: out }),
+    database: {}, env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, RATE_LIMIT_BACKEND: 'memory' }, logger: createLogger({ destination: out }),
     errorReporter: { enabled: true, captureError: (error, context) => reports.push({ error, context }) }, ...options,
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

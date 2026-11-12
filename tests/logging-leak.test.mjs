@@ -110,7 +110,7 @@ async function startFailing(t, error, extra = {}) {
   const out = sink();
   const reports = [];
   const server = createApiServer({
-    database: {}, backendServices: failingServices(error), env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken }, logger: createLogger({ destination: out }),
+    database: {}, backendServices: failingServices(error), env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, RATE_LIMIT_BACKEND: 'memory' }, logger: createLogger({ destination: out }),
     errorReporter: { enabled: true, captureError: (reported, context) => reports.push({ reported, context }) }, ...extra,
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -163,7 +163,7 @@ test('a provider error with a hostile message is logged by class and code only',
 
 test('guard failures (host, rate limit) and unknown routes log without the URL or headers', async t => {
   const out = sink();
-  const server = createApiServer({ database: {}, backendServices: failingServices(new Error('x')), env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, RATE_LIMIT_PER_MINUTE: '3' }, logger: createLogger({ destination: out }) });
+  const server = createApiServer({ database: {}, backendServices: failingServices(new Error('x')), env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, RATE_LIMIT_BACKEND: 'memory', RATE_LIMIT_PER_MINUTE: '3' }, logger: createLogger({ destination: out }) });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -180,7 +180,7 @@ test('the default logger is silent: embedding the server writes nothing', async 
   let wrote = '';
   process.stdout.write = (chunk, ...rest) => { wrote += String(chunk); return original.call(process.stdout, chunk, ...rest); };
   try {
-    const server = createApiServer({ database: {}, backendServices: failingServices(new Error('x')), env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken } });
+    const server = createApiServer({ database: {}, backendServices: failingServices(new Error('x')), env: { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, RATE_LIMIT_BACKEND: 'memory' } });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     await fetch(`http://127.0.0.1:${server.address().port}/api/v1/health`);
     await new Promise(resolve => server.close(resolve));

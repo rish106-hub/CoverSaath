@@ -144,11 +144,11 @@ test('every logged route template is a valid route label, and the registry never
 
 // ---- Scrape route ---------------------------------------------------------------------------------------------------
 
-function stubServices(env = { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken }) {
+function stubServices(env = { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, RATE_LIMIT_BACKEND: 'memory' }) {
   return { access: new TenantAccessService(null, { auth: null, households: null, consents: null, env }) };
 }
 
-async function start(t, { env = { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken }, services = stubServices(env), ...extra } = {}) {
+async function start(t, { env = { KNOWVIA_BOOTSTRAP_TOKEN: bootstrapToken, RATE_LIMIT_BACKEND: 'memory' }, services = stubServices(env), ...extra } = {}) {
   const server = createApiServer({ database: {}, backendServices: services, env, ...extra });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
