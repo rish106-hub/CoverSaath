@@ -101,6 +101,7 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `onboarding_progress` | delete | userData | Deleted. |
 | `person_records` | delete | userData | Deleted by household and member erasure, and when the consent that gated the record type is withdrawn. Payloads are sealed. |
 | `policy_holdings` | delete | - | Deleted by the document erasure trigger, by household erasure and when the document consent is withdrawn. Ids and closed enums only. |
+| `holding_documents` | delete | - | Deleted with its holding or document (cascade and the document erasure trigger), by document and household erasure. Ids and a closed enum only. |
 | `household_memory_facts` | delete | - | Deleted with its holding, document, member, on consent revocation and household erasure. Values are sealed. |
 | `memory_conflicts` | delete | - | Deleted with its holding or facts, on consent revocation and household erasure. Ids and closed enums only. |
 | `member_declarations` | delete | - | Deleted with its member, on consent revocation and household erasure. The label is sealed. |

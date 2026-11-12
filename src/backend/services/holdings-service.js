@@ -189,6 +189,33 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       return { holdingId: holding.id, status: holding.status, facts, unknownKeys: POLICY_FACT_KEY_NAMES.filter(key => !bySlot.has(key)) };
     },
 
+    /**
+     * Links another document of the household (its wording, an endorsement) to a holding and queues memorise so the linked clauses are
+     * embedded for this holding's chat. Idempotent. Household ownership is re-checked in the repository.
+     */
+    async linkDocument({ holding, documentId, kind }) {
+      requireEnabled();
+      const { linked } = await repository.linkDocument({ householdId: holding.householdId, holdingId: holding.id, documentId, kind });
+      if (memory?.enabled?.()) {
+        const document = await documentOf(holding);
+        const all = await repository.linkedDocuments({ householdId: holding.householdId, holdingId: holding.id });
+        await enqueue(HOLDING_JOB_KINDS.memorise, holding, document, holdingInputSha(all.map(item => item.documentId)));
+      }
+      return { holdingId: holding.id, documentId, kind, linked };
+    },
+
+    async unlinkDocument({ holding, documentId }) {
+      requireEnabled();
+      const { unlinked } = await repository.unlinkDocument({ householdId: holding.householdId, holdingId: holding.id, documentId });
+      return { holdingId: holding.id, documentId, unlinked };
+    },
+
+    async linkedDocuments({ holding }) {
+      requireEnabled();
+      const items = await repository.linkedDocuments({ householdId: holding.householdId, holdingId: holding.id });
+      return { holdingId: holding.id, documents: items.map(item => ({ documentId: item.documentId, kind: item.kind })) };
+    },
+
     async conflicts({ holding }) {
       requireEnabled();
       const rows = await repository.currentMemory({ householdId: holding.householdId, holdingId: holding.id });

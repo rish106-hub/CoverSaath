@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { getPolicyFactKey } from '../../contracts/policy-facts.js';
+import { buildClauses } from '../../features/policy-evidence/index.js';
 import { resolveSlot } from '../../features/insurance-rules/collate.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
@@ -28,8 +29,8 @@ const sha256 = text => createHash('sha256').update(text, 'utf8').digest('hex');
 const SERVED_STATUSES = new Set(['user_confirmed', 'reviewed_reference']);
 const EMBED_SKIPS = new Set(['unknown']);
 
-/** The resolved facts of a holding that may be shown or embedded as confirmed: [{ factKey, entry, status, value, sourceIds, sourceTier, checkWithInsurer }]. */
-export function resolvedConfirmedFacts(memoryRows) {
+/** The resolved facts of a holding that may be shown or embedded as confirmed (with includeUnverified, also own-document readings still unverified): [{ factKey, entry, status, value, sourceIds, sourceTier, checkWithInsurer }]. */
+export function resolvedConfirmedFacts(memoryRows, { includeUnverified = false } = {}) {
   const bySlot = new Map();
   for (const row of memoryRows) {
     if (row.scopeKey !== '') continue;
@@ -42,13 +43,14 @@ export function resolvedConfirmedFacts(memoryRows) {
     const entry = getPolicyFactKey(factKey);
     if (!entry) continue;
     const resolved = resolveSlot({ factKey, own: view(tiers.own_pdf), ida: view(tiers.ida_wording), declaration: view(tiers.user_declaration) });
-    if (!SERVED_STATUSES.has(resolved.status)) continue;
+    // Chat may also serve a value read from the household's own document (status extracted_unverified, never promoted to confirmed).
+    if (!SERVED_STATUSES.has(resolved.status) && !(includeUnverified && resolved.status === 'extracted_unverified')) continue;
     out.push({ factKey, entry, status: resolved.status, value: resolved.value, sourceIds: [...resolved.sourceIds], sourceTier: resolved.sourceTier, checkWithInsurer: resolved.checkWithInsurer });
   }
   return out;
 }
 
-export function createMemoryService({ holdingRepository, chunks, clauses, database, gateway = null, loadKnownIdentifiers, providerConsent, env = process.env }) {
+export function createMemoryService({ holdingRepository, chunks, clauses, ocr = null, database, gateway = null, loadKnownIdentifiers, providerConsent, env = process.env }) {
   if (!holdingRepository || !chunks) throw new TypeError('A holding repository and a chunk repository are required.');
   if (!providerConsent) throw new TypeError('A provider consent resolver is required.');
 
@@ -60,6 +62,20 @@ export function createMemoryService({ holdingRepository, chunks, clauses, databa
       if (['RESTRICTED_EVIDENCE', 'EVIDENCE_SOURCE_LIMIT', 'PRIVACY_GATE_MALFORMED'].includes(error?.code)) return null;
       throw error;
     }
+  }
+
+  // Clauses are derived deterministically from the stored OCR blocks (the same derivation the read-back routes use); an unread document is skipped.
+  async function ensureClauses({ householdId, caseId, documentId }) {
+    if (!ocr || typeof clauses.saveClauses !== 'function') return;
+    let stored;
+    try { stored = await ocr.getDocumentBlockPages({ documentId, householdId }); } catch (error) {
+      if (error?.code) return; // no stored pages yet (OCR not complete): nothing to derive, retrieval falls back to what exists
+      throw error;
+    }
+    if (!stored?.complete) return;
+    if ((await clauses.clauseDocumentIds({ householdId, caseId })).includes(documentId)) return;
+    const { clauses: built } = buildClauses(stored, { documentId, sourceVersion: stored.sourceVersion });
+    if (built.length) await clauses.saveClauses({ householdId, caseId, documentId, clauses: built });
   }
 
   async function embedGated(householdId, gatedTexts) {
@@ -115,12 +131,19 @@ export function createMemoryService({ holdingRepository, chunks, clauses, databa
         candidates.push({ scope: 'confirmed_fact', sourceRef: `fact:${fact.factKey}`, text: `${fact.entry.label} ${formatted} (${tier}).`, sourceDocumentId: null });
       }
       if (clauses) {
-        const caseRow = await database.one(`SELECT case_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [holding.documentId, householdId]);
-        if (caseRow?.case_id) {
-          const listed = await clauses.listClauses({ householdId, caseId: caseRow.case_id, documentIds: [holding.documentId] });
-          for (const clause of listed.slice(0, MAX_CLAUSE_PASSAGES)) {
+        // The holding's own document and every document linked to it (its wording, endorsements): clauses are derived now, not lazily, and each
+        // passage carries its document and printed page so an answer can cite them.
+        const linked = await holdingRepository.linkedDocuments({ householdId, holdingId });
+        const documentIds = [holding.documentId, ...linked.map(item => item.documentId)];
+        const perDocument = Math.max(1, Math.floor(MAX_CLAUSE_PASSAGES / documentIds.length));
+        for (const documentId of documentIds) {
+          const caseRow = await database.one(`SELECT case_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
+          if (!caseRow?.case_id) continue;
+          await ensureClauses({ householdId, caseId: caseRow.case_id, documentId });
+          const listed = await clauses.listClauses({ householdId, caseId: caseRow.case_id, documentIds: [documentId] });
+          for (const clause of listed.slice(0, perDocument)) {
             if (typeof clause.text !== 'string' || clause.text.trim() === '') continue;
-            candidates.push({ scope: 'own_pdf', sourceRef: `clause:${sha256(clause.clauseId).slice(0, 32)}`, text: clause.text, sourceDocumentId: holding.documentId });
+            candidates.push({ scope: 'own_pdf', sourceRef: `clause:${sha256(clause.clauseId).slice(0, 32)}`, text: clause.text, sourceDocumentId: documentId, sourcePage: Number.isInteger(clause.page) ? clause.page : null });
           }
         }
       }
@@ -146,7 +169,7 @@ export function createMemoryService({ holdingRepository, chunks, clauses, databa
           if (!embedded) { skipped = 'embeddings_unavailable'; break; }
           model = embedded.model;
           const per = Math.ceil(embedded.tokens / batch.length);
-          batch.forEach((passage, index) => toWrite.push({ scope: passage.scope, sourceRef: passage.sourceRef, text: passage.text, contentSha256: passage.contentSha256, embedding: embedded.vectors[index], tokenCount: per, sourceDocumentId: passage.sourceDocumentId }));
+          batch.forEach((passage, index) => toWrite.push({ scope: passage.scope, sourceRef: passage.sourceRef, text: passage.text, contentSha256: passage.contentSha256, embedding: embedded.vectors[index], tokenCount: per, sourceDocumentId: passage.sourceDocumentId, sourcePage: passage.sourcePage ?? null }));
         }
       } catch (error) {
         // A provider, budget or timeout failure never blocks the pipeline: retrieval falls back to facts and keywords.

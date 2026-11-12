@@ -85,6 +85,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const facts = [];
     const conflicts = [];
     const documents = [];
+    const places = new Map();
     for (const { id: holdingId } of holdingRows) {
       // Audit F7: holding facts and conflicts are owner-only (holding-facts-routes.js); a non-owner member gets neither here.
       if (!mayReadFacts) {
@@ -93,12 +94,16 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
         continue;
       }
       const rows = await holdingRepository.currentMemory({ householdId, holdingId });
-      for (const fact of resolvedConfirmedFacts(rows)) facts.push({ ...fact, holdingId });
+      // Own-document readings still unverified are served too, with their status kept (never presented as confirmed).
+      for (const fact of resolvedConfirmedFacts(rows, { includeUnverified: true })) facts.push({ ...fact, holdingId });
+      for (const [id, place] of await holdingRepository.ownFactSources({ householdId, rows })) places.set(id, place);
       for (const conflict of await holdingRepository.listConflicts({ householdId, holdingId, pendingOnly: true })) conflicts.push({ id: conflict.id, factKey: conflict.factKey, holdingId });
       const holding = await holdingRepository.getHolding({ householdId, holdingId });
       if (holding?.documentId) documents.push({ holdingId, documentId: holding.documentId });
+      // Documents linked to the holding (its wording, endorsements) are searched too.
+      for (const linked of await holdingRepository.linkedDocuments({ householdId, holdingId })) documents.push({ holdingId, documentId: linked.documentId });
     }
-    return { holdingIds: holdingRows.map(row => row.id), facts, conflicts, documents };
+    return { holdingIds: holdingRows.map(row => row.id), facts, conflicts, documents, places };
   }
 
   // Wording of the case: the holding's own document (the schedule) and every other active document of the same household case (the T&C
@@ -156,7 +161,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     };
     for (const fact of relevant.slice(0, MAX_FACTS_TO_MODEL)) {
       const value = formatFactValue(fact.entry.type, fact.value);
-      if (value !== null) await addSlot({ id: fact.sourceIds[0], label: fact.entry.label, value, fact });
+      // The model is told, in the label, that a reading from the household's own document is not confirmed.
+      if (value !== null) await addSlot({ id: fact.sourceIds[0], label: fact.status === 'extracted_unverified' ? `${fact.entry.label} (read from the policy document, not confirmed)` : fact.entry.label, value, fact });
     }
     for (const check of plan?.checks ?? []) await addSlot({ id: `check:${check.id}`, label: 'Planning check (computed)', value: check.detail, checkFactIds: check.factIds });
     for (const passage of passages) {
@@ -263,9 +269,9 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             const context = await gatherContext({ householdId, thread, mayReadFacts });
             const conflictKeys = new Set(context.conflicts.map(item => item.factKey));
             const byKey = new Set(factKeys);
-            const relevant = intent === 'procedure_planning' ? context.facts : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
+            const relevant = intent === 'procedure_planning' ? context.facts.filter(fact => fact.status !== 'extracted_unverified') : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
             const plan = intent === 'procedure_planning'
-              ? planProcedure({ facts: Object.fromEntries(context.facts.map(fact => [fact.factKey, { id: fact.sourceIds[0], status: fact.status, value: fact.value }])), procedure: procedure ?? {} }) : null;
+              ? planProcedure({ facts: Object.fromEntries(context.facts.filter(fact => fact.status !== 'extracted_unverified').map(fact => [fact.factKey, { id: fact.sourceIds[0], status: fact.status, value: fact.value }])), procedure: procedure ?? {} }) : null;
 
             // Retrieval beyond facts: vector top-k, else a keyword match over clauses (only when no confirmed fact answers the topic).
             let mode = 'facts_only';
@@ -307,6 +313,11 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             // Code owns the status: an answer that rests on no fact, chunk or computed check is "unknown".
             const status = usedFacts.length > 0 || usedChunks.length > 0 || sources.length > 0 || (plan?.checks.length ?? 0) > 0 ? 'evidence_found' : 'unknown';
             const factIds = [...new Set(usedFacts.map(fact => fact.sourceIds[0]))];
+            // Own-document readings the answer rests on, with their verbatim quote, document and page (status stays extracted_unverified).
+            for (const fact of usedFacts) {
+              const place = context.places.get(fact.sourceIds[0]);
+              if (place?.documentId) sources.push({ kind: 'fact', fact_id: fact.sourceIds[0], fact_key: fact.factKey, status: fact.status, document_id: place.documentId, page: place.page, quote: place.quote });
+            }
             const stored = await chatRepository.appendExchange({
               householdId, threadId,
               user: { text: message, inputKind, audioDocumentId },

@@ -8,6 +8,7 @@ import { formatFactValue } from './fact-format.js';
 const SOURCE = Object.freeze({
   user_confirmed: 'confirmed by you',
   reviewed_reference: "from the insurer's published wording",
+  extracted_unverified: 'read from your policy document, not yet confirmed by you',
 });
 
 /**
