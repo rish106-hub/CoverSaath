@@ -131,15 +131,43 @@ export class HoldingPipelineRepository {
     });
   }
 
-  /** Removes a link and the memory chunks that came from the unlinked document for this holding. Resolves { unlinked }. */
+  /**
+   * Removes a link, the memory chunks that came from the unlinked document for this holding, and the own-PDF memory rows that cite it
+   * (retired, so no fact read only from that document stays current; the caller re-collates to rebuild what the other documents give).
+   * A user declaration or a resolved conflict is never touched. Resolves { unlinked }.
+   */
   async unlinkDocument({ householdId, holdingId, documentId }) {
     requireId(householdId, 'householdId'); requireId(holdingId, 'holdingId'); requireId(documentId, 'documentId');
     return this.database.transaction(async () => {
       const db = this.database;
       const removed = await db.run('DELETE FROM holding_documents WHERE household_id = ? AND holding_id = ? AND document_id = ?', [householdId, holdingId, documentId]);
-      if (removed.changes === 1) await db.run('DELETE FROM memory_chunks WHERE household_id = ? AND holding_id = ? AND source_document_id = ?', [householdId, holdingId, documentId]);
+      if (removed.changes === 1) {
+        await db.run('DELETE FROM memory_chunks WHERE household_id = ? AND holding_id = ? AND source_document_id = ?', [householdId, holdingId, documentId]);
+        await db.run(`UPDATE ${MEMORY} SET superseded_at = ? WHERE household_id = ? AND holding_id = ? AND source_document_id = ? AND source_tier = 'own_pdf' AND superseded_at IS NULL`,
+          [this.clock().toISOString(), householdId, holdingId, documentId]);
+      }
       return Object.freeze({ unlinked: removed.changes === 1 });
     }, { locks: [householdLock(householdId)] });
+  }
+
+  /** Which of these documents may be read now (active, current version, clean, current processing grant): Set of document ids. Household scoped. */
+  async readableDocuments({ householdId, documentIds }) {
+    requireId(householdId, 'householdId');
+    if (documentIds.length === 0) return new Set();
+    const at = this.clock().toISOString();
+    const rows = await this.database.many(`SELECT document.id FROM document_uploads document
+      JOIN consent_grants consent ON consent.id = document.consent_grant_id
+      WHERE document.id = ANY(CAST(? AS text[])) AND document.household_id = ? AND document.lifecycle_state = 'active'
+        AND document.malware_status IN ('clean', 'not_scanned_fixture')
+        AND consent.purpose = 'document_processing' AND consent.revoked_at IS NULL
+        AND (consent.expires_at IS NULL OR julianday(consent.expires_at) > julianday(CAST(? AS text)))`, [documentIds, householdId, at]);
+    return new Set(rows.map(row => row.id));
+  }
+
+  /** The holdings of the household that a document is linked to (ids only). */
+  async holdingsLinkingDocument({ householdId, documentId }) {
+    requireId(householdId, 'householdId'); requireId(documentId, 'documentId');
+    return (await this.database.many('SELECT holding_id FROM holding_documents WHERE household_id = ? AND document_id = ? ORDER BY created_at, id LIMIT 20', [householdId, documentId])).map(row => row.holding_id);
   }
 
   /**
@@ -221,7 +249,7 @@ export class HoldingPipelineRepository {
         alternatives = [...seen.values()].slice(0, 4);
       }
       out.push(Object.freeze({
-        factKey: row.fact_type, factId: row.id, origin: row.origin, state: row.state,
+        factKey: row.fact_type, factId: row.id, documentId, origin: row.origin, state: row.state,
         value: row.state === 'extracted_unverified' ? this.#policyFactValue(row) : null, alternatives,
         pageId: first.page_id, blockIndex: first.block_index ?? null,
       }));
@@ -325,11 +353,21 @@ export class HoldingPipelineRepository {
    * Writes one collation of a holding. `slots` are collateSlot() results; `ownByFactId` maps policy fact id -> own candidate (page);
    * `consentGrantId` is the document's processing grant. Unchanged readings are kept; changed ones supersede. Returns counts.
    */
-  async writeCollation({ holding, sourceVersion, consentGrantId, slots, ownByFactId }) {
+  async writeCollation({ holding, sourceVersion, consentGrantId, slots, ownByFactId, linkedDocuments = [] }) {
     const householdId = holding.householdId;
     return this.database.transaction(async () => {
       const at = this.clock().toISOString();
       await this.#requireReadableDocument({ householdId, documentId: holding.documentId, sourceVersion, at });
+      // Linked documents that contributed a candidate: each is re-checked inside the transaction (consent, version, state). A document that
+      // stopped being readable since the read fails this attempt (retryable); the next attempt reads without it.
+      const linkedBy = new Map(linkedDocuments.map(item => [item.documentId, item]));
+      for (const item of linkedBy.values()) {
+        try { await this.#requireReadableDocument({ householdId, documentId: item.documentId, sourceVersion: item.sourceVersion, at }); }
+        catch { throw coded('HOLDING_COLLATE_RETRY', 'A linked document changed while collating.', 409); }
+      }
+      const linkedLive = await this.database.many('SELECT document_id FROM holding_documents WHERE household_id = ? AND holding_id = ?', [householdId, holding.id]);
+      const stillLinked = new Set(linkedLive.map(row => row.document_id));
+      for (const item of linkedBy.values()) if (!stillLinked.has(item.documentId)) throw coded('HOLDING_COLLATE_RETRY', 'A linked document was unlinked while collating.', 409);
       const live = await this.database.one('SELECT status FROM policy_holdings WHERE id = ? AND household_id = ?', [holding.id, householdId]);
       if (!live) throw notReady();
       const current = await this.currentMemory({ householdId, holdingId: holding.id });
@@ -361,7 +399,8 @@ export class HoldingPipelineRepository {
           await this.#insertMemory({
             id, household_id: householdId, holding_id: holding.id, policy_id: holding.policyId, subject_member_id: null, member_scope: 'policy',
             fact_key: slot.factKey, scope_key: '', key_schema: POLICY_FACT_REGISTRY_VERSION, fact_class: slot.factClass, source_tier: tier, status: intent.status,
-            value_enc: this.crypto.seal(MEMORY, 'value_enc', id, payload), consent_grant_id: consentGrantId, source_document_id: holding.documentId,
+            value_enc: this.crypto.seal(MEMORY, 'value_enc', id, payload), consent_grant_id: (page && linkedBy.get(page.documentId)?.consentGrantId) || consentGrantId,
+            source_document_id: (page && linkedBy.has(page.documentId)) ? page.documentId : holding.documentId,
             source_page_id: page?.pageId ?? null, block_index: page?.blockIndex ?? null, policy_fact_id: intent.policyFactId ?? null,
             reference_ref_enc: reference ? this.crypto.seal(MEMORY, 'reference_ref_enc', id, canonicalJson(reference)) : null,
             derivation_version: COLLATE_VERSION, supersedes_id: existing?.id ?? null, created_at: at,

@@ -18,6 +18,7 @@
     "eval:safety": "node scripts/run-safety-evals.mjs",
     "eval:household": "node scripts/eval-household-reasoning.mjs",
     "eval:retrieval": "node scripts/eval-retrieval-recall.mjs",
+    "eval:questions": "node scripts/eval-policy-questions.mjs",
     "build": "node --check src/server/server.js",
     "test": "node --test tests/*.test.mjs tests/evals/*.test.mjs",
     "test:sarvam-live": "RUN_SARVAM_LIVE=1 node --env-file=.env --test tests/sarvam-live.test.mjs",

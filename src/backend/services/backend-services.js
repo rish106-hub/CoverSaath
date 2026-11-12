@@ -121,7 +121,9 @@ export function createBackendServices(database, options = {}) {
   const policyProfile = createPolicyProfileService({ repository: policyProfiles, ocr, env: options.env ?? process.env, clock: options.clock });
   // Policy facts (migration 044, ADR 0025): datapoints read from a document, each with verified evidence. Same switch as the profile.
   const policyFactsRepository = new PolicyFactsRepository(database, shared);
-  const policyFacts = createPolicyFactsService({ repository: policyFactsRepository, ocr, env: options.env ?? process.env, clock: options.clock });
+  // A stored extraction of a document linked to a holding queues that holding's collate (holdings.documentFactsStored, set below).
+  let holdingsHook = null;
+  const policyFacts = createPolicyFactsService({ repository: policyFactsRepository, ocr, env: options.env ?? process.env, clock: options.clock, onStored: args => holdingsHook?.documentFactsStored(args) });
   // Holdings pipeline (complete.md 3.2, migrations 048-050): collate, conflicts, status. Off unless HOLDINGS_ENABLED=true. No model call.
   const holdingPipelineRepository = new HoldingPipelineRepository(database, shared);
   // Memory and chat v1 (migrations 053-054, ADR 0031). Off unless MEMORY_ENABLED=true; the model path is off unless CHAT_MODEL_ENABLED=true.
@@ -137,8 +139,9 @@ export function createBackendServices(database, options = {}) {
   const providerConsent = createProviderConsent({ database, clock: options.clock });
   const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, ocr, database, gateway: modelGateway, loadKnownIdentifiers, providerConsent, env });
   const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, memory, analytics, env });
+  holdingsHook = holdings;
   const chatRepository = new ChatRepository(database, { ...shared, households });
-  const chatV1 = createChatV1Service({ chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, providerConsent, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
+  const chatV1 = createChatV1Service({ onEvent: options.onWarn, chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, providerConsent, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
   const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
   const access = new TenantAccessService(database, { auth, authTokens, households, consents, env: options.env ?? {}, columnCrypto });
   const householdApp = new HouseholdAppRepository(database, shared);

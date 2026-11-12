@@ -13,6 +13,11 @@
 //   insurerName and productName are null until the owner confirmed the product (never an unconfirmed candidate, never the UIN). A headline is
 //   null while the holding has no fact for that key; `value` is the unit-typed value of the fact registry (null when conflicting or unknown).
 // One policy is one holding: a wording linked to a holding (POST /holdings/{id}/documents) never shows as a second holding.
+// A linked document also contributes its facts: collate reads the own-PDF facts of the holding's document and of each readable linked document
+// (same tier, no precedence). Equal values collapse; different values make the fact `conflicting` with both alternatives, and GET .../facts then
+// lists each reading as its own `sources` entry (tier own_pdf, id = the policy fact id, page.documentKind and pageId). GET .../documents adds
+// `factsState` per link: 'included' | 'none' (nothing read yet or found) | 'off' (POLICY_FACTS_ENABLED is off, so it adds no facts).
+// DELETE .../documents/{documentId} retires the facts read only from that document and re-collates. Additive: no field was removed or renamed.
 
 const HOLDINGS = /^\/api\/v1\/households\/([^/]+)\/holdings(?:\/([^/]+))?$/;
 
