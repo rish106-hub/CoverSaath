@@ -24,7 +24,7 @@ Kill switch: set the flag to `false` (or remove it) and restart. `CHAT_MODEL_ENA
 ## 2. Local setup
 
 1. PostgreSQL 17 with pgvector: [local-postgres runbook](local-postgres.md#pgvector-migration-053-adr-0031). Migration 053 runs `CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions`; a database without the extension files fails at 053.
-2. `npm run db:init` (migrations 001 to 057).
+2. `npm run db:init` (migrations 001 to 065).
 3. `SEED_ALLOW=1 npm run seed:demo-household` (refuses production, a non-loopback database and `coversaath_dev`) to get a synthetic household with holdings.
 4. `npm run dev` for the API and `npm run worker` for the jobs (memorise, analytics drain). Tests: `node --test tests/<file>.test.mjs`; the full suite needs `TEST_DATABASE_URL` and `REQUIRE_POSTGRES=1`.
 
