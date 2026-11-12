@@ -5,7 +5,7 @@ import { createApiServer } from '../src/server/server.js';
 // The memory-only demo API was removed. ENABLE_LEGACY_DEMO_API is no longer read,
 // so an old .env.local that still sets it must not bring any legacy route back.
 test('former legacy demo routes return ROUTE_NOT_FOUND even when ENABLE_LEGACY_DEMO_API=true', async t => {
-  const server = createApiServer({ env: { ENABLE_LEGACY_DEMO_API: 'true' } });
+  const server = createApiServer({ env: { ENABLE_LEGACY_DEMO_API: 'true', RATE_LIMIT_BACKEND: 'memory' } });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;

@@ -53,7 +53,7 @@ const chatAgent = sent => () => ({ async generate({ prompt }) {
   // Answers only a question about the waiting period; anything else gets no fact, like an honest model.
   const fact = /pre-existing/i.test(JSON.stringify(input.question)) ? (input.facts ?? []).find(item => /pre-existing/i.test(JSON.stringify(item.label))) : null;
   return fact
-    ? { output: { status: 'extracted_unverified', answer: 'The pre-existing disease waiting period is 36 months.', factsUsed: [fact.fact_id] }, totalUsage: { inputTokens: 80, outputTokens: 20 } }
+    ? { output: { status: 'extracted_unverified', answer: 'The pre-existing disease waiting period is 1095 days.', factsUsed: [fact.fact_id] }, totalUsage: { inputTokens: 80, outputTokens: 20 } }
     : { output: { status: 'unknown', answer: 'No answer.', factsUsed: [] }, totalUsage: { inputTokens: 80, outputTokens: 5 } };
 } });
 const vectorOf = text => { const d = createHash('sha256').update(text).digest(); return Array.from({ length: 1024 }, (_, i) => ((d[i % 32] - 127.5) / 127.5) + (i % 7) * 0.001); };
@@ -205,7 +205,7 @@ test('journey: schedule and wording uploaded, OCR, structuring, holdings jobs, m
   assert.deepEqual(answer.facts_used.map(item => [item.fact_key, item.status]), [['waiting_ped', 'reviewed_reference']]);
   const cited = await app.database.one('SELECT id, holding_id FROM household_memory_facts WHERE id = ?', [answer.facts_used[0].fact_id]);
   assert.equal(cited.holding_id, holdingId, 'the cited fact belongs to the holding');
-  assert.match(answer.answer, /36 months/);
+  assert.match(answer.answer, /1095 days/);
   assert.equal(chatSent.length, 1);
   assert.doesNotMatch(chatSent[0], /Journey|Asha/, 'no household name in the prompt');
 

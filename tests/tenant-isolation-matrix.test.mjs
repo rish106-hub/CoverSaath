@@ -190,7 +190,7 @@ test('createApiServer builds its database from DATABASE_URL, reports ready, and 
   assert.equal(sessions.rows[0].count, 0, 'the server pool was ended');
 
   // Without DATABASE_URL the API answers 500-class without the variable's value, and nothing listens on a database.
-  const bare = createApiServer({ env: {} });
+  const bare = createApiServer({ env: { RATE_LIMIT_BACKEND: 'memory' } });
   await new Promise(resolve => bare.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => { bare.close(resolve); bare.closeAllConnections(); }));
   const refused = await fetch(`http://127.0.0.1:${bare.address().port}/api/v1/ready`);
