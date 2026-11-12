@@ -11,6 +11,7 @@ import { POLICY_PARAMETER_REGISTRY } from '../src/features/coverage-analysis/pol
 import { assertAcquisitionTransition } from '../src/features/coverage-analysis/parameter-records.js';
 import { liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 import { plainRow, plainRows } from './support/sealed.mjs';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 const PINNED = 'policy-parameters/v1';
 const opaqueSourceId = rawId => sanitizeEvidenceForModel({
@@ -221,7 +222,7 @@ test('multi-document attribution: a citation resolves to the page and version of
   ].sort());
 
   // The profile, group and personal requests carry one source entry per page.
-  const extractionRequests = modelRequests.filter(request => /_extraction$/.test(request.agentId)).map(request => JSON.parse(request.prompt));
+  const extractionRequests = modelRequests.filter(request => /_extraction$/.test(request.agentId)).map(request => parseRenderedReference(request.prompt).payload);
   assert.equal(extractionRequests.length, 3);
   for (const request of extractionRequests) {
     assert.equal(request.sources.length, 2);
@@ -268,7 +269,7 @@ test('a case with more than 30 realistic 4 KB pages completes the live workflow 
   assert.equal(input.sourcePages.length + input.sourceSelection.notSent.length, 41, 'sent plus reported-unsent covers every page');
   assert.ok(input.sourceSelection.notSent.length > 0, 'the scenario must exceed the request budget');
   for (const request of modelRequests) {
-    const evidence = JSON.parse(request.prompt);
+    const evidence = parseRenderedReference(request.prompt).payload;
     assert.ok(evidence.sources.length <= 30);
     assert.ok(Buffer.byteLength(JSON.stringify(evidence)) <= 48_000);
   }

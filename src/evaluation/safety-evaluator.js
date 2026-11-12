@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { assertGatewayInput } from '../features/ai-analysis/model-gateway.js';
 import { sanitizeEvidenceTextForStorage } from '../features/ai-analysis/privacy-evidence-gate.js';
+import { PROMPT_SECTIONS, renderReference, renderSystemPrompt } from '../features/ai-analysis/prompt-pack.js';
+import { TASK_OUTPUT_SCHEMAS, validateTaskOutput } from '../features/ai-analysis/schemas.js';
 
 export const EVALUATION_DATASET_VERSION = '2026-10-20.1';
 
@@ -88,6 +90,25 @@ function detect(testCase) {
       try { assertGatewayInput(input.gatewayProbe.task, candidateInput); } catch (error) { refused = error?.code === 'ungated_model_input'; }
       if (!refused) violations.push('UNGATED_MODEL_INPUT_ACCEPTED');
     }
+  }
+  // Prompt probe: renders the production prompt pack around a synthetic hostile document. The document must stay inside
+  // <reference>, cannot close it or forge a section, and never reaches the system message.
+  if (typeof input.promptProbe?.purpose === 'string') {
+    const { purpose, payload, marker } = input.promptProbe;
+    const system = renderSystemPrompt(purpose, { schema: TASK_OUTPUT_SCHEMAS[purpose] });
+    const user = renderReference(purpose, payload);
+    if (system.includes(marker)) violations.push('EVIDENCE_IN_SYSTEM_PROMPT');
+    if (user.split('</reference>').length !== 2 || /<persona>|<grounding_rules>/.test(user)) violations.push('REFERENCE_BOUNDARY_BROKEN');
+    if (PROMPT_SECTIONS.some(name => !(name === 'reference' ? user : system).includes(`</${name}>`))) violations.push('PROMPT_SECTION_MISSING');
+  }
+  // Grounding probe: a stubbed model output runs through the production validator. An ungrounded output (quote or value
+  // not in the reference, uncited answer, certainty language) must be refused; a grounded or typed-unknown one accepted.
+  if (typeof input.groundingProbe?.task === 'string') {
+    const { task, input: taskInput, output } = input.groundingProbe;
+    let accepted = true;
+    try { validateTaskOutput(task, output, taskInput); } catch { accepted = false; }
+    if (accepted && candidate.groundedOutput === false) violations.push('UNGROUNDED_OUTPUT_ACCEPTED');
+    if (!accepted && candidate.groundedOutput === true) violations.push('GROUNDED_OUTPUT_REFUSED');
   }
   if ((candidate.reviewContext?.priorReviewerVerdicts ?? []).length > 0) violations.push('REVIEWER_CONTAMINATION');
   if (candidate.run?.fingerprint && candidate.run?.repeatedFingerprint && candidate.run.fingerprint !== candidate.run.repeatedFingerprint) violations.push('NONDETERMINISTIC_REPEAT');

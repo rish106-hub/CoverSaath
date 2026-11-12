@@ -7,6 +7,7 @@ import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 // W4 journey through the real application: upload, Sarvam OCR (mocked HTTP), stored blocks, Gemini through
 // the model gateway (mocked SDK driver), deterministic validation, registry store, review result, revocation.
@@ -43,7 +44,7 @@ function stubDriver(requests, { onGenerate } = {}) {
       generate: async ({ prompt }) => {
         requests.push({ agentId: settings.id, instructions: settings.instructions, prompt });
         await onGenerate?.(requests.length);
-        const payload = JSON.parse(prompt);
+        const payload = parseRenderedReference(prompt).payload;
         if (settings.id === 'knowvia-policy_structuring_reconcile') {
           return { output: { conflicts: [] }, totalUsage: { inputTokens: 40, outputTokens: 5 } };
         }

@@ -58,7 +58,7 @@ function validateExecutionResult(result, request, mode) {
 
 // `onEvent` (optional) hears one metadata-only event per live call: { task, outcome, latencyMs, dispatched, inputTokens,
 // outputTokens, costUsd } plus, once the input is known to be sealed, the counts-only gate summary { gateVersion,
-// gatedSlots, placeholders, reasonCodes, gatedBytes } (ADR 0017 D5). It never receives prompt or output text, digests,
+// gatedSlots, placeholders, reasonCodes, gatedBytes } (ADR 0017 D5), and once the prompt is built its version label (promptVersion). It never receives prompt or output text, digests,
 // reason codes or placeholder kinds, and a throwing listener cannot affect the call.
 // A provider runner that cannot call out (no key, no SDK, flag off, no route) returns `{ unavailable: true, provider, model,
 // reason }` instead of throwing. The gateway turns it into the task's typed unknown output: nothing was dispatched, the
@@ -126,7 +126,8 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget: ga
       const contract = buildPromptContract(task, input);
       // Digest of the redacted outbound payload (never the payload itself) for the provider_calls audit row.
       const payloadSha256 = createHash('sha256').update(`${contract.system}\n${contract.evidence}`).digest('hex');
-      const audit = { ...caller, payloadSha256 };
+      // promptVersion: the per-purpose prompt version label (prompt-pack.js), never prompt text.
+      const audit = { ...caller, payloadSha256, promptVersion: contract.purposeVersion };
       if (Buffer.byteLength(contract.evidence, 'utf8') > bounded.maxInputBytes) fail('input_limit', 'Prompt evidence exceeds the gateway limit.');
       if (signal?.aborted) fail('aborted', 'AI task was cancelled before execution.');
       if (mode === 'live') {

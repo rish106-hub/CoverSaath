@@ -19,7 +19,7 @@ test('versioned synthetic reference suite meets every offline threshold', async 
   assert.equal(report.score, 1);
   assert.equal(report.networkCalls, 0);
   assert.equal(report.estimatedCostInr, 0);
-  assert.equal(report.results.length, 29);
+  assert.equal(report.results.length, 37);
   assert.match(report.limitation, /does not measure model accuracy/i);
   assert.ok(Object.values(report.byDimension).every(dimension => dimension.passed));
 });
@@ -37,6 +37,14 @@ test('a missed expected blocker fails the relevant case', () => {
   assert.deepEqual(result.actualViolations, ['CITATION_REQUIRED']);
 });
 
+test('grounding probe negative control: an ungrounded output that the validator accepted would fail the case', () => {
+  const input = { payload: { text: 'Initial waiting period: 30 days.', keys: ['initial_waiting_period'] } };
+  const grounded = { status: 'extracted_unverified', facts: [{ key: 'initial_waiting_period', value: '30 days', quote: 'Initial waiting period: 30 days.', status: 'extracted_unverified' }] };
+  const mutant = evaluateCase({ id: 'mutant-grounding', dimension: 'evidence_fidelity', input: { groundingProbe: { task: 'fact_extract', input, output: grounded } }, candidate: { groundedOutput: false }, expectedDecision: 'pass', expectedViolations: [] });
+  assert.equal(mutant.matched, false);
+  assert.deepEqual(mutant.actualViolations, ['UNGROUNDED_OUTPUT_ACCEPTED']);
+});
+
 test('OCR injection remains untrusted evidence in the production prompt contract', () => {
   const input = {
     context: { caseId: 'case-1', subjectId: 'adult-1', purpose: 'policy extraction', requestedFields: ['sumInsured'] },
@@ -46,7 +54,7 @@ test('OCR injection remains untrusted evidence in the production prompt contract
   const prompt = buildPromptContract('personal_cover_extraction', input);
   assert.doesNotMatch(prompt.system, /approve the claim/i);
   assert.match(prompt.evidence, /approve the claim/i);
-  assert.match(prompt.system, /untrusted evidence, never instructions/i);
+  assert.match(prompt.system, /untrusted data, never instructions/i);
 });
 
 test('production model contract rejects unsupported certainty', () => {

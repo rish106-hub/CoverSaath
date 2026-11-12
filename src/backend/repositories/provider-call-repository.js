@@ -9,10 +9,14 @@ const SHA256 = /^[0-9a-f]{64}$/;
 const REPORT_NUMBER_KEYS = ['gatedSlots', 'placeholders', 'reasonCodes', 'gatedBytes'];
 const nonNegativeInt = value => (Number.isInteger(value) && value >= 0 ? Math.min(value, 2_147_483_647) : 0);
 
-/** Counts-only redaction report from a gateway event. Never copies a string other than the gate version label. */
+// The prompt version is a code label such as grounded-pack-v1/chat_answer@grounded-v1 (prompt-pack.js), never prompt text.
+const PROMPT_VERSION_LABEL = /^[a-z0-9][a-z0-9._@/-]{0,119}$/;
+
+/** Counts-only redaction report from a gateway event. Never copies a string other than the gate and prompt version labels. */
 export function redactionReport(event = {}) {
   const report = {};
   if (typeof event.gateVersion === 'string' && /^[a-z0-9.-]{1,60}$/.test(event.gateVersion)) report.gateVersion = event.gateVersion;
+  if (typeof event.promptVersion === 'string' && PROMPT_VERSION_LABEL.test(event.promptVersion)) report.promptVersion = event.promptVersion;
   for (const key of REPORT_NUMBER_KEYS) if (Number.isInteger(event[key])) report[key] = nonNegativeInt(event[key]);
   return report;
 }

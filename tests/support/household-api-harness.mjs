@@ -8,6 +8,7 @@ import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './temp-root.mjs';
 import { freshDatabase } from './pg.mjs';
 import { createApiServer } from '../../src/server/server.js';
+import { parseRenderedReference } from '../../src/features/ai-analysis/prompt-pack.js';
 
 export const bootstrapToken = 'coversaath-household-api-bootstrap-token-01';
 export const NUMBERS = ['SYN-PERS-410001', 'SYN-GRP-820002', 'SYN-TOP-930003'];
@@ -25,7 +26,7 @@ function stubDriver(requests) {
     createAgent: settings => ({
       generate: async ({ prompt }) => {
         requests.push({ agentId: settings.id, prompt });
-        const payload = JSON.parse(prompt);
+        const payload = parseRenderedReference(prompt).payload;
         if (settings.id === 'knowvia-policy_evidence_investigate') {
           const findings = payload.clauses.flatMap(clause => {
             const line = clause.text.split('\n').find(text => text.startsWith('Room rent limit:'));

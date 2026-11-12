@@ -8,6 +8,7 @@ import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 import { plainRow } from './support/sealed.mjs';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 const pgOptions = postgresTestOptions();
 
@@ -43,7 +44,7 @@ function stubDriver(requests) {
     createAgent: settings => ({
       generate: async ({ prompt }) => {
         requests.push({ agentId: settings.id, instructions: settings.instructions, prompt });
-        const payload = JSON.parse(prompt);
+        const payload = parseRenderedReference(prompt).payload;
         if (settings.id === 'knowvia-policy_evidence_investigate') {
           const clause = payload.clauses.find(entry => entry.text.includes('Room rent limit: 5,000 per day'));
           const findings = clause ? [{ clause_ids: [clause.clause_id], quote: 'Room rent limit: 5,000 per day', subject: 'room rent', conditions: [], exceptions: [] }] : [];

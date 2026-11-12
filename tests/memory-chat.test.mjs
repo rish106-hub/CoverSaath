@@ -13,6 +13,7 @@ import { planProcedure } from '../src/features/insurance-rules/procedure-plannin
 import { formatFactValue } from '../src/features/insurance-rules/fact-format.js';
 import { eraseMemoryForConsentGrant, eraseMemoryForDocuments, eraseMemoryForHousehold } from '../src/backend/repositories/memory-erasure.js';
 import { createApiServer } from '../src/server/server.js';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 // Memory and chat v1 (migrations 053-054, ADR 0031, ADR 0029): the success path (confirmed fact -> answer citing its id, redaction counts
 // in provider_calls), fallbacks, ownership, erasure of chunks, threads, turns and traces, and the voice fields. Synthetic data only. No live
@@ -36,7 +37,7 @@ const answerStub = (sent, answer = 'Hello {{PERSON_1}}. Your room rent limit is 
   async generate({ prompt }) {
     await hook?.();
     sent.push(`${settings.instructions}\n${prompt}`);
-    const facts = JSON.parse(prompt).facts ?? [];
+    const facts = parseRenderedReference(prompt).payload.facts ?? [];
     const room = facts.find(fact => /room rent/i.test(JSON.stringify(fact.label))) ?? facts.find(fact => /passage/i.test(JSON.stringify(fact.label)) && /ambulance/i.test(JSON.stringify(fact.value)));
     return { output: room ? { status: 'extracted_unverified', answer, factsUsed: [room.fact_id] } : { status: 'unknown', answer: 'No model answer.', factsUsed: [] }, totalUsage: { inputTokens: 100, outputTokens: 20 } };
   },

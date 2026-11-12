@@ -7,6 +7,7 @@ import { inflateSync } from 'node:zlib';
 import { PDFDocument } from 'pdf-lib';
 import { LIVE_RUN_CEILING_USD, main, parseArgs, planRun } from '../scripts/smoke-test-gemini.mjs';
 import { SYNTHETIC_BANNER, SYNTHETIC_CANARIES, SYNTHETIC_POLICY_PAGES, buildSyntheticPolicyPdf, stripTags } from '../scripts/fixtures/synthetic-policy-pages.mjs';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 // B2 live-run preparation (docs/runbooks/gemini-live-run.md). Everything here is stubbed: the model driver is a
 // local fake and global fetch is replaced so that any real network call fails the test. Synthetic data only.
@@ -37,7 +38,7 @@ function stubDriver({ usage = { inputTokens: 200, outputTokens: 50 } } = {}) {
         prompts.push({ agent: settings.id, prompt });
         if (settings.id.endsWith('policy_structuring_reconcile')) return { output: { conflicts: [] }, totalUsage: usage };
         const items = [];
-        for (const chunk of JSON.parse(prompt).chunks) {
+        for (const chunk of parseRenderedReference(prompt).payload.chunks) {
           for (const line of chunk.text.split('\n')) {
             for (const reading of READINGS.filter(entry => line.includes(entry.phrase))) {
               items.push({
