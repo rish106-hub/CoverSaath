@@ -50,11 +50,13 @@ const jobParams = (next, crypto) => [
 ];
 
 export class OcrRepository {
-  constructor(database, { audit = null, afterComplete = null, ...options } = {}) {
+  constructor(database, { audit = null, afterComplete = null, afterCompleteFailed = null, ...options } = {}) {
     this.database = database;
     this.audit = audit;
     // Optional ({ householdId, documentId, documentKind, consentGrantId }) hook run in a savepoint after a new completion (holdings, ADR 0032).
     this.afterComplete = typeof afterComplete === 'function' ? afterComplete : null;
+    // Optional, same argument: run (outside the rolled-back savepoint) when afterComplete threw, so the step can be queued for retry.
+    this.afterCompleteFailed = typeof afterCompleteFailed === 'function' ? afterCompleteFailed : null;
     this.crypto = resolveColumnCrypto(options);
   }
 
@@ -324,13 +326,18 @@ export class OcrRepository {
       await this.appendLifecycleAudit(await this.getJob(jobId), current.status, { pageCount: pages.length });
       if (this.afterComplete) {
         // A savepoint: a failure here must never undo the stored OCR pages. Identifiers only.
+        const hook = {
+          householdId, documentId: current.documentUploadId, documentKind: null,
+          consentGrantId: typeof current.authorization?.consentGrantId === 'string' ? current.authorization.consentGrantId : null,
+        };
         try {
           const document = await this.database.one('SELECT document_kind FROM document_uploads WHERE id = ?', [current.documentUploadId]);
-          await this.database.transaction(() => this.afterComplete({
-            householdId, documentId: current.documentUploadId, documentKind: document?.document_kind ?? null,
-            consentGrantId: typeof current.authorization?.consentGrantId === 'string' ? current.authorization.consentGrantId : null,
-          }));
-        } catch { /* the holding is best effort; the OCR result stands */ }
+          hook.documentKind = document?.document_kind ?? null;
+          await this.database.transaction(() => this.afterComplete({ ...hook }));
+        } catch {
+          // The holding is best effort for the OCR result, but not lost: the failed step is queued for bounded retry (holding.create).
+          try { await this.database.transaction(() => this.afterCompleteFailed?.({ ...hook })); } catch { /* the OCR result stands */ }
+        }
       }
       return this.getJob(jobId);
     }, { locks: [householdLock(householdId)] });

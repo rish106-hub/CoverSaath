@@ -31,7 +31,7 @@ export function policyFactsDedupeKey({ documentId, sourceVersion, normaliserVers
 
 const runIdOf = (documentId, sourceVersion, origin) => `${documentId}:${sha256Nfc(sourceVersion).slice(0, 16)}:${NORMALISER_VERSION}:${origin === 'model_proposed' ? 'm' : 'd'}`;
 
-export function createPolicyFactsService({ repository, ocr, env = process.env, clock = () => new Date() }) {
+export function createPolicyFactsService({ repository, ocr, env = process.env, clock = () => new Date(), onStored = null }) {
   const readStoredPages = createStoredPagesReader({ ocr, clock });
   const requireEnabled = () => {
     if (!policyFactsEnabled(env)) throw coded('POLICY_FACTS_DISABLED', 'Policy facts are disabled.', 503);
@@ -86,7 +86,7 @@ export function createPolicyFactsService({ repository, ocr, env = process.env, c
      * The deterministic pass for one document of a household. Resolves a counts-only result:
      * { status: 'stored' | 'unreadable', inserted, skipped, droppedByReason }.
      */
-    async extract({ householdId, documentId }) {
+    async extract({ householdId, documentId, notify = true }) {
       requireEnabled();
       const document = await repository.documentIdentity({ householdId, documentId });
       if (!document) return Object.freeze({ status: 'unreadable', inserted: 0, skipped: 0, droppedByReason: {} });
@@ -110,6 +110,9 @@ export function createPolicyFactsService({ repository, ocr, env = process.env, c
         householdId, documentId, sourceVersion: document.sourceVersion, extractionRunId: runIdOf(documentId, document.sourceVersion, 'deterministic'),
         normaliserVersion: NORMALISER_VERSION, facts: verified,
       });
+      // After the facts are stored (also on a replay, so a retry repeats a hook that failed): `onStored` lets the holdings pipeline pick up a
+      // document linked to a holding. Identifiers only. A failure is thrown so the job retries; the write above is idempotent.
+      if (notify && typeof onStored === 'function') await onStored({ householdId, documentId });
       return Object.freeze({ status: 'stored', inserted: result.inserted, skipped: result.skipped, droppedByReason });
     },
 
