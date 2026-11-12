@@ -175,6 +175,9 @@ export const DATA_REGISTRY = Object.freeze({
   // Holdings and memory (migrations 048-050, ADR 0032). A holding is a thin link of ids and closed enums.
   policy_holdings: entry('document_processing', {},
     ['id', 'household_id', 'policy_id', 'document_id', 'policy_profile_id', 'kind', 'status', 'created_at', 'updated_at']),
+  // Documents linked to a holding (migration 065): ids and a closed enum only.
+  holding_documents: entry('document_processing', {},
+    ['id', 'household_id', 'holding_id', 'document_id', 'kind', 'created_at']),
   household_memory_facts: entry('coverage_reconstruction',
     { health_or_policy_content: ['value_enc', 'reference_ref_enc'] },
     ['id', 'household_id', 'holding_id', 'policy_id', 'subject_member_id', 'member_scope', 'fact_key', 'scope_key', 'key_schema', 'fact_class', 'source_tier', 'status',
@@ -302,12 +305,12 @@ export const DATA_REGISTRY = Object.freeze({
   // (pgvector cannot index ciphertext) and leaks some of the content it encodes: own-PDF passages are redacted before embedding.
   memory_chunks: entry('coverage_reconstruction',
     { health_or_policy_content: ['chunk_text_enc', 'embedding'] },
-    ['id', 'household_id', 'holding_id', 'scope', 'source_ref', 'content_sha256', 'embedding_model', 'token_count', 'source_document_id', 'consent_grant_id', 'created_at']),
+    ['id', 'household_id', 'holding_id', 'scope', 'source_ref', 'content_sha256', 'embedding_model', 'token_count', 'source_document_id', 'source_page', 'consent_grant_id', 'created_at']),
   chat_threads: entry('coverage_reconstruction', {},
     ['id', 'household_id', 'holding_id', 'created_by_adult_id', 'created_at', 'updated_at']),
   chat_turns: entry('coverage_reconstruction',
     { health_or_policy_content: ['content_enc', 'transcript_enc'] },
-    ['id', 'household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'audio_document_id', 'intent', 'answer_source', 'provider', 'model', 'redacted_prompt_hash', 'tokens_in', 'tokens_out', 'cost_paise', 'latency_ms', 'created_at']),
+    ['id', 'household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'audio_document_id', 'consent_grant_id', 'intent', 'answer_source', 'provider', 'model', 'redacted_prompt_hash', 'tokens_in', 'tokens_out', 'cost_paise', 'latency_ms', 'created_at']),
   retrieval_traces: entry('coverage_reconstruction', {},
     ['id', 'household_id', 'thread_id', 'turn_id', 'mode', 'holding_ids', 'fact_ids', 'chunk_ids', 'conflict_ids', 'created_at']),
   // Provider call audit (migration 056, ADR 0030): counts, a sha256 of the redacted payload, usage and cost; never a prompt or a response.

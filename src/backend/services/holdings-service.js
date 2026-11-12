@@ -9,7 +9,7 @@ import { holdingInputSha, holdingJobDedupeKey } from './holding-pipeline.js';
 //
 //   startPipeline   after the owner reported the insurer and plan (status product_reported): fan out parse_own_pdf and fetch_reference
 //   parseOwnPdf     own-PDF tier = the existing policy_facts (ADR 0025): runs its deterministic extract, then status parsed, then collate
-//   fetchReference  STUB: the IDA reference import body belongs to the reference agent; here it only queues collate
+//   fetchReference  only queues collate (it never waits for reference data). The import itself is the reference.import job (holding-product-service.js)
 //   collate         ADR 0023 D3 resolver (collate.js) over own-PDF facts and the reference port's values; writes rows and conflicts
 //   memorise        settles the status (conflicts or ready), then embeds confirmed facts and own-PDF passages into memory_chunks through the
 //                   memory service (privacy gate, model gateway, provider_calls; ADR 0031). Off unless MEMORY_ENABLED; never blocks the status
@@ -98,7 +98,7 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       return Object.freeze({ status });
     },
 
-    // STUB (reference agent owns the body): the IDA import fills reference_cache; the reference port reads it during collate.
+    // Does not wait on the reference import: collate runs with whatever the reference port returns (none by default, see emptyReferenceFacts).
     async fetchReference({ householdId, holdingId }) {
       requireEnabled();
       const holding = await loadHolding(householdId, holdingId);
@@ -187,6 +187,33 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
         });
       }
       return { holdingId: holding.id, status: holding.status, facts, unknownKeys: POLICY_FACT_KEY_NAMES.filter(key => !bySlot.has(key)) };
+    },
+
+    /**
+     * Links another document of the household (its wording, an endorsement) to a holding and queues memorise so the linked clauses are
+     * embedded for this holding's chat. Idempotent. Household ownership is re-checked in the repository.
+     */
+    async linkDocument({ holding, documentId, kind }) {
+      requireEnabled();
+      const { linked } = await repository.linkDocument({ householdId: holding.householdId, holdingId: holding.id, documentId, kind });
+      if (memory?.enabled?.()) {
+        const document = await documentOf(holding);
+        const all = await repository.linkedDocuments({ householdId: holding.householdId, holdingId: holding.id });
+        await enqueue(HOLDING_JOB_KINDS.memorise, holding, document, holdingInputSha(all.map(item => item.documentId)));
+      }
+      return { holdingId: holding.id, documentId, kind, linked };
+    },
+
+    async unlinkDocument({ holding, documentId }) {
+      requireEnabled();
+      const { unlinked } = await repository.unlinkDocument({ householdId: holding.householdId, holdingId: holding.id, documentId });
+      return { holdingId: holding.id, documentId, unlinked };
+    },
+
+    async linkedDocuments({ holding }) {
+      requireEnabled();
+      const items = await repository.linkedDocuments({ householdId: holding.householdId, holdingId: holding.id });
+      return { holdingId: holding.id, documents: items.map(item => ({ documentId: item.documentId, kind: item.kind })) };
     },
 
     async conflicts({ holding }) {

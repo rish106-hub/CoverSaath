@@ -49,7 +49,7 @@ async function grantProviders(pool, id, recipients = ['anthropic', 'voyage']) {
   for (const recipient of recipients) await insert(pool, 'consent_scopes', { id: `scope-${id}-${recipient}`, consent_grant_id: id, ...SCOPE(recipient) });
 }
 
-async function scenario(t, { env: override = {}, budget = 1, facts = true, clauses = true, recipients = ['anthropic', 'voyage'], onGenerate = null, onEmbed = null, answer = undefined } = {}) {
+async function scenario(t, { env: override = {}, budget = 1, facts = true, clauses = true, recipients = ['anthropic', 'voyage'], onGenerate = null, onEmbed = null, answer = undefined, agent = null } = {}) {
   const fresh = await freshDatabase(t);
   const { db, handle } = fresh;
   const a = await seedWorld(handle.pool, 'a');
@@ -67,7 +67,7 @@ async function scenario(t, { env: override = {}, budget = 1, facts = true, claus
   const providerCalls = new ProviderCallRepository(db);
   const gateway = createChatModelGateway({
     env, router: createModelRouter({ env }), providerCalls, budgetFor: createHouseholdDayBudget({ maxUsd: budget }),
-    loadModel: async () => ({ stub: true }), createAgent: answerStub(sent, answer, () => onGenerate?.(handle, a)), embedClientFor: () => embedClient(embedded, () => onEmbed?.(handle, a)),
+    loadModel: async ({ provider }) => ({ stub: true, provider }), createAgent: agent?.(sent) ?? answerStub(sent, answer, () => onGenerate?.(handle, a)), embedClientFor: () => embedClient(embedded, () => onEmbed?.(handle, a)),
   });
   const services = createBackendServices(db, { env, modelGateway: gateway });
   const crypto = services.columnCrypto;
@@ -630,4 +630,100 @@ test('wording, vector path: a number absent from the cited passage falls back (n
   assert.doesNotMatch(answer.answer, /7,000/);
   assert.equal(answer.status, 'unknown');
   assert.deepEqual(answer.sources, []);
+});
+
+// ---- No-key funnel and provider failover (owner goal). Synthetic wording only; local stubs, no live call. ----
+const chatRows = s => s.providerCalls.listForHousehold(s.a.household);
+async function addWordingDocument(s, text, page) {
+  const id = 'document-tc';
+  await insert(s.handle.pool, 'document_uploads', { id, household_id: s.a.household, case_id: s.a.case, uploaded_by_adult_id: s.a.adult, consent_grant_id: s.a.consent });
+  const clauseId = 'clause-tc-1';
+  await insert(s.handle.pool, 'policy_clauses', { id: clauseId, household_id: s.a.household, case_id: s.a.case, document_id: id, page, text: s.services.columnCrypto.seal('policy_clauses', 'text', clauseId, text), digest: createHash('sha256').update(text).digest('hex') });
+  return id;
+}
+
+test('no keys: schedule fact, T&C clause with document and page, and unknown, all deterministic with no provider call', opts, async t => {
+  const s = await scenario(t, { clauses: false, env: { ANTHROPIC_API_KEY: '', VOYAGE_API_KEY: '', GEMINI_API_KEY: '' } });
+  const tc = await addWordingDocument(s, 'Cataract surgery is admissible only after a waiting period of 24 months from the policy start date.', 7);
+  const conversation = await s.thread();
+  const fact = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(fact.answer_source, 'deterministic');
+  assert.equal(fact.status, 'evidence_found');
+  assert.equal(fact.facts_used[0].fact_key, 'room_rent_limit');
+  assert.match(fact.answer, /5,000/);
+  const clause = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what does the policy say about cataract surgery?' } }));
+  assert.equal(clause.answer_source, 'deterministic');
+  assert.equal(clause.status, 'evidence_found');
+  assert.match(clause.answer, /From your policy document \(page 7\): Cataract surgery is admissible only after a waiting period of 24 months/);
+  assert.deepEqual(clause.sources.map(item => [item.kind, item.document_id, item.page]), [['wording', tc, 7]]);
+  const unknown = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'is dental treatment covered?' } }));
+  assert.equal(unknown.status, 'unknown');
+  assert.deepEqual([unknown.sources, unknown.facts_used], [[], []]);
+  assert.doesNotMatch(unknown.answer, /INR \d/);
+  assert.equal(s.sent.length, 0);
+  assert.equal(s.embedded.length, 0);
+  assert.ok((await chatRows(s)).every(row => row.status !== 'ok'), 'only typed-unavailable rows; nothing dispatched');
+});
+
+test('no keys: another household\'s wording is never searched', opts, async t => {
+  const s = await scenario(t, { clauses: false, env: { ANTHROPIC_API_KEY: '', VOYAGE_API_KEY: '' } });
+  const text = 'Cataract surgery is admissible only after 24 months.';
+  await insert(s.handle.pool, 'policy_clauses', { id: 'clause-b-1', household_id: s.b.household, case_id: s.b.case, document_id: s.b.document, page: 1, text: s.services.columnCrypto.seal('policy_clauses', 'text', 'clause-b-1', text), digest: createHash('sha256').update(text).digest('hex') });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what does the policy say about cataract surgery?' } }));
+  assert.equal(answer.status, 'unknown');
+  assert.deepEqual(answer.sources, []);
+});
+
+const FAILOVER_ENV = {
+  MODEL_PROVIDERS: 'gemini,anthropic,voyage', GEMINI_API_KEY: 'test-gemini-key-not-real', GEMINI_INPUT_USD_PER_MILLION: '1', GEMINI_OUTPUT_USD_PER_MILLION: '4',
+};
+// An agent that fails for the listed providers and answers (like the default stub) for the rest.
+const failingFor = (...providers) => sent => settings => settings.model.provider && providers.includes(settings.model.provider)
+  ? { async generate() { sent.push(`attempt:${settings.model.provider}`); throw new Error('provider exploded'); } }
+  : answerStub(sent)(settings);
+
+test('failover: Gemini answers first when its own grant exists; the grant stored is the answering provider\'s', opts, async t => {
+  const s = await scenario(t, { env: FAILOVER_ENV, recipients: ['gemini', 'anthropic', 'voyage'] });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(answer.answer_source, 'model', answer.model_status);
+  assert.deepEqual((await chatRows(s)).map(row => [row.provider, row.status]), [['gemini', 'ok']]);
+  assert.equal((await assistantTurns(s))[0].provider, 'gemini');
+});
+
+test('failover: a failed provider moves to the next consented one; both attempts are audited', opts, async t => {
+  const s = await scenario(t, { env: FAILOVER_ENV, recipients: ['gemini', 'anthropic', 'voyage'], agent: failingFor('gemini') });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(answer.answer_source, 'model', answer.model_status);
+  assert.deepEqual((await chatRows(s)).map(row => row.provider).sort(), ['anthropic', 'gemini']);
+  assert.equal((await assistantTurns(s))[0].provider, 'anthropic');
+});
+
+test('failover: a provider without its own grant is never sent to, even when the earlier one failed', opts, async t => {
+  const s = await scenario(t, { env: FAILOVER_ENV, recipients: ['gemini', 'voyage'], agent: failingFor('gemini') });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(answer.answer_source, 'deterministic');
+  assert.equal(answer.model_status, 'provider_failure');
+  assert.ok(!s.sent.some(entry => !entry.startsWith('attempt:gemini')), 'nothing reached anthropic');
+  assert.deepEqual((await chatRows(s)).map(row => row.provider), ['gemini']);
+  assert.equal(answer.facts_used[0].fact_key, 'room_rent_limit');
+});
+
+test('failover: only the consented provider is used when the first has no grant (skipped, not called)', opts, async t => {
+  const s = await scenario(t, { env: FAILOVER_ENV, recipients: ['anthropic', 'voyage'] });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(answer.answer_source, 'model', answer.model_status);
+  assert.deepEqual((await chatRows(s)).map(row => row.provider), ['anthropic']);
+});
+
+test('failover: an unconfigured first provider (no key) falls to the next without a call to it', opts, async t => {
+  const s = await scenario(t, { env: { ...FAILOVER_ENV, GEMINI_API_KEY: '' }, recipients: ['gemini', 'anthropic', 'voyage'] });
+  const conversation = await s.thread();
+  const answer = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
+  assert.equal(answer.answer_source, 'model', answer.model_status);
+  assert.deepEqual((await chatRows(s)).map(row => row.provider), ['anthropic']);
 });

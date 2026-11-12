@@ -38,6 +38,9 @@ export function createBackendServices(database, options = {}) {
   const appEvents = new AppEventRepository(database, { clock: options.clock, columnCrypto });
   const providerCalls = new ProviderCallRepository(database, { clock: options.clock });
   const runtimeLimits = new RuntimeLimitsRepository(database);
+  // Per-adult service limits (sessions, user data, sync, person records) count in the same table as the request limiter, so two
+  // API machines share one limit (ADR 0014 D9). RATE_LIMIT_BACKEND=memory keeps them per process (tests, one local process).
+  const limitStore = (options.env ?? process.env).RATE_LIMIT_BACKEND === 'memory' ? null : runtimeLimits;
   // Product analytics outbox (migration 057, ADR 0033): off unless ANALYTICS_ENABLED is exactly "true" and the household consented.
   const analytics = createAnalyticsService({ database, env: options.env ?? process.env });
   // Postgres job queue for the worker process group (migration 034). Revocation erases its rows through ConsentRepository.
@@ -75,7 +78,7 @@ export function createBackendServices(database, options = {}) {
     keyStore: { getActive: () => authTokenRepository.getActiveKey(), find: kid => authTokenRepository.findKey(kid) },
     clock: options.clock,
   });
-  const authTokens = createAuthTokenService({ repository: authTokenRepository, tokens: jwtTokens, clock: options.clock });
+  const authTokens = createAuthTokenService({ repository: authTokenRepository, tokens: jwtTokens, clock: options.clock, limitStore });
   const identities = new AuthIdentityRepository(database, { ...shared, households, auth, authTokens: authTokenRepository });
   // Holdings (complete.md 3.2 step 1): when OCR of a policy document completes, create its holding (status uploaded) and queue insurer
   // detection. One holding per document and one live job per holding; off unless HOLDINGS_ENABLED is exactly "true". `policyHoldings` is built below.
@@ -110,7 +113,7 @@ export function createBackendServices(database, options = {}) {
     embedClientFor: route => createVoyageEmbedClient({ apiKey: route.apiKey, model: route.model, fetchImpl: options.fetchImpl }),
   });
   const providerConsent = createProviderConsent({ database, clock: options.clock });
-  const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, gateway: modelGateway, loadKnownIdentifiers, providerConsent, env });
+  const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, ocr, database, gateway: modelGateway, loadKnownIdentifiers, providerConsent, env });
   const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, memory, analytics, env });
   const chatRepository = new ChatRepository(database, { ...shared, households });
   const chatV1 = createChatV1Service({ chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, providerConsent, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
@@ -119,10 +122,10 @@ export function createBackendServices(database, options = {}) {
   const householdApp = new HouseholdAppRepository(database, shared);
   const app = createHouseholdAppService({ access, appRepository: householdApp, consents, clock: options.clock });
   const userDataRepository = new UserDataRepository(database, { ...shared, households, auth });
-  const userData = createUserDataService({ access, repository: userDataRepository, clock: options.clock });
+  const userData = createUserDataService({ access, repository: userDataRepository, clock: options.clock, limitStore });
   // Change log, snapshot and batched push (ADR 0028). Writes go through `userData`; reads through the existing readers.
   const syncRepository = new SyncRepository(database, { clock: options.clock, audit });
-  const sync = createSyncService({ database, access, userData, userDataRepository, app, repository: syncRepository, audit, columnCrypto, clock: options.clock, limits: options.syncLimits });
+  const sync = createSyncService({ database, access, userData, userDataRepository, app, repository: syncRepository, audit, columnCrypto, clock: options.clock, limits: options.syncLimits, limitStore });
 
   // Erasure of a case, member or household (S3). Reuses the document, run, structuring and clause erasure paths above.
   const erasure = new ErasureRepository(database, { clock: options.clock, audit, consents, documents, profileAnswers, userData: userDataRepository, appEvents, policyStructuring, clauses });
@@ -133,7 +136,7 @@ export function createBackendServices(database, options = {}) {
   const memoryFacts = new MemoryFactRepository(database, { ...shared, households });
   const declarations = new DeclarationRepository(database, { ...shared, households });
   const premiums = new PremiumRepository(database, { ...shared, households });
-  const personRecords = createPersonRecordService({ access, repository: personRecordRepository, clock: options.clock });
+  const personRecords = createPersonRecordService({ access, repository: personRecordRepository, clock: options.clock, limitStore });
 
   // Holdings (migration 048): product detection, owner confirmation and the reference import. Off unless HOLDINGS_ENABLED=true.
   const holdingProductRepository = new HoldingProductRepository(database, shared);

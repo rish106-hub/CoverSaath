@@ -30,6 +30,7 @@ const ID = /^[A-Za-z0-9_.:-]{1,100}$/;
 const MAX_FACTS_TO_MODEL = 25;
 const VECTOR_K = 5;
 const KEYWORD_K = 3;
+const MAX_CASE_DOCUMENTS = 20;
 const MAX_HOLDINGS = 20;
 const DELTA_CHARS = 48;
 
@@ -84,6 +85,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const facts = [];
     const conflicts = [];
     const documents = [];
+    const places = new Map();
     for (const { id: holdingId } of holdingRows) {
       // Audit F7: holding facts and conflicts are owner-only (holding-facts-routes.js); a non-owner member gets neither here.
       if (!mayReadFacts) {
@@ -92,22 +94,32 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
         continue;
       }
       const rows = await holdingRepository.currentMemory({ householdId, holdingId });
-      for (const fact of resolvedConfirmedFacts(rows)) facts.push({ ...fact, holdingId });
+      // Own-document readings still unverified are served too, with their status kept (never presented as confirmed).
+      for (const fact of resolvedConfirmedFacts(rows, { includeUnverified: true })) facts.push({ ...fact, holdingId });
+      for (const [id, place] of await holdingRepository.ownFactSources({ householdId, rows })) places.set(id, place);
       for (const conflict of await holdingRepository.listConflicts({ householdId, holdingId, pendingOnly: true })) conflicts.push({ id: conflict.id, factKey: conflict.factKey, holdingId });
       const holding = await holdingRepository.getHolding({ householdId, holdingId });
       if (holding?.documentId) documents.push({ holdingId, documentId: holding.documentId });
+      // Documents linked to the holding (its wording, endorsements) are searched too.
+      for (const linked of await holdingRepository.linkedDocuments({ householdId, holdingId })) documents.push({ holdingId, documentId: linked.documentId });
     }
-    return { holdingIds: holdingRows.map(row => row.id), facts, conflicts, documents };
+    return { holdingIds: holdingRows.map(row => row.id), facts, conflicts, documents, places };
   }
 
+  // Wording of the case: the holding's own document (the schedule) and every other active document of the same household case (the T&C
+  // wording uploaded beside it). Household and case scoped; ranked in code (clause-repository.js), no provider involved. Hits carry their own document id.
   async function keywordClauses({ householdId, documents, message }) {
     if (!clauses) return [];
     const found = [];
+    const searched = new Set();
     for (const { documentId } of documents) {
       const row = await database.one(`SELECT case_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
-      if (!row?.case_id) continue;
-      const hits = await clauses.searchClauses({ householdId, caseId: row.case_id, documentIds: [documentId], query: message, limit: KEYWORD_K });
-      for (const hit of hits) found.push({ id: hit.clauseId, documentId, page: hit.page ?? null, text: hit.text });
+      if (!row?.case_id || searched.has(row.case_id)) continue;
+      searched.add(row.case_id);
+      const siblings = await database.many(`SELECT id FROM document_uploads WHERE household_id = ? AND case_id = ? AND lifecycle_state = 'active' ORDER BY id LIMIT ?`, [householdId, row.case_id, MAX_CASE_DOCUMENTS]);
+      const documentIds = [...new Set([documentId, ...siblings.map(item => item.id)])];
+      const hits = await clauses.searchClauses({ householdId, caseId: row.case_id, documentIds, query: message, limit: KEYWORD_K });
+      for (const hit of hits) found.push({ id: hit.clauseId, documentId: hit.documentId, page: hit.page ?? null, text: hit.text });
     }
     return found.slice(0, KEYWORD_K);
   }
@@ -131,7 +143,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
   }
 
   // Words a short answer over redacted facts. Resolves { text, factsUsed, meta } or null (use the deterministic answer).
-  async function modelAnswer({ householdId, adultId, chatGrantId, message, history, context, relevant, plan, passages, startedAt }) {
+  async function modelAnswer({ householdId, adultId, message, history, context, relevant, plan, passages, startedAt }) {
     if (!gateway?.enabled) return null;
     let memoLoad;
     const loader = () => (memoLoad ??= loadKnownIdentifiers(householdId));
@@ -149,7 +161,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     };
     for (const fact of relevant.slice(0, MAX_FACTS_TO_MODEL)) {
       const value = formatFactValue(fact.entry.type, fact.value);
-      if (value !== null) await addSlot({ id: fact.sourceIds[0], label: fact.entry.label, value, fact });
+      // The model is told, in the label, that a reading from the household's own document is not confirmed.
+      if (value !== null) await addSlot({ id: fact.sourceIds[0], label: fact.status === 'extracted_unverified' ? `${fact.entry.label} (read from the policy document, not confirmed)` : fact.entry.label, value, fact });
     }
     for (const check of plan?.checks ?? []) await addSlot({ id: `check:${check.id}`, label: 'Planning check (computed)', value: check.detail, checkFactIds: check.factIds });
     for (const passage of passages) {
@@ -166,10 +179,22 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const input = sealModelInput('chat_answer', { payload: { question: question.gated, history: historyGated, facts: slots } });
     const redactedPromptHash = sha256(JSON.stringify({ q: question.gated.text, h: historyGated.map(turn => turn.text.text), f: slots.map(slot => [slot.fact_id, slot.label.text, slot.value.text]) }));
     let result;
+    // Each provider in the failover chain needs its own current exact grant (resolved here, re-checked right before that dispatch: audit F1);
+    // a provider without one is skipped, never sent to. The commit re-checks the winning provider's grant again inside the transaction.
+    const authorize = async provider => {
+      const grantId = await providerConsent.resolve({ householdId, adultId, kind: 'chat', provider });
+      if (!grantId) return null;
+      await providerConsent.require({ householdId, adultId, grantId, kind: 'chat', provider });
+      return { grantId };
+    };
     try {
-      // Re-check the grant right before dispatch (audit F1); the commit re-checks it again inside the transaction.
-      await providerConsent.require({ householdId, adultId, grantId: chatGrantId, kind: 'chat' });
-      result = await gateway.call({ task: 'chat_answer', input, householdId });
+      if (gateway.callRouted) result = await gateway.callRouted({ task: 'chat_answer', input, householdId, authorize });
+      else {
+        // A gateway without a failover chain (a test fixture): one call, still under the anthropic grant.
+        const authorization = await authorize('anthropic');
+        if (!authorization) return { failed: 'consent_required' };
+        result = { ...(await gateway.call({ task: 'chat_answer', input, householdId })), authorization };
+      }
     } catch (error) {
       if (error?.code) return { failed: error.code };
       throw error;
@@ -189,7 +214,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const answerText = question.rehydrate(result.output.answer);
     if (!numbersSupported(answerText, allowed)) return { failed: 'numbers_unverified' };
     return {
-      text: answerText, usedFacts, usedChunks, redactedPromptHash,
+      text: answerText, usedFacts, usedChunks, redactedPromptHash, grantId: result.authorization?.grantId ?? null,
       meta: { provider: result.metadata.provider, model: result.metadata.model, tokensIn: result.metadata.inputTokens, tokensOut: result.metadata.outputTokens, costUsd: result.metadata.costUsd, latencyMs: Date.now() - startedAt },
     };
   }
@@ -244,9 +269,9 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             const context = await gatherContext({ householdId, thread, mayReadFacts });
             const conflictKeys = new Set(context.conflicts.map(item => item.factKey));
             const byKey = new Set(factKeys);
-            const relevant = intent === 'procedure_planning' ? context.facts : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
+            const relevant = intent === 'procedure_planning' ? context.facts.filter(fact => fact.status !== 'extracted_unverified') : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
             const plan = intent === 'procedure_planning'
-              ? planProcedure({ facts: Object.fromEntries(context.facts.map(fact => [fact.factKey, { id: fact.sourceIds[0], status: fact.status, value: fact.value }])), procedure: procedure ?? {} }) : null;
+              ? planProcedure({ facts: Object.fromEntries(context.facts.filter(fact => fact.status !== 'extracted_unverified').map(fact => [fact.factKey, { id: fact.sourceIds[0], status: fact.status, value: fact.value }])), procedure: procedure ?? {} }) : null;
 
             // Retrieval beyond facts: vector top-k, else a keyword match over clauses (only when no confirmed fact answers the topic).
             let mode = 'facts_only';
@@ -269,10 +294,9 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
 
             const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits });
             const history = await chatRepository.recentTurns({ householdId, threadId });
-            // No current chat grant (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
-            const chatGrantId = gateway?.enabled ? await providerConsent.resolve({ householdId, adultId: principal.adultId, kind: 'chat' }) : null;
+            // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
             const model = (context.facts.length > 0 || passages.length > 0)
-              ? (gateway?.enabled && !chatGrantId ? { failed: 'consent_required' } : await modelAnswer({ householdId, adultId: principal.adultId, chatGrantId, message, history, context, relevant, plan, passages, startedAt })) : null;
+              ? await modelAnswer({ householdId, adultId: principal.adultId, message, history, context, relevant, plan, passages, startedAt }) : null;
 
             let text = deterministic.text;
             let answerSource = 'deterministic';
@@ -289,6 +313,11 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             // Code owns the status: an answer that rests on no fact, chunk or computed check is "unknown".
             const status = usedFacts.length > 0 || usedChunks.length > 0 || sources.length > 0 || (plan?.checks.length ?? 0) > 0 ? 'evidence_found' : 'unknown';
             const factIds = [...new Set(usedFacts.map(fact => fact.sourceIds[0]))];
+            // Own-document readings the answer rests on, with their verbatim quote, document and page (status stays extracted_unverified).
+            for (const fact of usedFacts) {
+              const place = context.places.get(fact.sourceIds[0]);
+              if (place?.documentId) sources.push({ kind: 'fact', fact_id: fact.sourceIds[0], fact_key: fact.factKey, status: fact.status, document_id: place.documentId, page: place.page, quote: place.quote });
+            }
             const stored = await chatRepository.appendExchange({
               householdId, threadId,
               user: { text: message, inputKind, audioDocumentId },
@@ -298,7 +327,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
                 costPaise: assistantMeta.costUsd ? Math.ceil(assistantMeta.costUsd * (Number(env.COST_PAISE_PER_USD) > 0 ? Number(env.COST_PAISE_PER_USD) : 9000)) : 0,
                 latencyMs: Date.now() - startedAt,
               },
-              consent: answerSource === 'model' ? { grantId: chatGrantId, adultId: principal.adultId } : null,
+              consent: answerSource === 'model' ? { grantId: model.grantId, adultId: principal.adultId, provider: assistantMeta.provider } : null,
               trace: { mode, holdingIds: context.holdingIds, factIds, chunkIds: [...new Set([...passages.map(item => item.id)])], conflictIds: context.conflicts.map(item => item.id) },
             });
 

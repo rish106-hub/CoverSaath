@@ -26,7 +26,7 @@ export const jobHandlers = Object.freeze({});
 export function buildJobHandlers(services, env = process.env) {
   const handlers = {};
   if (policyFactsEnabled(env)) handlers[POLICY_FACTS_JOB_KIND] = createPolicyFactsHandler({ service: services.policyFacts });
-  // Holdings pipeline (complete.md 3.2): parse_own_pdf, fetch_reference (stub), collate, memorise (stub). Only while HOLDINGS_ENABLED is exactly "true".
+  // Holdings pipeline (complete.md 3.2): parse_own_pdf, fetch_reference (queues collate only), collate, memorise (embeds through the memory service). Only while HOLDINGS_ENABLED is exactly "true".
   if (holdingsEnabled(env)) Object.assign(handlers, createHoldingHandlers({ service: services.holdings }));
   // Holdings (HOLDINGS_ENABLED=true): detection, and the reference import (also needs REFERENCE_DATA_ENABLED=true to do any work).
   if (holdingsEnabled(env)) {
