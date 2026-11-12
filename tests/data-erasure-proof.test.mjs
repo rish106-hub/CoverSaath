@@ -252,3 +252,22 @@ test('revocation reasons are codes: free text is stored as other, never in the r
   await services.consents.revoke({ grantId: a.consent3, revokedByAdultId: a.adult2, reason: 'user_request' });
   assert.equal((await plainRows(db, 'consent_revocations', 'WHERE consent_grant_id = ?', [a.consent3]))[0].reason, 'user_request');
 });
+
+test('insurer-tier (FSS) rows: revocation erases the ida_wording row; household erasure removes the holding with its reference check columns', opts, async t => {
+  const { db, handle, services } = await freshDatabase(t);
+  const a = await seedErasureWorld(handle.pool, services, 'a');
+  const b = await seedErasureWorld(handle.pool, services, 'b');
+  // The reference check of migration 066 sits on the holding; the seeded ida_wording row stands for an attached FSS fact.
+  for (const world of [a, b]) await db.run("UPDATE policy_holdings SET reference_outcome = 'attached', reference_checked_at = now() WHERE id = ?", [world.holding]);
+  const idaCount = async household => Number((await db.one("SELECT count(*) AS n FROM household_memory_facts WHERE household_id = ? AND source_tier = 'ida_wording'", [household])).n);
+  assert.ok(await idaCount(a.household) >= 1);
+
+  await services.consents.revoke({ grantId: a.consent, revokedByAdultId: a.adult, reason: 'user_request' });
+  assert.equal(await idaCount(a.household), 0, 'revocation erased the insurer-tier rows');
+  assert.ok(await idaCount(b.household) >= 1, 'another household is untouched');
+  assert.deepEqual(await canaryHits(db, a.canaryPrefix + 'memory-ref'), {});
+
+  await services.erasure.eraseHousehold({ householdId: b.household, actor: actorOf(b), reason: 'data_subject_request' });
+  assert.equal(Number((await db.one('SELECT count(*) AS n FROM policy_holdings WHERE household_id = ?', [b.household])).n), 0);
+  assert.equal(await idaCount(b.household), 0);
+});
