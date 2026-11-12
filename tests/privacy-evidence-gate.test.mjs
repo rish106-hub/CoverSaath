@@ -4,6 +4,7 @@ import { createGeminiCoverageRegistryFactory } from '../src/features/ai-analysis
 import { PRIVACY_EVIDENCE_GATE_VERSION, sanitizeEvidenceForModel } from '../src/features/ai-analysis/privacy-evidence-gate.js';
 import { sanitizeEvidenceTextForStorage } from './support/storage-gate.mjs';
 import { RESTRICTED_PROBES, TOKENIZED_PROBES } from './support/privacy-probes.mjs';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 const policy = (overrides = {}) => ({
   dataClass: 'CONFIDENTIAL',
@@ -160,7 +161,7 @@ test('live runtime dispatches only sanitized evidence and runs the injected auth
     loadModel: async () => ({ mocked: true }),
     createAgent: () => ({
       generate: async ({ prompt }) => {
-        providerInput = JSON.parse(prompt);
+        providerInput = parseRenderedReference(prompt).payload;
         return {
           output: { facts: [{ id: 'fact-1', field: 'd.room_rent_limit', value: '5000', status: 'known', citations: [providerInput.sources[0].id] }], summary: 'A source-linked limit was extracted.' },
           totalUsage: { inputTokens: 10, outputTokens: 5 },

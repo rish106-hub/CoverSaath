@@ -4,6 +4,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { PROMPT_VERSION } from './prompts.js';
 import { AI_CONTRACT_VERSION } from './responsibility-matrix.js';
 import { isGatewayRequest } from './model-gateway.js';
+import { samplingFor } from './prompt-pack.js';
 
 // The only place a provider SDK is constructed (check:architecture: only this file may import `ai` or `@ai-sdk/*`).
 // SDK-backed providers only; deepseek, kimi and openai are config entries with no SDK and never reach this loader.
@@ -53,6 +54,8 @@ export function createAiSdkRunner({ loadModel, provider, model, modelVersion, in
       stopWhen: isStepCount(1),
       maxOutputTokens,
       maxRetries,
+      // Lowest sampling temperature the provider accepts (prompt-pack.js): grounded extraction, not creative text.
+      ...samplingFor(provider),
       output: Output.object({ schema: jsonSchema(outputSchema) }),
     });
     const result = await agent.generate({ prompt: prompt.evidence, abortSignal });

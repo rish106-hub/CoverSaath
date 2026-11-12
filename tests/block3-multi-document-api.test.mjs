@@ -11,6 +11,7 @@ import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
 import { assertHandoffContract } from '../src/features/decision-catalogue/index.js';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 const bootstrapToken = 'coversaath-multidoc-bootstrap-token-01';
 const PERSONAL_NUMBER = 'SYN-PERS-410001';
@@ -37,7 +38,7 @@ function stubDriver(requests) {
     createAgent: settings => ({
       generate: async ({ prompt }) => {
         requests.push({ agentId: settings.id, prompt });
-        const payload = JSON.parse(prompt);
+        const payload = parseRenderedReference(prompt).payload;
         if (settings.id === 'knowvia-policy_evidence_investigate') {
           const findings = payload.clauses.flatMap(clause => {
             const line = clause.text.split('\n').find(text => text.startsWith('Room rent limit:'));

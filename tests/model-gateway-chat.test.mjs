@@ -96,7 +96,9 @@ test('outbound payload holds no PII and the audit row holds counts and a digest,
   assert.ok(row.cost_paise > 0);
   const report = JSON.parse(row.redaction_report_json);
   assert.ok(report.placeholders >= 6 && report.gatedSlots === 3 && report.gateVersion);
-  assert.deepEqual(Object.keys(report).sort(), ['gateVersion', 'gatedBytes', 'gatedSlots', 'placeholders', 'reasonCodes']);
+  assert.deepEqual(Object.keys(report).sort(), ['gateVersion', 'gatedBytes', 'gatedSlots', 'placeholders', 'promptVersion', 'reasonCodes']);
+  // The prompt version is a code label (grounded prompt pack), never prompt text.
+  assert.match(report.promptVersion, /^grounded-pack-v\d+\/chat_answer@grounded-v\d+$/);
   assert.doesNotMatch(JSON.stringify(row), /room rent|Asha|HDF|sum insured/i, 'no payload text in the row');
 });
 

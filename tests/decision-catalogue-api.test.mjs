@@ -7,6 +7,7 @@ import { PDFDocument } from 'pdf-lib';
 import { testTempRoot as tmpdir } from './support/temp-root.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { createApiServer } from '../src/server/server.js';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 // Block 3 decision catalogue API on top of the ADR 0008 answer API through the real application: upload, Sarvam OCR (mocked HTTP), stored blocks, clauses,
 // Gemini through the model gateway (mocked SDK driver), cited conditional answer. Synthetic data only.
@@ -41,7 +42,7 @@ function stubDriver(requests) {
     createAgent: settings => ({
       generate: async ({ prompt }) => {
         requests.push({ agentId: settings.id, instructions: settings.instructions, prompt });
-        const payload = JSON.parse(prompt);
+        const payload = parseRenderedReference(prompt).payload;
         if (settings.id === 'knowvia-policy_evidence_investigate') {
           const clause = payload.clauses.find(entry => entry.text.includes('Room rent limit: Rs 5,000 per day'));
           const findings = clause ? [{ clause_ids: [clause.clause_id], quote: 'Room rent limit: Rs 5,000 per day', subject: 'room rent', conditions: [], exceptions: [] }] : [];
