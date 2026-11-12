@@ -4,139 +4,212 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/node-%E2%89%A525-brightgreen)
 
-A backend-first, consent-first health-insurance evidence system. Households upload their policy documents; CoverSaath reads them, keeps every extracted fact tied to its source page, and answers questions with citations and visible uncertainty. Deterministic code owns every consent, eligibility, money and release decision. Model output is only ever `extracted_unverified`, `conflicting` or `unknown`.
-
-> **Status: prototype.** Synthetic data only. Not an insurance adviser, a claims platform, or a production-ready service. Authentication is local prototype authentication. Consent and privacy wording is a draft that needs legal review.
+Prototype, synthetic data only.
 
 **AI agent working in this repo? Read [AI.md](AI.md) first**, then [AGENTS.md](AGENTS.md).
 
-## What it does
+## 1. What CoverSaath is
 
-- **Intake**: validates uploads, stores bytes encrypted, scans for malware, and runs OCR (Sarvam, off by default).
-- **Evidence**: structures policy text into clauses and facts with page-level provenance, then retrieves cited evidence for a question.
-- **Reasoning**: compares household coverage with deterministic rules and lists the gaps and next actions.
-- **Consent and erasure**: every provider call needs current, exact consent. Revoking consent stops in-flight work and erases derived data.
-- **Audit**: append-only, hash-chained audit events for protected actions.
+CoverSaath is a consent-first health-insurance evidence assistant for Indian households. It helps a household understand what its own policy documents say, with every answer tied to the page it came from.
 
-## Architecture
+The journey:
 
-One Node.js modular monolith over one PostgreSQL database. The agents in `src/agents/` are in-process modules, not services.
+1. The household uploads a policy schedule PDF and the policy terms and conditions (wording) PDF.
+2. The backend validates and scans each file, runs OCR (Sarvam), and structures the text into clauses and facts.
+3. The documents become one holding, with the schedule and the wording linked to it.
+4. The household asks questions in chat. Each answer carries a verbatim quote plus the document and page it came from. When the documents do not say, the answer is "unknown".
+
+Chat works without any model API key: with no provider configured it falls back to deterministic clause search over the household's own documents.
+
+Rules the product keeps:
+
+- Deterministic code decides consent, eligibility, money and release. Model output is only ever `extracted_unverified`, `conflicting` or `unknown`.
+- CoverSaath does not recommend buying, switching or renewing a policy, does not predict claim outcomes, and gives no medical or legal advice.
+- Consent, privacy and notice wording is a draft. **FOR LEGAL REVIEW.**
+
+## 2. Architecture
+
+Three repositories make up the product:
+
+| Repository | Role |
+| --- | --- |
+| `CoverSaath` (this one) | Backend API, worker, database schema, evidence and rules logic |
+| `CoverSaath-Frontend` | The app and its backend-for-frontend (BFF), hosted on Vercel |
+| Website | Landing page and waitlist |
+
+This repository is a Node 25+ ES-module modular monolith over one PostgreSQL database (Supabase). One Fly.io container (app `knowvia-api`, region `sin` in [fly.toml](fly.toml)) runs the API process, the job worker and clamd (ClamAV); the container entrypoint supervises all three and stops if any one stops, so Fly restarts them together. The worker claims jobs from a Postgres queue with `FOR UPDATE SKIP LOCKED`.
 
 ```mermaid
 flowchart LR
-  Client[HTTP client] --> API["src/server<br/>routes, auth, response policy"]
-  API --> Svc["src/backend<br/>services and repositories"]
-  API --> Feat["src/features<br/>input, evidence, rules, reasoning"]
-  Feat --> Int["src/integrations<br/>Gemini, Sarvam, clamd"]
+  App["App (Vercel)"] --> BFF["BFF (server side)"]
+  BFF --> API["src/server<br/>routes, auth, guards"]
+  API --> Svc["src/backend<br/>services, repositories"]
+  API --> Feat["src/features<br/>input, evidence, rules"]
+  Feat --> Int["src/integrations<br/>model providers, Sarvam, clamd"]
   Svc --> PG[(PostgreSQL)]
-  Feat --> Svc
-  Contracts["src/contracts"] -.shared types.- API
-  Contracts -.- Svc
-  Contracts -.- Feat
+  Worker["worker<br/>job queue"] --> Svc
+  Worker --> Feat
 ```
 
-Decisions live in [docs/adr](docs/adr); the current system map is [docs/architecture/system.md](docs/architecture/system.md).
+### Module map
 
-## Quick start
+| Path | Responsibility |
+| --- | --- |
+| `src/server/` | HTTP server, config, routes (`routes/v1-backend-routes.js` and the chat, holdings and data-lifecycle route files), worker entry |
+| `src/backend/` | PostgreSQL access, repositories, services, migrations |
+| `src/contracts/` | API, workflow, authority, persistence and data-purpose contracts |
+| `src/features/input/` | Upload validation, protected storage, scanning, OCR |
+| `src/features/policy-evidence/`, `policy-structuring/`, `policy-facts/`, `policy-identification/` | Evidence retrieval, clause structuring, facts with page provenance, UIN and insurer profile |
+| `src/features/insurance-rules/`, `household-reasoning/`, `coverage-analysis/`, `decision-catalogue/`, `insurer-detection/` | Deterministic rules, collation, household reasoning, catalogue, insurer detection |
+| `src/features/ai-analysis/` | Model gateway, privacy gate, grounded prompt pack, budget, chat runtime |
+| `src/integrations/` | Provider adapters; import only through `src/integrations/index.js` |
+| `src/shared/` | Framework-free HTTP helpers (security headers, host and origin check, rate limiter) |
+| `tests/`, `scripts/` | Unit, integration, security and journey tests; database, evaluation and architecture-check commands |
 
-Requirements: Node 25 or later (CI uses Node 26), npm, and PostgreSQL 17 for the database and tests.
+`npm run check:architecture` enforces the import and naming boundaries.
+
+### Security model
+
+- Bearer-token auth (web sessions with JWT access tokens and rotating refresh tokens, ADR 0027). A bootstrap token only creates the first household.
+- The API answers 403 to any `Host` other than loopback or a `PUBLIC_HOSTS` entry, and to any browser `Origin`. There is no CORS: the app calls the API only through the BFF, server to server.
+- Household ownership is checked on every protected read and write.
+- Every provider call passes the privacy gate and needs the household's current, exact consent for that provider, re-checked before the result is committed. Each model provider is its own consent recipient.
+- Sensitive columns are encrypted (ADR 0013); document bytes are stored encrypted in PostgreSQL.
+- Revoking consent erases derived data. Every derived store has an erasure path and a test.
+- Rate limits, the model spend budget and the evidence-claim guard are shared through PostgreSQL, so machines enforce one limit; they fail closed when the store errors (ADR 0014).
+- Every model call is recorded in `provider_calls` with counts, a payload hash and the `prompt_version`.
+- Append-only, hash-chained audit events for protected actions.
+
+Details: [docs/architecture/security.md](docs/architecture/security.md), [docs/architecture/processor-register.md](docs/architecture/processor-register.md).
+
+## 3. AI layer
+
+- **Grounded prompts.** One provider-neutral XML prompt per model purpose ([prompt-pack.js](src/features/ai-analysis/prompt-pack.js), version `grounded-pack-v1`). The system message holds `persona`, `work`, `dos`, `donts`, `industry_guardrails`, `grounding_rules` and `output_format`. The user message holds a `reference` block of document excerpts marked as untrusted data, then the request. Sampling uses the lowest temperature each provider accepts (0 where supported).
+- **Routing.** `chat_answer`, `intent_classify` and `fact_extract` use the chain gemini, anthropic, openai, deepseek, kimi (`src/integrations/model-routing/index.js`). A call moves to the next provider only when the earlier one is unavailable or fails, and only if the household has consented to that provider. `embed` routes to Voyage. `MODEL_PROVIDERS` chooses which providers are enabled.
+- **Adapters on main.** SDK adapters exist for Anthropic and Google (Gemini). OpenAI, DeepSeek and Kimi are config entries only and answer a typed `provider_sdk_missing` until an adapter lands. The adapter change is open as PR #123 (`feat/provider-sdks`) and is not merged.
+- **DeepSeek and Kimi** are China-hosted processors. They are off by default and must stay out of `MODEL_PROVIDERS` until legal review. **FOR LEGAL REVIEW.**
+- Model output is validated against the sealed input and is never treated as confirmed.
+
+## 4. Feature flags
+
+Every flag is off unless its value is exactly `true`. Enabling a flag does not call a provider by itself. All settings are in [.env.example](.env.example).
+
+| Flag | Gates |
+| --- | --- |
+| `SARVAM_OCR_ENABLED` | OCR jobs through Sarvam |
+| `POLICY_STRUCTURING_ENABLED` | Policy clause structuring runs |
+| `POLICY_EVIDENCE_ENABLED` | Evidence retrieval and investigation for questions |
+| `POLICY_FACTS_ENABLED` | Policy facts and fact evidence, and their worker jobs |
+| `DOCUMENT_READBACK_ENABLED` | Deterministic document readback (no model call) |
+| `CATALOGUE_INDEPENDENT_REVIEW_ENABLED` | Independent review step of the decision catalogue |
+| `REFERENCE_DATA_ENABLED` | Reference-data import (insurer product reference) |
+| `HOLDINGS_ENABLED` | Holdings, declarations, premiums, dues, hospitals routes and the holdings worker jobs |
+| `MEMORY_ENABLED` | Household memory writes and retrieval, chat v1 threads and turns |
+| `CHAT_ENABLED` | Chat v0 |
+| `CHAT_MODEL_ENABLED` | The model wording step of a chat turn; without it chat answers from code and stored facts |
+| `ANALYTICS_ENABLED` | Consent-gated analytics outbox and drain (also needs its own salt, key, host and an active consent grant) |
+| `VOICE_AUDIO_RETAIN` | Keeps a voice note's audio document; the transcript is stored either way, sealed |
+
+`APP_EVENTS_ENABLED` is the one exception: it is on unless set to `false`.
+
+## 5. Run locally and test
+
+Requirements: Node 25 or later (CI uses Node 26), npm, and PostgreSQL 17 (with pgvector for the memory tests; CI uses a pinned pgvector image).
 
 ```sh
 npm ci
-cp .env.example .env.local        # then fill in the values below
-npm run db:init                   # applies migrations to DATABASE_URL
-npm run dev                       # http://127.0.0.1:8787, restarts on change
+cp .env.example .env.local     # set DATABASE_URL, KNOWVIA_BOOTSTRAP_TOKEN (32+ chars), DOCUMENT_ENCRYPTION_KEY_BASE64
+npm run db:init                # apply migrations
+npm run dev                    # http://127.0.0.1:8787
 ```
 
-Minimum `.env.local` for local work:
+Optional: `npm run worker` runs the job worker alone; `npm run seed:demo` loads a synthetic demo household into a loopback database.
 
-| Variable | Value |
+| Command | Use |
 | --- | --- |
-| `DATABASE_URL` | Local PostgreSQL URL. For Supabase use the session pooler, see [fly-deploy runbook](docs/runbooks/fly-deploy.md). |
-| `KNOWVIA_BOOTSTRAP_TOKEN` | Random value of 32+ characters: `openssl rand -hex 32`. Only creates the first household. |
-| `DOCUMENT_ENCRYPTION_KEY_BASE64` | `openssl rand -base64 32`. Without it, document intake fails closed. |
+| `npm run check` | Architecture boundaries, all tests, entry-point check |
+| `npm test` | Tests only |
+| `npm run eval:safety` | Safety evaluations |
+| `npm run check:architecture` | Import and naming boundaries |
+| `node --test tests/<file>.test.mjs` | One test file |
+| `git diff --check` | Whitespace |
+| `gitleaks git .` | Secret scan of full history |
 
-Provider switches (`SARVAM_OCR_ENABLED`, `POLICY_EVIDENCE_ENABLED`, `POLICY_STRUCTURING_ENABLED`, `CATALOGUE_INDEPENDENT_REVIEW_ENABLED`) are off unless set to exactly `true`. Enabling one does not call a provider by itself. Every setting is documented in [.env.example](.env.example). Legacy `knowvia` names in variables and database values are kept on purpose until a compatibility plan exists.
+Tests need `TEST_DATABASE_URL` pointing at a local PostgreSQL 17 ([local-postgres runbook](docs/runbooks/local-postgres.md)). Set `REQUIRE_POSTGRES=1` to fail instead of skipping when it is missing. Tests use local provider stubs and synthetic data; they do not prove live provider behaviour or OCR accuracy.
 
-Check it is up:
+Legacy `knowvia` names (variables, database values, the Fly app) stay until a compatibility plan exists.
 
-```sh
-curl -s http://127.0.0.1:8787/api/v1/health
-curl -s http://127.0.0.1:8787/api/v1/ready
-```
+## 6. Deploy
 
-A local PostgreSQL for development and tests: [docs/runbooks/local-postgres.md](docs/runbooks/local-postgres.md).
+Target: Fly.io app `knowvia-api` with Supabase PostgreSQL ([ADR 0011](docs/adr/0011-supabase-master-database.md)), built from [Dockerfile](Dockerfile) and [fly.toml](fly.toml). Deployment needs explicit owner approval. Short form:
 
-## API
+1. Apply migrations from an operator machine over the direct or session-pooler database URL (`npm run db:init`), never through the runtime pooler URL.
+2. Set secrets on the app (database URL, encryption keys, bootstrap token); never in `fly.toml`.
+3. `fly deploy --remote-only -a knowvia-api`, then verify `/api/v1/health`, `/api/v1/ready` and the host guard.
 
-All routes are under `/api/v1` and, except health, need a session, household ownership and the relevant consent.
+Full steps, pooler probe, staging plan and recovery: [docs/runbooks/fly-deploy.md](docs/runbooks/fly-deploy.md).
 
-| Area | Routes |
+## 7. Status
+
+### What is built
+
+Backend, merged to main:
+
+- [x] Document intake: validation, encrypted storage in PostgreSQL, ClamAV scanning, Sarvam OCR, page blocks (migrations 001-020)
+- [x] Policy structuring, evidence retrieval, facts with page provenance, policy profile (UIN, insurer, page count) (007-014, 041-044)
+- [x] Consent, revocation and erasure; append-only audit events; consent-gated analytics outbox and PostHog drain (migration 057, ADR 0033)
+- [x] Column encryption and document bytes in the database (ADR 0013)
+- [x] Web sessions, JWT access tokens, rotating refresh tokens (045, ADR 0027); household sync change log (046, ADR 0028); person records (047, ADR 0026)
+- [x] Holdings, household memory facts, conflicts, declarations, premium payments and dues (048-052, ADR 0032); a holding is created when OCR completes
+- [x] Two-document holding: wording linked to a holding, chat cites the wording page and own-PDF readings (065, PR #121)
+- [x] IDA reference fetch and insurer detection (PR #97); network hospitals lookup filtered by the holding's insurer (055, PR #113)
+- [x] Memory chunks with pgvector and Voyage embeddings, chat v1 threads, streamed turns and traces (053-054, ADR 0031)
+- [x] Model gateway: provider routing, Anthropic and Gemini adapters, redaction gate, `provider_calls` (056, ADR 0030)
+- [x] Grounded XML prompt pack for every model purpose (PR #120)
+- [x] No-key chat funnel (deterministic clause search) and per-provider consent failover (PR #119); current exact consent required before chat and embed calls (058, PR #114)
+- [x] Chat integrity fixes: registry recipients, number check, owner-only facts (PR #115)
+- [x] Shared per-adult limits and model budget in PostgreSQL, fail closed (023, 032, PR #116, ADR 0014)
+- [x] Job worker runs inside the Fly container (PR #117)
+- [x] Synthetic demo seed (`npm run seed:demo`)
+- [x] CI: pinned pgvector PostgreSQL 17 image, gitleaks scan, architecture check
+
+The app and BFF live in `CoverSaath-Frontend`; their features are tracked in that repository.
+
+### What is left
+
+- [ ] Provider SDK adapters for OpenAI, DeepSeek and Kimi (PR #123, open, not merged)
+- [ ] The frontend must call the link-wording route (`POST /api/v1/holdings/{id}/documents`) after a wording upload
+- [ ] Production reference-data reader is not wired: the insurer tier is empty until it is
+- [ ] Live-model evaluation of grounding and refusal behaviour has not been measured; tests use stubs
+- [ ] Legal review of consent, notice and persona wording, and of voice transcript storage and cross-border model calls. **FOR LEGAL REVIEW.**
+- [ ] Legal review before DeepSeek or Kimi are ever enabled (China-hosted). **FOR LEGAL REVIEW.**
+- [ ] Provider keys not set: Anthropic, OpenAI, Voyage
+- [ ] OCR reliability follow-ups from the audit: F6 (failed OCR hook leaves no holding and nothing retries), F9 (failed-persistence OCR job can complete after revocation), F10 (`parse_completed.facts` counts every memory row)
+- [ ] Audit P3 items: F11 (hospital list has no pagination), F12 (analytics revocation is lazy; sent events stay in PostHog), F13 (outbox drain holds row locks across the PostHog call)
+- [ ] Other audit items not confirmed fixed on main: F4 (in-tier own-PDF conflicts get no conflict row), F14 (CodeQL alerts on frontend test code)
+- [ ] Chat procedure planning is not wired to the hospitals lookup; analytics events `voice_turn` and `hospital_search` are allowed but nothing emits them
+- [ ] Retention for expired (not revoked) consent is an open owner decision
+- [ ] Capacity and load numbers do not exist; Sydney or Singapore hosting is for synthetic data only, and real Indian health data needs a residency and legal decision (ADR 0011 D8)
+
+Current detail: [docs/iterations/LATEST.md](docs/iterations/LATEST.md) and [docs/audits/2026-11-13-complete-audit.md](docs/audits/2026-11-13-complete-audit.md).
+
+## 8. Docs index
+
+| Topic | File |
 | --- | --- |
-| Health | `GET /health`, `/live`, `/ready` |
-| Households and sessions | `POST /households`, `GET /households/{id}`, `POST /sessions/current/revoke` |
-| Consent | `POST /consents`, `POST /consents/{id}/revoke`, field access check |
-| Cases | `POST /cases`, `GET /cases/{id}`, `POST /cases/{id}/transitions`, `GET /cases/{id}/audit-events` |
-| Documents | `POST /cases/{id}/documents` (PDF), `GET /cases/{id}/documents`, `GET`/`DELETE /documents/{id}`, deletion inventory |
-| OCR and structuring | `POST /documents/{id}/ocr-jobs`, `POST /ocr-jobs/{id}/refresh`, `POST`/`GET /documents/{id}/structuring-runs` |
-| Evidence | `POST`/`GET /cases/{id}/questions`, `GET /cases/{id}/decision-catalogue`, `GET /cases/{id}/source-pack` |
-| Reasoning | `POST /households/{id}/coverage-preview`, `POST /cases/{id}/analysis-runs`, `GET /jobs/{runId}`, `GET /tasks/{taskId}` |
-
-Source of truth for routes is [src/server/routes/v1-backend-routes.js](src/server/routes/v1-backend-routes.js). Errors are coded and client-safe. There is no active UI; a UI talks to this contract through a server-side backend-for-frontend (see [AI.md](AI.md)).
-
-## Repository map
-
-```text
-src/
-├── agents/         bounded analysis specialists (in-process)
-├── backend/        PostgreSQL access, repositories, services, case state
-├── contracts/      API, workflow, authority and persistence contracts
-├── evaluation/     offline safety evaluation
-├── features/       input, ai-analysis, coverage-analysis, policy-evidence,
-│                   policy-structuring, insurance-rules, decision-catalogue,
-│                   household-reasoning
-├── integrations/   fail-closed provider adapters (import via index.js)
-├── server/         API composition, routes, response policies
-└── shared/         framework-free HTTP helpers
-tests/              unit, integration, security and journey tests
-scripts/            database, evaluation and architecture-check commands
-docs/               adr/, architecture/, runbooks/, exec-plans/, iterations/
-working/ building/  product behaviour and policy-decomposition sources
-```
-
-Files and directories use lowercase kebab-case. `npm run check:architecture` enforces the boundaries.
-
-## Verify a change
-
-```sh
-npm run check            # architecture boundaries, tests, entry-point validation
-npm run eval:safety      # safety evaluation
-git diff --check
-```
-
-Tests need `TEST_DATABASE_URL` (a local PostgreSQL 17). Set `REQUIRE_POSTGRES=1` to fail instead of skip when it is missing. Tests use synthetic records only. Mocked provider tests do not prove live provider behaviour, OCR accuracy, insurer decisions or production safety.
-
-## Deployment
-
-Target: Fly.io app `knowvia-api` in Sydney, with Supabase PostgreSQL ([ADR 0011](docs/adr/0011-supabase-master-database.md)). The container is built from [Dockerfile](Dockerfile) and [fly.toml](fly.toml). Steps and recovery: [docs/runbooks/fly-deploy.md](docs/runbooks/fly-deploy.md). The API is local-only unless `PUBLIC_HOSTS` opts a host in.
-
-## Security
-
-- Synthetic data only. No real policies, medical records, credentials or personal data in code, logs, fixtures or commits.
-- Secrets stay in ignored `.env.local` or the host's secret store. Scan the full history with `gitleaks git .`; test fixtures that look like keys are allowlisted in [.gitleaks.toml](.gitleaks.toml).
-- Report vulnerabilities privately; see [SECURITY.md](SECURITY.md).
-
-## Known limits
-
-- Authentication is local prototype authentication, not production identity.
-- Live provider journeys and production deployment are unverified.
-- Rate limiting and some claims are per process, so scaling past one machine needs work first.
-- No capacity or load-test numbers exist; make no scale claims.
-- Sydney hosting is for synthetic data only; real Indian health data needs a residency and legal decision (ADR 0011 D8).
-
-## Contributing
-
-Read [AGENTS.md](AGENTS.md) for the working rules (acceptance criteria first, smallest safe change, evidence before claiming success). Do not commit, push, merge or deploy unless the task asks for it. Current project state is in [docs/iterations/LATEST.md](docs/iterations/LATEST.md).
+| Agent orientation and rules | [AI.md](AI.md), [AGENTS.md](AGENTS.md) |
+| Current state | [docs/iterations/LATEST.md](docs/iterations/LATEST.md) |
+| System and data architecture | [docs/architecture/system.md](docs/architecture/system.md), [docs/architecture/data.md](docs/architecture/data.md), [docs/architecture/security.md](docs/architecture/security.md) |
+| Decisions | [docs/adr](docs/adr) |
+| Audit | [docs/audits/2026-11-13-complete-audit.md](docs/audits/2026-11-13-complete-audit.md) |
+| Deploy and recovery | [docs/runbooks/fly-deploy.md](docs/runbooks/fly-deploy.md) |
+| Local database | [docs/runbooks/local-postgres.md](docs/runbooks/local-postgres.md) |
+| Chat and memory | [docs/runbooks/chat-and-memory.md](docs/runbooks/chat-and-memory.md) |
+| Reference data and hospital sync | [docs/runbooks/ida-sync.md](docs/runbooks/ida-sync.md) |
+| CI gates | [docs/runbooks/ci-gates.md](docs/runbooks/ci-gates.md) |
+| Incident response | [docs/runbooks/incident-response.md](docs/runbooks/incident-response.md) |
+| Product behaviour sources | `working/`, `building/` |
+| Security reporting | [SECURITY.md](SECURITY.md) |
 
 ## License
 
