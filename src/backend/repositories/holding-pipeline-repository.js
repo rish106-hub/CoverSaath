@@ -94,10 +94,41 @@ export class HoldingPipelineRepository {
       const document = await db.one(`SELECT id, consent_grant_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
       if (!document) throw coded('DOCUMENT_NOT_FOUND', 'The document was not found.', 404);
       if (document.id === holding.document_id) throw coded('HOLDING_INPUT_INVALID', 'The holding already has this document.', 400);
+      await this.#absorbStandaloneHolding({ householdId, holdingId, documentId });
       const inserted = await db.run(`INSERT INTO holding_documents (id, household_id, holding_id, document_id, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT (holding_id, document_id) DO NOTHING`, [`hdoc-${randomUUID()}`, householdId, holdingId, documentId, kind, at]);
       return Object.freeze({ linked: inserted.changes === 1 });
     }, { locks: [householdLock(householdId)] });
+  }
+
+  // One policy, one holding. The linked document may already have a standalone holding of its own (created at OCR, or by a late holding.create
+  // job). Inside the link transaction (household lock held): if the owner never acted on it, delete it (foreign keys cascade its memory facts,
+  // conflicts, chunks and chat threads; its queued jobs go too) with a counts-only audit event. If the owner acted on it, refuse with a coded
+  // conflict and change nothing. A document linked to another holding is not a holding of its own, so it is never touched.
+  async #absorbStandaloneHolding({ householdId, holdingId, documentId }) {
+    const db = this.database;
+    const own = await db.one('SELECT id, status FROM policy_holdings WHERE household_id = ? AND document_id = ? FOR UPDATE', [householdId, documentId]);
+    if (!own || own.id === holdingId) return;
+    const acted = await db.one(`SELECT (
+        ? NOT IN ('uploaded', 'insurer_pending')
+        OR EXISTS (SELECT 1 FROM policy_profiles profile WHERE profile.household_id = ? AND profile.document_id = ?
+          AND (profile.uin_state = 'reported' OR profile.insurer_state = 'reported' OR profile.policy_name_state = 'reported'))
+        OR EXISTS (SELECT 1 FROM household_memory_facts fact WHERE fact.household_id = ? AND fact.holding_id = ? AND fact.source_tier = 'user_declaration')
+        OR EXISTS (SELECT 1 FROM memory_conflicts conflict WHERE conflict.household_id = ? AND conflict.holding_id = ? AND conflict.resolution <> 'pending')
+        OR EXISTS (SELECT 1 FROM holding_documents link WHERE link.household_id = ? AND link.holding_id = ?)
+        OR EXISTS (SELECT 1 FROM premium_payments payment WHERE payment.household_id = ? AND payment.holding_id = ?)
+        OR EXISTS (SELECT 1 FROM premium_dues due WHERE due.household_id = ? AND due.holding_id = ?)
+        OR EXISTS (SELECT 1 FROM chat_threads thread WHERE thread.household_id = ? AND thread.holding_id = ?)
+        OR EXISTS (SELECT 1 FROM member_declarations declaration WHERE declaration.household_id = ? AND declaration.holding_id = ?)
+      ) AS acted`, [own.status, householdId, documentId, householdId, own.id, householdId, own.id, householdId, own.id, householdId, own.id,
+      householdId, own.id, householdId, own.id, householdId, own.id]);
+    if (acted.acted) throw coded('HOLDING_DOCUMENT_HAS_HOLDING', 'That document already has its own holding that you have worked on.', 409);
+    await db.run(`DELETE FROM job_queue WHERE household_id = ? AND document_id = ? AND status = 'queued' AND kind LIKE 'holding.%'`, [householdId, documentId]);
+    await db.run('DELETE FROM policy_holdings WHERE id = ? AND household_id = ?', [own.id, householdId]);
+    await this.audit?.append({
+      householdId, actorType: 'system', actorId: 'holding-pipeline-repository', action: 'holding.absorbed',
+      resourceType: 'policy_holding', resourceId: own.id, payload: {},
+    });
   }
 
   /** Removes a link and the memory chunks that came from the unlinked document for this holding. Resolves { unlinked }. */
@@ -198,10 +229,44 @@ export class HoldingPipelineRepository {
     return out;
   }
 
+  /**
+   * The insurer and product name the owner confirmed for each holding: Map holding id -> { insurerName, productName } (each null unless that
+   * field is in state 'reported'; never an extracted candidate, never the UIN). Opened for the owning household's own response only.
+   */
+  async confirmedNames({ householdId, holdings }) {
+    requireId(householdId, 'householdId');
+    const ids = holdings.map(item => item.policyProfileId).filter(Boolean);
+    const out = new Map();
+    if (ids.length === 0) return out;
+    const rows = await this.database.many(`SELECT id, insurer_state, insurer_name_enc, policy_name_state, policy_name_enc FROM policy_profiles
+      WHERE household_id = ? AND id = ANY(CAST(? AS text[]))`, [householdId, ids]);
+    const byProfile = new Map(rows.map(row => [row.id, row]));
+    for (const holding of holdings) {
+      const row = byProfile.get(holding.policyProfileId);
+      if (!row) continue;
+      out.set(holding.id, Object.freeze({
+        insurerName: row.insurer_state === 'reported' && row.insurer_name_enc ? this.crypto.open('policy_profiles', 'insurer_name_enc', row.id, row.insurer_name_enc) : null,
+        productName: row.policy_name_state === 'reported' && row.policy_name_enc ? this.crypto.open('policy_profiles', 'policy_name_enc', row.id, row.policy_name_enc) : null,
+      }));
+    }
+    return out;
+  }
+
+  /** The kind of the document each source page belongs to: Map page id -> document_kind (household scoped). */
+  async pageDocumentKinds({ householdId, pageIds }) {
+    const ids = [...new Set(pageIds.filter(Boolean))];
+    if (ids.length === 0) return new Map();
+    const rows = await this.database.many(`SELECT page.id, document.document_kind FROM source_pages page
+      JOIN document_uploads document ON document.id = page.document_upload_id
+      WHERE document.household_id = ? AND page.id = ANY(CAST(? AS text[]))`, [householdId, ids]);
+    return new Map(rows.map(row => [row.id, row.document_kind]));
+  }
+
   /** Current memory rows of a holding, opened (server side only). */
-  async currentMemory({ householdId, holdingId }) {
+  async currentMemory({ householdId, holdingId, factKeys = null }) {
     const rows = await this.database.many(`SELECT * FROM ${MEMORY} WHERE household_id = ? AND holding_id = ? AND superseded_at IS NULL
-      ORDER BY fact_key, source_tier, id LIMIT ?`, [householdId, holdingId, MAX_ROWS]);
+      AND (CAST(? AS text[]) IS NULL OR fact_key = ANY(CAST(? AS text[])))
+      ORDER BY fact_key, source_tier, id LIMIT ?`, [householdId, holdingId, factKeys, factKeys, MAX_ROWS]);
     return rows.map(row => {
       const sealed = row.value_enc ? JSON.parse(this.crypto.open(MEMORY, 'value_enc', row.id, row.value_enc)) : { value: null, alternatives: [] };
       return Object.freeze({

@@ -85,7 +85,9 @@ export function createBackendServices(database, options = {}) {
   // Idempotent: one holding per document (unique household + document), one live detect job per holding (dedupe key). Safe to retry or deliver twice.
   const ensureHolding = async ({ householdId, documentId, documentKind, consentGrantId = null }) => {
     if (!holdingsEnabled(options.env ?? process.env) || !HOLDING_DOCUMENT_KINDS.includes(documentKind)) return null;
-    const holding = await policyHoldings.create({ householdId, adultId: null, documentId, kind: 'retail_health' });
+    // A document already linked to a policy's holding (its wording) never gets a holding of its own: one policy, one holding.
+    const holding = await policyHoldings.create({ householdId, adultId: null, documentId, kind: 'retail_health', unlessLinked: true });
+    if (!holding) return null;
     await jobQueue.enqueue({
       kind: DETECT_INSURER_JOB_KIND, householdId, documentId, consentGrantId, payload: { holdingId: holding.id },
       dedupeKey: createHash('sha256').update(`${DETECT_INSURER_JOB_KIND}\u0000${holding.id}\u0000${documentId}`).digest('hex'), maxAttempts: HOLDING_JOB_MAX_ATTEMPTS,

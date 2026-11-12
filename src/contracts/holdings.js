@@ -42,6 +42,14 @@ export const CONFLICT_RESOLUTIONS = Object.freeze(['pending', 'user_chose', 'ins
 // Resolved slot statuses a read can return. No bare "confirmed" (AI.md, ADR 0003, ADR 0009).
 export const RESOLVED_STATUSES = Object.freeze(['extracted_unverified', 'conflicting', 'unknown', 'reviewed_reference', 'user_confirmed']);
 
+// `summary` of a holding in GET /api/v1/households/{id}/holdings and /holdings/{holdingId} (deterministic, stored data only):
+//   { insurerName: string | null, productName: string | null, sumInsured: Headline | null, policyPeriod: Headline | null, premium: Headline | null }
+//   Headline = { factKey, value, status }, status from RESOLVED_STATUSES. Names are null until the owner confirmed the product (policy_profiles
+//   state 'reported'); never a candidate, never the UIN. Field -> existing fact key of src/contracts/policy-facts.js:
+export const HOLDING_SUMMARY_HEADLINES = Object.freeze({ sumInsured: 'sum_insured', policyPeriod: 'policy_period', premium: 'premium_total' });
+// GET /api/v1/holdings/{id}/facts: each source `page` is { pageId, blockIndex, documentKind } where documentKind is the document_kind of the
+// page's document (policy_schedule, policy_wording, ...), or null.
+
 // Coded, client-safe errors of the holdings routes are registered in src/contracts/error-codes.js (HOLDING_*, MEMORY_CONFLICT_*).
 
 // HOLDINGS_ENABLED (off unless exactly "true") lives in src/backend/services/holdings-flag.js.
