@@ -102,7 +102,59 @@ function parseEvidence(raw) {
   const sha256 = text(value.sha256, 64);
   if (!SHA256.test(sha256)) throw invalid();
   if (!Number.isInteger(value.page_number) || value.page_number < 1) throw invalid();
-  return { documentId: text(value.document_id, 100), pageNumber: value.page_number, sha256 };
+  const pageSha256 = value.page_sha256 === undefined || value.page_sha256 === null ? null : text(value.page_sha256, 64);
+  if (pageSha256 !== null && !SHA256.test(pageSha256)) throw invalid();
+  return { documentId: text(value.document_id, 100), pageNumber: value.page_number, sha256, pageSha256 };
+}
+
+// FSS fact type -> coverage family. Mirrors insurance-data-api apps/api/src/products.routes.ts (the `families` CTE and
+// `familyTypes`); coverage is reported per family, never per fact type. Types outside the map have no family and stay unknown.
+export const FSS_FACT_FAMILY = Object.freeze({
+  room_rent_limit: 'room_rent_limit',
+  copay: 'copay',
+  initial_waiting_period: 'waiting_periods',
+  pre_existing_disease_waiting_period: 'waiting_periods',
+  specific_disease_waiting_period: 'waiting_periods',
+  excluded_conditions: 'exclusions',
+});
+export const familyForFactType = factType => (Object.hasOwn(FSS_FACT_FAMILY, factType) ? FSS_FACT_FAMILY[factType] : null);
+// A family is usable when FSS reports it verified or partial; anything else (awaiting_review, not_permitted,
+// not_observed, conflicting_evidence) never yields a decided value.
+const USABLE_FAMILY_STATUS = new Set(['verified', 'partial']);
+export const MAX_FACT_PAGES = 5;
+
+const optionalNumber = value => {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw invalid();
+  return value;
+};
+// openapi FactValue. Structured fields are kept (bounded); unknown keys are dropped. `kind` is tolerated when absent.
+function parseValue(raw) {
+  if (raw === undefined || raw === null) return null;
+  const value = object(raw);
+  const duration = value.duration === undefined || value.duration === null ? null : (() => {
+    const d = object(value.duration);
+    return { value: optionalNumber(d.value), unit: text(d.unit, 20) };
+  })();
+  return {
+    kind: optionalText(value.kind, 40),
+    number: optionalNumber(value.number),
+    amount: optionalNumber(value.amount),
+    percentage: optionalNumber(value.percentage),
+    unit: optionalText(value.unit, 40),
+    currency: optionalText(value.currency, 10),
+    denominator: optionalText(value.denominator, 100),
+    text: optionalText(value.text, MAX_LONG_TEXT),
+    limitType: optionalText(value.limit_type, 60),
+    appliesTo: optionalText(value.applies_to, 20),
+    period: optionalText(value.period, 20),
+    periodType: optionalText(value.period_type, 60),
+    duration,
+    roomCategories: value.room_categories === undefined ? [] : array(value.room_categories, 20).map(c => text(c, 100)),
+    applicableCondition: optionalText(value.applicable_condition, MAX_LONG_TEXT),
+    exclusionCategory: optionalText(value.exclusion_category, 60),
+    scope: optionalText(value.scope, MAX_LONG_TEXT),
+  };
 }
 
 function parseFact(raw, versionSynthetic, coverageByFamily) {
@@ -111,23 +163,27 @@ function parseFact(raw, versionSynthetic, coverageByFamily) {
     factId: text(value.fact_id, 100),
     factType: text(value.fact_type, 100),
     valueText: optionalText(isObject(value.value) ? value.value.text : null, MAX_LONG_TEXT),
+    value: parseValue(value.value),
     conditions: textList(value.conditions),
     exceptions: textList(value.exceptions),
     verificationStatus: text(value.verification_status, 100),
     taxonomyVersion: optionalText(value.taxonomy_version, 100),
     reviewId: optionalText(value.review_id, 100),
+    reviewerId: optionalText(value.reviewer_id, 100),
     sourceFreshness: optionalText(value.source_freshness, 100),
     evidence: array(value.evidence ?? [], 20).map(parseEvidence),
   };
-  // X1 rule 4: usable only when independently verified, non-synthetic, evidenced and the family coverage is verified.
-  const family = coverageByFamily.get(fact.factType) ?? null;
+  // X1 rule 4: usable only when independently verified, non-synthetic, evidenced and its FAMILY coverage is verified or
+  // partial. Coverage is keyed by family (FSS_FACT_FAMILY), not by fact type.
+  const familyName = familyForFactType(fact.factType);
+  const family = familyName === null ? null : coverageByFamily.get(familyName) ?? null;
   const usable = fact.verificationStatus === 'independently_verified' && versionSynthetic === false
-    && fact.evidence.length > 0 && family === 'verified';
+    && fact.evidence.length > 0 && USABLE_FAMILY_STATUS.has(family);
   const outcome = usable ? 'verified' : family === 'conflicting_evidence' ? 'conflicting' : 'unknown';
   // Never carry the value forward unless usable: a non-usable fact is `unknown`/`conflicting`, not a decided value.
   // Conditions and exceptions qualify a value, so they are dropped with it.
-  if (!usable) return { ...fact, valueText: null, conditions: [], exceptions: [], outcome };
-  return { ...fact, outcome };
+  if (!usable) return { ...fact, valueText: null, value: null, conditions: [], exceptions: [], outcome, family: familyName };
+  return { ...fact, outcome, family: familyName };
 }
 
 export function parseFacts(raw) {
@@ -148,7 +204,23 @@ export function parseFacts(raw) {
     versionSynthetic,
     coverage,
     facts: array(value.facts ?? []).map(fact => parseFact(fact, versionSynthetic, coverageByFamily)),
+    nextCursor: nextCursor(value.next_cursor),
   };
+}
+
+/** Reads every facts page through `readPage(cursor)` (resolving to parsed facts), at most MAX_FACT_PAGES pages. Merges
+ * facts; coverage and version fields come from the first page. `truncated` is true when more pages remained. */
+export async function collectFactPages(readPage, { maxPages = MAX_FACT_PAGES } = {}) {
+  const limit = Math.min(maxPages, MAX_FACT_PAGES);
+  let merged = null;
+  let cursor;
+  for (let page = 0; page < limit; page += 1) {
+    const current = await readPage(cursor);
+    merged = merged === null ? { ...current, facts: [...current.facts] } : { ...merged, facts: [...merged.facts, ...current.facts] };
+    cursor = current.nextCursor ?? null;
+    if (cursor === null) return { ...merged, nextCursor: null, pages: page + 1, truncated: false };
+  }
+  return { ...merged, nextCursor: cursor, pages: limit, truncated: true };
 }
 
 // ---- Service-only endpoints (registry listing, name search, export by UIN) ---------------------------------------------

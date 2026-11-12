@@ -19,3 +19,19 @@ export function errorForStatus(status, retryAfterMs = null) {
   if (status === 400) return referenceError('REFERENCE_DATA_REQUEST_REJECTED', 'Reference data service rejected the request.', { statusCode: 502 });
   return referenceError('REFERENCE_DATA_UNAVAILABLE', 'Reference data is unavailable.', { retryable: true, statusCode: 503 });
 }
+
+export const REFERENCE_NO_USABLE_FACTS = 'REFERENCE_DATA_NO_USABLE_FACTS';
+/** Maps each ReferenceDataError code to the failure state name used by callers (design: unavailable, rate_limited,
+ * unauthorized, no_match, invalid_response, disabled, no_usable_facts). Unknown codes map to `unavailable`. */
+export const REFERENCE_FAILURE_STATE = Object.freeze({
+  REFERENCE_DATA_UNAVAILABLE: 'unavailable',
+  REFERENCE_DATA_RESPONSE_TOO_LARGE: 'invalid_response',
+  REFERENCE_DATA_RATE_LIMITED: 'rate_limited',
+  REFERENCE_DATA_AUTH_FAILED: 'unauthorized',
+  REFERENCE_DATA_NOT_FOUND: 'no_match',
+  REFERENCE_DATA_RESPONSE_INVALID: 'invalid_response',
+  REFERENCE_DATA_DISABLED: 'disabled',
+  [REFERENCE_NO_USABLE_FACTS]: 'no_usable_facts',
+});
+export const referenceFailureState = error => (error instanceof ReferenceDataError ? REFERENCE_FAILURE_STATE[error.code] ?? 'unavailable' : 'unavailable');
+export const noUsableFactsError = () => referenceError(REFERENCE_NO_USABLE_FACTS, 'Reference data had no usable facts.', { statusCode: 404 });

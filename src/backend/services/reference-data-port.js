@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { ReferenceDataError, referenceDataEnabled } from '../../integrations/index.js';
+import { ReferenceDataError, referenceDataEnabled, collectFactPages } from '../../integrations/index.js';
 
 // ReferenceDataPort (B3): reads PUBLIC insurance reference data (insurers, products, versions, facts) through the D3
 // cache (migration 033). Off unless REFERENCE_DATA_ENABLED is exactly "true". Reference data is context only: it never
@@ -18,6 +18,8 @@ export const signatureFor = body => digest(canonical(body));
 export function createReferenceDataPort({ repository, client, env = process.env, owner = `ref-${randomUUID()}`, leaseMs } = {}) {
   if (!repository || !client) throw new TypeError('createReferenceDataPort needs a repository and a client.');
   const unavailable = () => new ReferenceDataError('REFERENCE_DATA_UNAVAILABLE', 'Reference data is unavailable.', { retryable: true, statusCode: 503 });
+
+  const factsParams = ({ versionId, factType, cursor }) => ({ versionId, ...(factType === undefined ? {} : { factType }), ...(cursor == null ? {} : { cursor }) });
 
   async function read(endpoint, rawParams) {
     if (!referenceDataEnabled(env)) {
@@ -59,12 +61,33 @@ export function createReferenceDataPort({ repository, client, env = process.env,
     }
   }
 
+  /** Cache-only read: never fetches, never takes a lease, never writes. Null on disabled, miss or a corrupt row. */
+  async function peek(endpoint, rawParams) {
+    if (!referenceDataEnabled(env)) return null;
+    const key = cacheKeyFor(endpoint, client.normalizeParams(endpoint, rawParams));
+    const row = await repository.get(key);
+    if (!row || row.signature !== signatureFor(row.body)) return null;
+    return { data: row.body, source: 'cache', stale: !row.fresh, fetchedAt: row.fetchedAt, referenceContextOnly: true };
+  }
+
   return {
+    peek,
+    peekFacts: ({ versionId, factType, cursor }) => peek('versions.facts', factsParams({ versionId, factType, cursor })),
+    /** All facts pages (max 5) through the cache. Coverage comes from the first page. */
+    async getAllFacts({ versionId, factType }) {
+      const pages = [];
+      const merged = await collectFactPages(async cursor => {
+        const result = await read('versions.facts', factsParams({ versionId, factType, cursor }));
+        pages.push(result);
+        return result.data;
+      });
+      return { data: merged, source: pages.every(p => p.source === 'cache') ? 'cache' : 'service', stale: pages.some(p => p.stale), referenceContextOnly: true };
+    },
     searchInsurers: ({ q }) => read('insurers.search', { q }),
     resolveInsurer: ({ q }) => read('insurers.resolve', { q }),
     searchProducts: params => read('products.search', params),
     getProduct: ({ productId }) => read('products.get', { productId }),
     listVersions: ({ productId }) => read('products.versions', { productId }),
-    getFacts: ({ versionId, factType }) => read('versions.facts', factType === undefined ? { versionId } : { versionId, factType }),
+    getFacts: ({ versionId, factType, cursor }) => read('versions.facts', factsParams({ versionId, factType, cursor })),
   };
 }
