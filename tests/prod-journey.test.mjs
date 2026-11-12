@@ -10,6 +10,7 @@ import { JobQueueRepository, ProviderCallRepository } from '../src/backend/repos
 import { createModelRouter, createVoyageEmbedClient } from '../src/integrations/index.js';
 import { createChatModelGateway, createHouseholdDayBudget } from '../src/features/ai-analysis/chat-runtime.js';
 import { buildJobHandlers } from '../src/server/worker.js';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 // The production journey for one household and one holding, over local stubs only (Sarvam, Gemini, Anthropic, Voyage, reference data):
 // upload (schedule and wording) -> OCR -> structuring -> holdings jobs (detect, confirm-product, parse, reference, collate, memorise)
@@ -39,7 +40,7 @@ const structuringDriver = requests => ({
     requests.push(settings.id);
     if (settings.id.endsWith('reconcile')) return { output: { conflicts: [] }, totalUsage: { inputTokens: 10, outputTokens: 2 } };
     const items = [];
-    for (const chunk of JSON.parse(prompt).chunks) {
+    for (const chunk of parseRenderedReference(prompt).payload.chunks) {
       for (const line of chunk.text.split('\n')) {
         if (line.includes('36 months')) items.push({ chunk_id: chunk.chunk_id, registry_key: 'f.ped_waiting_period', value: '36 months', subject: 'policy', evidence_quote: line.trim(), page: chunk.page, block_index: chunk.block_indexes[0], confidence: 'high', rationale: 'Printed.' });
       }
@@ -49,7 +50,7 @@ const structuringDriver = requests => ({
 });
 const chatAgent = sent => () => ({ async generate({ prompt }) {
   sent.push(prompt);
-  const input = JSON.parse(prompt);
+  const input = parseRenderedReference(prompt).payload;
   // Answers only a question about the waiting period, the sum insured or an exclusion in the wording; anything else gets no fact, like an honest model.
   const question = JSON.stringify(input.question);
   const pick = (asked, shown) => (asked.test(question) ? (input.facts ?? []).find(item => shown.test(JSON.stringify(item.label) + JSON.stringify(item.value))) : null);

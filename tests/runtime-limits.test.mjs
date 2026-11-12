@@ -30,7 +30,7 @@ test('two machines share one request limit and the counters hold no address', po
   await two.check('203.0.113.11', { shared: false });
   assert.equal(await count(db, 'rate_limit_buckets'), before);
   const keys = await db.many('SELECT key_hash FROM rate_limit_buckets');
-  assert.ok(keys.every(row => /^[0-9a-f]{32}$/.test(row.key_hash) && !row.key_hash.includes('203')));
+  assert.ok(keys.every(row => /^[0-9a-f]{32}$/.test(row.key_hash) && !row.key_hash.includes('203.0.113')));
   // A new window starts fresh and old windows can be purged.
   now += 61_000;
   assert.equal((await one.check('203.0.113.9')).remaining, 2);
