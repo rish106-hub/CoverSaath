@@ -123,23 +123,25 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   }),
   // Holdings and memory (migrations 048-052, ADR 0032). Sealed: memory values and references, declaration labels, premium amounts and
   // agent name and code. recipients none: a model never receives these rows (modelEligible stays false, the default).
+  // FOR LEGAL REVIEW (audit F2): the opened value is gated and sent to the chat model (anthropic) as a fact slot, and its redacted
+  // passage to the embedding provider (voyage). Recipients name those processors; rows are still sent only under the chat/embed grants.
   table('household_memory_facts.value_enc', {
-    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',
-    childData: 'possible', erasure: ERASE.memory,
+    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: [ANTHROPIC, 'voyage'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', crossBorder: 'possible', erasure: ERASE.memory,
   }),
   table('household_memory_facts.reference_ref_enc', {
     category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',
     childData: 'possible', erasure: ERASE.memory,
   }),
   // Memory chunks and chat v1 (migrations 053-054, ADR 0031 and 0029). chunk_text_enc is the REDACTED passage; the embedding is plaintext
-  // by necessity and is classified, not sealed. recipients provider: the embedding provider receives the redacted passage once, at write time.
+  // by necessity and is classified, not sealed. recipients (FOR LEGAL REVIEW): voyage receives the redacted passage once, at write time; anthropic receives it as a chat slot at answer time. The embedding vector goes to voyage only.
   table('memory_chunks.chunk_text_enc', {
-    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',
-    childData: 'possible', erasure: ERASE.memory,
+    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: [ANTHROPIC, 'voyage'], sealed: true, retention: 'until_revocation',
+    childData: 'possible', crossBorder: 'possible', erasure: ERASE.memory,
   }),
   table('memory_chunks.embedding', {
-    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: false, retention: 'until_revocation',
-    childData: 'possible', erasure: ERASE.memory,
+    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: ['voyage'], sealed: false, retention: 'until_revocation',
+    childData: 'possible', crossBorder: 'possible', erasure: ERASE.memory,
   }),
   table('chat_turns.content_enc', {
     category: 'insurance_question', purposes: ['coverage_reconstruction'], recipients: ['none'], sealed: true, retention: 'until_revocation',

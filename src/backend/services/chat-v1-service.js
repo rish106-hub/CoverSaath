@@ -45,6 +45,13 @@ const only = (value, keys, name) => {
   return value;
 };
 
+// Numbers as comparable tokens: thousands separators dropped, leading zeros and trailing decimal zeros normalised.
+const numbersIn = text => (String(text ?? '').replace(/\{\{[A-Z_]+\d*\}\}/g, ' ').match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map(token => String(Number(token.replace(/,/g, ''))));
+export function numbersSupported(answer, sources) {
+  const allowed = new Set(sources.flatMap(numbersIn));
+  return numbersIn(answer).every(number => allowed.has(number));
+}
+
 function validateProcedure(raw) {
   if (raw === undefined) return null;
   const body = only(raw, CHAT_PROCEDURE_KEYS, 'procedure');
@@ -71,7 +78,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
   const voiceAudioRetained = () => env.VOICE_AUDIO_RETAIN === 'true';
 
   // The facts, conflicts and holdings in scope of a thread.
-  async function gatherContext({ householdId, thread }) {
+  async function gatherContext({ householdId, thread, mayReadFacts }) {
     const holdingRows = thread.holdingId ? [{ id: thread.holdingId }]
       : await database.many(`SELECT id FROM policy_holdings WHERE household_id = ? AND status IN ('parsed', 'conflicts', 'ready') ORDER BY created_at, id LIMIT ?`, [householdId, MAX_HOLDINGS]);
     const facts = [];
@@ -79,6 +86,12 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const documents = [];
     const places = new Map();
     for (const { id: holdingId } of holdingRows) {
+      // Audit F7: holding facts and conflicts are owner-only (holding-facts-routes.js); a non-owner member gets neither here.
+      if (!mayReadFacts) {
+        const holding = await holdingRepository.getHolding({ householdId, holdingId });
+        if (holding?.documentId) documents.push({ holdingId, documentId: holding.documentId });
+        continue;
+      }
       const rows = await holdingRepository.currentMemory({ householdId, holdingId });
       // Own-document readings still unverified are served too, with their status kept (never presented as confirmed).
       for (const fact of resolvedConfirmedFacts(rows, { includeUnverified: true })) facts.push({ ...fact, holdingId });
@@ -99,9 +112,27 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
       const row = await database.one(`SELECT case_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
       if (!row?.case_id) continue;
       const hits = await clauses.searchClauses({ householdId, caseId: row.case_id, documentIds: [documentId], query: message, limit: KEYWORD_K });
-      for (const hit of hits) found.push({ id: hit.clauseId, page: hit.page ?? null, text: hit.text, documentId });
+      for (const hit of hits) found.push({ id: hit.clauseId, documentId, page: hit.page ?? null, text: hit.text });
     }
     return found.slice(0, KEYWORD_K);
+  }
+
+  // Audit F5 + owner scope: a wording answer names the policy document and page it rests on. Pages come from policy_clauses; a stored passage
+  // knows its clause only by hash (memory-service.js), so the hash is matched here. Ids shown are document ids, never text.
+  async function wordingSources({ householdId, passageList, clauseList }) {
+    const out = [];
+    const seen = new Set();
+    const push = (documentId, page, ref) => { const key = `${documentId}|${page}|${ref}`; if (documentId && !seen.has(key)) { seen.add(key); out.push({ kind: 'wording', document_id: documentId, page, ref }); } };
+    for (const clause of clauseList) push(clause.documentId, clause.page, `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`);
+    const byDocument = new Map();
+    for (const passage of passageList.filter(item => item.scope === 'own_pdf' && item.sourceDocumentId)) {
+      if (!byDocument.has(passage.sourceDocumentId)) {
+        const rows = await database.many(`SELECT id, page FROM policy_clauses WHERE household_id = ? AND document_id = ?`, [householdId, passage.sourceDocumentId]);
+        byDocument.set(passage.sourceDocumentId, new Map(rows.map(row => [`clause:${createHash('sha256').update(row.id).digest('hex').slice(0, 32)}`, row.page ?? null])));
+      }
+      push(passage.sourceDocumentId, byDocument.get(passage.sourceDocumentId).get(passage.sourceRef) ?? null, passage.sourceRef);
+    }
+    return out;
   }
 
   // Words a short answer over redacted facts. Resolves { text, factsUsed, meta } or null (use the deterministic answer).
@@ -118,7 +149,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const slots = [];
     const addSlot = async ({ id, label, value, fact = null, checkFactIds = null }) => {
       const key = alias(householdId, id);
-      aliasToFact.set(key, { fact, checkFactIds });
+      aliasToFact.set(key, { fact, checkFactIds, text: value });
       slots.push({ fact_id: key, label: gateText(label, { knownIdentifiers: [] }), value: (await gateTextForHousehold(value, { householdId, loadKnownIdentifiers: loader })).gated });
     };
     for (const fact of relevant.slice(0, MAX_FACTS_TO_MODEL)) {
@@ -131,7 +162,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
       // Stored passages were redacted at write time; their tokens are renamed so they never rehydrate as this question's people.
       const text = passage.text.replace(/\{\{([A-Z][A-Z_]*_\d+)\}\}/g, '{{PASSAGE_$1}}');
       const key = alias(householdId, passage.id);
-      aliasToFact.set(key, { chunkId: passage.id });
+      aliasToFact.set(key, { chunkId: passage.id, text: passage.text });
       slots.push({ fact_id: key, label: gateText('Policy passage', { knownIdentifiers: [] }), value: gateText(text, { regate: true, knownIdentifiers: [] }) });
     }
     const historyGated = [];
@@ -158,8 +189,13 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
       else if (entry?.chunkId) usedChunks.push(entry.chunkId);
       else if (entry?.checkFactIds) for (const id of entry.checkFactIds) { const f = context.facts.find(item => item.sourceIds.includes(id)); if (f && !usedFacts.includes(f)) usedFacts.push(f); }
     }
+    // Audit F5: code, not the model, decides that the cited evidence supports the numbers. Every number in the answer must appear in
+    // the formatted value of a cited fact or passage, or in a computed check; otherwise the deterministic answer stands.
+    const allowed = [...result.output.factsUsed.map(key => aliasToFact.get(key)?.text ?? ''), ...(plan?.checks ?? []).map(check => check.detail)];
+    const answerText = question.rehydrate(result.output.answer);
+    if (!numbersSupported(answerText, allowed)) return { failed: 'numbers_unverified' };
     return {
-      text: question.rehydrate(result.output.answer), usedFacts, usedChunks, redactedPromptHash,
+      text: answerText, usedFacts, usedChunks, redactedPromptHash,
       meta: { provider: result.metadata.provider, model: result.metadata.model, tokensIn: result.metadata.inputTokens, tokensOut: result.metadata.outputTokens, costUsd: result.metadata.costUsd, latencyMs: Date.now() - startedAt },
     };
   }
@@ -210,7 +246,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
           const startedAt = Date.now();
           try {
             const { intent, factKeys } = classifyChatMessage(message, { hasProcedure: procedure !== null });
-            const context = await gatherContext({ householdId, thread });
+            const mayReadFacts = await chatRepository.mayReadHoldingFacts({ householdId, adultId: principal.adultId });
+            const context = await gatherContext({ householdId, thread, mayReadFacts });
             const conflictKeys = new Set(context.conflicts.map(item => item.factKey));
             const byKey = new Set(factKeys);
             const relevant = intent === 'procedure_planning' ? context.facts.filter(fact => fact.status !== 'extracted_unverified') : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
@@ -221,7 +258,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             let mode = 'facts_only';
             let passages = [];
             const answersTopic = factKeys.some(key => context.facts.some(fact => fact.factKey === key));
-            if (!answersTopic && intent !== 'procedure_planning') {
+            if (mayReadFacts && !answersTopic && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
               const vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: message });
               if (vector) {
                 passages = await chunks.search({ householdId, holdingIds: context.holdingIds.length ? context.holdingIds : null, embedding: vector, limit: VECTOR_K });
@@ -253,15 +290,16 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               assistantMeta = { ...model.meta, redactedPromptHash: model.redactedPromptHash };
             } else if (model?.failed) assistantMeta = { modelStatus: model.failed };
 
+            const citedPassages = passages.filter(item => usedChunks.includes(item.id));
+            const sources = await wordingSources({ householdId, passageList: answerSource === 'model' ? citedPassages : [], clauseList: answerSource === 'model' ? [] : clauseHits });
             // Code owns the status: an answer that rests on no fact, chunk or computed check is "unknown".
-            const status = usedFacts.length > 0 || usedChunks.length > 0 || (plan?.checks.length ?? 0) > 0 ? 'evidence_found' : 'unknown';
+            const status = usedFacts.length > 0 || usedChunks.length > 0 || sources.length > 0 || (plan?.checks.length ?? 0) > 0 ? 'evidence_found' : 'unknown';
             const factIds = [...new Set(usedFacts.map(fact => fact.sourceIds[0]))];
-            // Where the answer rests, for the client to cite: own-document readings with their verbatim quote, document and page; wording
-            // passages with their document and printed page. Status is the fact's own (an own-document reading stays extracted_unverified).
-            const sources = [
-              ...usedFacts.map(fact => ({ kind: 'fact', fact_id: fact.sourceIds[0], fact_key: fact.factKey, status: fact.status, document_id: context.places.get(fact.sourceIds[0])?.documentId ?? null, page: context.places.get(fact.sourceIds[0])?.page ?? null, quote: context.places.get(fact.sourceIds[0])?.quote ?? null })),
-              ...passages.filter(item => usedChunks.includes(item.id)).map(item => ({ kind: 'passage', chunk_id: item.id, document_id: item.sourceDocumentId ?? null, page: item.page ?? null, quote: item.text.replace(/\s+/g, ' ').slice(0, 300) })),
-            ];
+            // Own-document readings the answer rests on, with their verbatim quote, document and page (status stays extracted_unverified).
+            for (const fact of usedFacts) {
+              const place = context.places.get(fact.sourceIds[0]);
+              if (place?.documentId) sources.push({ kind: 'fact', fact_id: fact.sourceIds[0], fact_key: fact.factKey, status: fact.status, document_id: place.documentId, page: place.page, quote: place.quote });
+            }
             const stored = await chatRepository.appendExchange({
               householdId, threadId,
               user: { text: message, inputKind, audioDocumentId },

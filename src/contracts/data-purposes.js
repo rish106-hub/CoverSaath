@@ -310,7 +310,7 @@ export const DATA_REGISTRY = Object.freeze({
     ['id', 'household_id', 'holding_id', 'created_by_adult_id', 'created_at', 'updated_at']),
   chat_turns: entry('coverage_reconstruction',
     { health_or_policy_content: ['content_enc', 'transcript_enc'] },
-    ['id', 'household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'audio_document_id', 'intent', 'answer_source', 'provider', 'model', 'redacted_prompt_hash', 'tokens_in', 'tokens_out', 'cost_paise', 'latency_ms', 'created_at']),
+    ['id', 'household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'audio_document_id', 'consent_grant_id', 'intent', 'answer_source', 'provider', 'model', 'redacted_prompt_hash', 'tokens_in', 'tokens_out', 'cost_paise', 'latency_ms', 'created_at']),
   retrieval_traces: entry('coverage_reconstruction', {},
     ['id', 'household_id', 'thread_id', 'turn_id', 'mode', 'holding_ids', 'fact_ids', 'chunk_ids', 'conflict_ids', 'created_at']),
   // Provider call audit (migration 056, ADR 0030): counts, a sha256 of the redacted payload, usage and cost; never a prompt or a response.
