@@ -179,7 +179,8 @@ test('F2: every MODEL_ROUTES route has its payload slots registered with the rou
     assert.ok(slots.length > 0, `${task} has registry slots`);
     for (const slot of slots) {
       const routed = routes.map(route => route.provider);
-      assert.ok(slot.recipients.every(recipient => routed.includes(recipient)) && routed.some(provider => slot.recipients.includes(provider)), `${slot.field} recipient matches route ${routed}`);
+      // Every routed provider is a recipient of the slot (and nothing else is), so a failover never sends to an unregistered processor.
+      assert.deepEqual([...slot.recipients].sort(), [...routed].sort(), `${slot.field} recipients match route ${routed}`);
       assert.equal(slot.consentScope?.recipient, slot.recipients[0], `${slot.field} scope names the same recipient`);
     }
   }
@@ -187,7 +188,8 @@ test('F2: every MODEL_ROUTES route has its payload slots registered with the rou
 });
 
 test('F2: stores whose opened values become model slots list the real recipients, not none (FOR LEGAL REVIEW)', () => {
-  assert.deepEqual([...purposeEntry('db:household_memory_facts.value_enc').recipients].sort(), ['anthropic', 'voyage']);
-  assert.deepEqual([...purposeEntry('db:memory_chunks.chunk_text_enc').recipients].sort(), ['anthropic', 'voyage']);
+  const everyProvider = [...new Set([...MODEL_ROUTES.chat_answer, ...MODEL_ROUTES.embed].map(route => route.provider))].sort();
+  assert.deepEqual([...purposeEntry('db:household_memory_facts.value_enc').recipients].sort(), everyProvider);
+  assert.deepEqual([...purposeEntry('db:memory_chunks.chunk_text_enc').recipients].sort(), everyProvider);
   assert.deepEqual([...purposeEntry('db:memory_chunks.embedding').recipients], ['voyage']);
 });

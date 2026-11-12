@@ -15,6 +15,10 @@ Every flag is off unless exactly `true` (set in `.env.local` locally; never comm
 
 Embeddings need `MODEL_PROVIDERS` to include `voyage`, plus `VOYAGE_API_KEY` and `VOYAGE_INPUT_USD_PER_MILLION` (see `.env.example` comments). The model answer needs the `anthropic` provider with `ANTHROPIC_API_KEY` and its two `ANTHROPIC_*_USD_PER_MILLION` prices. Without a key, a spent budget or a refusal, the gateway returns a typed `unknown` and chat falls back to facts and a keyword match over `policy_clauses`.
 
+Model failover (FOR LEGAL REVIEW): chat tasks route Gemini, then anthropic, openai, deepseek, kimi (`MODEL_ROUTES`). A provider is used only if it is enabled in `MODEL_PROVIDERS`, has a key and rates, and the acting adult holds a current exact `coverage_reconstruction` grant whose scope names that provider as recipient (`gemini`, `anthropic`, ...). Without its grant a provider is skipped, never called; the next one is tried only after a typed unavailable or a failed call, and the grant is re-checked before each dispatch and again at commit (the stored turn names the provider that answered). Default `MODEL_PROVIDERS` is unchanged (`anthropic`); recommended `gemini,anthropic,openai,voyage`. Keep `deepseek` and `kimi` out until legal review (cross-border). openai, deepseek and kimi have no SDK adapter yet and answer a typed unavailable. Embeddings stay on voyage.
+
+No keys at all: no provider is called. The answer is the confirmed facts plus verbatim wording passages (with `sources` of document and page) found by keyword over the clauses of every active document in the holding's case (schedule and T&C), or `unknown`. No migration is needed for this path.
+
 Kill switch: set the flag to `false` (or remove it) and restart. `CHAT_MODEL_ENABLED=false` alone stops every model call from chat; memory and deterministic answers keep working.
 
 ## 2. Local setup

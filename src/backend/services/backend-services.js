@@ -113,7 +113,7 @@ export function createBackendServices(database, options = {}) {
     embedClientFor: route => createVoyageEmbedClient({ apiKey: route.apiKey, model: route.model, fetchImpl: options.fetchImpl }),
   });
   const providerConsent = createProviderConsent({ database, clock: options.clock });
-  const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, gateway: modelGateway, loadKnownIdentifiers, providerConsent, env });
+  const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, ocr, database, gateway: modelGateway, loadKnownIdentifiers, providerConsent, env });
   const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts: options.referenceFacts, memory, analytics, env });
   const chatRepository = new ChatRepository(database, { ...shared, households });
   const chatV1 = createChatV1Service({ chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, providerConsent, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });

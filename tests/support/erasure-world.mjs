@@ -66,6 +66,10 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   // Holdings and memory (migrations 048-052): every store gets a row; the sealed columns hold envelope-shaped values carrying the canary.
   ids.holding = `holding-${key}`;
   await insert(pool, 'policy_holdings', { id: ids.holding, household_id: ids.household, policy_id: ids.policy, document_id: ids.document });
+  // A second document (the wording) linked to the holding (migration 065).
+  ids.wording = `wording-${key}`;
+  await insert(pool, 'document_uploads', { id: ids.wording, household_id: ids.household, case_id: ids.case, uploaded_by_adult_id: ids.adult, consent_grant_id: ids.consent, document_kind: 'policy_wording' });
+  await insert(pool, 'holding_documents', { id: `hdoc-${key}`, household_id: ids.household, holding_id: ids.holding, document_id: ids.wording });
   await insert(pool, 'household_memory_facts', { id: `mfact-a-${key}`, household_id: ids.household, holding_id: ids.holding, consent_grant_id: ids.consent, source_document_id: ids.document, source_page_id: ids.page, value_enc: `enc2.k1.${canary('memory-value')}` });
   await insert(pool, 'household_memory_facts', { id: `mfact-b-${key}`, household_id: ids.household, holding_id: ids.holding, fact_class: 'product_term', source_tier: 'ida_wording', status: 'reviewed_reference', consent_grant_id: ids.consent, source_document_id: ids.document, reference_ref_enc: `enc2.k1.${canary('memory-ref')}`, value_enc: `enc2.k1.${canary('memory-value2')}`, fact_key: 'room_rent_limit' });
   await insert(pool, 'household_memory_facts', { id: `mfact-c-${key}`, household_id: ids.household, holding_id: ids.holding, source_tier: 'user_declaration', status: 'user_confirmed', consent_grant_id: ids.consent, declared_by_adult_id: ids.adult, capture_method: 'typed', value_enc: `enc2.k1.${canary('memory-value3')}` });

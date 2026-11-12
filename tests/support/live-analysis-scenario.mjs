@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { testTempRoot as tmpdir } from './temp-root.mjs';
 import { freshDatabase } from './pg.mjs';
 import { createApiServer } from '../../src/server/server.js';
+import { parseRenderedReference } from '../../src/features/ai-analysis/prompt-pack.js';
 
 export const bootstrapToken = 'knowvia-live-test-bootstrap-token-001';
 export const liveEnv = Object.freeze({
@@ -52,7 +53,7 @@ export function stubModelDriver({ modelRequests = [], loadedModels = [], onGener
         const request = { agentId: settings.id, instructions: settings.instructions, prompt };
         modelRequests.push(request);
         await onGenerate?.(request, modelRequests.length);
-        return { output: output(settings.id, JSON.parse(prompt)), totalUsage: { inputTokens: 10, outputTokens: 5 } };
+        return { output: output(settings.id, parseRenderedReference(prompt).payload), totalUsage: { inputTokens: 10, outputTokens: 5 } };
       },
     }),
   };

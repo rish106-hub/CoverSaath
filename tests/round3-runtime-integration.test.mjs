@@ -10,6 +10,7 @@ import { auditActions, liveEnv, mockOutput, setupLiveCase, startLiveServer, stub
 import { seedParameterWorld } from './support/parameter-fixtures.mjs';
 import { freshDatabase, postgresTestOptions } from './support/pg.mjs';
 import { plainRow, plainRows } from './support/sealed.mjs';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 const pg = postgresTestOptions();
 
@@ -391,7 +392,7 @@ test('T4: question citations are the single opaque id of an authorised source, n
   const doubleHashed = opaqueSourceId(opaque);
 
   const request = modelRequests.find(entry => entry.agentId.endsWith('question_drafting'));
-  const sent = JSON.parse(request.prompt);
+  const sent = parseRenderedReference(request.prompt).payload;
   assert.ok(sent.sources.length >= 1);
   assert.ok(sent.sources.every(source => source.id === opaque), 'question sources are opaqued exactly once');
   assert.ok(!request.prompt.includes(doubleHashed));

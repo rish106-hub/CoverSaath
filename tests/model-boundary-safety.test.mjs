@@ -6,6 +6,7 @@ import { RESTRICTED_PROBES, TOKENIZED_PROBES } from './support/privacy-probes.mj
 import { postgresTestOptions } from './support/pg.mjs';
 import { liveEnv, mockOutput, setupLiveCase, startLiveServer, stubModelDriver } from './support/live-analysis-scenario.mjs';
 import { plainRows } from './support/sealed.mjs';
+import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 const MODEL_AGENT_IDS = [
   'knowvia-evidence_synthesis', 'knowvia-group_cover_extraction', 'knowvia-personal_cover_extraction',
@@ -78,15 +79,15 @@ test('prompt injection inside OCR text stays in untrusted evidence and cannot ch
   for (const request of modelRequests) {
     const task = request.agentId.replace(/^knowvia-/, '');
     // System/developer instructions are the fixed per-task contract; evidence never enters them.
-    assert.equal(request.instructions, buildPromptContract(task, JSON.parse(request.prompt)).system);
-    assert.ok(request.instructions.startsWith(AI_RESPONSIBILITY_MATRIX[task]));
+    assert.equal(request.instructions, buildPromptContract(task, parseRenderedReference(request.prompt).payload).system);
+    assert.ok(request.instructions.includes(AI_RESPONSIBILITY_MATRIX[task]));
     assert.doesNotMatch(request.instructions, /IGNORE PREVIOUS|you are the insurer|mark everything covered/i);
   }
   // The injected text appears only inside source text of the evidence payload.
   const carrying = modelRequests.filter(request => request.prompt.includes('IGNORE PREVIOUS INSTRUCTIONS'));
   assert.ok(carrying.length >= 1);
   for (const request of carrying) {
-    const evidence = JSON.parse(request.prompt);
+    const evidence = parseRenderedReference(request.prompt).payload;
     const inSources = evidence.sources.some(source => source.text.includes('IGNORE PREVIOUS INSTRUCTIONS'));
     const inContext = JSON.stringify(evidence.context).includes('IGNORE PREVIOUS');
     assert.ok(inSources && !inContext, 'injection must stay inside sources[].text');

@@ -4,21 +4,23 @@
 // ledger. It lives under scripts/ so that nothing in src/ can build a provider request (scripts/check-architecture.mjs). The
 // product path is createStructuringModelCallFactory. Never import this from src/ and never point it at real household data.
 import { ADJUDICATOR_LIMITS } from '../../src/features/ai-analysis/field-adjudicator.js';
+import { renderProviderRequest } from '../../src/features/ai-analysis/prompt-pack.js';
 
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
 
-// Plain generateContent call: temperature 0, JSON schema output. The key is sent to Gemini over HTTPS in the x-goog-api-key header and is never logged or returned.
+// Plain generateContent call: systemInstruction plus one user turn rendered by the prompt pack, temperature 0, JSON schema output. The key is sent to Gemini over HTTPS in the x-goog-api-key header and is never logged or returned.
 export function createGeminiEvalCaller({ apiKey, model, fetchImpl = fetch, timeoutMs = ADJUDICATOR_LIMITS.timeoutMs }) {
   if (!apiKey || !model) fail('ADJUDICATOR_CONFIG', 'Gemini key and model are required.');
-  return async ({ system, payload, schema }) => {
+  return async ({ system, prompt, payload, schema }) => {
+    const rendered = renderProviderRequest('google', { system, user: prompt ?? JSON.stringify(payload) });
     const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
       signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: JSON.stringify(payload) }] }],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: toGeminiSchema(schema) },
+        systemInstruction: rendered.systemInstruction,
+        contents: rendered.contents,
+        generationConfig: { ...rendered.generationConfig, responseMimeType: 'application/json', responseSchema: toGeminiSchema(schema) },
       }),
     });
     if (!response.ok) fail('ADJUDICATOR_PROVIDER', `Gemini returned HTTP ${response.status}.`);

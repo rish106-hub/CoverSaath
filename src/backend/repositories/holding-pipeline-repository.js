@@ -69,6 +69,67 @@ export class HoldingPipelineRepository {
     return row ? Object.freeze({ id: row.id, sourceVersion: row.source_version, consentGrantId: row.consent_grant_id }) : null;
   }
 
+  /** The documents linked to a holding (migration 065): [{ documentId, kind, sourceVersion, consentGrantId }], active documents only. */
+  async linkedDocuments({ householdId, holdingId }) {
+    requireId(householdId, 'householdId'); requireId(holdingId, 'holdingId');
+    const rows = await this.database.many(`SELECT link.document_id, link.kind, document.source_version, document.consent_grant_id FROM holding_documents link
+      JOIN document_uploads document ON document.id = link.document_id AND document.household_id = link.household_id AND document.lifecycle_state = 'active'
+      WHERE link.household_id = ? AND link.holding_id = ? ORDER BY link.created_at, link.id LIMIT 20`, [householdId, holdingId]);
+    return rows.map(row => Object.freeze({ documentId: row.document_id, kind: row.kind, sourceVersion: row.source_version, consentGrantId: row.consent_grant_id }));
+  }
+
+  /**
+   * Links another active document of the household (its T&C wording, an endorsement) to a holding. Idempotent: a repeat resolves
+   * { linked: false }. Household ownership of both ends is re-checked inside the transaction; a foreign or missing id answers the
+   * same 404. Resolves { linked }.
+   */
+  async linkDocument({ householdId, holdingId, documentId, kind }) {
+    requireId(householdId, 'householdId'); requireId(holdingId, 'holdingId'); requireId(documentId, 'documentId');
+    if (!['wording', 'endorsement', 'other'].includes(kind)) throw coded('HOLDING_INPUT_INVALID', 'kind is invalid.', 400);
+    const at = this.clock().toISOString();
+    return this.database.transaction(async () => {
+      const db = this.database;
+      const holding = await db.one('SELECT id, document_id FROM policy_holdings WHERE id = ? AND household_id = ?', [holdingId, householdId]);
+      if (!holding) throw coded('HOLDING_NOT_FOUND', 'The holding was not found.', 404);
+      const document = await db.one(`SELECT id, consent_grant_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
+      if (!document) throw coded('DOCUMENT_NOT_FOUND', 'The document was not found.', 404);
+      if (document.id === holding.document_id) throw coded('HOLDING_INPUT_INVALID', 'The holding already has this document.', 400);
+      const inserted = await db.run(`INSERT INTO holding_documents (id, household_id, holding_id, document_id, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT (holding_id, document_id) DO NOTHING`, [`hdoc-${randomUUID()}`, householdId, holdingId, documentId, kind, at]);
+      return Object.freeze({ linked: inserted.changes === 1 });
+    }, { locks: [householdLock(householdId)] });
+  }
+
+  /** Removes a link and the memory chunks that came from the unlinked document for this holding. Resolves { unlinked }. */
+  async unlinkDocument({ householdId, holdingId, documentId }) {
+    requireId(householdId, 'householdId'); requireId(holdingId, 'holdingId'); requireId(documentId, 'documentId');
+    return this.database.transaction(async () => {
+      const db = this.database;
+      const removed = await db.run('DELETE FROM holding_documents WHERE household_id = ? AND holding_id = ? AND document_id = ?', [householdId, holdingId, documentId]);
+      if (removed.changes === 1) await db.run('DELETE FROM memory_chunks WHERE household_id = ? AND holding_id = ? AND source_document_id = ?', [householdId, holdingId, documentId]);
+      return Object.freeze({ unlinked: removed.changes === 1 });
+    }, { locks: [householdLock(householdId)] });
+  }
+
+  /**
+   * Where each own-PDF fact was read: for the given current memory rows, { [row id]: { documentId, page, quote } } (quote and page from the
+   * fact's primary evidence). Opened for the owning household's own answer only; never sent to a model.
+   */
+  async ownFactSources({ householdId, rows }) {
+    const own = rows.filter(row => row.tier === 'own_pdf' && row.policyFactId);
+    if (own.length === 0) return new Map();
+    const quotes = await this.ownQuotes({ householdId, policyFactIds: own.map(row => row.policyFactId) });
+    const pages = await this.database.many(`SELECT fact.id AS memory_id, fact.source_document_id, page.page_number FROM household_memory_facts fact
+      LEFT JOIN source_pages page ON page.id = fact.source_page_id WHERE fact.household_id = ? AND fact.id = ANY(CAST(? AS text[]))`, [householdId, own.map(row => row.id)]);
+    const byMemory = new Map(pages.map(row => [row.memory_id, row]));
+    const out = new Map();
+    for (const row of own) {
+      const place = byMemory.get(row.id);
+      out.set(row.id, Object.freeze({ documentId: place?.source_document_id ?? null, page: place?.page_number == null ? null : Number(place.page_number), quote: quotes.get(row.policyFactId) ?? null }));
+    }
+    return out;
+  }
+
   /** Conditional status write: only from `from`. Returns true when it changed. */
   async setStatus({ householdId, holdingId, from, to }) {
     if (from === to) return false;

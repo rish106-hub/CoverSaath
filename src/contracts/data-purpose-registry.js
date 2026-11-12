@@ -19,7 +19,19 @@ export const CONSENT_PURPOSES = Object.freeze([
 const GEMINI = 'google-gemini';
 const ANTHROPIC = 'anthropic';
 // Household chat and fact extraction (ADR 0030, S6). The grant that opens this scope is built with chat v1; FOR LEGAL REVIEW.
-const CHAT_SCOPE = Object.freeze({ resourceType: 'household', action: 'derive', dataCategory: 'insurance_question', recipient: ANTHROPIC });
+// Chat-model providers in failover order (MODEL_ROUTES chat_answer, intent_classify and fact_extract; a drift test ties the two). Each one is its
+// own recipient: a grant naming one provider never covers another, so a failover never sends to a provider the household did not consent to.
+// deepseek and kimi are cross-border processors; FOR LEGAL REVIEW before they are enabled (MODEL_PROVIDERS).
+export const CHAT_PROVIDERS = Object.freeze(['gemini', ANTHROPIC, 'openai', 'deepseek', 'kimi']);
+const chatScope = recipient => Object.freeze({ resourceType: 'household', action: 'derive', dataCategory: 'insurance_question', recipient });
+export const CHAT_PROVIDER_SCOPES = Object.freeze(Object.fromEntries(CHAT_PROVIDERS.map(provider => [provider, chatScope(provider)])));
+/** The consent scope a chat-model call to `provider` needs. Throws for a provider that is not a chat recipient. */
+export function chatScopeFor(provider) {
+  const scope = CHAT_PROVIDER_SCOPES[provider];
+  if (!scope) throw Object.assign(new TypeError('Unknown chat provider.'), { code: 'CHAT_PROVIDER_UNKNOWN' });
+  return scope;
+}
+const CHAT_SCOPE = CHAT_PROVIDER_SCOPES[ANTHROPIC];
 // The embedding provider (MODEL_ROUTES routes `embed` to voyage, ADR 0031): its own recipient, so a chat grant never covers it. FOR LEGAL REVIEW.
 const EMBED_SCOPE = Object.freeze({ resourceType: 'household', action: 'derive', dataCategory: 'insurance_question', recipient: 'voyage' });
 // The purpose a chat or embed grant must carry (resolved server side, re-checked at commit; src/backend/services/provider-consent.js).
@@ -126,7 +138,7 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   // FOR LEGAL REVIEW (audit F2): the opened value is gated and sent to the chat model (anthropic) as a fact slot, and its redacted
   // passage to the embedding provider (voyage). Recipients name those processors; rows are still sent only under the chat/embed grants.
   table('household_memory_facts.value_enc', {
-    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: [ANTHROPIC, 'voyage'], sealed: true, retention: 'until_revocation',
+    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: [...CHAT_PROVIDERS, 'voyage'], sealed: true, retention: 'until_revocation',
     childData: 'possible', crossBorder: 'possible', erasure: ERASE.memory,
   }),
   table('household_memory_facts.reference_ref_enc', {
@@ -136,7 +148,7 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   // Memory chunks and chat v1 (migrations 053-054, ADR 0031 and 0029). chunk_text_enc is the REDACTED passage; the embedding is plaintext
   // by necessity and is classified, not sealed. recipients (FOR LEGAL REVIEW): voyage receives the redacted passage once, at write time; anthropic receives it as a chat slot at answer time. The embedding vector goes to voyage only.
   table('memory_chunks.chunk_text_enc', {
-    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: [ANTHROPIC, 'voyage'], sealed: true, retention: 'until_revocation',
+    category: 'insurance_document', purposes: ['coverage_reconstruction'], recipients: [...CHAT_PROVIDERS, 'voyage'], sealed: true, retention: 'until_revocation',
     childData: 'possible', crossBorder: 'possible', erasure: ERASE.memory,
   }),
   table('memory_chunks.embedding', {
@@ -178,10 +190,10 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
 
   // Model payload slots (gated text only; ADR 0017 D2). One entry per gated slot of MODEL_INPUT_FIELDS.
   // Gateway tasks (ADR 0030): gated chat, classification, fact-extraction and embedding text. Recipient is the routed provider
-  // (anthropic by default). Nothing is stored by this service; provider_calls keeps counts and a digest only.
+  // (the routed chat providers, in failover order; one consent scope per provider). Nothing is stored by this service; provider_calls keeps counts and a digest only.
   ...['chat_answer.payload.question', 'chat_answer.payload.history[].text', 'chat_answer.payload.facts[].label', 'chat_answer.payload.facts[].value',
     'intent_classify.payload.text', 'fact_extract.payload.text'].map(slot => entry({
-    field: `model:${slot}`, category: 'insurance_question', purposes: ['coverage_reconstruction'], consentScope: CHAT_SCOPE, recipients: [ANTHROPIC], modelEligible: true,
+    field: `model:${slot}`, category: 'insurance_question', purposes: ['coverage_reconstruction'], consentScope: CHAT_PROVIDER_SCOPES[CHAT_PROVIDERS[0]], recipients: CHAT_PROVIDERS, modelEligible: true,
     retention: 'not_stored_by_this_service', dataClass: 'CONFIDENTIAL', childData: 'possible', crossBorder: 'possible',
   })),
   entry({
