@@ -57,7 +57,7 @@ export async function eventually(check, { timeoutMs = 3000 } = {}) {
   }
 }
 
-export async function startApp(t, { env: extraEnv = {}, logger } = {}) {
+export async function startApp(t, { env: extraEnv = {}, logger, services: servicesFor = null, driver = null } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'coversaath-readfacts-'));
   const { db: database } = await freshDatabase(t);
   const providerCalls = [];
@@ -81,7 +81,9 @@ export async function startApp(t, { env: extraEnv = {}, logger } = {}) {
   };
   const server = createApiServer({
     database, env, sarvamFetch: sarvamFetch(providerCalls), ...(logger ? { logger } : {}),
-    analysisLiveModelDriver: { loadModel: async () => ({ mocked: true }), createAgent: () => ({ generate: async () => { modelCalls.push('model'); throw new Error('no model call expected'); } }) },
+    // `services` (optional): a factory (database, env) for the backend services, so a test can inject stubs. `driver`: the structuring model driver.
+    ...(servicesFor ? { backendServices: servicesFor(database, env) } : {}),
+    analysisLiveModelDriver: driver ?? { loadModel: async () => ({ mocked: true }), createAgent: () => ({ generate: async () => { modelCalls.push('model'); throw new Error('no model call expected'); } }) },
     documentScanner: { mode: 'clamd', async scan() { return { status: 'clean' }; }, async ping() { return true; } },
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -98,18 +100,18 @@ export async function startApp(t, { env: extraEnv = {}, logger } = {}) {
     });
     return { status: response.status, data: await response.json().catch(() => null) };
   };
-  return { database, call, base, providerCalls, modelCalls, outbound };
+  return { database, call, base, env, server, providerCalls, modelCalls, outbound };
 }
 
 let widthSeed = 300;
 
-export async function uploadDocument(app, s, { logicalId, version } = {}) {
+export async function uploadDocument(app, s, { logicalId, version, kind = 'policy_schedule' } = {}) {
   widthSeed += 1;
   const upload = await fetch(`${app.base}/api/v1/cases/${s.caseId}/documents`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${s.token}`, 'Content-Type': 'application/pdf', 'Idempotency-Key': randomUUID(),
-      'X-Document-Kind': 'policy_schedule', 'X-Consent-Grant-Id': s.processingGrantId, 'X-Filename': 'synthetic-policy.pdf',
+      'X-Document-Kind': kind, 'X-Consent-Grant-Id': s.processingGrantId, 'X-Filename': 'synthetic-policy.pdf',
       ...(logicalId ? { 'X-Logical-Document-Id': logicalId, 'X-Document-Version': String(version ?? 1) } : {}),
     },
     body: await pdf(widthSeed),
@@ -160,7 +162,7 @@ export async function scenario(app, { name = 'ReadFacts', read = true, logicalId
     },
   });
   assert.equal(processing.status, 201);
-  const s = { token, householdId, adultId, caseId, processingGrantId: processing.data.id };
+  const s = { token, householdId, adultId, caseId, caseRevision: opened.data.revision, processingGrantId: processing.data.id };
   s.documentId = await uploadDocument(app, s, { logicalId });
   if (read) {
     s.readingGrantId = await grantReading(app, s, s.documentId);

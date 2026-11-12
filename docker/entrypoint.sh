@@ -1,5 +1,7 @@
 #!/bin/bash
-# Starts clamd (with a signature updater) and the API. If the API or clamd stops, the container stops so Fly restarts both.
+# Starts clamd (with a signature updater), the API and the job worker. If the API, the worker or clamd stops, the container stops so Fly restarts all.
+# The worker (src/server/worker.js) claims jobs from the Postgres queue with FOR UPDATE SKIP LOCKED, so two machines never run one job twice.
+# WORKER_IN_CONTAINER=false (a Fly env or secret) is the kill switch: the API then runs alone, as before.
 set -eu
 
 # A Fly volume mounts as root; the API runs as the unprivileged node user.
@@ -45,12 +47,18 @@ if [ "${DOCUMENT_SCAN_MODE:-disabled}" = "clamd" ]; then
 fi
 runuser -u node -- node /app/src/server/server.js &
 node_pid=$!
+worker_pid=""
+if [ "${WORKER_IN_CONTAINER:-true}" != "false" ]; then
+  runuser -u node -- node /app/src/server/worker.js &
+  worker_pid=$!
+fi
 
-trap 'kill ${clamd_pid:-} ${freshclam_pid:-} "$node_pid" 2>/dev/null || true' TERM INT
+trap 'kill ${clamd_pid:-} ${freshclam_pid:-} ${worker_pid:-} "$node_pid" 2>/dev/null || true' TERM INT
 status=0
-# Only the API and clamd decide the container's life.
-wait -n "$node_pid" ${clamd_pid:+"$clamd_pid"} || status=$?
-kill ${clamd_pid:-} ${freshclam_pid:-} "$node_pid" 2>/dev/null || true
-# Let the API finish its in-flight work after SIGTERM; the watcher and updater subshells must not hold the exit.
+# Only the API, the worker and clamd decide the container's life.
+wait -n "$node_pid" ${worker_pid:+"$worker_pid"} ${clamd_pid:+"$clamd_pid"} || status=$?
+kill ${clamd_pid:-} ${freshclam_pid:-} ${worker_pid:-} "$node_pid" 2>/dev/null || true
+# Let the API and the worker finish in-flight work after SIGTERM; the watcher and updater subshells must not hold the exit.
 wait "$node_pid" 2>/dev/null || true
+[ -z "$worker_pid" ] || wait "$worker_pid" 2>/dev/null || true
 exit "$status"

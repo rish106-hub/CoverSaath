@@ -165,6 +165,15 @@ Rollback of this step: `fly secrets unset SARVAM_OCR_ENABLED POLICY_STRUCTURING_
 - `RATE_LIMIT_BACKEND`, `MODEL_BUDGET_BACKEND` and `EVIDENCE_CLAIM_BACKEND` default to `database` (migrations 023 and 032, ADR 0014 addendum): the request limit, the model spend cap and the evidence-question claim (an expiring lease) hold across machines and restarts. `RATE_LIMIT_BACKEND` also covers the per-adult service limits (sessions, user data, sync, person records; ADR 0014 D9). If the database errors, these limiters refuse (fail closed, ADR 0014 D11). `memory` turns one off and is for tests only. The scan worker is still per process (duplicate work, not corruption).
 - Run `npm run db:init` against the hosted database before the first deploy that includes migrations 022 to 024, then check `GET /api/v1/ready`.
 
+## Job worker in the same container (2026-11-12)
+
+`docker/entrypoint.sh` starts `node src/server/worker.js` next to the API, as the `node` user, in the same Fly machine group (no new process group, no extra machine, no paid change). If the API, the worker or clamd exits, the entrypoint kills the others and exits with that status, so Fly restarts the container. SIGTERM stops both; the worker finishes its in-flight job (lease re-claimed by another machine if it cannot). `WORKER_IN_CONTAINER=false` (Fly env) starts the API alone: the kill switch. Allow for one more Node process of memory (the 3 GB machines have room next to clamd; not measured).
+
+- Two machines never run one job twice: `JobQueueRepository.claim` takes one row with `FOR UPDATE SKIP LOCKED` inside a short transaction, and heartbeat, complete and fail are fenced by worker id and attempt (`tests/job-queue.test.mjs`: two and four real parallel workers, every job exactly once; a crashed worker's job is re-claimed after its lease). The worker id defaults to `<hostname>-<pid>`, which differs per machine.
+- Transaction pooler (port 6543): the worker uses the same pool as the API (`pool.js`, no named prepared statements, no `LISTEN`, no session lock). `tests/worker-entrypoint.test.mjs` fails if runtime code adds `pg_advisory_lock`, `LISTEN`, `NOTIFY`, `PREPARE` or a session-level `set_config`. Still unmeasured on the real pooler: the startup-option timeouts (run `scripts/probe-pooler.mjs` as above; the worker is no different from the API here).
+- Handlers register only for the flags that are exactly `true` (`buildJobHandlers`); with none, the worker claims nothing. Boot log lines: `worker.started` with the kinds, `worker.stopped`.
+- Flags and secrets for the one-person journey (upload, OCR, structuring, holdings, memory, chat): see the PR text of this change and `docs/runbooks/chat-and-memory.md`.
+
 ## Rollback
 
 - Code: list releases with `fly releases -a knowvia-api`, then redeploy the previous image with `fly deploy --image <previous image reference> -a knowvia-api` (**OWNER APPROVAL REQUIRED**), or stop machines with `fly machine stop <id>`.

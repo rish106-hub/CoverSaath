@@ -6,9 +6,9 @@
 // dedupe_key = sha256 hex of (holding_id, step, input_sha) (see holdingJobDedupeKey in src/backend/services/holding-pipeline.js).
 //
 //   holding.parse_own_pdf    own-PDF tier: runs the existing policy_facts.extract work for the holding's document
-//   holding.fetch_reference  IDA tier: the reference import (job body owned by the IDA reference agent; a stub here)
+//   holding.fetch_reference  IDA tier: only queues collate, never waits for reference data (the import is the reference.import job)
 //   holding.collate          ADR 0023 D3 resolver as a job: writes machine-tier memory rows and memory_conflicts
-//   holding.memorise         STUB until Wave B: no embedding and no provider call; moves the status to conflicts or ready
+//   holding.memorise         settles the status (conflicts or ready), then embeds confirmed facts and own-PDF clauses through the memory service (needs MEMORY_ENABLED and the voyage grant; never blocks the status)
 
 export const HOLDING_JOB_KINDS = Object.freeze({
   parseOwnPdf: 'holding.parse_own_pdf',
