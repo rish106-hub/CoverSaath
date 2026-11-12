@@ -93,13 +93,13 @@ export class MemoryChunkRepository {
     if (holdingIds !== null && (!Array.isArray(holdingIds) || holdingIds.length === 0 || holdingIds.length > 50)) invalid('holdingIds are invalid.');
     const literal = vectorLiteral(embedding);
     const scoped = holdingIds ? 'AND holding_id = ANY(CAST(? AS text[]))' : '';
-    const rows = await this.database.many(`SELECT id, scope, source_ref, holding_id, chunk_text_enc,
+    const rows = await this.database.many(`SELECT id, scope, source_ref, holding_id, source_document_id, chunk_text_enc,
         1 - (embedding OPERATOR(extensions.<=>) CAST(? AS extensions.vector)) AS score
       FROM memory_chunks WHERE household_id = ? ${scoped} AND scope IN ('own_pdf', 'confirmed_fact', 'declaration')
       ORDER BY embedding OPERATOR(extensions.<=>) CAST(? AS extensions.vector) LIMIT ?`,
     [literal, householdId, ...(holdingIds ? [holdingIds] : []), literal, limit]);
     return rows.map(row => Object.freeze({
-      id: row.id, scope: row.scope, sourceRef: row.source_ref, holdingId: row.holding_id,
+      id: row.id, scope: row.scope, sourceRef: row.source_ref, holdingId: row.holding_id, sourceDocumentId: row.source_document_id ?? null,
       text: this.crypto.open(CHUNKS, 'chunk_text_enc', row.id, row.chunk_text_enc), score: Number(row.score),
     }));
   }

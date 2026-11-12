@@ -56,6 +56,16 @@ export class ChatRepository {
     return this.#thread(row);
   }
 
+  /**
+   * Holding facts, conflicts and fact-derived passages are the owner's to read (same rule as GET /holdings/{id}/facts and
+   * /conflicts: owner role only; audit F7). A member with a write role may chat but is answered without them.
+   */
+  async mayReadHoldingFacts({ householdId, adultId }) {
+    str(householdId, 'householdId'); str(adultId, 'adultId');
+    const roles = await this.households.listActiveRoles(householdId, adultId);
+    return roles.some(item => item.role === 'owner');
+  }
+
   /** The last few turns, oldest first, opened for the owning household's own prompt history (still gated before any provider). */
   async recentTurns({ householdId, threadId, limit = HISTORY_LIMIT }) {
     const rows = await this.database.many(`SELECT * FROM chat_turns WHERE household_id = ? AND thread_id = ? ORDER BY turn_index DESC LIMIT ?`, [householdId, threadId, Math.min(Math.max(limit, 1), 50)]);

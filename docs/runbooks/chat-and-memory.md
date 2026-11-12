@@ -62,3 +62,7 @@ Flags off and restart. Code revert is safe: the tables are expand-only. A synthe
 ## 7. Known gaps
 
 Procedure planning is not wired to `network_hospitals`. Analytics events `voice_turn` and `hospital_search` are not emitted. Not deployed, not reviewed.
+
+Chat integrity (audit F5, F7; FOR LEGAL REVIEW where wording is concerned): a model answer is used only if every number in it appears in the formatted value of a cited fact or passage, or in a computed check of the turn; otherwise the deterministic answer stands with `model_status: numbers_unverified` (additive value of the existing free-form `model_status`). Holding facts, open conflicts and fact-derived passages in chat are owner-only, like `GET /holdings/{id}/facts`; a non-owner member with a write role chats without them (no fact reaches the model or `facts_used`).
+
+Wording answers (owner scope): chat answers from the schedule facts and from the policy wording PDF (clauses). The answer carries an additive `sources` array of `{ kind: "wording", document_id, page, ref }` for each clause or passage it rests on (page null if the clause has none). The number check also accepts numbers in the cited wording passages. A question with no fact and no clause support is `status: unknown` with empty `sources` and `facts_used`; no number is invented.
