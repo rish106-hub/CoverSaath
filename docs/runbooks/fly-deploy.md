@@ -17,7 +17,7 @@ Every step marked **OWNER APPROVAL REQUIRED** deploys, changes a remote system, 
 
 - The `fly` binary is at `~/.fly/bin/fly` (not on PATH). `fly auth whoami` must succeed.
 - Run from a clean checkout of the branch. Do not put secrets in `fly.toml`.
-- All migrations (the highest file in `src/backend/database/postgres/migrations/`, 040 at the time of writing) are applied to the target database first (see Database connections). A deploy against an unmigrated database fails `/ready`.
+- All migrations (the highest file in `src/backend/database/postgres/migrations/`, 065 on main on 2026-11-12; numbers 059 to 064 are not used) are applied to the target database first (see Database connections). A deploy against an unmigrated database fails `/ready`.
 
 ## Database connections
 
@@ -172,7 +172,7 @@ Rollback of this step: `fly secrets unset SARVAM_OCR_ENABLED POLICY_STRUCTURING_
 - Two machines never run one job twice: `JobQueueRepository.claim` takes one row with `FOR UPDATE SKIP LOCKED` inside a short transaction, and heartbeat, complete and fail are fenced by worker id and attempt (`tests/job-queue.test.mjs`: two and four real parallel workers, every job exactly once; a crashed worker's job is re-claimed after its lease). The worker id defaults to `<hostname>-<pid>`, which differs per machine.
 - Transaction pooler (port 6543): the worker uses the same pool as the API (`pool.js`, no named prepared statements, no `LISTEN`, no session lock). `tests/worker-entrypoint.test.mjs` fails if runtime code adds `pg_advisory_lock`, `LISTEN`, `NOTIFY`, `PREPARE` or a session-level `set_config`. Still unmeasured on the real pooler: the startup-option timeouts (run `scripts/probe-pooler.mjs` as above; the worker is no different from the API here).
 - Handlers register only for the flags that are exactly `true` (`buildJobHandlers`); with none, the worker claims nothing. Boot log lines: `worker.started` with the kinds, `worker.stopped`.
-- Flags and secrets for the one-person journey (upload, OCR, structuring, holdings, memory, chat): see the PR text of this change and `docs/runbooks/chat-and-memory.md`.
+- Flags and secrets for the one-person journey (upload, OCR, structuring, holdings, memory, chat): see [demo-journey.md](demo-journey.md) (flags, processes, steps, failure table) and `docs/runbooks/chat-and-memory.md`.
 
 ## Chat model providers: openai, anthropic, deepseek, kimi (2026-11-12)
 

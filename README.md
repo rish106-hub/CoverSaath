@@ -86,7 +86,7 @@ Details: [docs/architecture/security.md](docs/architecture/security.md), [docs/a
 
 - **Grounded prompts.** One provider-neutral XML prompt per model purpose ([prompt-pack.js](src/features/ai-analysis/prompt-pack.js), version `grounded-pack-v1`). The system message holds `persona`, `work`, `dos`, `donts`, `industry_guardrails`, `grounding_rules` and `output_format`. The user message holds a `reference` block of document excerpts marked as untrusted data, then the request. Sampling uses the lowest temperature each provider accepts (0 where supported).
 - **Routing.** `chat_answer`, `intent_classify` and `fact_extract` use the chain gemini, anthropic, openai, deepseek, kimi (`src/integrations/model-routing/index.js`). A call moves to the next provider only when the earlier one is unavailable or fails, and only if the household has consented to that provider. `embed` routes to Voyage. `MODEL_PROVIDERS` chooses which providers are enabled.
-- **Adapters on main.** SDK adapters exist for Anthropic and Google (Gemini). OpenAI, DeepSeek and Kimi are config entries only and answer a typed `provider_sdk_missing` until an adapter lands. The adapter change is open as PR #123 (`feat/provider-sdks`) and is not merged.
+- **Adapters on main.** SDK adapters exist for Anthropic, Google (Gemini), OpenAI, DeepSeek and Kimi (PR #123, merged). A provider with no key, no rates or not listed in `MODEL_PROVIDERS` answers a typed unavailable and the next one is tried. No live call to any of them has been measured.
 - **DeepSeek and Kimi** are China-hosted processors. They are off by default and must stay out of `MODEL_PROVIDERS` until legal review. **FOR LEGAL REVIEW.**
 - Model output is validated against the sealed input and is never treated as confirmed.
 
@@ -170,6 +170,7 @@ Backend, merged to main:
 - [x] Chat integrity fixes: registry recipients, number check, owner-only facts (PR #115)
 - [x] Shared per-adult limits and model budget in PostgreSQL, fail closed (023, 032, PR #116, ADR 0014)
 - [x] Job worker runs inside the Fly container (PR #117)
+- [x] Provider SDK adapters for OpenAI, DeepSeek, Kimi and Anthropic, SDK upgrades (PR #123)
 - [x] Synthetic demo seed (`npm run seed:demo`)
 - [x] CI: pinned pgvector PostgreSQL 17 image, gitleaks scan, architecture check
 
@@ -177,7 +178,6 @@ The app and BFF live in `CoverSaath-Frontend`; their features are tracked in tha
 
 ### What is left
 
-- [ ] Provider SDK adapters for OpenAI, DeepSeek and Kimi (PR #123, open, not merged)
 - [ ] The frontend must call the link-wording route (`POST /api/v1/holdings/{id}/documents`) after a wording upload
 - [ ] Production reference-data reader is not wired: the insurer tier is empty until it is
 - [ ] Live-model evaluation of grounding and refusal behaviour has not been measured; tests use stubs
@@ -198,6 +198,7 @@ Current detail: [docs/iterations/LATEST.md](docs/iterations/LATEST.md) and [docs
 | Topic | File |
 | --- | --- |
 | Agent orientation and rules | [AI.md](AI.md), [AGENTS.md](AGENTS.md) |
+| Run the P0 journey (two PDFs, one holding, chat) | [docs/runbooks/demo-journey.md](docs/runbooks/demo-journey.md) |
 | Current state | [docs/iterations/LATEST.md](docs/iterations/LATEST.md) |
 | System and data architecture | [docs/architecture/system.md](docs/architecture/system.md), [docs/architecture/data.md](docs/architecture/data.md), [docs/architecture/security.md](docs/architecture/security.md) |
 | Decisions | [docs/adr](docs/adr) |

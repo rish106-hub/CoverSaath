@@ -111,6 +111,9 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   HOLDING_NOT_FOUND: entry(404, 'not_found', false),
   HOLDING_NOT_READY: entry(409, 'conflict', true),
   HOLDING_INPUT_INVALID: entry(400, 'request', false),
+  HOLDING_CREATE_FAILED: entry(409, 'conflict', true),
+  // The document being linked already has its own holding that the owner acted on (confirmed product, resolved conflict, linked documents, payments, chat).
+  HOLDING_DOCUMENT_HAS_HOLDING: entry(409, 'conflict', false),
   HOLDING_TRANSITION_INVALID: entry(409, 'conflict', false),
   HOLDING_JOB_INPUT_INVALID: entry(null, 'contract', false),
   HOLDING_COLLATE_INPUT_INVALID: entry(null, 'contract', false),

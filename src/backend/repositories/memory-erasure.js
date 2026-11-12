@@ -46,6 +46,11 @@ export async function eraseMemoryForHousehold(db, { householdId }) {
 export async function eraseMemoryForDocuments(db, { householdId = null, documentIds }) {
   const counts = empty();
   if (documentIds.length === 0) return counts;
+  // A linked document's facts are collated into the own-PDF rows of the holding it is linked to, and such a row may cite the holding's own document
+  // while one of its values was read from the linked one. Those own-PDF rows go with the link (the next collate rebuilds them without it).
+  const linkedFacts = await db.many(`SELECT fact.id, fact.household_id FROM household_memory_facts fact
+    WHERE fact.source_tier = 'own_pdf' AND fact.holding_id IN (SELECT link.holding_id FROM holding_documents link WHERE link.document_id = ANY(CAST(? AS text[]))${householdId ? ' AND link.household_id = ?' : ''})`,
+  [documentIds, ...(householdId ? [householdId] : [])]);
   // Links to the documents (a wording or endorsement linked to another holding); chunks that came from them go below (source_document_id).
   await db.run(`DELETE FROM holding_documents WHERE document_id = ANY(CAST(? AS text[]))${householdId ? ' AND household_id = ?' : ''}`, [documentIds, ...(householdId ? [householdId] : [])]);
   const scope = householdId ? ' AND household_id = ?' : '';
@@ -54,7 +59,7 @@ export async function eraseMemoryForDocuments(db, { householdId = null, document
   const holdings = (await db.many(`SELECT id, household_id FROM policy_holdings WHERE document_id = ANY(CAST(? AS text[]))${scope}`, [documentIds, ...extra]));
   const heldFacts = holdings.length === 0 ? [] : await db.many('SELECT id, household_id FROM household_memory_facts WHERE holding_id = ANY(CAST(? AS text[]))', [holdings.map(row => row.id)]);
   const byHousehold = new Map();
-  for (const row of [...facts, ...heldFacts]) {
+  for (const row of [...facts, ...heldFacts, ...linkedFacts]) {
     if (!byHousehold.has(row.household_id)) byHousehold.set(row.household_id, new Set());
     byHousehold.get(row.household_id).add(row.id);
   }
@@ -70,6 +75,7 @@ export async function eraseMemoryForDocuments(db, { householdId = null, document
     counts.payments = count(await db.run('DELETE FROM premium_payments WHERE holding_id = ANY(CAST(? AS text[]))', [holdingIds]));
   }
   counts.facts = count(await db.run(`DELETE FROM household_memory_facts WHERE source_document_id = ANY(CAST(? AS text[]))${scope}`, [documentIds, ...extra]));
+  if (linkedFacts.length > 0) counts.facts += count(await db.run('DELETE FROM household_memory_facts WHERE id = ANY(CAST(? AS text[]))', [linkedFacts.map(row => row.id)]));
   if (holdings.length > 0) {
     counts.facts += count(await db.run('DELETE FROM household_memory_facts WHERE holding_id = ANY(CAST(? AS text[]))', [holdings.map(row => row.id)]));
     counts.holdings = count(await db.run(`DELETE FROM policy_holdings WHERE document_id = ANY(CAST(? AS text[]))${scope}`, [documentIds, ...extra]));
@@ -80,7 +86,11 @@ export async function eraseMemoryForDocuments(db, { householdId = null, document
 /** Everything written under one consent grant (revocation). */
 export async function eraseMemoryForConsentGrant(db, { householdId, consentGrantId }) {
   const counts = empty();
-  const facts = (await db.many('SELECT id FROM household_memory_facts WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId])).map(row => row.id);
+  // Own-PDF rows of a holding that links a document read under this grant may carry one of its values (see eraseMemoryForDocuments).
+  const linkedIds = (await db.many(`SELECT fact.id FROM household_memory_facts fact WHERE fact.household_id = ? AND fact.source_tier = 'own_pdf' AND fact.holding_id IN (
+      SELECT link.holding_id FROM holding_documents link JOIN document_uploads document ON document.id = link.document_id
+      WHERE link.household_id = ? AND document.consent_grant_id = ?)`, [householdId, householdId, consentGrantId])).map(row => row.id);
+  const facts = [...new Set([...(await db.many('SELECT id FROM household_memory_facts WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId])).map(row => row.id), ...linkedIds])];
   counts.conflicts = await deleteConflictsOfFacts(db, householdId, facts);
   const chunkIds = (await db.many('SELECT id FROM memory_chunks WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId])).map(row => row.id);
   counts.threads = await deleteChatDerivedFrom(db, { householdId, factIds: facts, chunkIds });
@@ -90,6 +100,7 @@ export async function eraseMemoryForConsentGrant(db, { householdId, consentGrant
   counts.dues = count(await db.run('DELETE FROM premium_dues WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId]));
   counts.payments = count(await db.run('DELETE FROM premium_payments WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId]));
   counts.facts = count(await db.run('DELETE FROM household_memory_facts WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId]));
+  if (linkedIds.length > 0) counts.facts += count(await db.run('DELETE FROM household_memory_facts WHERE household_id = ? AND id = ANY(CAST(? AS text[]))', [householdId, linkedIds]));
   counts.declarations = count(await db.run('DELETE FROM member_declarations WHERE household_id = ? AND consent_grant_id = ?', [householdId, consentGrantId]));
   return counts;
 }

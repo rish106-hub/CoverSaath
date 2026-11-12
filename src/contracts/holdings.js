@@ -16,6 +16,11 @@ export const HOLDING_JOB_KINDS = Object.freeze({
   collate: 'holding.collate',
   memorise: 'holding.memorise',
 });
+// GET /holdings/{id}/documents: per linked document, whether its facts are part of the holding's facts.
+//   included  the document's facts are collated into the holding's facts
+//   none      nothing read from it yet, or nothing found
+//   off       fact reading is switched off (POLICY_FACTS_ENABLED), so it adds no facts
+export const LINKED_DOCUMENT_FACTS_STATES = Object.freeze(['included', 'none', 'off']);
 export const HOLDING_JOB_KIND_LIST = Object.freeze(Object.values(HOLDING_JOB_KINDS));
 export const HOLDING_JOB_STEPS = Object.freeze({
   [HOLDING_JOB_KINDS.parseOwnPdf]: 'parse_own_pdf',
@@ -24,6 +29,12 @@ export const HOLDING_JOB_STEPS = Object.freeze({
   [HOLDING_JOB_KINDS.memorise]: 'memorise',
 });
 export const HOLDING_JOB_MAX_ATTEMPTS = 3;
+// Retry of holding creation after OCR: when creating the holding (or queuing its insurer detection) throws after the OCR pages are stored,
+// a `holding.create` job re-runs it (identifiers only, dedupe per document, HOLDING_JOB_MAX_ATTEMPTS attempts). After the last attempt the job
+// is dead with this code, and GET /households/{id}/holdings lists the document under `creation_issues` with state 'failed'.
+export const HOLDING_CREATE_JOB_KIND = 'holding.create';
+export const HOLDING_CREATE_FAILED = 'HOLDING_CREATE_FAILED';
+export const HOLDING_CREATION_STATES = Object.freeze(['retrying', 'failed']);
 
 // policy_holdings.status (migration 048). A holding status, never a fact status: the step after the owner states the insurer and
 // plan is product_reported (written to policy_profiles in state reported, ADR 0024), not "confirmed".
@@ -35,6 +46,14 @@ export const CONFLICT_RESOLUTIONS = Object.freeze(['pending', 'user_chose', 'ins
 
 // Resolved slot statuses a read can return. No bare "confirmed" (AI.md, ADR 0003, ADR 0009).
 export const RESOLVED_STATUSES = Object.freeze(['extracted_unverified', 'conflicting', 'unknown', 'reviewed_reference', 'user_confirmed']);
+
+// `summary` of a holding in GET /api/v1/households/{id}/holdings and /holdings/{holdingId} (deterministic, stored data only):
+//   { insurerName: string | null, productName: string | null, sumInsured: Headline | null, policyPeriod: Headline | null, premium: Headline | null }
+//   Headline = { factKey, value, status }, status from RESOLVED_STATUSES. Names are null until the owner confirmed the product (policy_profiles
+//   state 'reported'); never a candidate, never the UIN. Field -> existing fact key of src/contracts/policy-facts.js:
+export const HOLDING_SUMMARY_HEADLINES = Object.freeze({ sumInsured: 'sum_insured', policyPeriod: 'policy_period', premium: 'premium_total' });
+// GET /api/v1/holdings/{id}/facts: each source `page` is { pageId, blockIndex, documentKind } where documentKind is the document_kind of the
+// page's document (policy_schedule, policy_wording, ...), or null.
 
 // Coded, client-safe errors of the holdings routes are registered in src/contracts/error-codes.js (HOLDING_*, MEMORY_CONFLICT_*).
 

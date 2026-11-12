@@ -153,7 +153,7 @@ test('flow: registry import, candidates, confirm-product, reference import (UIN 
 
   // The queued job runs through the registered handler: registry paged (two product pages), stored once, idempotent.
   const handlers = buildJobHandlers(services, env);
-  assert.deepEqual(Object.keys(handlers).sort(), ['holding.collate', 'holding.detect_insurer', 'holding.fetch_reference', 'holding.memorise', 'holding.parse_own_pdf', 'policy_facts.extract', 'reference.import']);
+  assert.deepEqual(Object.keys(handlers).sort(), ['holding.collate', 'holding.create', 'holding.detect_insurer', 'holding.fetch_reference', 'holding.memorise', 'holding.parse_own_pdf', 'policy_facts.extract', 'reference.import']);
   await handlers['reference.import']({ job: { kind: 'reference.import', householdId: s.householdId, payload: { scope: 'registry' } } });
   await handlers['reference.import']({ job: { kind: 'reference.import', householdId: s.householdId, payload: { scope: 'registry' } } });
   const registryRow = await app.database.one('SELECT body FROM reference_cache WHERE key = ?', [REGISTRY_CACHE_KEY]);
