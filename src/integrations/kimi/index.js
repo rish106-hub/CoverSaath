@@ -1,8 +1,8 @@
 import { defineModelProvider } from '../shared/model-provider.js';
 
-// Config entry only: no SDK is installed (ADR 0030), so a route to this provider answers a typed unknown until an
-// adapter is added behind the gateway runner. The model id is a placeholder, not a verified one.
+// SDK adapter: @ai-sdk/moonshotai (Moonshot). Key: MOONSHOT_API_KEY. China-hosted (cross-border transfer): never in a default MODEL_PROVIDERS. FOR LEGAL REVIEW.
+// Model and rate variables keep the KIMI_ prefix (KIMI_MODEL, KIMI_INPUT_USD_PER_MILLION). The model id is a placeholder.
 export const KIMI_PROVIDER = defineModelProvider({
-  id: 'kimi', sdk: null, keyEnv: 'KIMI_API_KEY', envPrefix: 'KIMI',
+  id: 'kimi', sdk: 'moonshotai', keyEnv: 'MOONSHOT_API_KEY', envPrefix: 'KIMI',
   models: { default: 'kimi-k2', classify: 'kimi-k2' },
 });

@@ -150,18 +150,18 @@ test('only gate-minted input passes: a hand-made payload is refused before any p
   assert.equal(row.payload_sha256, null);
 });
 
-test('routing: deepseek, kimi and openai are config entries that answer typed unknown; routes follow purpose and tier', () => {
-  for (const provider of ['deepseek', 'kimi', 'openai']) {
-    const env = { MODEL_PROVIDERS: provider, [`${provider.toUpperCase()}_API_KEY`]: 'k' };
+test('routing: deepseek, kimi and openai have SDK adapters but stay unavailable without a key and rates; routes follow purpose and tier', () => {
+  for (const [provider, keyEnv] of [['deepseek', 'DEEPSEEK_API_KEY'], ['kimi', 'MOONSHOT_API_KEY'], ['openai', 'OPENAI_API_KEY']]) {
+    const env = { MODEL_PROVIDERS: provider, [keyEnv]: 'k' };
     const route = createModelRouter({ env, routes: { chat_answer: [{ provider, tier: 'default' }] } }).resolve('chat_answer');
-    assert.deepEqual([route.status, route.reason, route.provider], ['unavailable', 'no_sdk_adapter', provider]);
+    assert.deepEqual([route.status, route.reason, route.provider], ['unavailable', 'rates_missing', provider]);
   }
   const router = createModelRouter({ env: ENV });
   assert.equal(router.resolve('chat_answer').model, 'claude-sonnet-5-5');
   assert.equal(router.resolve('fact_extract').model, 'claude-sonnet-5-5');
   assert.equal(router.resolve('intent_classify').model, 'claude-haiku-5-5');
   assert.equal(router.resolve('embed').reason, 'provider_not_enabled');
-  assert.equal(createModelRouter({ env: { ...ENV, MODEL_PROVIDERS: 'openai' } }).resolve('chat_answer').reason, 'no_sdk_adapter');
+  assert.equal(createModelRouter({ env: { ...ENV, MODEL_PROVIDERS: 'openai' } }).resolve('chat_answer').reason, 'key_missing');
   assert.equal(createModelRouter({ env: { ...ENV, MODEL_PROVIDERS: 'voyage' } }).resolve('chat_answer').reason, 'provider_not_enabled');
   assert.equal(createModelRouter({ env: { ...ENV, ANTHROPIC_OUTPUT_USD_PER_MILLION: '' } }).resolve('chat_answer').reason, 'rates_missing');
   assert.equal(JSON.stringify(createModelRouter({ env: { ...ENV, ANTHROPIC_API_KEY: '' } }).resolve('chat_answer')).includes('test-key'), false);

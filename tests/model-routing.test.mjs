@@ -19,12 +19,12 @@ test('the default MODEL_PROVIDERS (unset) still enables anthropic only', () => {
 });
 
 test('candidates are the ready providers in order; resolve follows the first and can pin one', () => {
-  const env = { MODEL_PROVIDERS: 'gemini,anthropic,openai,deepseek,kimi,voyage', ...keys(['GEMINI', 'ANTHROPIC', 'OPENAI', 'DEEPSEEK', 'KIMI']) };
+  const env = { MODEL_PROVIDERS: 'gemini,anthropic,openai,deepseek,kimi,voyage', ...keys(['GEMINI', 'ANTHROPIC', 'OPENAI', 'DEEPSEEK', 'KIMI']), MOONSHOT_API_KEY: 'test-key-not-real' };
   const router = createModelRouter({ env });
-  assert.deepEqual(router.candidates('chat_answer').map(route => route.provider), ['gemini', 'anthropic'], 'openai, deepseek and kimi have no SDK adapter yet');
+  assert.deepEqual(router.candidates('chat_answer').map(route => route.provider), ['gemini', 'anthropic', 'openai', 'deepseek', 'kimi'], 'every chat provider has an SDK adapter');
   assert.equal(router.resolve('chat_answer').provider, 'gemini');
   assert.equal(router.resolve('chat_answer', { provider: 'anthropic' }).provider, 'anthropic');
-  assert.equal(router.resolve('chat_answer', { provider: 'deepseek' }).reason, 'no_sdk_adapter');
+  assert.equal(router.resolve('chat_answer', { provider: 'deepseek' }).sdk, 'deepseek');
   assert.equal(router.resolve('chat_answer', { provider: 'voyage' }).reason, 'no_route');
   assert.equal(router.resolve('chat_answer', { provider: 'gemini' }).model, router.resolve('chat_answer').model);
 });

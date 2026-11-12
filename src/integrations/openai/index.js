@@ -1,8 +1,7 @@
 import { defineModelProvider } from '../shared/model-provider.js';
 
-// Config entry only: no SDK is installed (ADR 0030), so a route to this provider answers a typed unknown until an
-// adapter is added behind the gateway runner. The model id is a placeholder, not a verified one.
+// SDK adapter: @ai-sdk/openai (ai-sdk-runner.js). Key: OPENAI_API_KEY. The model id is a placeholder: set OPENAI_MODEL and the rate variables.
 export const OPENAI_PROVIDER = defineModelProvider({
-  id: 'openai', sdk: null, keyEnv: 'OPENAI_API_KEY', envPrefix: 'OPENAI',
+  id: 'openai', sdk: 'openai', keyEnv: 'OPENAI_API_KEY', envPrefix: 'OPENAI',
   models: { default: 'gpt-5', classify: 'gpt-5' },
 });

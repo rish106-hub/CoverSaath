@@ -1,17 +1,24 @@
 import { ToolLoopAgent, Output, isStepCount, jsonSchema } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createMoonshotAI } from '@ai-sdk/moonshotai';
 import { PROMPT_VERSION } from './prompts.js';
 import { AI_CONTRACT_VERSION } from './responsibility-matrix.js';
 import { isGatewayRequest } from './model-gateway.js';
 import { samplingFor } from './prompt-pack.js';
 
 // The only place a provider SDK is constructed (check:architecture: only this file may import `ai` or `@ai-sdk/*`).
-// SDK-backed providers only; deepseek, kimi and openai are config entries with no SDK and never reach this loader.
+// SDK-backed providers only (anthropic, google, openai, deepseek, moonshotai). Which of them may be called is decided by the router
+// (MODEL_PROVIDERS, key, rates) and the caller's per-provider consent, never here. deepseek and moonshotai are China-hosted: FOR LEGAL REVIEW.
 // The key is passed in by the caller from the environment; it is never read here.
 const SDK_FACTORIES = Object.freeze({
   anthropic: apiKey => createAnthropic({ apiKey }),
   google: apiKey => createGoogleGenerativeAI({ apiKey }),
+  openai: apiKey => createOpenAI({ apiKey }),
+  deepseek: apiKey => createDeepSeek({ apiKey }),
+  moonshotai: apiKey => createMoonshotAI({ apiKey }),
 });
 
 export function createProviderModelLoader({ provider, apiKey } = {}) {
