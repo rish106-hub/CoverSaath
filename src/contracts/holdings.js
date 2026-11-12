@@ -16,6 +16,11 @@ export const HOLDING_JOB_KINDS = Object.freeze({
   collate: 'holding.collate',
   memorise: 'holding.memorise',
 });
+// GET /holdings/{id}/documents: per linked document, whether its facts are part of the holding's facts.
+//   included  the document's facts are collated into the holding's facts
+//   none      nothing read from it yet, or nothing found
+//   off       fact reading is switched off (POLICY_FACTS_ENABLED), so it adds no facts
+export const LINKED_DOCUMENT_FACTS_STATES = Object.freeze(['included', 'none', 'off']);
 export const HOLDING_JOB_KIND_LIST = Object.freeze(Object.values(HOLDING_JOB_KINDS));
 export const HOLDING_JOB_STEPS = Object.freeze({
   [HOLDING_JOB_KINDS.parseOwnPdf]: 'parse_own_pdf',
