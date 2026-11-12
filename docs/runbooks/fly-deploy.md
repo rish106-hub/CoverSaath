@@ -174,6 +174,14 @@ Rollback of this step: `fly secrets unset SARVAM_OCR_ENABLED POLICY_STRUCTURING_
 - Handlers register only for the flags that are exactly `true` (`buildJobHandlers`); with none, the worker claims nothing. Boot log lines: `worker.started` with the kinds, `worker.stopped`.
 - Flags and secrets for the one-person journey (upload, OCR, structuring, holdings, memory, chat): see the PR text of this change and `docs/runbooks/chat-and-memory.md`.
 
+## Chat model providers: openai, anthropic, deepseek, kimi (2026-11-12)
+
+Chat answers, intent classification and fact extraction route gemini, then anthropic, openai, deepseek, kimi (`MODEL_ROUTES`). Each has an AI SDK adapter (`@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/deepseek`, `@ai-sdk/moonshotai`). A provider is called only when it is in `MODEL_PROVIDERS`, its key and both per-million rates are set, `CHAT_MODEL_ENABLED=true`, and the household has a current grant naming that provider; otherwise it answers a typed unavailable and the next one is tried.
+
+- Secrets (names only): `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`, `MOONSHOT_API_KEY`. Models and rates have no verified default: set `<P>_MODEL`, `<P>_CLASSIFY_MODEL` and `<P>_INPUT_USD_PER_MILLION`, `<P>_OUTPUT_USD_PER_MILLION` (and `_CLASSIFY_` pairs) with `<P>` one of `OPENAI`, `ANTHROPIC`, `DEEPSEEK`, `KIMI` (Kimi keeps the `KIMI_` prefix for models and rates). A missing rate fails closed (`rates_missing`).
+- **FOR LEGAL REVIEW (DPDP cross-border transfer):** DeepSeek and Moonshot (Kimi) are China-hosted processors. Keep `deepseek` and `kimi` out of `MODEL_PROVIDERS` until the owner has a legal decision on transfer, notice and consent wording. The default stays `anthropic`; the recommended set is `gemini,anthropic,openai,voyage`.
+- Rollback: remove the provider from `MODEL_PROVIDERS` (or unset its key); no migration is involved.
+
 ## Rollback
 
 - Code: list releases with `fly releases -a knowvia-api`, then redeploy the previous image with `fly deploy --image <previous image reference> -a knowvia-api` (**OWNER APPROVAL REQUIRED**), or stop machines with `fly machine stop <id>`.

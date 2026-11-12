@@ -13,8 +13,8 @@ const PROVIDERS = Object.freeze(Object.fromEntries([ANTHROPIC_PROVIDER, GEMINI_P
 //
 // Chat-model order: Gemini first, then anthropic, openai, deepseek, kimi. A caller moves to the next entry only when the earlier one
 // is unavailable (typed) or its call failed, and only after that provider's own current consent grant is confirmed (chat-runtime.js
-// callRouted; the router itself never decides consent). openai, deepseek and kimi have no SDK adapter yet and resolve to a typed
-// `no_sdk_adapter` until one is added. FOR LEGAL REVIEW: deepseek and kimi are cross-border processors; keep them out of
+// callRouted; the router itself never decides consent). Every chat provider has an SDK adapter (ai-sdk-runner.js); a provider without one would resolve to a typed
+// `no_sdk_adapter`. FOR LEGAL REVIEW: deepseek and kimi are cross-border processors; keep them out of
 // MODEL_PROVIDERS until that review (recommended: MODEL_PROVIDERS=gemini,anthropic,openai,voyage). The default stays "anthropic".
 const CHAT_ORDER = ['gemini', 'anthropic', 'openai', 'deepseek', 'kimi'];
 const chatRoute = tier => Object.freeze(CHAT_ORDER.map(provider => Object.freeze({ provider, tier })));
