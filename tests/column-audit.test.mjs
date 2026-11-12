@@ -140,7 +140,7 @@ const PLAIN = {
   },
   policies: { 'closed vocabulary': ['policy_kind', 'verification_state'] },
   holding_documents: { 'closed vocabulary: the kind of linked document (wording, endorsement, other); ids only': ['kind'] },
-  policy_holdings: { 'closed vocabulary: holding kind and lifecycle status (ADR 0032); no insurer, plan or number': ['kind', 'status'] },
+  policy_holdings: { 'closed vocabulary: holding kind and lifecycle status (ADR 0032); no insurer, plan or number': ['kind', 'status'], 'closed vocabulary: outcome code of the last insurer-reference check (migration 066); no value, locator or UIN': ['reference_outcome'] },
   household_memory_facts: {
     'public registry key, scope slug, key schema, class, tier, status, scope of member, capture method, derivation version and supersession id: closed vocabularies and identifiers, no value (the value and the reference are sealed). NOTE: a declared_* key names that a declaration exists; flagged for owner review (ADR 0032)': [
       'member_scope', 'fact_key', 'scope_key', 'key_schema', 'fact_class', 'source_tier', 'status', 'capture_method', 'derivation_version', 'supersedes_id'],
