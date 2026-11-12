@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { fail, requirePerson, requireScopedGrant, str } from './holdings-common.js';
-import { CHAT_CONSENT_PURPOSE, CHAT_SCOPE } from '../../contracts/data-purpose-registry.js';
+import { CHAT_CONSENT_PURPOSE, chatScopeFor } from '../../contracts/data-purpose-registry.js';
 
 // Chat v1 storage (migration 054, ADR 0029 and 0031): threads, turns and retrieval traces.
 //
@@ -89,7 +89,7 @@ export class ChatRepository {
       const thread = await db.one('SELECT id FROM chat_threads WHERE id = ? AND household_id = ? FOR UPDATE', [threadId, householdId]);
       if (!thread) throw notFound();
       const modelled = assistant.answerSource === 'model';
-      if (modelled) await requireScopedGrant(db, { householdId, grantId: consent?.grantId, purpose: CHAT_CONSENT_PURPOSE, subjectAdultId: consent?.adultId ?? null, scope: CHAT_SCOPE, now: at, lock: true });
+      if (modelled) await requireScopedGrant(db, { householdId, grantId: consent?.grantId, purpose: CHAT_CONSENT_PURPOSE, subjectAdultId: consent?.adultId ?? null, scope: chatScopeFor(consent?.provider ?? assistant.provider ?? 'anthropic'), now: at, lock: true });
       const next = (await db.one('SELECT COALESCE(MAX(turn_index) + 1, 0)::int AS n FROM chat_turns WHERE household_id = ? AND thread_id = ?', [householdId, threadId])).n;
       const userId = `turn-${randomUUID()}`;
       const assistantId = `turn-${randomUUID()}`;

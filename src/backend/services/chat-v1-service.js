@@ -30,6 +30,7 @@ const ID = /^[A-Za-z0-9_.:-]{1,100}$/;
 const MAX_FACTS_TO_MODEL = 25;
 const VECTOR_K = 5;
 const KEYWORD_K = 3;
+const MAX_CASE_DOCUMENTS = 20;
 const MAX_HOLDINGS = 20;
 const DELTA_CHARS = 48;
 
@@ -100,14 +101,20 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     return { holdingIds: holdingRows.map(row => row.id), facts, conflicts, documents };
   }
 
+  // Wording of the case: the holding's own document (the schedule) and every other active document of the same household case (the T&C
+  // wording uploaded beside it). Household and case scoped; ranked in code (clause-repository.js), no provider involved. Hits carry their own document id.
   async function keywordClauses({ householdId, documents, message }) {
     if (!clauses) return [];
     const found = [];
+    const searched = new Set();
     for (const { documentId } of documents) {
       const row = await database.one(`SELECT case_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
-      if (!row?.case_id) continue;
-      const hits = await clauses.searchClauses({ householdId, caseId: row.case_id, documentIds: [documentId], query: message, limit: KEYWORD_K });
-      for (const hit of hits) found.push({ id: hit.clauseId, documentId, page: hit.page ?? null, text: hit.text });
+      if (!row?.case_id || searched.has(row.case_id)) continue;
+      searched.add(row.case_id);
+      const siblings = await database.many(`SELECT id FROM document_uploads WHERE household_id = ? AND case_id = ? AND lifecycle_state = 'active' ORDER BY id LIMIT ?`, [householdId, row.case_id, MAX_CASE_DOCUMENTS]);
+      const documentIds = [...new Set([documentId, ...siblings.map(item => item.id)])];
+      const hits = await clauses.searchClauses({ householdId, caseId: row.case_id, documentIds, query: message, limit: KEYWORD_K });
+      for (const hit of hits) found.push({ id: hit.clauseId, documentId: hit.documentId, page: hit.page ?? null, text: hit.text });
     }
     return found.slice(0, KEYWORD_K);
   }
@@ -131,7 +138,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
   }
 
   // Words a short answer over redacted facts. Resolves { text, factsUsed, meta } or null (use the deterministic answer).
-  async function modelAnswer({ householdId, adultId, chatGrantId, message, history, context, relevant, plan, passages, startedAt }) {
+  async function modelAnswer({ householdId, adultId, message, history, context, relevant, plan, passages, startedAt }) {
     if (!gateway?.enabled) return null;
     let memoLoad;
     const loader = () => (memoLoad ??= loadKnownIdentifiers(householdId));
@@ -166,10 +173,22 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const input = sealModelInput('chat_answer', { payload: { question: question.gated, history: historyGated, facts: slots } });
     const redactedPromptHash = sha256(JSON.stringify({ q: question.gated.text, h: historyGated.map(turn => turn.text.text), f: slots.map(slot => [slot.fact_id, slot.label.text, slot.value.text]) }));
     let result;
+    // Each provider in the failover chain needs its own current exact grant (resolved here, re-checked right before that dispatch: audit F1);
+    // a provider without one is skipped, never sent to. The commit re-checks the winning provider's grant again inside the transaction.
+    const authorize = async provider => {
+      const grantId = await providerConsent.resolve({ householdId, adultId, kind: 'chat', provider });
+      if (!grantId) return null;
+      await providerConsent.require({ householdId, adultId, grantId, kind: 'chat', provider });
+      return { grantId };
+    };
     try {
-      // Re-check the grant right before dispatch (audit F1); the commit re-checks it again inside the transaction.
-      await providerConsent.require({ householdId, adultId, grantId: chatGrantId, kind: 'chat' });
-      result = await gateway.call({ task: 'chat_answer', input, householdId });
+      if (gateway.callRouted) result = await gateway.callRouted({ task: 'chat_answer', input, householdId, authorize });
+      else {
+        // A gateway without a failover chain (a test fixture): one call, still under the anthropic grant.
+        const authorization = await authorize('anthropic');
+        if (!authorization) return { failed: 'consent_required' };
+        result = { ...(await gateway.call({ task: 'chat_answer', input, householdId })), authorization };
+      }
     } catch (error) {
       if (error?.code) return { failed: error.code };
       throw error;
@@ -189,7 +208,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const answerText = question.rehydrate(result.output.answer);
     if (!numbersSupported(answerText, allowed)) return { failed: 'numbers_unverified' };
     return {
-      text: answerText, usedFacts, usedChunks, redactedPromptHash,
+      text: answerText, usedFacts, usedChunks, redactedPromptHash, grantId: result.authorization?.grantId ?? null,
       meta: { provider: result.metadata.provider, model: result.metadata.model, tokensIn: result.metadata.inputTokens, tokensOut: result.metadata.outputTokens, costUsd: result.metadata.costUsd, latencyMs: Date.now() - startedAt },
     };
   }
@@ -269,10 +288,9 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
 
             const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits });
             const history = await chatRepository.recentTurns({ householdId, threadId });
-            // No current chat grant (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
-            const chatGrantId = gateway?.enabled ? await providerConsent.resolve({ householdId, adultId: principal.adultId, kind: 'chat' }) : null;
+            // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
             const model = (context.facts.length > 0 || passages.length > 0)
-              ? (gateway?.enabled && !chatGrantId ? { failed: 'consent_required' } : await modelAnswer({ householdId, adultId: principal.adultId, chatGrantId, message, history, context, relevant, plan, passages, startedAt })) : null;
+              ? await modelAnswer({ householdId, adultId: principal.adultId, message, history, context, relevant, plan, passages, startedAt }) : null;
 
             let text = deterministic.text;
             let answerSource = 'deterministic';
@@ -298,7 +316,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
                 costPaise: assistantMeta.costUsd ? Math.ceil(assistantMeta.costUsd * (Number(env.COST_PAISE_PER_USD) > 0 ? Number(env.COST_PAISE_PER_USD) : 9000)) : 0,
                 latencyMs: Date.now() - startedAt,
               },
-              consent: answerSource === 'model' ? { grantId: chatGrantId, adultId: principal.adultId } : null,
+              consent: answerSource === 'model' ? { grantId: model.grantId, adultId: principal.adultId, provider: assistantMeta.provider } : null,
               trace: { mode, holdingIds: context.holdingIds, factIds, chunkIds: [...new Set([...passages.map(item => item.id)])], conflictIds: context.conflicts.map(item => item.id) },
             });
 
