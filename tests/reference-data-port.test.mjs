@@ -98,7 +98,8 @@ test('facts: only independently verified, non-synthetic, evidenced, verified-fam
   const run = payload => clientFor(stub(() => jsonResponse(payload)).fetchImpl).read('versions.facts', { versionId: 'v1' }).then(r => r.data.facts[0]);
   assert.deepEqual(await run(body()), { ...(await run(body())), outcome: 'verified', valueText: 'ten percent' });
   assert.equal((await run(body({ version_synthetic: true }))).outcome, 'unknown');
-  assert.equal((await run(body({}, { copay: 'partial' }))).outcome, 'unknown');
+  assert.equal((await run(body({}, { copay: 'partial' }))).outcome, 'verified');
+  assert.equal((await run(body({}, { copay: 'awaiting_review' }))).outcome, 'unknown');
   assert.equal((await run(body({}, { copay: 'conflicting_evidence' }))).outcome, 'conflicting');
   assert.equal((await run(body({}, { copay: 'verified' }, [fact('f1', { verification_status: 'candidate' })]))).outcome, 'unknown');
   assert.equal((await run(body({}, { copay: 'verified' }, [fact('f1', { evidence: [] })]))).outcome, 'unknown');

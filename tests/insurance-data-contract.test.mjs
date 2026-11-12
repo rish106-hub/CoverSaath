@@ -91,18 +91,26 @@ test('spec nullable and list fields parse: uin_raw null, conditions and exceptio
   assert.equal((await client.read('products.get', { productId: 'prod_example_01' })).data.uinRaw, null);
 });
 
-test('coverage family states map fail closed: only verified carries a value', async () => {
+test('coverage family states map fail closed: verified or partial carry a value; conflicting_evidence -> conflicting; withheld or unknown -> unknown', async () => {
   const fact = type => ({ ...verifiedFact, fact_id: `f_${type}`, fact_type: type });
-  const body = factsHeader({ facts: [fact('copay'), fact('waiting_periods'), fact('exclusions'), fact('room_rent_limit')] });
-  const { client } = stubClient(() => jsonResponse(body));
-  const out = Object.fromEntries((await client.read('versions.facts', { versionId: 'ver_example_2' })).data.facts.map(f => [f.factType, f]));
+  const types = ['copay', 'initial_waiting_period', 'excluded_conditions', 'room_rent_limit', 'icu_limit'];
+  const run = async coverage => {
+    const { client } = stubClient(() => jsonResponse(factsHeader({ facts: types.map(fact), coverage })));
+    return Object.fromEntries((await client.read('versions.facts', { versionId: 'ver_example_2' })).data.facts.map(f => [f.factType, f]));
+  };
+  const out = await run({ room_rent_limit: 'not_observed', copay: 'verified', waiting_periods: 'partial', exclusions: 'conflicting_evidence' });
   assert.equal(out.copay.outcome, 'verified');
-  assert.equal(out.waiting_periods.outcome, 'unknown');
-  assert.equal(out.waiting_periods.valueText, null);
-  assert.deepEqual(out.waiting_periods.conditions, []);
-  assert.equal(out.exclusions.outcome, 'conflicting');
-  assert.equal(out.exclusions.valueText, null);
+  assert.equal(out.initial_waiting_period.outcome, 'verified');
+  assert.equal(out.initial_waiting_period.valueText, 'Ten percent');
+  assert.equal(out.excluded_conditions.outcome, 'conflicting');
+  assert.equal(out.excluded_conditions.valueText, null);
   assert.equal(out.room_rent_limit.outcome, 'unknown');
+  // A fact type with no family is never usable.
+  assert.equal(out.icu_limit.outcome, 'unknown');
+  const withheld = await run({ room_rent_limit: 'not_permitted', copay: 'awaiting_review', waiting_periods: 'awaiting_review', exclusions: 'not_observed' });
+  for (const type of types) assert.equal(withheld[type].outcome, 'unknown', type);
+  assert.equal(withheld.initial_waiting_period.valueText, null);
+  assert.deepEqual(withheld.initial_waiting_period.conditions, []);
   // A synthetic version never yields a verified fact, whatever the fact claims.
   const { client: synthetic } = stubClient(() => jsonResponse(factsHeader({ version_synthetic: true })));
   assert.equal((await synthetic.read('versions.facts', { versionId: 'ver_example_2' })).data.facts[0].outcome, 'unknown');

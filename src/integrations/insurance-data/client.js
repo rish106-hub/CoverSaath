@@ -29,6 +29,8 @@ const normalizeUin = value => {
   if (!/^[A-Z0-9][A-Z0-9 ./_-]{2,63}$/.test(uin)) throw invalidRequest();
   return uin;
 };
+const CURSOR = /^[A-Za-z0-9_-]{1,200}$/;
+const normalizeCursor = value => { if (value === undefined) return undefined; if (typeof value !== 'string' || !CURSOR.test(value)) throw invalidRequest(); return value; };
 const normalizeId = value => { if (typeof value !== 'string' || !ID.test(value)) throw invalidRequest(); return value; };
 const invalidRequest = () => referenceError('REFERENCE_DATA_REQUEST_INVALID', 'Reference data request was invalid.', { statusCode: 400 });
 
@@ -73,17 +75,16 @@ export const REFERENCE_ENDPOINTS = Object.freeze({
         if (typeof p.factType !== 'string' || !FACT_TYPE.test(p.factType)) throw invalidRequest();
         out.factType = p.factType;
       }
+      if (p.cursor !== undefined) out.cursor = normalizeCursor(p.cursor);
       return out;
     },
-    request: p => ({ path: `/v1/versions/${encodeURIComponent(p.versionId)}/facts`, query: { fact_type: p.factType } }),
+    request: p => ({ path: `/v1/versions/${encodeURIComponent(p.versionId)}/facts`, query: { fact_type: p.factType, cursor: p.cursor } }),
     parse: schemas.parseFacts,
   },
 });
 
 // Service-only endpoints for the backend's own detection and reference import (never reachable from the import file
 // allow-list above or from any route). Their responses carry the UIN: callers keep it in server-side rows only.
-const CURSOR = /^[A-Za-z0-9_-]{1,200}$/;
-const normalizeCursor = value => { if (value === undefined) return undefined; if (typeof value !== 'string' || !CURSOR.test(value)) throw invalidRequest(); return value; };
 export const EXPORT_MAX_RESPONSE_BYTES = 8_388_608;
 export const SERVICE_ENDPOINTS = Object.freeze({
   'registry.insurers': {
