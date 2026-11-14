@@ -1,4 +1,5 @@
 import { formatFactValue } from './fact-format.js';
+import { NOT_IN_DOCUMENTS_TEXT } from './clause-answer.js';
 
 // The deterministic chat answer (chat v0 behaviour carried into v1, complete.md 3.3). Used when CHAT_MODEL_ENABLED is not "true", when
 // the budget is spent, when the provider is unavailable, and whenever the model output fails the code's checks. A template over typed
@@ -16,7 +17,7 @@ const SOURCE = Object.freeze({
  * conflictKeys: Set of fact keys with an open conflict. clauses: [{ id, page, text }] keyword hits (used only when no fact answers).
  * Resolves { text, usedFacts, status } with status evidence_found | unknown.
  */
-export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [] }) {
+export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [], searchedClauses = false }) {
   const byKey = new Map();
   for (const fact of facts) if (!byKey.has(fact.factKey)) byKey.set(fact.factKey, fact);
   const lines = [];
@@ -45,8 +46,14 @@ export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys
     }
     if (used.length === 0 && lines.length === 0) {
       if (clauses.length > 0) {
-        for (const clause of clauses.slice(0, 3)) lines.push(`- From your policy document${clause.page ? ` (page ${clause.page})` : ''}: ${String(clause.text).replace(/\s+/g, ' ').slice(0, 300)}`);
+        for (const clause of clauses.slice(0, 3)) {
+          const quote = String(clause.window ?? clause.text).replace(/\s+/g, ' ').slice(0, 300);
+          const place = clause.page ? ` (page ${clause.page})` : '';
+          lines.push(clause.excluded ? `- Your policy wording excludes this${place}: ${quote}` : `- From your policy document${place}: ${quote}`);
+        }
         lines.push('These are passages as printed; they are not a confirmed term.');
+      } else if (searchedClauses) {
+        lines.push(NOT_IN_DOCUMENTS_TEXT);
       } else if (factKeys.length > 0) {
         lines.push(`I do not have ${factKeys.slice(0, 2).map(key => key.replace(/_/g, ' ')).join(' or ')} confirmed for your policy yet.`);
       } else {
