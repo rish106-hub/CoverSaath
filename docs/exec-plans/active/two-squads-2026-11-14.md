@@ -36,3 +36,4 @@ CoverSaath calls FSS only through `src/integrations/insurance-data/client.js` al
 ## Hand-off log (append, newest last)
 
 - 2026-11-14 A: PR #134 merged; review fixes on `main` 930b6e4. Squad B lane opened.
+- 2026-11-14 A: Squad A running A1+A2 (`sqa/pdf-gate-sanitise`), A3 (`sqa/chat-honest-unknown`), A4 cleanup. Squad B brief: `squad-b-brief.md`.
