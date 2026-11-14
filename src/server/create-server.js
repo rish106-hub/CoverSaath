@@ -408,6 +408,7 @@ export function createApiServer({
         // A text result (the metrics scrape) is sent as is; every other route answers JSON.
         if (typeof backendResult.text === 'string') {
           res.setHeader('Content-Type', backendResult.contentType);
+          if (backendResult.cacheControl) res.setHeader('Cache-Control', backendResult.cacheControl);
           res.writeHead(backendResult.status);
           return res.end(backendResult.text);
         }
