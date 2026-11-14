@@ -43,6 +43,8 @@ test('picker: ties go to more documents, then lower id', () => {
 
 test('picker: rejects non toll-free numbers, bad e-mails, bad purpose, missing id', () => {
   assert.equal(pickInsurerContact([ct('x', 'phone', '022-0000-0000', 'service')]), null);
+  assert.equal(pickInsurerContact([ct('x', 'phone', '1800-00-000', 'service')]), null); // too short
+  assert.equal(pickInsurerContact([ct('t', 'phone', '1800-000-002', 'service')]).id, 't'); // 10-digit toll-free is valid
   assert.equal(pickInsurerContact([ct('x', 'phone', '9800000000', 'claims')]), null);
   assert.equal(pickInsurerContact([ct('x', 'email', 'not-an-email', 'service')]), null);
   assert.equal(pickInsurerContact([ct('x', 'phone', '1800-000-0001', 'sales')]), null);
@@ -51,7 +53,7 @@ test('picker: rejects non toll-free numbers, bad e-mails, bad purpose, missing i
 });
 
 test('containsContactValue: catches e-mails, toll-free and mobile numbers, not policy numbers', () => {
-  for (const t of ['write to care@insurer.example', 'call 1800-000-0001', 'call 18600000003', 'ring +91 98000 00000', '9800000000']) assert.equal(containsContactValue(t), true, t);
+  for (const t of ['write to care@insurer.example', 'call 1800-000-0001', 'call 18600000003', 'call 1800-000-002', 'ring +91 98000 00000', '9800000000']) assert.equal(containsContactValue(t), true, t);
   for (const t of ['Up to Rs 5,00,000 per policy year', 'Rs 18,00,000 sum insured', 'wait of 24 months', 'ends on 12 Mar 2027', '1% of sum insured', 'clause 4.2(b)']) assert.equal(containsContactValue(t), false, t);
 });
 

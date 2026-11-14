@@ -6,7 +6,7 @@ export const CONTACT_KINDS = Object.freeze(['phone', 'email']);
 export const CONTACT_PURPOSES = Object.freeze(['claims', 'service', 'grievance', 'other']);
 
 // Indian toll-free only (1800 / 1860). Anything else is not shown as an insurer helpline.
-const TOLL_FREE = /^18(?:00|60)[\s-]?\d{3}[\s-]?\d{4}$/;
+const TOLL_FREE = /^18(?:00|60)(?:[\s-]?\d){6,7}$/; // 10 or 11 digits, e.g. 1800-220-233 and 1800-000-0001
 const EMAIL = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
 
 export function isValidContact(contact) {
@@ -50,7 +50,7 @@ export function pickInsurerContact(contacts, { use = 'holder' } = {}) {
 export function containsContactValue(text) {
   const t = String(text ?? '').normalize('NFKC');
   if (/[a-z0-9._%+-]+@[a-z0-9-]+\.[a-z0-9.-]+/i.test(t)) return true;
-  if (/(?<!\d)18(?:00|60)[\s-]?\d{3}[\s-]?\d{4}(?!\d)/.test(t)) return true; // toll-free
+  if (/(?<!\d)18(?:00|60)(?:[\s-]?\d){6,7}(?![\s-]?\d)/.test(t)) return true; // toll-free, 10 or 11 digits
   if (/(?<!\d)(?:\+?91[\s-]?)?[6-9]\d{4}[\s-]?\d{5}(?!\d)/.test(t)) return true; // Indian mobile
   return false;
 }
