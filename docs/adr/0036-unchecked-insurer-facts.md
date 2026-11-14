@@ -1,0 +1,22 @@
+# ADR 0036: Show model-extracted insurer facts as "not checked"
+
+- Status: Proposed (2026-11-14). Owner decision taken; implementation follows the first extraction run. Not reviewed. Builds on ADR 0034 (FSS as the insurer tier). FOR LEGAL REVIEW: the display wording.
+
+**Context.** FSS will extract insurer facts from public policy wordings with a model (FSS `docs/contracts/extraction-v1.md`, signed off 2026-11-14). Every such fact is `extracted_unverified`, with a page and verbatim quote. CoverSaath today drops any insurer fact that is not `independently_verified`: `parseFact` blanks its value, and `fss-fact-map.js` maps only `outcome === 'verified'`. Migration 049's pairing CHECK also allows `ida_wording` only with `reviewed_reference | conflicting | unknown`. So none of the extracted facts would ever reach a user. On 2026-11-14 the owner chose to show them, labelled "From the insurer's wording, not checked".
+
+**Decision.**
+1. **Status.** `ida_wording` gains `extracted_unverified`. `TIER_STATUSES.ida_wording` becomes `reviewed_reference | extracted_unverified | conflicting | unknown`. A new migration replaces `household_memory_facts_tier_status_check` the same way (expand-only, existing rows untouched).
+2. **Parsing.** `parseFact` (integrations/insurance-data/schemas.js) keeps the value of a non-synthetic, evidenced fact whose `verification_status` is `extracted_unverified`, with `outcome: 'unchecked'`. Everything else is unchanged: `verified` still needs `independently_verified` plus family coverage. The value is bounded by the same parsers.
+3. **Mapping.** `fss-fact-map.js` maps `outcome: 'unchecked'` to an `ida_wording` row with status `extracted_unverified`, and `verified` to `reviewed_reference` as today. The evidence (page, quote) is sealed as now.
+4. **Collate.** An `ida_wording` row with `extracted_unverified` is never the holding's decided value. `collate.js` keeps today's order: `reviewed_reference` insurer > own PDF > unknown. An unchecked insurer value only fills a key that has no own-PDF value, and it keeps the status `extracted_unverified`. It is never promoted.
+5. **Never a verdict.** Rules (`insurance-rules`), procedure planning and computed checks read only `reviewed_reference` and own-PDF values, exactly as now; a unit test pins that `extracted_unverified` `ida_wording` rows are ignored there. In chat, an unchecked insurer fact may be cited as a source (answer card `sources[].tier = 'ida_wording'`, `status = 'extracted_unverified'`), and the guard's checks apply. The card `verdict` stays `unknown`.
+6. **Display.** The policy card and chat show "From the insurer's wording, not checked", with the page and the quote. The beta tile badge maps to `ida_wording` with an "unchecked" variant. Wording FOR LEGAL REVIEW.
+7. **Erasure.** These are rows of existing stores (`household_memory_facts`, the reference cache), so they are erased with the holding, the document or a revocation as now. No new store.
+
+**Consequences.** Users see insurer terms for products where the policy itself is silent. That's the value of the extraction run. The risk is a wrong extracted value shown as insurer wording, contained by: the label, the quote shown with it, the extraction gate (≤ 2% false values on the golden set), the never-a-verdict rule, and the guard. A later independent review (FSS checker workflow) promotes a fact to `reviewed_reference` with no CoverSaath change.
+
+**Alternatives rejected.**
+- Keep dropping unverified insurer facts until reviewed: safe but slow, and nothing reaches users for months (owner rejected).
+- Treat extracted facts as `reviewed_reference`: breaks the rule that a model never writes `reviewed_reference` (AI.md, migration 049).
+
+**Implementation touchpoints** (one PR, after the first extraction run): `src/contracts/policy-facts.js` (`TIER_STATUSES`) · new migration (pairing CHECK) · `src/integrations/insurance-data/schemas.js` (`parseFact`) · `src/features/policy-facts/fss-fact-map.js` · `src/features/insurance-rules/collate.js` (+ pin test) · chat source tier mapping · beta tile badge (Knowvia `src/lib/beta/tiles.ts`) · tests: raw-column, erasure, never-a-verdict, migration, policy-facts registry drift. Needs an independent read-only review (AI.md: migration, AI and trust change).
