@@ -18,8 +18,8 @@ psql -h localhost -p 54329 -U coversaath -d coversaath_live -c "CREATE SCHEMA ex
 node scripts/live-run/launch.mjs initdb
 node scripts/live-run/build-eval-pdfs.mjs           # writes .local/live-run/pdfs/
 node scripts/live-run/fss-stub.mjs 3999             # terminal 1
-node scripts/live-run/launch.mjs server             # terminal 2
-node scripts/live-run/launch.mjs worker             # terminal 3
+node scripts/live-run/launch.mjs server             # terminal 2 (export both LIVE_RUN_* variables here first)
+node scripts/live-run/launch.mjs worker             # terminal 3 (export both LIVE_RUN_* variables here first)
 node scripts/live-run/journey.mjs --eval            # steps 1-7, then 100 questions through chat v1
 ```
 
@@ -27,9 +27,16 @@ Notes:
 
 - Migration 053 expects pgvector in the `extensions` schema (Supabase layout), hence the second `psql` line.
 - The session token stays in memory; nothing is written to disk. Drop the database after the run.
-- The FSS stub serves an invented insurer and product. Replace `LIVE_RUN_FSS_URL` with a real FSS once one branch serves every route.
+- The FSS stub serves an invented insurer and product. For a real FSS, set `LIVE_RUN_FSS_URL` and `LIVE_RUN_FSS_API_KEY` (the launcher refuses a real URL without a key).
+- The launcher refuses a `LIVE_RUN_DATABASE_URL` that is not on loopback.
 - Chat runs without model wording unless a `coverage_reconstruction` provider grant is added ([chat-and-memory](chat-and-memory.md) section 4).
 
 ## Rollback
 
-Stop the processes and `DROP DATABASE coversaath_live`. Nothing hosted is touched.
+Stop the processes, then:
+
+```sh
+psql -h localhost -p 54329 -U coversaath -d postgres -c "DROP DATABASE IF EXISTS coversaath_live"
+```
+
+Nothing hosted is touched.
