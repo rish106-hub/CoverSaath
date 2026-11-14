@@ -142,6 +142,45 @@ export function createHoldingProductService({
       return { holdingId: holding.id, profileVersion: profile?.version ?? 0, candidates };
     },
 
+    /**
+     * Owner read: products whose name (with the insurer's name and aliases) contains every word of a typed name fragment, from the
+     * cached registry snapshot. No call leaves this process, nothing is stored and the fragment is never logged. At most 8, only
+     * products that can be confirmed (they carry a UIN), in the candidate shape so confirm-product accepts the pick. No UIN returned.
+     */
+    async searchProducts({ holding, q }) {
+      requireEnabled();
+      const fragment = typeof q === 'string' ? q.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim() : '';
+      if (fragment.length < 2 || fragment.length > 80 || fragment.split(' ').length > 8) {
+        throw coded('HOLDING_PRODUCT_SEARCH_INVALID', 'Type 2 to 80 characters of the product name.', 400);
+      }
+      const registry = await readRegistry();
+      if (!registry) {
+        await enqueueRegistryRefresh(holding.householdId);
+        throw coded('HOLDING_REGISTRY_UNAVAILABLE', 'The product list is not ready yet. Try again shortly.', 503, { retryable: true });
+      }
+      const words = fragment.split(' ');
+      const insurers = new Map((registry.insurers ?? []).map(item => [item.id, item]));
+      const matches = [];
+      for (const product of registry.products ?? []) {
+        if (!product.uinRaw || typeof product.productName !== 'string') continue;
+        const insurer = insurers.get(product.insurerId);
+        if (!insurer) continue;
+        const name = product.productName.toLowerCase();
+        const haystack = `${name} ${String(insurer.canonicalName ?? '').toLowerCase()} ${(insurer.aliases ?? []).join(' ').toLowerCase()}`;
+        if (!words.every(word => haystack.includes(word))) continue;
+        // Name starts with the fragment, then more words found in the product name itself, then the shorter name.
+        const score = [name.startsWith(fragment) ? 0 : 1, -words.filter(word => name.includes(word)).length, name.length];
+        matches.push({ product, insurer, score });
+      }
+      matches.sort((a, b) => a.score[0] - b.score[0] || a.score[1] - b.score[1] || a.score[2] - b.score[2] || (a.product.productId < b.product.productId ? -1 : 1));
+      return {
+        holdingId: holding.id,
+        candidates: matches.slice(0, 8).map((item, index) => ({
+          candidateId: item.product.productId, insurerName: item.insurer.canonicalName, productName: item.product.productName, rank: index + 1,
+        })),
+      };
+    },
+
     /** Job: the same detection for a queued holding. Only the status moves; no candidate is stored. Returns the candidate count. */
     async runDetection({ householdId, documentId, holdingId }) {
       requireEnabled();

@@ -221,6 +221,35 @@ test('flow: registry import, candidates, confirm-product, reference import (UIN 
   assert.equal(Number((await app.database.one('SELECT count(*) AS n FROM reference_cache')).n), 2);
 });
 
+test('product search: name fragment against the cached registry, candidate shape, no UIN, no outbound call, validated', opts, async t => {
+  const { app, s, holdingId, stub, services, env } = await world(t);
+  const url = q => `/api/v1/holdings/${holdingId}/product-search?q=${encodeURIComponent(q)}`;
+  const early = await app.call(url('shield'), { token: s.token });
+  assert.equal(early.data.error.code, 'HOLDING_REGISTRY_UNAVAILABLE');
+  await buildJobHandlers(services, env)['reference.import']({ job: { kind: 'reference.import', householdId: s.householdId, payload: { scope: 'registry' } } });
+  const before = stub.requests.length;
+  const hit = await app.call(url('  Shield   PLUS '), { token: s.token });
+  assert.equal(hit.status, 200, hit.text);
+  assert.equal(hit.data.candidates[0].candidateId, 'prod-shield');
+  assert.deepEqual(Object.keys(hit.data.candidates[0]).sort(), ['candidateId', 'insurerName', 'productName', 'rank']);
+  assert.equal(noUin(hit.data), true);
+  assert.equal(stub.requests.length, before, 'search reads the cache only');
+  // Insurer name words narrow too; a word in neither name finds nothing.
+  assert.ok((await app.call(url('acme shield'), { token: s.token })).data.candidates.length >= 1);
+  assert.deepEqual((await app.call(url('zebra'), { token: s.token })).data.candidates, []);
+  for (const bad of ['a', 'x'.repeat(81), 'one two three four five six seven eight nine']) {
+    const refused = await app.call(url(bad), { token: s.token });
+    assert.deepEqual([refused.status, refused.data.error.code], [400, 'HOLDING_PRODUCT_SEARCH_INVALID']);
+  }
+  // A search hit is a valid pick for confirm-product.
+  const confirmed = await app.call(`/api/v1/holdings/${holdingId}/confirm-product`, { method: 'POST', token: s.token, body: { candidateId: hit.data.candidates[0].candidateId, expectedVersion: 0 }, headers: { 'Idempotency-Key': `confirm-${randomUUID()}` } });
+  assert.equal(confirmed.status, 200, confirmed.text);
+  // Ownership: another household gets the same 404.
+  const foreign = await app.call('/api/v1/households', { method: 'POST', token: bootstrapToken, body: { displayName: 'Foreign household', owner: { displayName: 'Other Synthetic' } } });
+  const other = await app.call(url('shield'), { token: foreign.data.session.token });
+  assert.deepEqual([other.status, other.data.error.code], [404, 'HOLDING_NOT_FOUND']);
+});
+
 test('detect-insurer job: moves the status only, stores no candidate, ends quietly when the text is unreadable', opts, async t => {
   const { app, s, holdingId, services } = await world(t);
   await services.holdingProducts.importRegistry();
