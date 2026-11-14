@@ -68,13 +68,14 @@ Failure: text mode may retry once on C1-C3; voice never retries. Otherwise the f
 
 ## 5. Voice on Gnani
 
-Pipeline: push to talk (max 30 s, client VAD, Opus 16 kHz), then BFF, then `POST /api/v1/voice/turns` (ownership + exact voice consent naming Gnani as recipient), then Gnani STT streaming (en-IN, hi-IN, Hinglish), then editable transcript chip row with one "Send" tap, then the same answer pipeline (`input_kind = voice`), then TTS of the template headline only.
+Pipeline: push to talk (max 30 s, client VAD, 16 kHz mono WAV encoded in the browser, because Gnani REST STT takes wav/mp3/ogg/flac/aac/m4a but not the webm Chrome records), then BFF, then `POST /api/v1/voice/turns` (ownership + exact voice consent naming Gnani as recipient), then Gnani STT streaming (en-IN, hi-IN, Hinglish), then editable transcript chip row with one "Send" tap, then the same answer pipeline (`input_kind = voice`), then TTS of the template headline only.
 
 - **Processor (B3)**: Gnani receives raw health speech, so it needs a processor-register row, a purpose-registry recipient, India data-residency confirmation and the consent text naming it. No STT call without that grant.
 - **Never spoken**: health declarations, member names, conditions. Headline = verdict + at most one amount or date.
 - **TTS cache (B7)**: global cache only for strings with no numbers, dates or names (refusals, catalogue prompts, pre-rendered at build time). Personal headlines are synthesised fresh.
 - **Efficiency**: push to talk, VAD, confirm-before-send (catches STT errors before a model call), short TTS, circuit breaker to text.
 - **Latency targets** (measure on stub first): 1.5 s to transcript, 2.5 s to validated card, 1.0 s to audio.
+- **Gnani facts (docs.gnani.ai, read 2026-11-14)**: host `api.vachana.ai`, auth header `X-API-Key-ID`; STT `POST /stt/v3` multipart (`audio_file`, `language_code` en-IN / hi-IN, `model` prisma-v3.0 accepts `hi-IN,en-IN` for Hinglish), 30 s REST cap; TTS `POST /api/v1/tts/inference` (timbre-v3.0, returns raw audio); realtime WSS exists (later). **One active request per account** (429 otherwise, no published limits): in-process single-flight queue now, DB lease across machines, and ask Gnani for higher concurrency before beta users. Hosted region and API retention are not stated in the docs, so O5 stays open.
 - **Adapter**: `transcribe` and `synthesize` through the provider boundary with a local stub and opt-in live test; live run needs owner approval.
 
 ## 6. Guardrails (input to output)
