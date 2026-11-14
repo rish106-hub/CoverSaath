@@ -69,26 +69,27 @@ for (const [kind, id] of Object.entries(docs)) {
 }
 
 // 5. holdings, candidates, confirm
-const holdings = await poll('holdings', () => call(`/api/v1/households/${householdId}/holdings`), x => (x.data?.holdings ?? []).length >= 1);
+const holdings = await poll('holdings', () => call(`/api/v1/households/${householdId}/holdings`), x => (x.data?.holdings ?? []).some(h => h.documentId === docs.policy_schedule));
 const list = holdings.data.holdings; log('5 holdings', list.length, list.map(h => h.status).join(','));
-const holdingId = (list.find(h => h.documentId === docs.policy_schedule) ?? list[0]).id;
+const holdingId = list.find(h => h.documentId === docs.policy_schedule).id;
 const cands = await poll('candidates', () => call(`/api/v1/holdings/${holdingId}/product-candidates`), x => x.status === 200 || (x.status >= 400 && x.status !== 503), { every: 3000, max: 120_000 });
 log('5 candidates', cands.status, code(cands), (cands.data?.candidates ?? []).map(c => c.candidateId).join(','));
 if (cands.status === 200 && cands.data.candidates?.length) {
-  const conf = await call(`/api/v1/holdings/${holdingId}/confirm-product`, { method: 'POST', headers: { 'idempotency-key': `confirm-${randomUUID()}` }, body: { candidateId: cands.data.candidates[0].candidateId, expectedVersion: cands.data.profileVersion } });
-  log('5 confirm', conf.status, code(conf), conf.data?.status ?? '');
+  const conf = must(await call(`/api/v1/holdings/${holdingId}/confirm-product`, { method: 'POST', headers: { 'idempotency-key': `confirm-${randomUUID()}` }, body: { candidateId: cands.data.candidates[0].candidateId, expectedVersion: cands.data.profileVersion } }), [200], 'confirm product');
+  log('5 confirm', conf.status ?? 'ok');
 }
 
 // 6. link wording
-const link = await call(`/api/v1/holdings/${holdingId}/documents`, { method: 'POST', body: { documentId: docs.policy_wording, kind: 'wording' } });
-log('6 link wording', link.status, code(link), JSON.stringify(link.data).slice(0, 120));
+must(await call(`/api/v1/holdings/${holdingId}/documents`, { method: 'POST', body: { documentId: docs.policy_wording, kind: 'wording' } }), [200, 201], 'link wording');
+log('6 link wording', 'ok');
 await sleep(15000);
 const after = await call(`/api/v1/households/${householdId}/holdings`);
 log('6 holdings after link', (after.data?.holdings ?? []).length, JSON.stringify(after.data?.holdings?.[0]?.summary ?? {}).slice(0, 300));
 
 // 7. facts + chat
-const facts = await poll('facts', () => call(`/api/v1/holdings/${holdingId}/facts`), x => (x.data?.facts ?? []).length > 0 || x.status >= 400, { every: 4000, max: 180_000 }).catch(() => null);
-const fl = facts?.data?.facts ?? [];
+const facts = await poll('facts', () => call(`/api/v1/holdings/${holdingId}/facts`), x => (x.data?.facts ?? []).length > 0 || x.status >= 400, { every: 4000, max: 180_000 });
+must(facts, [200], 'facts');
+const fl = facts.data.facts;
 log('7 facts', facts?.status, fl.length, fl.slice(0, 40).map(f => `${f.factKey ?? f.key}=${JSON.stringify(f.value).slice(0, 40)}[${f.status ?? f.state ?? ''}]`).join(' | '));
 const conflicts = await call(`/api/v1/holdings/${holdingId}/conflicts`);
 log('7 conflicts', conflicts.status, (conflicts.data?.conflicts ?? []).length);
@@ -99,9 +100,10 @@ for (const q of questions) {
   const res = await fetch(`${BASE}/api/v1/chat/threads/${threadId}/turns`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify({ message: q }) });
   const text = await res.text();
   const events = text.split('\n\n').map(b => ({ ev: /event: (.*)/.exec(b)?.[1], data: /data: (.*)/s.exec(b)?.[1] })).filter(e => e.ev);
-  const ans = events.find(e => e.ev === 'answer'); const err = events.find(e => e.ev === 'error');
-  let a = {}; try { a = JSON.parse(ans?.data ?? err?.data ?? '{}'); } catch {}
-  log(`7 chat "${q}"`, res.status, a.status ?? '', '→', String(a.answer ?? a.text ?? a.message ?? a.code ?? '').slice(0, 220), '| sources:', JSON.stringify(a.sources ?? []).slice(0, 160), '| model:', a.model?.status ?? a.modelStatus ?? '');
+  const ans = events.find(e => e.ev === 'answer');
+  if (!res.ok || !ans) { log(`FAIL chat "${q}"`, res.status, events.find(e => e.ev === 'error')?.data?.slice(0, 200) ?? ''); process.exit(1); }
+  let a = {}; try { a = JSON.parse(ans.data); } catch { log('FAIL chat answer not JSON'); process.exit(1); }
+  log(`7 chat "${q}"`, res.status, a.status ?? '', '→', String(a.answer ?? a.text ?? '').slice(0, 220), '| sources:', JSON.stringify(a.sources ?? []).slice(0, 160), '| model:', a.model?.status ?? a.modelStatus ?? '');
 }
 if (process.argv.includes('--eval')) {
   const set = JSON.parse(await readFile('scripts/fixtures/synthetic-policy-questions.json', 'utf8'));

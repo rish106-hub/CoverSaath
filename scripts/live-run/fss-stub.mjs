@@ -19,7 +19,7 @@ http.createServer((req, res) => {
   const send = (body, status = 200) => { res.writeHead(status, { 'content-type': 'application/json', etag: '"stub"' }); res.end(JSON.stringify(body)); };
   console.log(req.method, url.pathname);
   if (url.pathname === '/v1/insurers') return send({ data: [insurer], next_cursor: null });
-  if (url.pathname === '/v1/insurers/resolve') return send({ data: [{ ...insurer, score: 1 }] });
+  if (url.pathname === '/v1/insurers/resolve') return send({ status: 'resolved', insurer });
   if (url.pathname === '/v1/products') return send({ data: [product], next_cursor: null });
   if (url.pathname === '/v1/products/search') return send({ data: [{ ...product, insurer_name: insurer.canonical_name }] });
   if (url.pathname === '/v1/network-hospitals/export') return send({ data: [], next_cursor: null });
