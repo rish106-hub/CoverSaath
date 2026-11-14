@@ -219,7 +219,8 @@ test('vector retrieval: with embeddings the nearest passages are retrieved and c
   const out = await s.turn({ threadId: conversation.id, body: { message: 'what does the policy say about room rent?' } });
   const trace = await s.services.chatRepository.trace({ householdId: s.a.household, turnId: answerOf(out).turn_id });
   assert.equal(trace.mode, 'vector');
-  assert.equal(trace.chunkIds.length, 2);
+  // Relevance floor: the ambulance passage does not carry the question's terms and is dropped; only the room rent passage stays.
+  assert.equal(trace.chunkIds.length, 1);
 });
 
 test('ownership: another household cannot read, write or probe a thread, holding or chunk; flags are exact', opts, async t => {

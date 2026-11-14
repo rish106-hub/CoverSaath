@@ -4,6 +4,7 @@ import { ANALYTICS_EVENTS } from '../../contracts/analytics-events.js';
 import { CHAT_INTENTS } from '../../features/ai-analysis/gateway-contract.js';
 import { gateText, gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { buildDeterministicAnswer } from '../../features/insurance-rules/chat-answer.js';
+import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer } from '../../features/insurance-rules/clause-answer.js';
 import { classifyChatMessage } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
@@ -118,8 +119,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
       searched.add(row.case_id);
       const siblings = await database.many(`SELECT id FROM document_uploads WHERE household_id = ? AND case_id = ? AND lifecycle_state = 'active' ORDER BY id LIMIT ?`, [householdId, row.case_id, MAX_CASE_DOCUMENTS]);
       const documentIds = [...new Set([documentId, ...siblings.map(item => item.id)])];
-      const hits = await clauses.searchClauses({ householdId, caseId: row.case_id, documentIds, query: message, limit: KEYWORD_K });
-      for (const hit of hits) found.push({ id: hit.clauseId, documentId: hit.documentId, page: hit.page ?? null, text: hit.text });
+      const hits = await clauses.searchClauses({ householdId, caseId: row.case_id, documentIds, query: expandQuery(message), limit: KEYWORD_K });
+      for (const hit of hits) found.push({ id: hit.clauseId, documentId: hit.documentId, page: hit.page ?? null, text: hit.text, kind: hit.kind, sectionPath: hit.sectionPath, blockIndexes: hit.blockIndexes });
     }
     return found.slice(0, KEYWORD_K);
   }
@@ -129,8 +130,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
   async function wordingSources({ householdId, passageList, clauseList }) {
     const out = [];
     const seen = new Set();
-    const push = (documentId, page, ref) => { const key = `${documentId}|${page}|${ref}`; if (documentId && !seen.has(key)) { seen.add(key); out.push({ kind: 'wording', document_id: documentId, page, ref }); } };
-    for (const clause of clauseList) push(clause.documentId, clause.page, `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`);
+    const push = (documentId, page, ref, blockIndex = null) => { const key = `${documentId}|${page}|${ref}`; if (documentId && !seen.has(key)) { seen.add(key); out.push({ kind: 'wording', document_id: documentId, page, ref, ...(Number.isInteger(blockIndex) ? { block_index: blockIndex } : {}) }); } };
+    for (const clause of clauseList) push(clause.documentId, clause.page, `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`, clause.blockIndex);
     const byDocument = new Map();
     for (const passage of passageList.filter(item => item.scope === 'own_pdf' && item.sourceDocumentId)) {
       if (!byDocument.has(passage.sourceDocumentId)) {
@@ -286,23 +287,31 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
                 try { onEvent?.({ event: 'chat_embed_failed', code: /^[A-Z][A-Z0-9_]{2,63}$/.test(error?.code ?? '') ? error.code : 'EMBED_FAILED' }); } catch { /* logging never breaks a turn */ }
               }
               if (vector) {
-                passages = await chunks.search({ householdId, holdingIds: context.holdingIds.length ? context.holdingIds : null, embedding: vector, limit: VECTOR_K });
+                // Relevance floor: a passage must carry the question's content terms; weak vector neighbours are dropped, not shown.
+                passages = (await chunks.search({ householdId, holdingIds: context.holdingIds.length ? context.holdingIds : null, embedding: vector, limit: VECTOR_K })).filter(item => clearsRelevanceFloor(message, item.text));
                 // Zero vector hits fall through to the keyword path (same household scope); only a vector that found passages stays 'vector'.
                 if (passages.length > 0) mode = 'vector';
               }
             }
             let clauseHits = [];
+            let searchedClauses = false;
             if (mode !== 'vector' && !answersTopic && context.documents.length > 0 && intent !== 'procedure_planning') {
-              clauseHits = await keywordClauses({ householdId, documents: context.documents, message });
+              const candidates = await keywordClauses({ householdId, documents: context.documents, message });
+              // Clause level: only the best sentence window that clears the relevance floor, never the page. None means "unknown", no source.
+              const picked = selectClauseAnswer({ question: message, clauses: candidates });
+              clauseHits = picked ? [{ ...picked.clause, window: picked.text, excluded: picked.excluded, blockIndex: picked.blockIndex }] : [];
+              searchedClauses = contentTerms(message).length > 0;
               mode = 'keyword';
             }
 
             emit('meta', { thread_id: thread.id, intent: CHAT_INTENTS.includes(intent) ? intent : 'unknown', retrieval_mode: mode, facts_available: context.facts.length, open_conflicts: context.conflicts.length });
 
-            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits });
+            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses });
             const history = await chatRepository.recentTurns({ householdId, threadId });
             // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
-            const model = (context.facts.length > 0 || passages.length > 0)
+            // Nothing in the wording or the facts speaks to a coverage question: no model call, the fixed unknown answer stands.
+            const nothingRelevant = searchedClauses && clauseHits.length === 0 && passages.length === 0 && !answersTopic;
+            const model = !nothingRelevant && (context.facts.length > 0 || passages.length > 0)
               ? await modelAnswer({ householdId, adultId: principal.adultId, message, history, context, relevant, plan, passages, startedAt }) : null;
 
             let text = deterministic.text;
