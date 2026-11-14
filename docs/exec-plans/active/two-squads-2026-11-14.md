@@ -57,11 +57,12 @@ Owner order: A and B talk to each other directly (cross-session SendMessage), ch
 
 | Squad A (session "Remaining work estimate") | Squad B (session `coversaath-4a`) |
 |---|---|
-| R2 upload of all PDFs (`docs:load`), counts verified against catalog | Re-tag, label-as-name fix (386 rows), doc_type for "unknown", untagged.csv gaps; never guess a UIN |
-| Re-run `docs:load` on every B catalog sha (tags only, no re-upload); re-export registry matches for B | Push catalog sha + counts to A after each pass; no column renames (append only, warn first) |
-| Own branch `sqb/supabase-store` (migration 022, loader); merge to FSS `master` after upload verified | Product registry growth: add catalog UINs with complete tags to the registry via `products:import` as unverified, so documents link to products |
-| CoverSaath live E2E (`launch.mjs` + `journey.mjs`) against local FSS; paid OCR/chat as owner approved after re-tag | Run the FSS API locally and give A a dev API key in `~/.config/fss/fss-dev.env` (chmod 600; LIVE_RUN_FSS_URL, LIVE_RUN_FSS_API_KEY); never paste keys in messages |
-| CoverSaath + Knowvia_website code and fixes found by the E2E | FSS fixes found by the E2E (contract unchanged unless both agree) |
+| FSS branch `sqb/supabase-store` (migration 022, `docs:load`, S3 signer), every DB load and `products:import` run, R2 bucket `knowvia-insurance`, Supabase setup | Repo `insurance-raw-docs` (docs/, manifest, tag-catalog.py, catalog.csv/jsonl, untagged.csv, HANDOFF.md, links/) |
+| Re-run `docs:load` on every B sha; export `registry-uin-names.csv` + `catalog-registry-matches.csv` | Tag completeness (UIN, name, category, doc_type), 386 label-as-name fix, registry name backfill (registry wins when one product holds the UIN); never guess a UIN |
+| CoverSaath and Knowvia_website, incl. live E2E (one journey after the re-tag, per owner "wait for re-tag") | FSS `tools/raw-download.mjs`, `data/products/*.csv` (add catalog UINs as unverified rows), `data/raw-docs`, `sqb/fetch-fixes`; re-collect dropped PDFs |
+| | FSS API on loopback + one dev key in `~/.config/fss/fss-dev.env` (chmod 600) for A's E2E; send "ready", never the key |
+
+Interfaces: catalog.csv (B writes, A reads, columns append-only with notice); registry exports (A writes, B copies to links/); B sends sha after each tag push, A refreshes the load. Merges to FSS `master`, spend beyond the one approved E2E, unpausing sites, legal and deploys wait for the owner. Disputes: argue by message with evidence; the file owner decides.
 
 Rules: do not write to the other squad's files, branches or buckets without asking first. Disagree in messages with evidence (counts, test output). If stuck between squads, log both views and take the reversible option.
 
