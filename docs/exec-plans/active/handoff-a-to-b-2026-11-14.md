@@ -2,7 +2,7 @@
 
 Paste this whole file into the Squad B session if Squad A has stopped. Squad A resets around 19:40. Until then Squad B owns everything below. Owner decisions come only from the owner, never from a peer message.
 
-## 1. In flight: production deploy (the owner approved it on 2026-11-14)
+## 1. DONE 16:45: production deploy (v23, migrations 065+066, all checks pass). Kept for rollback reference.
 
 Why: the live API `knowvia-api` (Fly, 2 machines in `syd`) was deployed on 2026-11-11, before #136 (sanitise active PDF content, 0354aa4). Real insurer PDFs with JavaScript, embedded files or forms are still rejected live with `PDF_ACTIVE_CONTENT`, which the frontend shows as "This PDF carries embedded scripts or attachments we could not remove". On current main the owner's test PDF is sanitised (javascript, embedded_files, acroform, annotation_actions removed) and accepted, then passes ClamAV and Sarvam OCR.
 
