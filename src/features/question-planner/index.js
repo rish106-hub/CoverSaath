@@ -5,8 +5,9 @@ import { getPolicyFactKey } from '../../contracts/policy-facts.js';
 import { CATALOGUE_V1 } from './catalogue-v1.js';
 
 export { QUESTION_CATALOGUE_VERSION, CATALOGUE_V1 };
-export const MAX_QUESTIONS_BEFORE_CARD = 5;
+export const MAX_QUESTIONS_BEFORE_CARD = 2;
 export const NOT_SURE_SUPPRESSION_DAYS = 30;
+export { SUPPORTED_LOCALES } from '../../contracts/question-catalogue.js';
 export const CARD_TILES = Object.freeze(['sum_insured', 'room_rent', 'waiting_periods', 'copay_deductible', 'exclusions', 'cashless']);
 export const CONFLICT_PROMPT_EN = 'Which is right?';
 const DAY_MS = 86_400_000;
@@ -22,10 +23,14 @@ const factClassOf = item => getPolicyFactKey(item.slot.factKey)?.factClass ?? 'h
 const itemMembers = (item, members) => (item.perMember ? members : [null]);
 
 export function planNextQuestions({
-  slots = [], members = [], answeredLog = [], openedTiles = [], askedVerdictNeeds = [], now, limit = MAX_QUESTIONS_BEFORE_CARD, catalogue = CATALOGUE_V1,
+  slots = [], members = [], answeredLog = [], openedTiles = [], askedVerdictNeeds = [], now, phase = 'before_card', limit, catalogue = CATALOGUE_V1,
 } = {}) {
   const nowMs = toMs(now);
-  const cap = Math.max(0, Math.min(Number.isInteger(limit) ? limit : MAX_QUESTIONS_BEFORE_CARD, MAX_QUESTIONS_BEFORE_CARD));
+  // before_card: at most 2 (B9), only items that change an on-card tile. strip: unlimited unless a limit is passed, still score-ordered.
+  const cap = phase === 'strip'
+    ? (Number.isInteger(limit) ? Math.max(0, limit) : Infinity)
+    : Math.max(0, Math.min(Number.isInteger(limit) ? limit : MAX_QUESTIONS_BEFORE_CARD, MAX_QUESTIONS_BEFORE_CARD));
+  // B10: openedTiles shape this call's scores only. Interest is never returned, stored or turned into a profile.
   const slotMap = new Map(slots.map(slot => [slotId(slot.factKey, slot.scopeKey, slot.memberId), slot]));
   const opened = new Set(openedTiles);
   const needs = new Set(askedVerdictNeeds);
@@ -51,6 +56,7 @@ export function planNextQuestions({
 
   const candidates = [];
   for (const item of catalogue) {
+    if (item.phase !== phase) continue;
     for (const member of itemMembers(item, members)) {
       const memberId = member?.id ?? null;
       if (member?.isMinor === true && !item.coverageRelevant) continue;
@@ -69,13 +75,15 @@ export function planNextQuestions({
       if (gated && entries.some(e => e.outcome === 'answered')) continue;
 
       const tiles = item.valueOfInformation.unlocksTiles;
+      // A required input of a tile (B6) weighs 3 when that tile is opened or on the card.
       const tileFactor = tiles.length === 0 ? NO_TILE_FACTOR
-        : tiles.reduce((sum, tile) => sum + (opened.has(tile) ? 2 : CARD_TILES.includes(tile) ? 1 : 0), 0);
+        : tiles.reduce((sum, tile) => sum + (opened.has(tile) || CARD_TILES.includes(tile)
+          ? (item.requiredInputOf?.includes(tile) ? 3 : opened.has(tile) ? 2 : 1) : 0), 0);
       if (tileFactor === 0) continue;
       const verdict = needs.has(item.id) || needs.has(item.slot.factKey);
       const score = item.valueOfInformation.weight * tileFactor * (verdict ? 1 : 0.5);
       const reason = conflicting ? 'conflict' : gated ? 'followup' : verdict ? 'changes_verdict' : status === 'extracted_unverified' ? 'confirm_extracted' : 'unknown';
-      const entry = { questionId: item.id, memberId, reason };
+      const entry = { questionId: item.id, memberId, reason, phase };
       if (conflicting) {
         entry.conflict = {
           prompt: CONFLICT_PROMPT_EN,
@@ -122,6 +130,16 @@ export function recordAnswer({ questionId, memberId = null, optionIds, catalogue
     questionId: item.id,
     catalogueVersion,
     followupsActivated,
-    sensitive: item.sensitive === true,
+    sensitivity: item.sensitivity,
+    optionIds: Object.freeze([...optionIds]),
   });
+}
+
+/**
+ * Analytics payload for an answer (B1). Health and money answers leak nothing about the choice: only the question id and that it was
+ * answered. Only sensitivity 'none' answers carry option ids.
+ */
+export function analyticsPayloadFor(answer) {
+  if (answer?.sensitivity === 'none') return { questionId: answer.questionId, answered: true, optionIds: [...answer.optionIds] };
+  return { questionId: answer?.questionId, answered: true };
 }

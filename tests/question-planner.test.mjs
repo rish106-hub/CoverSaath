@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { planNextQuestions, recordAnswer, MAX_QUESTIONS_BEFORE_CARD, CATALOGUE_V1 } from '../src/features/question-planner/index.js';
+import { planNextQuestions, recordAnswer, analyticsPayloadFor, MAX_QUESTIONS_BEFORE_CARD, CATALOGUE_V1 } from '../src/features/question-planner/index.js';
 import { QUESTION_CATALOGUE_VERSION } from '../src/contracts/question-catalogue.js';
 
 const now = '2026-11-14T00:00:00.000Z';
@@ -8,15 +8,26 @@ const adult = { id: 'm1', isMinor: false };
 const child = { id: 'm2', isMinor: true };
 const ids = plan => plan.map(p => `${p.questionId}@${p.memberId}`);
 
-test('caps at 5 and never exceeds it even if asked', () => {
+test('before the card: cap of 2, members and PED only; strip is unlimited (B9)', () => {
+  assert.equal(MAX_QUESTIONS_BEFORE_CARD, 2);
   const plan = planNextQuestions({ members: [adult, child], now, limit: 50 });
-  assert.equal(plan.length, MAX_QUESTIONS_BEFORE_CARD);
-  assert.equal(planNextQuestions({ members: [adult], now, limit: 2 }).length, 2);
+  assert.equal(plan.length, 2);
+  assert.equal(planNextQuestions({ members: [adult], now }).length, 2);
+  assert.ok(plan.every(p => p.phase === 'before_card' && /^(members|ped)\./.test(p.questionId)));
+  const strip = planNextQuestions({ members: [adult], now, phase: 'strip' });
+  assert.ok(strip.length > 5 && strip.every(p => p.phase === 'strip'));
+});
+test('strip is ordered by score and a required-input question ranks high (B6)', () => {
+  const strip = planNextQuestions({ members: [adult], now, phase: 'strip' });
+  assert.equal(strip[0].questionId, 'portability.prior_cover_years');
+  const none = planNextQuestions({ members: [adult], now, phase: 'strip', openedTiles: [] });
+  assert.deepEqual(none, strip);
 });
 test('orders by score then catalogue order', () => {
-  const plan = planNextQuestions({ members: [adult], now, limit: 5 });
-  assert.equal(plan[0].questionId, 'members.confirm');
-  assert.deepEqual(plan.map(p => p.questionId).slice(0, 3), ['members.confirm', 'ped.has_any', 'claims.prior_4y']);
+  const plan = planNextQuestions({ members: [adult], now });
+  assert.deepEqual(plan.map(p => p.questionId), ['members.confirm', 'ped.has_any']);
+  const strip = planNextQuestions({ members: [adult], now, phase: 'strip' }).map(p => p.questionId);
+  assert.deepEqual(strip.slice(0, 3), ['portability.prior_cover_years', 'claims.prior_4y', 'cover.other_health']);
   assert.ok(!plan.some(p => p.questionId === 'ped.which_conditions'), 'followup stays hidden until parent answered');
 });
 test('not_sure suppresses the slot for 30 days, then it returns', () => {
@@ -34,35 +45,37 @@ test('extracted_unverified declaration-primary slots are asked; product terms ar
   const slots = [
     { factKey: 'declared_prior_claims', memberId: 'm1', status: 'extracted_unverified', sourceTier: 'own_pdf' },
   ];
-  const plan = planNextQuestions({ members: [adult], slots, now, limit: 5 });
+  const plan = planNextQuestions({ members: [adult], slots, now, phase: 'strip' });
   assert.equal(plan.find(p => p.questionId === 'claims.prior_4y').reason, 'confirm_extracted');
 });
 test('conflicting slot gives a 2-choice question with both source tiers', () => {
   const slots = [{ factKey: 'declared_other_cover', memberId: null, status: 'conflicting', alternatives: [
     { value: 'yes', sourceTier: 'own_pdf' }, { value: 'no', sourceTier: 'user_declaration' }, { value: 'x', sourceTier: 'ida_wording' }] }];
-  const entry = planNextQuestions({ members: [adult], slots, now }).find(p => p.questionId === 'cover.other_health');
+  const entry = planNextQuestions({ members: [adult], slots, now, phase: 'strip' }).find(p => p.questionId === 'cover.other_health');
   assert.equal(entry.reason, 'conflict');
   assert.equal(entry.conflict.prompt, 'Which is right?');
   assert.deepEqual(entry.conflict.choices, [{ choiceId: 'a', value: 'yes', sourceTier: 'own_pdf' }, { choiceId: 'b', value: 'no', sourceTier: 'user_declaration' }]);
 });
 test('minors only get coverage-relevant questions', () => {
-  const plan = planNextQuestions({ members: [child], now, limit: 5 });
+  const plan = [...planNextQuestions({ members: [child], now }), ...planNextQuestions({ members: [child], now, phase: 'strip' })];
   const byId = new Map(CATALOGUE_V1.map(i => [i.id, i]));
   for (const p of plan) if (p.memberId === 'm2') assert.equal(byId.get(p.questionId).coverageRelevant, true);
   assert.ok(plan.some(p => p.memberId === 'm2'));
 });
 test('a question that changes an asked verdict ranks first', () => {
-  const base = planNextQuestions({ members: [adult], now });
-  assert.notEqual(base[0].questionId, 'claims.prior_4y');
-  const boosted = planNextQuestions({ members: [adult], now, askedVerdictNeeds: ['declared_prior_claims'] });
-  assert.equal(boosted[0].questionId, 'claims.prior_4y');
+  const answeredLog = [{ questionId: 'portability.prior_cover_years', memberId: null, outcome: 'answered', optionIds: ['this_year'], answeredAt: now }];
+  const opts = { members: [adult], now, phase: 'strip', answeredLog };
+  const base = planNextQuestions({ ...opts, askedVerdictNeeds: [] });
+  assert.equal(base[0].questionId, 'claims.prior_4y');
+  const boosted = planNextQuestions({ ...opts, askedVerdictNeeds: ['declared_other_cover'] });
+  assert.equal(boosted[0].questionId, 'cover.other_health');
   assert.equal(boosted[0].reason, 'changes_verdict');
 });
 test('opened tiles raise the score of what unlocks them', () => {
-  const base = planNextQuestions({ members: [adult], now, limit: 5 }).map(p => p.questionId);
-  const opened = planNextQuestions({ members: [adult], now, openedTiles: ['cashless'], limit: 5 }).map(p => p.questionId);
-  assert.ok(opened.indexOf('home.city') < base.indexOf('home.city'));
-  assert.equal(opened[2], 'home.city');
+  const strip = extra => planNextQuestions({ members: [adult], now, phase: 'strip', ...extra }).map(p => p.questionId);
+  assert.ok(strip({ openedTiles: ['cashless'] }).indexOf('home.city') < strip().indexOf('home.city'));
+  // B10: interest is not echoed back.
+  assert.ok(planNextQuestions({ members: [adult], now, phase: 'strip', openedTiles: ['cashless'] }).every(p => !('openedTiles' in p) && !('score' in p)));
 });
 test('PED yes activates which-conditions, then started-on', () => {
   const answered = (questionId, optionIds) => ({ questionId, memberId: 'm1', outcome: 'answered', optionIds, answeredAt: now });
@@ -75,7 +88,7 @@ test('PED yes activates which-conditions, then started-on', () => {
   assert.equal(next[0].questionId, 'ped.started_on');
 });
 test('deterministic for identical input and returns no text', () => {
-  const input = { members: [adult, child], now, openedTiles: ['waiting_periods'], askedVerdictNeeds: ['declared_ped'] };
+  const input = { members: [adult, child], now, openedTiles: ['waiting_periods'], askedVerdictNeeds: ['declared_ped'], phase: 'strip' };
   const a = planNextQuestions(structuredClone(input));
   assert.deepEqual(a, planNextQuestions(structuredClone(input)));
   assert.ok(a.every(p => !('prompt' in p)));
@@ -89,7 +102,7 @@ test('recordAnswer builds a user_declaration DTO with audit fields', () => {
   assert.deepEqual(row.value, ['diabetes', 'thyroid']);
   assert.equal(row.questionId, 'ped.which_conditions');
   assert.equal(row.catalogueVersion, 'question-catalogue/v1');
-  assert.equal(row.sensitive, true);
+  assert.equal(row.sensitivity, 'health');
   assert.deepEqual(row.followupsActivated, ['ped.started_on']);
   const yes = recordAnswer({ questionId: 'ped.has_any', memberId: 'm1', optionIds: ['yes'], catalogueVersion: QUESTION_CATALOGUE_VERSION });
   assert.deepEqual(yes.followupsActivated, ['ped.which_conditions']);
@@ -105,4 +118,20 @@ test('recordAnswer: not_sure is unknown and writes no row; bad input is refused'
   assert.throws(bad({ questionId: 'home.city', optionIds: ['delhi'], catalogueVersion: 'old' }), /version/);
   assert.throws(bad({ questionId: 'nope', optionIds: ['x'] }), /Unknown/);
   assert.equal(recordAnswer({ questionId: 'cover.other_health', optionIds: ['yes'], catalogueVersion: QUESTION_CATALOGUE_VERSION, conflictResolution: true }).captureMethod, 'conflict_resolution');
+});
+
+test('analytics payload never carries a health or money option (B1)', () => {
+  const v = QUESTION_CATALOGUE_VERSION;
+  const health = recordAnswer({ questionId: 'ped.which_conditions', memberId: 'm1', optionIds: ['diabetes'], catalogueVersion: v });
+  const payload = analyticsPayloadFor(health);
+  assert.deepEqual(payload, { questionId: 'ped.which_conditions', answered: true });
+  assert.ok(!JSON.stringify(payload).includes('diabetes'));
+  const money = recordAnswer({ questionId: 'cover.employer', optionIds: ['yes'], catalogueVersion: v });
+  assert.deepEqual(analyticsPayloadFor(money), { questionId: 'cover.employer', answered: true });
+  const none = recordAnswer({ questionId: 'pref.language', optionIds: ['hi'], catalogueVersion: v });
+  assert.deepEqual(analyticsPayloadFor(none), { questionId: 'pref.language', answered: true, optionIds: ['hi'] });
+  for (const item of CATALOGUE_V1.filter(i => i.sensitivity !== 'none' && !i.perMember)) {
+    const opt = item.input.options[0]?.id ?? 'x';
+    assert.ok(!('optionIds' in analyticsPayloadFor(recordAnswer({ questionId: item.id, optionIds: [opt], catalogueVersion: v }))));
+  }
 });

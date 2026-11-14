@@ -6,6 +6,9 @@ export const QUESTION_CATALOGUE_VERSION = 'question-catalogue/v1';
 export const INPUT_KINDS = Object.freeze([
   'yes_no_unsure', 'single_choice', 'multi_choice_chips', 'amount_presets', 'date_presets', 'member_pick',
 ]);
+export const SUPPORTED_LOCALES = Object.freeze(['en', 'hi']);
+export const SENSITIVITIES = Object.freeze(['health', 'money', 'none']);
+export const PHASES = Object.freeze(['before_card', 'strip']);
 export const NOT_SURE = 'not_sure';
 export const OTHER = 'other';
 export const MAX_SINGLE_CHOICE_OPTIONS = 5;
@@ -17,7 +20,7 @@ export const FOLLOWUP_ANY = '*';
 // Slot keys not yet in the append-only registry (src/contracts/policy-facts.js). Proposed for the next registry append; every other
 // catalogue key must already exist there. Mapping notes live in catalogue-v1.js.
 export const PROPOSED_FACT_KEYS = Object.freeze([
-  'member_covered', 'member_relationship', 'declared_employer_cover', 'home_city', 'preference_cashless', 'preference_language', 'purchase_channel',
+  'member_covered', 'prior_cover_years', 'member_relationship', 'declared_employer_cover', 'home_city', 'preference_cashless', 'preference_language', 'purchase_channel',
 ]);
 
 const KNOWN_KEYS = new Set([...POLICY_FACT_KEY_NAMES, ...PROPOSED_FACT_KEYS]);
@@ -39,7 +42,15 @@ export function validateCatalogue(items) {
     const at = message => errors.push(`${item.id}: ${message}`);
     if (!text(item.prompt?.en)) at('prompt.en missing');
     if (!text(item.why?.en)) at('why.en missing');
-    for (const field of ['prompt', 'why']) if (item[field]?.hi !== null && item[field]?.hi !== undefined && !text(item[field].hi)) at(`${field}.hi must be null or text`);
+    for (const field of ['prompt', 'why']) {
+      for (const [locale, value] of Object.entries(item[field] ?? {})) {
+        if (!SUPPORTED_LOCALES.includes(locale)) at(`${field}.${locale} is not a supported locale`);
+        else if (locale !== 'en' && value !== null && !text(value)) at(`${field}.${locale} must be null or text`);
+      }
+    }
+    if (!SENSITIVITIES.includes(item.sensitivity)) at('sensitivity must be health, money or none');
+    if (!PHASES.includes(item.phase)) at('phase must be before_card or strip');
+    if (item.phase === 'before_card' && !(item.valueOfInformation?.unlocksTiles?.length > 0)) at('before_card questions must change an on-card tile');
     if (!text(item.slot?.factKey)) at('slot.factKey missing');
     else if (!KNOWN_KEYS.has(item.slot.factKey)) at(`slot.factKey ${item.slot.factKey} is neither a registry key nor a proposed key`);
     if (!MEMBER_SCOPES.includes(item.slot?.memberScope)) at('slot.memberScope invalid');
