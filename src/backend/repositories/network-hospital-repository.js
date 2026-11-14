@@ -29,14 +29,21 @@ export class NetworkHospitalRepository {
   }
 
   /** Hospitals in one pincode that are listed today (valid window), cashless first. `insurerId` (optional) keeps insurer-specific and all-insurer rows. */
-  async byPincode({ pincode, insurerId = null }) {
+  async byPincode(args) {
+    return (await this.byPincodePage(args)).hospitals;
+  }
+
+  /** Same list as byPincode, plus `truncated` (audit F11): true when more than MAX_LIST rows matched (one extra row is fetched, then dropped). */
+  async byPincodePage({ pincode, insurerId = null }) {
     if (typeof pincode !== 'string' || !PINCODE.test(pincode)) throw invalid();
     if (insurerId !== null && (typeof insurerId !== 'string' || insurerId.length < 1 || insurerId.length > 100)) throw invalid();
     const rows = await this.database.many(
       `SELECT id, name, address, city, pincode, cashless FROM network_hospitals
        WHERE pincode = ? AND (?::text IS NULL OR insurer_id IS NULL OR insurer_id = ?)
          AND (valid_from IS NULL OR valid_from <= current_date) AND (valid_to IS NULL OR valid_to >= current_date)
-       ORDER BY cashless DESC, name, id LIMIT ?`, [pincode, insurerId, insurerId, MAX_LIST]);
-    return rows.map(row => ({ id: row.id, name: row.name, address: row.address, city: row.city, pincode: row.pincode, cashless: row.cashless === true }));
+       ORDER BY cashless DESC, name, id LIMIT ?`, [pincode, insurerId, insurerId, MAX_LIST + 1]);
+    const truncated = rows.length > MAX_LIST;
+    const hospitals = rows.slice(0, MAX_LIST).map(row => ({ id: row.id, name: row.name, address: row.address, city: row.city, pincode: row.pincode, cashless: row.cashless === true }));
+    return { hospitals, truncated };
   }
 }

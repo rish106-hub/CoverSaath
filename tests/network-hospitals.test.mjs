@@ -183,3 +183,19 @@ test('seed:demo loads the 30 invented hospitals once; each demo pincode has a ca
     assert.ok(Number((await db.one('SELECT count(*) AS n FROM network_hospitals WHERE pincode = ? AND cashless', [pincode])).n) >= 1, pincode);
   }
 });
+
+test('hospitals route: a full page (50) carries no truncated flag; a 51st match returns 50 and truncated: true (audit F11)', opts, async t => {
+  const w = await world(t);
+  const { NetworkHospitalRepository } = await import('../src/backend/repositories/network-hospital-repository.js');
+  const repo = new NetworkHospitalRepository(w.db);
+  await repo.upsertMany(Array.from({ length: 50 }, (_, n) => hospital(`full-${String(n).padStart(2, '0')}`, '990010', true)));
+  const exact = await w.app.call(`/api/v1/holdings/${w.a.holding.id}/hospitals?pincode=990010`, w.a.token);
+  assert.equal(exact.data.hospitals.length, 50);
+  assert.deepEqual(Object.keys(exact.data), ['hospitals'], 'exactly 50 matches is not truncated');
+  await repo.upsertMany([hospital('full-50', '990010', false)]);
+  const over = await w.app.call(`/api/v1/holdings/${w.a.holding.id}/hospitals?pincode=990010`, w.a.token);
+  assert.equal(over.status, 200);
+  assert.equal(over.data.hospitals.length, 50);
+  assert.equal(over.data.truncated, true);
+  assert.ok(!over.data.hospitals.some(item => item.id === 'full-50'), 'cashless rows sort first, so the cut row is the non-cashless one');
+});

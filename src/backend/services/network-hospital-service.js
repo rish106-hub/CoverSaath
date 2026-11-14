@@ -67,7 +67,8 @@ export function createNetworkHospitalService({ repository, holdingRepository, po
       }
       const insurerId = await insurerOf(holding);
       if (insurerId === null) return { hospitals: [], reason: 'insurer_unknown' };
-      return { hospitals: await repository.byPincode({ pincode, insurerId }) };
+      const { hospitals, truncated } = await repository.byPincodePage({ pincode, insurerId });
+      return truncated ? { hospitals, truncated: true } : { hospitals };
     },
   });
 }
