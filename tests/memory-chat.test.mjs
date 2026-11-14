@@ -134,6 +134,12 @@ test('success: memorise embeds redacted passages, a room-rent question cites the
   assert.equal(answer.intent, 'coverage_question');
   assert.deepEqual(answer.facts_used.map(item => [item.fact_id, item.fact_key, item.status]), [[ids.room_rent_limit, 'room_rent_limit', 'reviewed_reference']]);
   assert.match(answer.answer, /Hello Asha/, 'person tokens are restored in the reply only');
+  // answer-card/v1 (#138): released by the guard, sources carry the fact, and its text is the turn text.
+  assert.equal(answer.card.contract, 'answer-card/v1');
+  assert.equal(answer.card.status, 'evidence_found');
+  assert.equal(answer.card.verdict, 'unknown', 'chat never claims covered without a rule result');
+  assert.ok(answer.card.sources.length >= 1 && answer.card.sources.every(item => item.quote.length > 0));
+  assert.equal(answer.card.answer, answer.answer);
   assert.match(answer.facts_used[0].value_text, /5,000/);
   // Never a decrypted name or the UIN in a prompt or a response body.
   assert.equal(sent.length, 1);
@@ -168,6 +174,9 @@ test('procedure planning: waiting period, sub-limit, room rent and co-pay are co
   assert.deepEqual(answer.computed.summary, { estimateMinor: 25_000_000, insurerShareMinor: 21_600_000, youPayMinor: 3_400_000, basis: 'estimate_from_terms_on_record' });
   assert.equal(answer.status, 'evidence_found');
   assert.ok(answer.facts_used.length >= 3);
+  // Computed checks count as evidence of the facts they read, so a procedure answer is released, not dropped.
+  assert.equal(answer.card.status, 'evidence_found');
+  assert.equal(answer.card.answer, answer.answer);
   assert.match(answer.answer, /not an approval/);
   assert.equal((await providerCalls.listForHousehold(a.household)).length, 0, 'flag off: no provider call, no audit row');
   assert.ok(holding.id);

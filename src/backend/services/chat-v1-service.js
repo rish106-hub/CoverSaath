@@ -8,6 +8,7 @@ import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer } f
 import { classifyChatMessage } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
+import { guardTurnAnswer } from './chat-answer-card.js';
 import { memoryEnabled, resolvedConfirmedFacts } from './memory-service.js';
 
 // Chat v1 (complete.md 3.3, ADR 0031): threads, and turns streamed as SSE. Off unless MEMORY_ENABLED is exactly "true".
@@ -325,14 +326,35 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             } else if (model?.failed) assistantMeta = { modelStatus: model.failed };
 
             const citedPassages = passages.filter(item => usedChunks.includes(item.id));
-            const sources = await wordingSources({ householdId, passageList: answerSource === 'model' ? citedPassages : [], clauseList: answerSource === 'model' ? [] : clauseHits });
+            let sources = await wordingSources({ householdId, passageList: answerSource === 'model' ? citedPassages : [], clauseList: answerSource === 'model' ? [] : clauseHits });
             // Code owns the status: an answer that rests on no fact, chunk or computed check is "unknown".
-            const status = usedFacts.length > 0 || usedChunks.length > 0 || sources.length > 0 || (plan?.checks.length ?? 0) > 0 ? 'evidence_found' : 'unknown';
+            let status = usedFacts.length > 0 || usedChunks.length > 0 || sources.length > 0 || (plan?.checks.length ?? 0) > 0 ? 'evidence_found' : 'unknown';
             const factIds = [...new Set(usedFacts.map(fact => fact.sourceIds[0]))];
             // Own-document readings the answer rests on, with their verbatim quote, document and page (status stays extracted_unverified).
             for (const fact of usedFacts) {
               const place = context.places.get(fact.sourceIds[0]);
               if (place?.documentId) sources.push({ kind: 'fact', fact_id: fact.sourceIds[0], fact_key: fact.factKey, status: fact.status, document_id: place.documentId, page: place.page, quote: place.quote });
+            }
+
+            // answer-card/v1 (#138): the card is built from the evidence above and released only through the guard, BEFORE anything is
+            // stored or streamed. A dropped card replaces the text, status and sources everywhere (fail closed); check ids are logged.
+            const pageOf = new Map(sources.filter(item => item.kind === 'wording').map(item => [`${item.document_id}|${item.ref}`, item.page]));
+            const wordingEvidence = answerSource === 'model'
+              ? citedPassages.filter(item => item.sourceDocumentId).map(item => ({ documentId: item.sourceDocumentId, page: pageOf.get(`${item.sourceDocumentId}|${item.sourceRef}`) ?? null, ref: item.sourceRef, text: item.text, tier: item.scope }))
+              : clauseHits.map(clause => ({ documentId: clause.documentId, page: clause.page, ref: `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`, text: clause.window, tier: 'own_pdf' }));
+            // Computed checks (procedure planning) are code, not wording: their detail counts as evidence of the facts they read.
+            const checkDetail = new Map();
+            for (const check of plan?.checks ?? []) for (const id of check.factIds ?? []) checkDetail.set(id, [checkDetail.get(id), check.detail].filter(Boolean).join(' '));
+            const evidenceFacts = [...usedFacts, ...context.facts.filter(fact => checkDetail.has(fact.sourceIds[0]) && !usedFacts.includes(fact))];
+            const factEvidence = evidenceFacts.map(fact => {
+              const place = context.places.get(fact.sourceIds[0]);
+              const valueText = [formatFactValue(fact.entry.type, fact.value), checkDetail.get(fact.sourceIds[0])].filter(Boolean).join(' ');
+              return { factId: fact.sourceIds[0], factKey: fact.factKey, status: fact.status, tier: fact.sourceTier, page: place?.page ?? null, quote: place?.quote ?? '', valueText };
+            });
+            const guarded = guardTurnAnswer({ status, text, wording: wordingEvidence, facts: factEvidence });
+            if (!guarded.released) {
+              text = guarded.card.answer; status = 'unknown'; sources = []; usedFacts = [];
+              try { onEvent?.({ event: 'chat_answer_dropped', checks: guarded.failedChecks }); } catch { /* logging never breaks a turn */ }
             }
             const stored = await chatRepository.appendExchange({
               householdId, threadId,
@@ -353,6 +375,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               ...(assistantMeta.modelStatus ? { model_status: assistantMeta.modelStatus } : {}),
               facts_used: usedFacts.map(factView),
               sources,
+              card: guarded.card,
               computed: plan ? { version: plan.version, checks: plan.checks.map(check => ({ id: check.id, status: check.status, detail: check.detail, fact_ids: check.factIds })), summary: plan.summary, missing_inputs: plan.missingInputs } : null,
               open_conflicts: context.conflicts.filter(item => byKey.has(item.factKey)).map(item => ({ conflict_id: item.id, fact_key: item.factKey, holding_id: item.holdingId })),
               audio_retained: audioDocumentId !== null, created_at: clock().toISOString(),
