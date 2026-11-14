@@ -4,6 +4,9 @@
 //   duration_months  value = months                   36 months == 3 years == 3 yrs; 1 year = 12 months
 //   duration_days    value = days                     30 days
 //   percent_bps      value = basis points             12.5% = 1250
+//   policy_year      value = ordinal (4th year, 5 th Policy Year)
+//   percent_of_si / percent_of_sa  value = basis points, when followed by "of (the) sum insured/SI" or "sum assured/SA"
+// Duration entries also carry `unit` ('day'|'month'|'year') and `amount` (as written); equality ignores them.
 //   date             value = 'YYYY-MM-DD'
 // Month and day durations are different kinds. They compare equal (durationsEqual) only by the documented bridge: 1 month = 30 days,
 // or a whole number of years = years * 365 days (so 24 months == 730 days and 36 months == 1080 or 1095 days). Nothing else bridges.
@@ -49,6 +52,8 @@ const DATE_TEXT = new RegExp(`${NOT_PREV}(\\d{1,2})(?:st|nd|rd|th)?\\s+(jan(?:ua
 const DURATION = new RegExp(`${NOT_PREV}(${AMT})\\s*-?\\s*(months?|mos?|years?|yrs?|days?|महीने|महीना|माह|साल|वर्ष|दिन)${NOT_NEXT}`, 'giu');
 const PERCENT = new RegExp(`${NOT_PREV}(${AMT})\\s*(%|percent|per\\s+cent|प्रतिशत)`, 'giu');
 const MONEY = new RegExp(`${NOT_PREV}(?:(rs\\.?|inr|₹|rupees?)\\s*)?(${AMT})(?:\\s*(${UNIT_ALT})|([kl]))?(?:\\s*(rupees?|rs\\.?|inr|रुपये|रुपए))?${NOT_NEXT}`, 'giu');
+const POLICY_YEAR = new RegExp(`${NOT_PREV}(\\d{1,2})\\s*(?:st|nd|rd|th)\\s+(?:policy\\s+)?year${NOT_NEXT}`, 'giu');
+const PERCENT_OF = new RegExp(`${NOT_PREV}(${AMT})\\s*(?:%|percent|per\\s+cent)\\s+of\\s+(?:the\\s+)?(sum\\s+insured|sum\\s+assured|si|sa)${NOT_NEXT}`, 'giu');
 const BARE = /(?<![\p{L}\p{N}\p{M}.])(\d{1,3}(?:,\d{2,3})+|\d{4,})(?![\p{L}\p{N}\p{M}])/gu;
 
 const mask = (text, start, end) => text.slice(0, start) + ' '.repeat(end - start) + text.slice(end);
@@ -69,13 +74,19 @@ export function extractNumbers(input) {
     const mon = MONTHS[m[2].toLowerCase().slice(0, m[2].toLowerCase().startsWith('sept') ? 4 : 3)] ?? MONTHS[m[2].toLowerCase().slice(0, 3)];
     return mon && validDate(+m[3], mon, +m[1]) ? { kind: 'date', value: `${m[3]}-${pad(mon)}-${pad(+m[1])}` } : null;
   });
+  scan(POLICY_YEAR, (m) => ({ kind: 'policy_year', value: Number(m[1]) }));
+  scan(PERCENT_OF, (m) => {
+    const n = parseAmount(m[1]);
+    return n == null ? null : { kind: /^(sum\s+insured|si)$/i.test(m[2]) ? 'percent_of_si' : 'percent_of_sa', value: Math.round(n * 100) };
+  });
   scan(DURATION, (m) => {
     const n = parseAmount(m[1]);
     if (n == null) return null;
     const unit = m[2].toLowerCase();
-    if (/^(day|दिन)/.test(unit)) return { kind: 'duration_days', value: Math.round(n) };
-    if (/^(year|yr|साल|वर्ष)/.test(unit)) return { kind: 'duration_months', value: Math.round(n * 12) };
-    return { kind: 'duration_months', value: Math.round(n) };
+    // `unit` and `amount` keep the source unit for display and golden comparison; equality uses kind and value only.
+    if (/^(day|दिन)/.test(unit)) return { kind: 'duration_days', value: Math.round(n), unit: 'day', amount: n };
+    if (/^(year|yr|साल|वर्ष)/.test(unit)) return { kind: 'duration_months', value: Math.round(n * 12), unit: 'year', amount: n };
+    return { kind: 'duration_months', value: Math.round(n), unit: 'month', amount: n };
   });
   scan(PERCENT, (m) => {
     const n = parseAmount(m[1]);
@@ -104,6 +115,9 @@ export function durationsEqual(a, b) {
 export function numbersEqual(a, b) {
   if (!a || !b) return false;
   if (a.kind.startsWith('duration_') && b.kind.startsWith('duration_')) return durationsEqual(a, b);
+  // Plain percent grounds a percent-of-SI/SA value ("1%" against "1% of sum insured") and vice versa; SI and SA never cross.
+  const percent = (k) => k === 'percent_bps' || k === 'percent_of_si' || k === 'percent_of_sa';
+  if (percent(a.kind) && percent(b.kind) && (a.kind === 'percent_bps' || b.kind === 'percent_bps')) return a.value === b.value;
   return a.kind === b.kind && a.value === b.value;
 }
 

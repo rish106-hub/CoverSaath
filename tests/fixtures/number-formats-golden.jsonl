@@ -1,0 +1,59 @@
+{"raw": "Rs.21,000", "kind": "money", "expected": 2100000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "Rs. 2000", "kind": "money", "expected": 200000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "rs 100", "kind": "money", "expected": 10000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "INR 10,000", "kind": "money", "expected": 1000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "₹1,000", "kind": "money", "expected": 100000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "₹5,00,000", "kind": "money", "expected": 50000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "₹ 182", "kind": "money", "expected": 18200, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "10 lakhs", "kind": "money", "expected": 100000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "5 Lakhs", "kind": "money", "expected": 50000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "0.5 lakh", "kind": "money", "expected": 5000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "1 lakh", "kind": "money", "expected": 10000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "2 lacs", "kind": "money", "expected": 20000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "20 lacs", "kind": "money", "expected": 200000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "2.5 Lac", "kind": "money", "expected": 25000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "15 Lac", "kind": "money", "expected": 150000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "5Lac", "kind": "money", "expected": 50000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "10lakhs", "kind": "money", "expected": 100000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "Rs.10 lakhs", "kind": "money", "expected": 100000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "Rs.5 lakhs", "kind": "money", "expected": 50000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "1 crore", "kind": "money", "expected": 1000000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "1.99 crore", "kind": "money", "expected": 1990000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "INR 1 Cr", "kind": "money", "expected": 1000000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "₹ 185 cr", "kind": "money", "expected": 18500000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "Rs. 1,54,750 crore", "kind": "money", "expected": 154750000000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "five lakh", "kind": "money", "expected": 50000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "ten lakhs", "kind": "money", "expected": 100000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "ten lakh", "kind": "money", "expected": 100000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "15 days", "kind": "duration", "expected": {"value": 15, "unit": "day"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "60days", "kind": "duration", "expected": {"value": 60, "unit": "day"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "2Day", "kind": "duration", "expected": {"value": 2, "unit": "day"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "1 day", "kind": "duration", "expected": {"value": 1, "unit": "day"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "fifteen days", "kind": "duration", "expected": {"value": 15, "unit": "day"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "thirty Days", "kind": "duration", "expected": {"value": 30, "unit": "day"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "three days", "kind": "duration", "expected": {"value": 3, "unit": "day"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "3 months", "kind": "duration", "expected": {"value": 3, "unit": "month"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "48 months", "kind": "duration", "expected": {"value": 48, "unit": "month"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "1 month", "kind": "duration", "expected": {"value": 1, "unit": "month"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "twelve months", "kind": "duration", "expected": {"value": 12, "unit": "month"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "six months", "kind": "duration", "expected": {"value": 6, "unit": "month"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "18 years", "kind": "duration", "expected": {"value": 18, "unit": "year"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "2Years", "kind": "duration", "expected": {"value": 2, "unit": "year"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "1 year", "kind": "duration", "expected": {"value": 1, "unit": "year"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "FIVE YEARS", "kind": "duration", "expected": {"value": 5, "unit": "year"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "two year", "kind": "duration", "expected": {"value": 2, "unit": "year"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "Five Year", "kind": "duration", "expected": {"value": 5, "unit": "year"}, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "5 th Policy year", "kind": "policy_year", "expected": 5, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "11 th Policy Year", "kind": "policy_year", "expected": 11, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "2nd Policy Year", "kind": "policy_year", "expected": 2, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "25th policy year", "kind": "policy_year", "expected": 25, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "4th year", "kind": "policy_year", "expected": 4, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "1.25 %", "kind": "percent", "expected": 1.25, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "105%", "kind": "percent", "expected": 105, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "1% of the Sum Insured", "kind": "percent_of_si", "expected": 1, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "10% of sum insured", "kind": "percent_of_si", "expected": 10, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "15% of SI", "kind": "percent_of_si", "expected": 15, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "5% of the Si", "kind": "percent_of_si", "expected": 5, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "100% of the Sum Assured", "kind": "percent_of_sa", "expected": 100, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "RS, L", "kind": "none", "expected": null, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "rs,", "kind": "none", "expected": null, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}

@@ -186,7 +186,7 @@ test('normaliser: durations compare in months; days bridge documented', () => {
   assert.equal(durationsEqual({ kind: 'duration_months', value: 36 }, { kind: 'duration_days', value: 1080 }), true);
   assert.equal(durationsEqual({ kind: 'duration_months', value: 36 }, { kind: 'duration_days', value: 1000 }), false);
   assert.equal(durationsEqual({ kind: 'duration_months', value: 5 }, { kind: 'duration_days', value: 152 }), false);
-  assert.deepEqual(extractNumbers('30 days'), [{ kind: 'duration_days', value: 30 }]);
+  assert.deepEqual(extractNumbers('30 days'), [{ kind: 'duration_days', value: 30, unit: 'day', amount: 30 }]);
 });
 
 test('normaliser: percent, dates, noise', () => {
