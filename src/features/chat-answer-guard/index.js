@@ -173,18 +173,21 @@ const VERIFIED_STATUSES = new Set(['user_confirmed', 'reviewed_reference']);
 const COVERAGE_VERDICTS = new Set(['covered', 'not_covered', 'partly_covered']);
 
 // C9 verdict_inputs_verified (B5). Not a drop: a coverage verdict built on an unverified fact is downgraded to `depends` and the
-// card asks the user to confirm that fact. A rule result without an `inputs` array is treated as not checked (no downgrade).
+// card asks the user to confirm that fact. Fails closed: a rule result with a missing or empty `inputs` array is downgraded too (no factId, so no action).
 function downgradeIfUnverified(card, ruleResults) {
   if (!COVERAGE_VERDICTS.has(card.verdict)) return { card, downgradedFactIds: [] };
   const inputs = ruleResults?.[card.ruleResultId]?.inputs;
-  const unverified = Array.isArray(inputs) ? inputs.filter((i) => !VERIFIED_STATUSES.has(i?.status)) : [];
-  if (unverified.length === 0) return { card, downgradedFactIds: [] };
-  const downgradedFactIds = [...new Set(unverified.map((i) => i.factId))];
+  const list = Array.isArray(inputs) ? inputs : [];
+  const unverified = list.filter((i) => !VERIFIED_STATUSES.has(i?.status));
+  if (list.length > 0 && unverified.length === 0) return { card, downgradedFactIds: [] };
+  const downgradedFactIds = [...new Set(unverified.map((i) => i?.factId).filter((id) => typeof id === 'string' && id.length > 0))];
   const next = { ...card, verdict: 'depends' };
-  next.actions = [
-    { kind: 'answer_question', label: 'Is this right?', factId: downgradedFactIds[0] },
-    ...(card.actions ?? []).filter((a) => a.kind !== 'answer_question' || a.factId !== downgradedFactIds[0]),
-  ].slice(0, ANSWER_CARD_LIMITS.actions);
+  if (downgradedFactIds.length > 0) {
+    next.actions = [
+      { kind: 'answer_question', label: 'Is this right?', factId: downgradedFactIds[0] },
+      ...(card.actions ?? []).filter((a) => a.kind !== 'answer_question' || a.factId !== downgradedFactIds[0]),
+    ].slice(0, ANSWER_CARD_LIMITS.actions);
+  }
   if (card.speech != null) next.speech = { ...card.speech, text: speechFromHeadline(next) };
   return { card: next, downgradedFactIds };
 }
@@ -205,9 +208,10 @@ export function guardAnswerCard({ card, evidence = {}, ruleResults = {}, mode = 
   const failedChecks = (shape.valid ? runChecks(card, evidence, ruleResults, mode) : [GUARD_CHECK_IDS.shape]).sort();
   if (failedChecks.length === 0) {
     const { card: next, downgradedFactIds } = downgradeIfUnverified(structuredClone(card), ruleResults);
+    const verdictChanged = next.verdict !== card.verdict;
     deepFreeze(next);
     RELEASED.add(next);
-    return { released: true, card: next, downgraded: downgradedFactIds.length > 0, downgradedFactIds };
+    return { released: true, card: next, downgraded: verdictChanged, downgradedFactIds };
   }
   const retryable = mode === 'text' && failedChecks.every((id) => RETRYABLE.has(id));
   const dropped = deepFreeze(unknownCard());

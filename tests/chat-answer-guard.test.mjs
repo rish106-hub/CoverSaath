@@ -240,3 +240,29 @@ test('B2: only guardAnswerCard produces a releasable card', () => {
   assert.equal(isReleasedCard({ ...ok.card }), false);
   assert.equal(isReleasedCard(guard(good({ ruleResultId: null })).card), true); // the drop card is guard output too
 });
+
+test('C9 fails closed: missing or empty inputs downgrade, no action without a factId', () => {
+  for (const rule of [{ verdict: 'partly_covered', values: ruleResults.rr1.values }, { verdict: 'partly_covered', values: ruleResults.rr1.values, inputs: [] }]) {
+    const r = guard(good(), 'text', evidence, { ...ruleResults, rr1: rule });
+    assert.equal(r.released, true);
+    assert.equal(r.card.verdict, 'depends');
+    assert.equal(r.downgraded, true);
+    assert.deepEqual(r.downgradedFactIds, []);
+    assert.equal(r.card.actions.some((a) => a.label === 'Is this right?'), false);
+    assert.equal(r.card.speech.text.startsWith('Your policy says: it depends'), true);
+  }
+  const noId = guard(good(), 'text', evidence, { ...ruleResults, rr1: { ...ruleResults.rr1, inputs: [{ status: 'unknown' }] } });
+  assert.equal(noId.card.verdict, 'depends');
+  assert.equal(noId.card.actions.some((a) => a.label === 'Is this right?'), false);
+});
+
+test('guaranteed: renewal terms allowed, claim promises blocked', () => {
+  for (const ok of ['Guaranteed renewal for life.', 'Guaranteed renewability applies.', 'Lifelong renewal is offered.', 'Renewal is guaranteed by the wording.', 'The policy has guaranteed lifelong renewal.']) {
+    assert.equal(firstMatch(OUTCOME_PROMISE_PHRASES, ok), null, ok);
+  }
+  for (const bad of ['Claim guaranteed.', 'Guaranteed payout.', 'Guaranteed approval.', 'This is guaranteed.', 'Guaranteed renewal, but your claim is guaranteed.']) {
+    assert.equal(firstMatch(OUTCOME_PROMISE_PHRASES, bad), 'guaranteed', bad);
+  }
+  assert.equal(guard(withExplanation('Guaranteed renewal for life.')).released, true);
+  assert.equal(guard(withExplanation('Your payout is guaranteed.')).released, false);
+});

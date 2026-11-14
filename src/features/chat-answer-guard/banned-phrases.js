@@ -2,12 +2,30 @@
 // trips one (for example "guaranteed renewal") is dropped to the "documents don't say" card. Wording is not final: legal review.
 const p = (id, source) => Object.freeze({ id, pattern: new RegExp(source, 'iu') });
 
+// "guaranteed" is banned, except as a renewal term (IRDAI lifelong renewability): allowed only when a word starting with "renew"
+// is within 3 words of that occurrence. Checked per occurrence, so "guaranteed renewal, claim guaranteed" still fails.
+function guaranteeRule() {
+  return Object.freeze({
+    id: 'guaranteed',
+    pattern: {
+      test(text) {
+        const words = String(text).split(/\s+/);
+        return words.some((word, i) => {
+          if (!/^\W*guarantee[ds]?\W*$/iu.test(word)) return false;
+          const near = [...words.slice(Math.max(0, i - 3), i), ...words.slice(i + 1, i + 4)];
+          return !near.some((w) => /^\W*renew/iu.test(w));
+        });
+      },
+    },
+  });
+}
+
 // G1: promises about a claim outcome. Only the insurer or TPA decides.
 export const OUTCOME_PROMISE_PHRASES = Object.freeze([
   p('will_be_paid', '\\bwill\\s+(?:definitely\\s+|surely\\s+)?be\\s+(?:paid|approved|settled|accepted|rejected|denied|reimbursed|honou?red|cleared)\\b'),
   p('claim_will_be', '\\bclaims?\\s+will\\s+(?:be|get)\\b'),
   p('you_will_receive', '\\byou\\s+(?:will|are\\s+going\\s+to)\\s+(?:get|receive)\\s+(?:the\\s+)?(?:money|payout|amount|claim|reimbursement)\\b'),
-  p('guaranteed', '\\bguarantee[ds]?\\b'),
+  guaranteeRule(),
   p('definitely', '\\b(?:definitely|certainly|surely|absolutely)\\s+(?:covered|paid|approved|settled|eligible)\\b'),
   p('hundred_percent_covered', '\\b100\\s*%\\s+(?:covered|sure|certain)\\b'),
   p('sure_to_be', '\\bsure\\s+to\\s+be\\s+(?:paid|approved|covered|settled)\\b'),
