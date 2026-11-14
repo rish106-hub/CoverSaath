@@ -32,7 +32,7 @@ test('option limits per input kind', () => {
   assert.match(errorsFor(i => { i[single].input.options.splice(0, 0, { id: 'x1', label: { en: 'x' } }); }).join(), /at most 5/);
   assert.match(errorsFor(i => { i[single].input.options = i[single].input.options.filter(o => o.id !== 'not_sure'); }).join(), /needs not_sure/);
   const chips = CATALOGUE_V1.findIndex(i => i.id === 'ped.which_conditions');
-  assert.match(errorsFor(i => { for (let n = 0; n < 3; n += 1) i[chips].input.options.unshift({ id: `c${n}`, label: { en: 'c' } }); }).join(), /at most 8/);
+  assert.match(errorsFor(i => { for (let n = 0; n < 4; n += 1) i[chips].input.options.unshift({ id: `c${n}`, label: { en: 'c' } }); }).join(), /at most 8/);
   assert.match(errorsFor(i => { i[chips].input.options = i[chips].input.options.filter(o => o.id !== 'other'); }).join(), /needs other/);
 });
 test('followups must reference existing ids and not cycle', () => {
