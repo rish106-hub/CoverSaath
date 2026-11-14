@@ -26,7 +26,7 @@ Related: [incident response runbook](../runbooks/incident-response.md), [ADR 001
 | 8 | AWS KMS | No (not used) | none (security.md: no KMS) | n/a | n/a |
 | 9 | Grafana | No (not used; later task M2) | branch mention only | n/a | n/a |
 | 10 | GitHub | Source, docs, CI; possibly old evidence in history | code (`.github/`), doc | US (UNVERIFIED) | Yes, if real data is ever committed |
-| 11 | Gnani (voice) | Planned: speech and transcripts. None today | code (stub, refuses all calls today) | n/a | UNVERIFIED |
+| 11 | Gnani (voice) | Recipient of raw health speech (audio) and TTS text once enabled. None today (off by default) | code (adapter, off unless `GNANI_VOICE_ENABLED=true`; wire format UNVERIFIED) | India residency to confirm | UNVERIFIED |
 | 12 | Pine Labs (payments) | Planned: payer and order details. None today | code (stub, refuses all calls today) | n/a | UNVERIFIED |
 | 13 | Institutional e-mail sender (provider not chosen) | Planned: approved question text and recipient address. None today | code (stub, refuses all calls today) | n/a | UNVERIFIED |
 | 14 | Intake connectors (camera, e-mail forward, voice, Gmail, Outlook, insurer and HR portals, DigiLocker, WhatsApp) | Planned: documents, mail, voice. None today | code (stubs, refuse all calls today) | n/a | UNVERIFIED |
@@ -118,10 +118,11 @@ Related: [incident response runbook](../runbooks/incident-response.md), [ADR 001
 
 ## 11. Gnani (voice)
 
-- **Grounding:** code (stub, refuses all calls today). `src/integrations/gnani/voice-provider.js` needs `GNANI_API_KEY_ID`; `transcribe`, `synthesize`, `transfer` and `verifyWebhook` all throw (`src/integrations/shared/provider-boundary.js`). Even with the key set, status is only `configured_not_verified` and every call is refused. The intake connector `voice` is a stub too (`src/contracts/intake-connectors.js`, scope `voice:record`, data returned `voice_prefill`).
-- **Planned data categories:** audio recordings of the user speaking, transcripts (may include names, policy details, health information), synthesised read-back text, call metadata. Spoken content is personal data and may be health data. Role text in code: consented speech transcription and read-back.
-- **Region / cross-border, retention, sub-processors:** UNVERIFIED. Nothing is called today.
-- **Contract/DPA:** UNKNOWN. **Owner action:** before enabling, get Gnani's terms, DPA, hosting region, audio and transcript retention, and a deletion route; add a privacy-gate and exact-consent design for voice (ADR needed); keep `GNANI_API_KEY_ID` out of Fly secrets until then.
+- **Grounding:** code, off by default. `src/integrations/gnani/voice-provider.js` is live only when `GNANI_VOICE_ENABLED` is exactly `true` and `GNANI_BASE_URL` (https; loopback http for tests), `GNANI_API_KEY_ID` (and optional `GNANI_API_SECRET`) are set. `transcribe` (audio up to 512 KB and 30 s, en-IN or hi-IN) and `synthesize` (text up to 25 words) need `authorization` with `authorized: true`, `purpose: 'voice_intake'` and `recipients` including `gnani`. `transfer` and `verifyWebhook` stay refused. The request shape lives in one file, `gnani-transport.js`, marked UNVERIFIED wire format (no Gnani documentation was read). Circuit breaker: 3 consecutive failures open it for 60 s. A TTS cache holds only strings with no digits, number words, dates, months or rupee amounts (`tts-cache.js`); personal headlines are always synthesised fresh. Local stub: `scripts/gnani-stub.mjs`.
+- **Data categories:** recipient of raw health speech (audio recordings of the user speaking; may include names, policy details, health information) and of short read-back text. Transcripts are never logged by the adapter. FOR LEGAL REVIEW.
+- **Purpose-registry recipient:** no recipient list exists for `voice_intake` yet in `src/contracts/data-purpose-registry.js`; `gnani` is documented here only. Add a registry row and the consent text naming Gnani with the voice route (architecture-v1 B3).
+- **Region / cross-border, retention, sub-processors:** India data residency to confirm. UNVERIFIED.
+- **Contract/DPA:** UNKNOWN. **Owner action:** before enabling, get Gnani's terms, DPA, hosting region, audio and transcript retention, a deletion route, and the official API contract; confirm the wire format; keep `GNANI_API_KEY_ID` out of Fly secrets until then. Live run needs owner approval.
 
 ## 12. Pine Labs (payments)
 
