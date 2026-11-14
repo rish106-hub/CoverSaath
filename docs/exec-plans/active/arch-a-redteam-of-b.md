@@ -1,0 +1,42 @@
+# Squad A red-team of `arch-b-draft.md` (guardrails, memory, storage, scale, pipelines)
+
+Status: critique for merge into `architecture-v1-2026-11-14.md`. FOR LEGAL REVIEW where noted. Each item: lapse, why it matters, fix. Severity: **H** blocks merge, **M** fix before build, **L** note.
+
+## Best parts (keep as is)
+
+- Rule 0.1 + L6: "the validator, not the prompt, is the guardrail". Same principle as my section 4.1; we should merge the two into one validator, not two.
+- G5 numeric grounding: targets the exact failure of the 2026-11-14 live run (19 of 20 expected-unknown answered anyway).
+- G7 injected-PDF canary corpus, and the bad-answer stub model. Both are free and testable today.
+- Five memory kinds split by trust, consent and lifetime (6.3). Correct reason for not using one table.
+- Section 8.1: parse once per UIN version, reuse across holders. This is the main reason the cost holds at scale.
+- 9.1 free text-layer extraction with pypdf: zero spend, reversible, unlocks clause search. Flagged correctly as O-B4.
+
+## Lapses
+
+| # | Sev | Lapse | Why it matters | Fix |
+|---|---|---|---|---|
+| R1 | H | **G1 says "the answer schema has no verdict field"; my `answer-card/v1` has `verdict`.** | We contradict each other. Without a verdict the card cannot show "covered after 2 years", which is the user value. | Keep `verdict`, but (a) allowed values describe the wording, not the outcome (`covered`, `not_covered`, `partly_covered`, `depends`, `unknown`); (b) `verdict` other than `unknown`/`depends` requires a `ruleResultId` (G2); (c) UI copy is "Your policy says: covered", never "will be paid"; (d) G1 banned phrases still apply to all text. Updated in arch-a 4. |
+| R2 | H | **Minors.** Dependents include children. DPDP requires verifiable consent of a parent or guardian for a child's data, and bars tracking and behavioural monitoring of children. | `person_signals`, `person_episodes`, research export and analytics could all hold a child's data. | Member rows carry `is_minor` (from DOB on the schedule or a declaration). No signals, episodes, research or analytics rows with `member_id` of a minor; their facts only serve the adult's own coverage questions. Parent consent wording FOR LEGAL REVIEW. Add to G11 and a test. |
+| R3 | H | **Privacy between adults in one household.** G8 isolates households, but two adults (spouses, a parent and an adult child) in one household can see each other's declarations (PED, prior claims). | Health declarations are the most sensitive data we hold. "Household is the tenant" is right for billing and coverage, wrong for visibility. | Today only the owner adult exists (no member-invite routes), so v1 is safe. Before invites ship: each declaration and signal has a `visible_to` (subject only, or household), default subject only for health. Record now as an open decision so no later change assumes household-wide visibility. |
+| R4 | M | **`person_episodes` duplicates `chat_turns`, `retrieval_traces`, `app_events` and memory rows.** Over-building. | A second sealed copy is another erasure path, more storage and drift between two histories. | v1: no new table. Render the timeline at read time from the existing sources, the same way `memory-document.js` renders memory (A5). Add the table only if a measured export or timeline read is too slow. |
+| R5 | M | **`person_signals` `inferred_unverified` written by the model.** | Model-made profiling of values and opinions from chat text is a new purpose under DPDP, and turns rule 0.1 ("model only words") into "model also infers". | v1: no model-written signals. Signals come only from taps (choice cards, feedback chips) and from code (`unmet_need` from L2/L6 verdicts, `flow_abandoned`). Revisit with consent and legal review. |
+| R6 | M | **L2 keyword intent router on Hinglish and voice transcripts.** | Keyword routing mis-reads mixed-language, misspelled or STT text. A false refusal ("purchase advice") on a real coverage question hurts more than it protects, because L6 already stops bad outputs. | Refuse only on high-precision matches (closed phrase lists, tested). Anything unmatched routes to `coverage_question` with retrieval; L4 + L6 keep it safe. Golden corpus must report false-refusal rate next to unsupported-claim rate (target under 2%). |
+| R7 | M | **G5 grounding misses Indian number formats and spoken numbers.** | "5,00,000", "5 lakh", "five lakh", "पांच लाख", "Rs 5L", "50k", "36 months" vs "3 years" are the same values. A naive check drops correct answers or passes wrong ones. | One shared normaliser (money to paise, durations to days, percentages to basis points) used by L4, L6 and the card builder. Speech text comes from a template over normalised values, not from the model (arch-a 4.1 check 5). Golden tests per format. |
+| R8 | M | **L6 "retry once" on voice.** | Doubles latency and cost on the slowest path; blows the 2.5 s budget. | Text: retry once. Voice: no retry, go straight to the template card. |
+| R9 | M | **G6 masks the full policy number, but users need it at the hospital desk and with the TPA.** | The hospital moment fails if the user cannot read their own policy number. | Show the last 4 digits by default with a tap "Show full number" that reads from the user's own document (never echoed into chat or model). G6 stays for chat and voice. |
+| R10 | M | **Scale misses the biggest per-user cost: model calls on general product questions.** | "Does Plan X cover maternity?" asked by 10,000 holders of Plan X costs 10,000 model calls. | Shared answer cache keyed by `(UIN version, canonical question id)` for questions answered from FSS facts only (no personal context, no declarations). Personal answers are never cached across households. Invalidate on new FSS version. |
+| R11 | M | **Research HMAC id and revocation.** | Pseudonymised data is still personal data under DPDP. Deletion by HMAC id needs the HMAC key kept; rotating it breaks deletion. Early on, k >= 10 suppresses almost everything. | Keep a per-household random research id (not HMAC of the household id), stored sealed in the household row, deleted on revocation together with all `research_*` rows. k-anonymity check stays; accept that early exports are mostly suppressed. |
+| R12 | L | **`code` vocabulary leak (your 10.1).** Agreed. | | Two vocabularies: plain topic-free codes (`value.cashless_first`, `unmet_need.answer_unknown`) and sealed topic codes. A test fails if a plain code contains a term from the health topic list. |
+| R13 | L | **G14 "read aloud?" tap for every sensitive answer.** | Most voice answers mention money; a tap on every one kills voice. | Speak only the template headline (verdict plus at most one amount or date). Health declarations, member names and conditions are never spoken. No extra tap needed for headlines. |
+| R14 | L | **Unknown answers need a next step, not just a refusal.** | "I can't answer that" with no route is a dead end. | Every refusal and unknown template carries an action: insurer helpline (FSS), the exact question to ask, or the grievance path (G13). Matches arch-a section 3. |
+
+## Answers to section 10 questions
+
+- **Q3 compare two plans.** Inside G3 if it shows facts side by side with sources and no ranking, verdict or "better". Outside G3 if it suggests switching. Owner and legal decision; suggest MVP compares only plans the household holds.
+- **Q4 where the research consent goes.** After first value: after the policy card and the first answer card, as one dismissible card ("Help improve answers for others?" Yes / Not now), never at sign-up, never blocking, also in settings. Asked at most once per 30 days after "Not now".
+- **Q5 schema per claim for L6.** Confirmed and added to `answer-card/v1`: each `sources[]` item gets `factIds[]`; `verdict` and each `conditions[]` item get `ruleResultId` (nullable) and `sourceIds[]`; each source keeps `status`, `page`, `clause`, `quote`. L6 validates every claim against these ids.
+- **Q6 voice tap.** Yes: the transcript is shown as an editable chip row with one "Send" tap before any answer. Voice prefill (`voice-intake/v0`) values appear as chips to confirm. With R5, voice never writes signals by itself.
+
+## Merge proposal
+
+One validator module (`features/chat-answer-guard/`) implements arch-a 4.1 and arch-b L6 together. G-rule ids become check ids in `answer_dropped` and `guardrail_events`. One normaliser (R7) shared by L4, L6 and the card builder.

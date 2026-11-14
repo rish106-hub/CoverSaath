@@ -94,15 +94,16 @@ Backward compatible: v1 fields `status`, `answer`, `sources` stay; new fields ar
   "contract": "answer-card/v1",
   "status": "evidence_found",
   "verdict": "partly_covered",
+  "ruleResultId": "rr_waiting_period_9f2",
   "headline": "Covered after 2 years, up to Rs 50,000",
   "explanation": "Knee replacement is in the list of treatments with a 2-year wait. Your wait ends on 12 Mar 2027.",
   "conditions": [
-    { "kind": "waiting_period", "text": "2-year wait for listed surgeries", "days": 730, "endsOn": "2027-03-12", "sourceIds": ["s1"] },
-    { "kind": "sublimit", "text": "Up to Rs 50,000 per knee", "amountMinor": 5000000, "sourceIds": ["s2"] }
+    { "kind": "waiting_period", "text": "2-year wait for listed surgeries", "days": 730, "endsOn": "2027-03-12", "ruleResultId": "rr_waiting_period_9f2", "sourceIds": ["s1"] },
+    { "kind": "sublimit", "text": "Up to Rs 50,000 per knee", "amountMinor": 5000000, "ruleResultId": null, "sourceIds": ["s2"] }
   ],
   "sources": [
-    { "id": "s1", "tier": "ida_wording", "status": "reviewed_reference", "page": 12, "clause": "4.2(b)", "quote": "..." },
-    { "id": "s2", "tier": "own_pdf", "status": "extracted_unverified", "page": 3, "clause": null, "quote": "..." }
+    { "id": "s1", "factIds": ["f_812"], "tier": "ida_wording", "status": "reviewed_reference", "page": 12, "clause": "4.2(b)", "quote": "..." },
+    { "id": "s2", "factIds": ["f_133"], "tier": "own_pdf", "status": "extracted_unverified", "page": 3, "clause": null, "quote": "..." }
   ],
   "gaps": [ { "questionId": "condition.started_on", "reason": "changes_verdict" } ],
   "actions": [
@@ -116,7 +117,7 @@ Backward compatible: v1 fields `status`, `answer`, `sources` stay; new fields ar
 }
 ```
 
-Verdict values: `covered`, `not_covered`, `partly_covered`, `depends` (a gap changes it), `unknown`. Verdict comes from `features/insurance-rules` when a rule exists; otherwise only `unknown` or `depends` are allowed with a model draft.
+Verdict values describe what the wording says, never a claim outcome (G1): `covered`, `not_covered`, `partly_covered`, `depends` (a gap changes it), `unknown`. Any verdict other than `unknown` or `depends` requires a `ruleResultId` from `features/insurance-rules` (G2). UI copy reads "Your policy says: covered", never "will be paid". Each claim carries `sourceIds`, each source carries `factIds`, so the validator (arch-b L6) checks every claim against the evidence pack. Agreed with Squad B (red-team R1, Q5).
 
 ### 4.1 Server checks before a card is released (fail closed)
 
