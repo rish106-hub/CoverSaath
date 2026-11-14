@@ -17,6 +17,9 @@ import {
   createFallbackByteStorage,
   createOcrService,
   createSandboxedPdfInspector,
+  createSandboxedPdfSanitiser,
+  createSandboxedInsuranceGate,
+  createPdfUploadChecks,
   createSandboxedPdfSegmenter,
 } from '../features/input/index.js';
 import {
@@ -94,6 +97,9 @@ export function createApiServer({
       },
     })
     : null;
+  const pdfSanitiser = documentStorage ? createSandboxedPdfSanitiser() : null;
+  const insuranceGate = documentStorage ? createSandboxedInsuranceGate() : null;
+  const inspectPdfUpload = documentStorage ? createPdfUploadChecks({ inspector: pdfInspector, sanitiser: pdfSanitiser, gate: insuranceGate }) : null;
   const pdfSegmenter = documentStorage ? createSandboxedPdfSegmenter() : null;
   // Activity events and the database-backed limiter both need the data key (payload sealing, keyed client hash). It is read
   // here so a missing key in production stops startup instead of the first request (ADR 0014).
@@ -292,7 +298,7 @@ export function createApiServer({
           authorization: { authorized: true, purpose: 'document_erasure' },
         });
       },
-      inspectFile: validated => (validated.detectedMimeType === 'application/pdf' ? pdfInspector.inspect(validated.bytes) : null),
+      inspectFile: validated => (validated.detectedMimeType === 'application/pdf' ? inspectPdfUpload(validated) : null),
       limits: {
         maxDocumentsPerCase: config.documents.maxDocumentsPerCase,
         maxPendingPerHousehold: config.documents.maxPendingPerHousehold,
@@ -474,7 +480,7 @@ export function createApiServer({
       workerStopped = worker ? worker.stop().catch(() => {}) : Promise.resolve();
     });
   }
-  if (pdfInspector) server.once('close', () => pdfInspector.close());
+  if (pdfInspector) server.once('close', () => { pdfInspector.close(); pdfSanitiser.close(); insuranceGate.close(); });
   // Buffered activity events are written before the server's own database pool closes, and before a caller's close
   // callback runs (so an injected database is still open when the last batch is written).
   let eventsFlushed = Promise.resolve();
