@@ -4,6 +4,8 @@ import { createChatModelGateway, createHouseholdDayBudget } from '../../features
 import { createModelRouter, createVoyageEmbedClient, createInsuranceDataClient } from '../../integrations/index.js';
 import { createHouseholdIdentifierLoader } from './household-identifiers.js';
 import { createMemoryService } from './memory-service.js';
+import { createMemoryDocumentService } from './memory-document.js';
+import { MemoryDocumentRepository } from '../repositories/memory-document-repository.js';
 import { createChatV1Service } from './chat-v1-service.js';
 import { createProviderConsent } from './provider-consent.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
@@ -177,12 +179,15 @@ export function createBackendServices(database, options = {}) {
     repository: holdingProductRepository, policyHoldings, policyProfiles, referenceCache: new ReferenceCacheRepository(database), jobQueue, ocr, pipeline: holdings, env: options.env ?? process.env, clock: options.clock, client: options.referenceClient ?? null,
   });
 
+  // The owner's memory document: rendered on demand, nothing stored (services/memory-document.js).
+  const memoryDocument = createMemoryDocumentService({ holdingRepository: holdingPipelineRepository, holdings, repository: new MemoryDocumentRepository(database, shared), declarations, premiums, households, env: options.env ?? process.env, clock: options.clock });
+
   const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, referenceCache: new ReferenceCacheRepository(database), env: options.env ?? process.env, client: options.referenceClient ?? null });
 
   return {
     ensureHolding, ensureHoldingForDocument, analytics, networkHospitals, holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
-    holdings, holdingPipelineRepository, memory, memoryChunks, chatRepository, chatV1, modelGateway,
+    holdings, holdingPipelineRepository, memoryDocument, memory, memoryChunks, chatRepository, chatV1, modelGateway,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {
