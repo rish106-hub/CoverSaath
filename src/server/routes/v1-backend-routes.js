@@ -20,6 +20,7 @@ import { handleHoldingsRoute } from './holdings-routes.js';
 import { handleHoldingDocumentsRoute } from './holding-documents-routes.js';
 import { handleHoldingHospitalsRoute } from './holding-hospitals-routes.js';
 import { handleHoldingFactsRoute } from './holding-facts-routes.js';
+import { handleHoldingIntakeRoute } from './holding-intake-routes.js';
 import { handleHoldingMemoryDocumentRoute } from './holding-memory-document-routes.js';
 import { handleHoldingRecordsRoute } from './holding-records-routes.js';
 import { handleChatV1Route } from './chat-v1-routes.js';
@@ -418,6 +419,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     if (holdingsRoute) return holdingsRoute;
     const holdingHospitals = await handleHoldingHospitalsRoute({ req, url, principal, services }); if (holdingHospitals) return holdingHospitals;
     const holdingFacts = await handleHoldingFactsRoute({ req, url, principal, services }); if (holdingFacts) return holdingFacts;
+    const holdingIntake = await handleHoldingIntakeRoute({ req, url, principal, services }); if (holdingIntake) return holdingIntake;
     const holdingMemoryDocument = await handleHoldingMemoryDocumentRoute({ req, url, principal, services }); if (holdingMemoryDocument) return holdingMemoryDocument;
     const holdingDocuments = await handleHoldingDocumentsRoute({ req, url, principal, services }); if (holdingDocuments) return holdingDocuments;
     const holdingRecords = await handleHoldingRecordsRoute({ req, url, principal, services }); if (holdingRecords) return holdingRecords;
