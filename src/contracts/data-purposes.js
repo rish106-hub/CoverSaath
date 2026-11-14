@@ -173,8 +173,9 @@ export const DATA_REGISTRY = Object.freeze({
   fact_conflicts: entry('coverage_reconstruction', {},
     ['id', 'fact_key', 'left_fact_id', 'right_fact_id', 'resolution_state', 'resolved_by_review_id', 'created_at', 'resolved_at']),
   // Holdings and memory (migrations 048-050, ADR 0032). A holding is a thin link of ids and closed enums.
+  // reference_outcome (closed code) and reference_checked_at (timestamp) record the last insurer-terms check (migration 066).
   policy_holdings: entry('document_processing', {},
-    ['id', 'household_id', 'policy_id', 'document_id', 'policy_profile_id', 'kind', 'status', 'created_at', 'updated_at']),
+    ['id', 'household_id', 'policy_id', 'document_id', 'policy_profile_id', 'kind', 'status', 'reference_outcome', 'reference_checked_at', 'created_at', 'updated_at']),
   // Documents linked to a holding (migration 065): ids and a closed enum only.
   holding_documents: entry('document_processing', {},
     ['id', 'household_id', 'holding_id', 'document_id', 'kind', 'created_at']),

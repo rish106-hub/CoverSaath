@@ -238,7 +238,7 @@ export function createSarvamDocAiTransport({
           pages.push({
             pageNumber: originalPage,
             text,
-            layoutTags: ordered.map(block => block.layout_tag ?? null),
+            layoutTags: ordered.map(block => sarvamLayoutTag(block.layout_tag)),
             blocks: ordered.map(sarvamBlockShape),
             extractionStatus: text.trim() ? 'extracted' : 'failed',
             confidenceBasisPoints: null,
@@ -263,8 +263,17 @@ export function createSarvamDocAiTransport({
 // Normalised block shape for knowvia.ocr.v2: text, layout tag and reading order only. Block ids,
 // coordinates, bounding boxes and confidences are not kept. document-intake validates and stores it.
 export const SARVAM_OCR_OUTPUT_VERSION = 'knowvia.ocr.v2';
+// Layout tags the stored-block contract accepts (must equal OCR_BLOCK_TAGS in src/features/input/ocr-blocks.js;
+// tests/sarvam-layout-tags.test.mjs checks). A tag outside this list becomes null: the block text is kept and read
+// as plain text, only the layout hint is lost. The tag is never copied anywhere else.
+export const SARVAM_LAYOUT_TAGS = Object.freeze([
+  'headline', 'sub-headline', 'section-title', 'header', 'paragraph', 'footer', 'footnote', 'page-number',
+  'table', 'image', 'image-caption', 'photograph', 'chart', 'diagram', 'advertisement', 'folio', 'reference',
+]);
+const KNOWN_LAYOUT_TAGS = new Set(SARVAM_LAYOUT_TAGS);
+export const sarvamLayoutTag = tag => (typeof tag === 'string' && KNOWN_LAYOUT_TAGS.has(tag) ? tag : null);
 export function sarvamBlockShape(block) {
-  return { text: block.text, tag: block.layout_tag ?? null, readingOrder: block.reading_order };
+  return { text: block.text, tag: sarvamLayoutTag(block.layout_tag), readingOrder: block.reading_order };
 }
 
 function validBlocks(blocks) {
