@@ -48,3 +48,21 @@ CoverSaath calls FSS only through `src/integrations/insurance-data/client.js` al
 - 2026-11-14 A: A5 merged (#137, 2f434c3): `GET /api/v1/holdings/{id}/memory-document`, markdown, 9 sections, page + clause cites, no-store. Squad A build slices A1-A6 all on `main`. Next: live E2E (launch.mjs + journey.mjs) against local FSS (port 55432 DB, 655 real products) once owner OKs paid Sarvam OCR + chat model calls and an FSS dev key.
 - 2026-11-14 A (for B): owner asked Squad A to put the raw-docs store on Supabase + Cloudflare R2. FSS #5 merged (42e0fd5, package.json conflict resolved). Branch `sqb/supabase-store` (FSS): migration 022 (`documents`, `document_artifacts`, RLS on all public tables) + `npm run docs:load` (catalog -> rows, PDFs -> R2). Local rows-only run clean (4,317 docs, all insurers matched, 214 linked to products). Waiting on owner: Supabase MCP auth, R2 bucket + token. Squad B: do not build a parallel uploader.
 - 2026-11-14 A: live sync opened with Squad B session (coversaath-4a) via cross-session SendMessage. Rule: messages for speed, this log for the record; owner decisions only from the owner. R2 bucket `knowvia-insurance` full upload running from Squad A (staging DB local); B re-tag pushes -> B messages sha + counts -> A re-runs docs:load to refresh tags.
+- 2026-11-14 B: sync confirmed with A. Owner: R2 connected; storage is R2 + relational table; Oriental, Raheja QBE, IRDAI paused. B re-tag running (decrypt + 60-page UIN scan), pushes insurance-raw-docs; B then sends sha + complete count to A for docs:load refresh. catalog.csv columns frozen (append-only, warn first). Next B: filter label-as-name bug, then untagged.csv (Care, ICICI Pru, Axis Max, Tata AIA, SUD, Canara). Handoff: insurance-raw-docs/HANDOFF.md.
+- 2026-11-14 B: owner away; asked for a written scope split. B proposed to A: B owns insurance-raw-docs (collection, tag-catalog, catalog.csv, untagged.csv), tag completeness (uin/name/category/doc_type), re-collection (Oriental, Raheja QBE, IRDAI still paused), FSS tools/raw-download.mjs + data/products + sqb/fetch-fixes. A owns sqb/supabase-store (migration 022, docs:load), DB loads, R2 bucket, Supabase connect, products:import runs, CoverSaath + Knowvia_website. Interfaces: catalog.csv (B writes, A reads, columns append-only with notice), registry-uin-names.csv (A exports, B reads). Disputes: by message, then the file owner decides; spend, unpausing, legal, merges and deploys wait for the owner.
+
+## Scope split from 2026-11-14 15:30 (owner away; squads coordinate directly)
+
+Owner order: A and B talk to each other directly (cross-session SendMessage), challenge each other's work, fix and keep going. One line per decision in the hand-off log. Owner-only items wait in "Owner queue".
+
+| Squad A (session "Remaining work estimate") | Squad B (session `coversaath-4a`) |
+|---|---|
+| R2 upload of all PDFs (`docs:load`), counts verified against catalog | Re-tag, label-as-name fix (386 rows), doc_type for "unknown", untagged.csv gaps; never guess a UIN |
+| Re-run `docs:load` on every B catalog sha (tags only, no re-upload); re-export registry matches for B | Push catalog sha + counts to A after each pass; no column renames (append only, warn first) |
+| Own branch `sqb/supabase-store` (migration 022, loader); merge to FSS `master` after upload verified | Product registry growth: add catalog UINs with complete tags to the registry via `products:import` as unverified, so documents link to products |
+| CoverSaath live E2E (`launch.mjs` + `journey.mjs`) against local FSS; paid OCR/chat as owner approved after re-tag | Run the FSS API locally and give A a dev API key in `~/.config/fss/fss-dev.env` (chmod 600; LIVE_RUN_FSS_URL, LIVE_RUN_FSS_API_KEY); never paste keys in messages |
+| CoverSaath + Knowvia_website code and fixes found by the E2E | FSS fixes found by the E2E (contract unchanged unless both agree) |
+
+Rules: do not write to the other squad's files, branches or buckets without asking first. Disagree in messages with evidence (counts, test output). If stuck between squads, log both views and take the reversible option.
+
+Owner queue: (1) Supabase `/mcp` auth, then A creates the project and loads the rows; (2) roll the R2 token after the upload (the secret was shown in the terminal); (3) Oriental, Raheja QBE, IRDAI stay paused.
