@@ -21,7 +21,7 @@ const ID = /^[A-Za-z0-9_.:-]{1,100}$/;
 const notFound = () => Object.assign(new Error('The holding was not found.'), { code: 'HOLDING_NOT_FOUND', statusCode: 404 });
 
 // The holding is looked up by id, then the caller must hold the owner role in ITS household (ownership on every read and write).
-async function requireOwnedHolding({ services, principal, holdingId }) {
+export async function requireOwnedHolding({ services, principal, holdingId }) {
   if (!ID.test(holdingId)) throw notFound();
   const householdId = await services.holdingPipelineRepository.householdOfHolding(holdingId);
   if (!householdId) throw notFound();
