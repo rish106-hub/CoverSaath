@@ -52,7 +52,7 @@ export const RESOLVED_STATUSES = Object.freeze(['extracted_unverified', 'conflic
 //   Headline = { factKey, value, status }, status from RESOLVED_STATUSES. Names are null until the owner confirmed the product (policy_profiles
 //   state 'reported'); never a candidate, never the UIN. Field -> existing fact key of src/contracts/policy-facts.js:
 export const HOLDING_SUMMARY_HEADLINES = Object.freeze({ sumInsured: 'sum_insured', policyPeriod: 'policy_period', premium: 'premium_total' });
-// GET /api/v1/holdings/{id}/facts: each source `page` is { pageId, blockIndex, documentKind } where documentKind is the document_kind of the
+// GET /api/v1/holdings/{id}/facts: each source `page` is { pageId, blockIndex, documentKind, pageNumber } where pageNumber is the 1-based page of the document and documentKind is the document_kind of the
 // page's document (policy_schedule, policy_wording, ...), or null.
 
 // Coded, client-safe errors of the holdings routes are registered in src/contracts/error-codes.js (HOLDING_*, MEMORY_CONFLICT_*).

@@ -127,7 +127,7 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       if (!out.has(item.factKey)) out.set(item.factKey, []);
       out.get(item.factKey).push({
         id: item.factId, tier: 'own_pdf', status: 'extracted_unverified', value: item.value, alternatives: [],
-        page: { pageId: item.pageId, blockIndex: item.blockIndex, documentKind: kinds.get(item.pageId) ?? null },
+        page: { pageId: item.pageId, blockIndex: item.blockIndex, documentKind: kinds.get(item.pageId)?.documentKind ?? null, pageNumber: kinds.get(item.pageId)?.pageNumber ?? null },
         quote: quotes.get(item.factId) ?? null, captureMethod: null, current: true,
       });
     }
@@ -430,7 +430,7 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
 function sourceView(row, quotes = new Map(), kinds = new Map()) {
   return {
     id: row.id, tier: row.tier, status: row.status, value: row.value, alternatives: row.alternatives,
-    page: row.sourcePageId ? { pageId: row.sourcePageId, blockIndex: row.blockIndex, documentKind: kinds.get(row.sourcePageId) ?? null } : null,
+    page: row.sourcePageId ? { pageId: row.sourcePageId, blockIndex: row.blockIndex, documentKind: kinds.get(row.sourcePageId)?.documentKind ?? null, pageNumber: kinds.get(row.sourcePageId)?.pageNumber ?? null } : null,
     quote: row.tier === 'ida_wording' ? (typeof row.reference?.quote === 'string' ? row.reference.quote : null)
       : row.tier === 'own_pdf' ? quotes.get(row.policyFactId) ?? null : null,
     captureMethod: row.captureMethod ?? null, current: true,

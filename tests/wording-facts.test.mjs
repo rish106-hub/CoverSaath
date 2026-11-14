@@ -57,6 +57,7 @@ test('structure then link: the wording facts join the holding, still extracted_u
   const ped = await w.fact('waiting_ped');
   assert.equal(ped.status, 'extracted_unverified');
   assert.equal(ped.sources[0].page.documentKind, 'policy_wording');
+  assert.ok(Number.isInteger(ped.sources[0].page.pageNumber) && ped.sources[0].page.pageNumber > 0);
   assert.ok(Number.isInteger(ped.sources[0].page.blockIndex) || ped.sources[0].page.blockIndex === null);
   assert.equal((await w.fact('sum_insured')).sources[0].page.documentKind, 'policy_schedule');
   const row = await w.app.database.one("SELECT source_document_id FROM household_memory_facts WHERE holding_id = ? AND fact_key = 'waiting_ped' AND superseded_at IS NULL", [w.holdingId]);

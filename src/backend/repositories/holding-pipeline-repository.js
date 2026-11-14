@@ -327,10 +327,10 @@ export class HoldingPipelineRepository {
   async pageDocumentKinds({ householdId, pageIds }) {
     const ids = [...new Set(pageIds.filter(Boolean))];
     if (ids.length === 0) return new Map();
-    const rows = await this.database.many(`SELECT page.id, document.document_kind FROM source_pages page
+    const rows = await this.database.many(`SELECT page.id, page.page_number, document.document_kind FROM source_pages page
       JOIN document_uploads document ON document.id = page.document_upload_id
       WHERE document.household_id = ? AND page.id = ANY(CAST(? AS text[]))`, [householdId, ids]);
-    return new Map(rows.map(row => [row.id, row.document_kind]));
+    return new Map(rows.map(row => [row.id, { documentKind: row.document_kind, pageNumber: Number(row.page_number) }]));
   }
 
   /** Current memory rows of a holding, opened (server side only). */
