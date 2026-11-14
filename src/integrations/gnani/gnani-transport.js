@@ -23,11 +23,16 @@ const STT_LANGUAGE_CODES = Object.freeze({ 'en-IN': 'en-IN', 'hi-IN': 'hi-IN', '
 const AUDIO_CONFIG = Object.freeze({ sample_rate: 24000, num_channels: 1, sample_width: 2, encoding: 'oggopus', container: 'ogg' });
 const fail = (code, message, retryable = false, statusCode = 502) => Object.assign(new Error(message), { code, retryable, statusCode });
 
+// Outbound host is pinned: https on Gnani's own domain, or loopback http for the local stub and tests. An operator
+// misconfiguration (or a tampered env) can never point the server credential and user audio at another host (SSRF).
+const GNANI_HOST = /^(?:[a-z0-9-]+\.)*vachana\.ai$/;
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 export function validateGnaniBaseUrl(value) {
   let url;
   try { url = new URL(value); } catch { return null; }
-  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
-  if (url.protocol === 'https:' || (url.protocol === 'http:' && loopback)) return url.origin;
+  if (url.username || url.password) return null;
+  if (url.protocol === 'https:' && GNANI_HOST.test(url.hostname) && !url.port) return url.origin;
+  if (url.protocol === 'http:' && LOOPBACK_HOSTS.has(url.hostname)) return url.origin;
   return null;
 }
 
@@ -62,7 +67,7 @@ function providerError(status, body) {
 
 export function createGnaniTransport({ baseUrl = DEFAULT_GNANI_BASE_URL, apiKeyId, fetchImpl = globalThis.fetch, timeoutMs = 10_000 } = {}) {
   const origin = validateGnaniBaseUrl(baseUrl);
-  if (!origin) throw new TypeError('Gnani base URL must be https (loopback http is allowed for tests).');
+  if (!origin) throw new TypeError('Gnani base URL must be https on vachana.ai (loopback http is allowed for tests).');
   if (typeof apiKeyId !== 'string' || apiKeyId.trim() === '') throw new TypeError('Gnani API key id is required.');
   if (typeof fetchImpl !== 'function') throw new TypeError('fetch is required.');
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 60_000) throw new TypeError('Invalid Gnani timeout.');

@@ -333,3 +333,14 @@ test('a queued call that gets its turn cancels its wait timer and reports the wa
   assert.equal(timersMade[0].cleared, true);
   assert.deepEqual(metrics, [0, 400]);
 });
+
+test('base URL is pinned to vachana.ai over https or loopback http (SSRF)', async () => {
+  const { validateGnaniBaseUrl } = await import('../src/integrations/gnani/gnani-transport.js');
+  assert.equal(validateGnaniBaseUrl('https://api.vachana.ai'), 'https://api.vachana.ai');
+  assert.equal(validateGnaniBaseUrl('https://api.vachana.ai/some/path'), 'https://api.vachana.ai');
+  assert.equal(validateGnaniBaseUrl('http://127.0.0.1:4010'), 'http://127.0.0.1:4010');
+  for (const bad of [
+    'https://evil.example', 'https://vachana.ai.evil.example', 'https://evilvachana.ai', 'http://api.vachana.ai',
+    'https://api.vachana.ai:8443', 'https://user:pw@api.vachana.ai', 'http://169.254.169.254', 'http://10.0.0.5:80', 'file:///etc/passwd', 'not a url',
+  ]) assert.equal(validateGnaniBaseUrl(bad), null, bad);
+});
