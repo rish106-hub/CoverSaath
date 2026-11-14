@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createInsuranceDataClient, REFERENCE_ENDPOINTS } from '../../integrations/index.js';
+import { createInsuranceDataClient, REFERENCE_ENDPOINTS, SERVICE_ENDPOINTS, ReferenceDataError } from '../../integrations/index.js';
 import { cacheKeyFor, signatureFor } from './reference-data-port.js';
 
 // Reference-data import (ADR 0021, option d): loads PUBLIC reference responses from a local JSON file straight into the
@@ -14,6 +14,12 @@ import { cacheKeyFor, signatureFor } from './reference-data-port.js';
 // opt-in; it is for data whose source rights the owner has recorded. FOR LEGAL REVIEW before any non-synthetic import.
 
 export const IMPORT_FORMAT = 'reference-import-v1';
+// Service endpoints an owner_approved import may carry (pipeline stage 5: FSS writes these files from its public store).
+// They are stored under their own `import.` key so they never collide with rows the jobs derive from them (for example
+// exportCacheKey holds the chunked export, not the raw one). Synthetic imports keep the reference endpoints only.
+export const IMPORT_SERVICE_ENDPOINTS = Object.freeze(['registry.insurers', 'registry.products', 'products.exportByUin']);
+export const importSourceKey = (endpoint, params) => cacheKeyFor(`import.${endpoint}`, params);
+const isImportServiceEndpoint = endpoint => IMPORT_SERVICE_ENDPOINTS.includes(endpoint);
 export const MAX_IMPORT_ENTRIES = 1000;
 export const DEFAULT_IMPORT_TTL_DAYS = 30;
 const MAX_IMPORT_TTL_DAYS = 3650;
@@ -70,16 +76,19 @@ export function prepareReferenceImport(document, { allowOwnerApproved = false } 
       throw importError('Entry must have only endpoint, params and response', index);
     }
     const { endpoint } = entry;
-    if (typeof endpoint !== 'string' || !Object.hasOwn(REFERENCE_ENDPOINTS, endpoint)) throw importError('Endpoint is not allowed', index);
+    const serviceEntry = typeof endpoint === 'string' && isImportServiceEndpoint(endpoint);
+    if (typeof endpoint !== 'string' || !(Object.hasOwn(REFERENCE_ENDPOINTS, endpoint) || serviceEntry)) throw importError('Endpoint is not allowed', index);
+    if (serviceEntry && document.data_class !== 'owner_approved') throw importError('Service endpoints need owner_approved data', index);
+    const definition = serviceEntry ? SERVICE_ENDPOINTS[endpoint] : REFERENCE_ENDPOINTS[endpoint];
     let params;
     try { params = client.normalizeParams(endpoint, entry.params ?? {}); } catch { throw importError('Params are invalid', index); }
     if (!isObject(entry.response)) throw importError('Response must be a JSON object', index);
     if (document.data_class === 'synthetic') assertSyntheticOnly(endpoint, entry.response, index);
     let body;
-    try { body = REFERENCE_ENDPOINTS[endpoint].parse(entry.response); } catch { throw importError('Response does not match the pinned shape', index); }
+    try { body = definition.parse(entry.response); } catch { throw importError('Response does not match the pinned shape', index); }
     // Defence in depth: a synthetic import must never yield a verified fact, whatever the pre-parse checks let through.
     if (document.data_class === 'synthetic') assertNoVerifiedFacts(body, index);
-    const key = cacheKeyFor(endpoint, params);
+    const key = serviceEntry ? importSourceKey(endpoint, params) : cacheKeyFor(endpoint, params);
     if (seen.has(key)) throw importError('Duplicate endpoint and params', index);
     seen.add(key);
     return { key, endpoint, body, signature: signatureFor(body) };
@@ -108,4 +117,33 @@ export async function importReferenceData({ database, repository, document, ttlD
     for (const row of rows) await repository.put({ key: row.key, etag: marker, body: row.body, signature: row.signature, ttlMs });
   });
   return { ...summary, marker };
+}
+
+/** Import mode: reference data is enabled with no service URL, so nothing is fetched and imported rows are the source. */
+export const referenceImportMode = (env = process.env) => env?.REFERENCE_DATA_ENABLED === 'true' && String(env?.REFERENCE_DATA_BASE_URL ?? '').trim() === '';
+
+const MISSING_IS_NOT_FOUND = new Set(['products.get', 'products.exportByUin', 'products.search', 'products.versions', 'versions.facts']);
+
+/**
+ * A client with the insurance-data client's `read`/`normalizeParams` shape that serves imported rows from the reference
+ * cache and never touches the network. Used by jobs in import mode. A missing or tampered row is a coded miss: NOT_FOUND
+ * for per-product reads (the job records "not available"), UNAVAILABLE (retryable) for the registry.
+ */
+export function createImportedReferenceClient({ referenceCache }) {
+  if (typeof referenceCache?.get !== 'function') throw new TypeError('createImportedReferenceClient needs a reference cache.');
+  const normalizer = createInsuranceDataClient({ env: {}, fetchImpl: noNetwork });
+  return Object.freeze({
+    normalizeParams: (endpoint, params) => normalizer.normalizeParams(endpoint, params),
+    async read(endpoint, rawParams = {}) {
+      const params = normalizer.normalizeParams(endpoint, rawParams);
+      const key = isImportServiceEndpoint(endpoint) ? importSourceKey(endpoint, params) : cacheKeyFor(endpoint, params);
+      const row = await referenceCache.get(key);
+      if (!row || row.signature !== signatureFor(row.body)) {
+        throw MISSING_IS_NOT_FOUND.has(endpoint)
+          ? new ReferenceDataError('REFERENCE_DATA_NOT_FOUND', 'Reference data was not found.', { statusCode: 404 })
+          : new ReferenceDataError('REFERENCE_DATA_UNAVAILABLE', 'Reference data is unavailable.', { retryable: true, statusCode: 503 });
+      }
+      return { data: row.body, etag: row.etag ?? null };
+    },
+  });
 }

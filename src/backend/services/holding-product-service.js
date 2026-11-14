@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createInsuranceDataClient, referenceDataEnabled, ReferenceDataError } from '../../integrations/index.js';
+import { createImportedReferenceClient, referenceImportMode } from './reference-data-import.js';
 import { detectInsurerCandidates, DETECTION_PAGES } from '../../features/insurer-detection/index.js';
 import { flattenBlock } from '../../features/ai-analysis/eval-extractor.js';
 import { createStoredPagesReader } from './readable-document.js';
@@ -80,7 +81,11 @@ export function createHoldingProductService({
   const requireEnabled = () => { if (!enabled()) throw coded('HOLDINGS_DISABLED', 'Holdings are disabled.', 503); };
   const readStoredPages = createStoredPagesReader({ ocr, clock });
   let built = client;
-  const reference = () => { built ??= createInsuranceDataClient({ env }); return built; };
+  // Import mode (no service URL): jobs read the rows an owner_approved import wrote (pipeline stage 5), never the network.
+  const reference = () => {
+    built ??= referenceImportMode(env) ? createImportedReferenceClient({ referenceCache }) : createInsuranceDataClient({ env });
+    return built;
+  };
 
   async function readRegistry() {
     const row = await referenceCache.get(REGISTRY_CACHE_KEY);
