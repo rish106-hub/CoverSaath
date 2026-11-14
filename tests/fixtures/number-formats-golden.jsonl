@@ -20,7 +20,7 @@
 {"raw": "1 crore", "kind": "money", "expected": 1000000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
 {"raw": "1.99 crore", "kind": "money", "expected": 1990000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
 {"raw": "INR 1 Cr", "kind": "money", "expected": 1000000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
-{"raw": "₹ 185 cr", "kind": "money", "expected": 18500000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
+{"raw": "₹ 185 cr", "kind": "money", "expected": 185000000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
 {"raw": "Rs. 1,54,750 crore", "kind": "money", "expected": 154750000000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
 {"raw": "five lakh", "kind": "money", "expected": 50000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}
 {"raw": "ten lakhs", "kind": "money", "expected": 100000000, "source": "insurance-raw-docs sample of 220 PDFs, 2026-11-14"}

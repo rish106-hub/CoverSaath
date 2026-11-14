@@ -20,18 +20,8 @@ function toGolden(n) {
 
 test('golden file has 59 cases', () => assert.equal(cases.length, 59));
 
-// Rows where the golden expected value disagrees with the arithmetic. Reported to Squad B, not bent around.
-// "₹ 185 cr" = 185 x 1,00,00,000 rupees = 18,50,00,00,000 rupees = 185000000000 paise; the file says 18500000000 (10x low).
-const KNOWN_CONFLICTS = new Map([['₹ 185 cr', { kind: 'money', expected: 185000000000 }]]);
-
+// All 59 rows now agree with the arithmetic (Squad B fixed "₹ 185 cr" in insurance-raw-docs a5d16dc).
 for (const c of cases) {
-  if (KNOWN_CONFLICTS.has(c.raw)) {
-    test(`golden conflict (fixture expected ${c.expected}, arithmetic differs): ${c.raw}`, () => {
-      assert.deepEqual(toGolden(extractNumbers(c.raw)[0]), KNOWN_CONFLICTS.get(c.raw));
-      assert.notEqual(c.expected, KNOWN_CONFLICTS.get(c.raw).expected);
-    });
-    continue;
-  }
   test(`golden: ${c.raw} -> ${c.kind}`, () => {
     const found = extractNumbers(c.raw);
     if (c.kind === 'none') return assert.deepEqual(found, []);
