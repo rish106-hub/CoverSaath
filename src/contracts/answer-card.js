@@ -59,6 +59,9 @@ export function validateAnswerCardShape(card) {
     if (actions.length > L.actions) errors.push('actions_too_many');
     actions.forEach((action, index) => {
       if (!isObject(action) || !ANSWER_CARD_ACTION_KINDS.includes(action.kind) || !isString(action.label)) errors.push(`actions[${index}]`);
+      // An action may reference a trusted contact by id; only the guard attaches `contact` (C10 rejects a draft carrying one).
+      else if (action.contactId != null && (!isString(action.contactId) || !['call_insurer', 'grievance_path'].includes(action.kind))) errors.push(`actions[${index}].contact`);
+      else if (action.contact != null && (action.contactId == null || !isObject(action.contact) || !isString(action.contact.kind) || !isString(action.contact.value))) errors.push(`actions[${index}].contact`);
     });
   }
   const followups = card.followups ?? [];

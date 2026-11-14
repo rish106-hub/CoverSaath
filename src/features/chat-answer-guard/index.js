@@ -3,6 +3,8 @@
 import { ANSWER_CARD_CONTRACT, ANSWER_CARD_LIMITS, validateAnswerCardShape } from '../../contracts/answer-card.js';
 import { ADVICE_PHRASES, OUTCOME_PROMISE_PHRASES, firstMatch } from './banned-phrases.js';
 import { extractNumbers, isGrounded, toCanonicalValues } from './number-normaliser.js';
+import { containsContactValue, isValidContact } from './insurer-contact.js';
+export { CONTACT_PURPOSES, containsContactValue, isValidContact, pickInsurerContact } from './insurer-contact.js';
 
 export const GUARD_CHECK_IDS = Object.freeze({
   shape: 'card_shape',
@@ -14,6 +16,7 @@ export const GUARD_CHECK_IDS = Object.freeze({
   advice: 'no_advice',
   identifier: 'no_identifier_echo',
   speech: 'speech_template',
+  contact: 'contact_trusted',
   inputs: 'verdict_inputs_verified', // downgrade, not drop
 });
 const RETRYABLE = new Set([GUARD_CHECK_IDS.citation, GUARD_CHECK_IDS.quote, GUARD_CHECK_IDS.number]);
@@ -52,8 +55,9 @@ export function speechFromHeadline(card) {
   return `${phrase}.`;
 }
 
-// All copy here is pending legal review.
-export function unknownCard() {
+// All copy here is pending legal review. `contact` is a trusted contact (pickInsurerContact); without one the card points to
+// the number printed on the user's own policy documents instead of naming one.
+export function unknownCard({ contact = null } = {}) {
   const headline = "Your documents don't say.";
   const explanation = 'Please check with your insurer.';
   return {
@@ -66,7 +70,9 @@ export function unknownCard() {
     conditions: [],
     sources: [],
     gaps: [],
-    actions: [{ kind: 'call_insurer', label: 'Call your insurer' }],
+    actions: [isValidContact(contact)
+      ? { kind: 'call_insurer', label: 'Call your insurer', contactId: contact.id, contact: { kind: contact.kind, value: contact.value } }
+      : { kind: 'call_insurer', label: 'Call the number on your policy card' }],
     followups: [],
     speech: { lang: 'en', text: headline },
     answer: `${headline} ${explanation}`,
@@ -126,7 +132,7 @@ function structuredNumbers(condition) {
   return out;
 }
 
-function runChecks(card, evidence, ruleResults, mode) {
+function runChecks(card, evidence, ruleResults, mode, contacts) {
   const failed = new Set();
   const conditions = card.conditions ?? [];
   const sources = card.sources ?? [];
@@ -163,6 +169,11 @@ function runChecks(card, evidence, ruleResults, mode) {
   if (texts.some((t) => firstMatch(OUTCOME_PROMISE_PHRASES, t))) failed.add(GUARD_CHECK_IDS.outcome);
   if (texts.some((t) => firstMatch(ADVICE_PHRASES, t))) failed.add(GUARD_CHECK_IDS.advice);
   if (texts.some(containsIdentifier)) failed.add(GUARD_CHECK_IDS.identifier);
+
+  // C10 contact_trusted: no contact value in any text; every contactId must be a trusted contact passed by the caller.
+  if (texts.some(containsContactValue)) failed.add(GUARD_CHECK_IDS.contact);
+  if ((card.actions ?? []).some((a) => a.contact != null)) failed.add(GUARD_CHECK_IDS.contact); // drafts reference, never carry
+  for (const a of card.actions ?? []) if (a.contactId != null && !isValidContact(contacts?.[a.contactId])) failed.add(GUARD_CHECK_IDS.contact);
 
   // C8 speech_template: present speech must equal the template; voice mode requires it.
   if (card.speech != null ? card.speech.text !== speechFromHeadline(card) : mode === 'voice') failed.add(GUARD_CHECK_IDS.speech);
@@ -203,18 +214,35 @@ export function isReleasedCard(card) {
   return RELEASED.has(card);
 }
 
-export function guardAnswerCard({ card, evidence = {}, ruleResults = {}, mode = 'text' } = {}) {
+// Attach the trusted value to each referenced contact. Runs only after C10 passed, so every id resolves.
+function resolveContacts(card, contacts) {
+  if (!(card.actions ?? []).some((a) => a.contactId != null)) return card;
+  return {
+    ...card,
+    actions: card.actions.map((a) => {
+      if (a.contactId == null) return a;
+      const c = contacts[a.contactId];
+      return { ...a, contact: { kind: c.kind, value: c.value } };
+    }),
+  };
+}
+
+// contacts: { [contactId]: { id, kind, value, purpose } } from FSS for the insurer of this policy. fallbackContactId names the
+// contact the dropped card should offer (pickInsurerContact); an unknown or invalid id gives the policy-card wording instead.
+export function guardAnswerCard({ card, evidence = {}, ruleResults = {}, mode = 'text', contacts = {}, fallbackContactId = null } = {}) {
   const shape = validateAnswerCardShape(card);
-  const failedChecks = (shape.valid ? runChecks(card, evidence, ruleResults, mode) : [GUARD_CHECK_IDS.shape]).sort();
+  const failedChecks = (shape.valid ? runChecks(card, evidence, ruleResults, mode, contacts) : [GUARD_CHECK_IDS.shape]).sort();
   if (failedChecks.length === 0) {
-    const { card: next, downgradedFactIds } = downgradeIfUnverified(structuredClone(card), ruleResults);
+    const { card: downgraded, downgradedFactIds } = downgradeIfUnverified(structuredClone(card), ruleResults);
+    const next = resolveContacts(downgraded, contacts);
     const verdictChanged = next.verdict !== card.verdict;
     deepFreeze(next);
     RELEASED.add(next);
     return { released: true, card: next, downgraded: verdictChanged, downgradedFactIds };
   }
   const retryable = mode === 'text' && failedChecks.every((id) => RETRYABLE.has(id));
-  const dropped = deepFreeze(unknownCard());
+  const fallback = fallbackContactId != null && Object.hasOwn(contacts ?? {}, fallbackContactId) ? contacts[fallbackContactId] : null;
+  const dropped = deepFreeze(unknownCard({ contact: fallback }));
   RELEASED.add(dropped);
   return { released: false, card: dropped, failedChecks, retryable };
 }
