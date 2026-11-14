@@ -149,7 +149,8 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       if (analytics && holding.status === 'parsed') {
         void (async () => {
           try {
-            const facts = (await repository.currentMemory({ householdId, holdingId })).length;
+            // Distinct resolved slots (one per fact key, unscoped, known to the registry), not raw memory rows.
+            const facts = new Set((await repository.currentMemory({ householdId, holdingId })).filter(row => row.scopeKey === '' && getPolicyFactKey(row.factKey)).map(row => row.factKey)).size;
             await analytics.track({ householdId, event: 'parse_completed', properties: { facts, conflicts: open, ms: Math.max(0, Date.now() - Date.parse(holding.createdAt)) || 0 } });
           } catch { /* analytics never breaks the pipeline */ }
         })();

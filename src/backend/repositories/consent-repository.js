@@ -277,8 +277,9 @@ export class ConsentRepository {
         WHERE scope.consent_grant_id = ? AND scope.resource_type = 'document' AND scope.recipient = ?
         ORDER BY document.id`, [grantId, GEMINI_RECIPIENT]))
         .filter(document => !affectedDocuments.some(affected => affected.id === document.id));
-      const cancelOcrSet = `status = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN 'cancelled' ELSE status END,
-          completed_at = CASE WHEN status IN ('queued', 'submitted', 'processing') THEN CAST(? AS text) ELSE completed_at END,
+      // A failed-persistence job can still complete (ocr-repository completeJob), so it is cancelled too.
+      const cancelOcrSet = `status = CASE WHEN status IN ('queued', 'submitted', 'processing') OR (status = 'failed' AND error_code = 'OCR_PERSISTENCE_FAILED') THEN 'cancelled' ELSE status END,
+          completed_at = CASE WHEN status IN ('queued', 'submitted', 'processing') OR (status = 'failed' AND error_code = 'OCR_PERSISTENCE_FAILED') THEN CAST(? AS text) ELSE completed_at END,
           error_code = CASE
             WHEN status IN ('submitted', 'processing') OR (status = 'queued' AND started_at IS NOT NULL)
               THEN 'CONSENT_REVOKED'

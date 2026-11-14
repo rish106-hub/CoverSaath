@@ -269,6 +269,22 @@ export class OcrRepository {
     return this.getJob(jobId);
   }
 
+  // The after-completion hook runs in a savepoint: a failure never undoes stored OCR pages. It is logged as a coded event
+  // (opaque job id only) and retried by the next completion replay.
+  async #runAfterComplete(current, householdId) {
+    if (!this.afterComplete) return;
+    const consentGrantId = typeof current.authorization?.consentGrantId === 'string' ? current.authorization.consentGrantId : null;
+    try {
+      const document = await this.database.one('SELECT document_kind FROM document_uploads WHERE id = ?', [current.documentUploadId]);
+      await this.database.transaction(() => this.afterComplete({
+        householdId, documentId: current.documentUploadId, documentKind: document?.document_kind ?? null, consentGrantId,
+      }));
+    } catch (error) {
+      const code = typeof error?.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(error.code) ? error.code : 'UNCODED';
+      console.warn(JSON.stringify({ event: 'ocr_after_complete_failed', code, jobId: current.id }));
+    }
+  }
+
   // Pages are evidence: parameter observations reference source_pages, so they
   // are inserted once and never deleted or replaced here. Completing a job that
   // already completed is a no-op when the result digest is identical and a
@@ -283,11 +299,25 @@ export class OcrRepository {
       if (current.status === 'succeeded' || ownPages > 0) {
         if (current.status === 'succeeded' && ownPages > 0 && typeof changes?.resultDigest === 'string'
           && changes.resultDigest === current.resultDigest) {
+          // A replay re-runs the hook so a holding lost to an earlier hook failure is re-created (idempotent). Revocation
+          // clears authorization and the result digest, so a revoked job never reaches this path.
+          await this.#runAfterComplete(current, householdId);
           return current;
         }
         const error = new Error('This OCR job is already completed; its source pages are immutable.');
         error.code = current.status === 'succeeded' ? 'OCR_JOB_ALREADY_COMPLETED' : 'OCR_PAGES_ALREADY_EXIST';
         throw error;
+      }
+      if (current.status === 'failed') {
+        // Fail closed: a failed-persistence job may only complete under a grant that is still current.
+        const grantId = current.authorization?.consentGrantId;
+        const grant = typeof grantId === 'string'
+          ? await this.database.one('SELECT id FROM consent_grants WHERE id = ? AND revoked_at IS NULL', [grantId]) : null;
+        if (!grant) {
+          const error = new Error('OCR job consent is no longer current.');
+          error.code = 'CONSENT_REQUIRED';
+          throw error;
+        }
       }
       const existing = await this.database.many(`SELECT ocr_job_id FROM source_pages
         WHERE document_upload_id = ? AND source_version = ?`, [current.documentUploadId, pages[0]?.sourceVersion ?? '']);
@@ -322,16 +352,7 @@ export class OcrRepository {
       // The provider-reported page count of the document (migration 042); a better source already stored is kept.
       if (pages.length >= 1 && pages.length <= MAX_PAGE_COUNT) await setPageCountOnce(this.database, current.documentUploadId, pages.length, 'ocr');
       await this.appendLifecycleAudit(await this.getJob(jobId), current.status, { pageCount: pages.length });
-      if (this.afterComplete) {
-        // A savepoint: a failure here must never undo the stored OCR pages. Identifiers only.
-        try {
-          const document = await this.database.one('SELECT document_kind FROM document_uploads WHERE id = ?', [current.documentUploadId]);
-          await this.database.transaction(() => this.afterComplete({
-            householdId, documentId: current.documentUploadId, documentKind: document?.document_kind ?? null,
-            consentGrantId: typeof current.authorization?.consentGrantId === 'string' ? current.authorization.consentGrantId : null,
-          }));
-        } catch { /* the holding is best effort; the OCR result stands */ }
-      }
+      await this.#runAfterComplete(current, householdId);
       return this.getJob(jobId);
     }, { locks: [householdLock(householdId)] });
   }
