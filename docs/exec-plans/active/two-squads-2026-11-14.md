@@ -14,6 +14,8 @@ Worktrees under `CoverSaath.worktrees/`, branches `sqa/*`.
 | A2 PDF sanitiser (strip JS, actions, embedded files, forms; re-inspect) | `src/features/input/pdf-sanitise*.js`, `pdf-inspection.js`, tests, ADR `docs/adr/0034-*` |
 | A3 honest unknown + clause-level chat answers | `src/backend/services/chat*`, `src/features/memory*`, chat tests |
 | A4 stale branch and worktree cleanup (all repos) | git refs only |
+| A5 per-household memory document (rendered from sealed rows, page + clause cites) | `src/backend/services/memory-document*.js`, its route file, tests |
+| A6 beta app flow: upload, product confirm, declarations, policy card, chat | repo `Knowvia_website`, branches `sqa/*` |
 
 ## Squad B (session 2): FSS real data, repo `insurance-data-api`
 
@@ -37,3 +39,4 @@ CoverSaath calls FSS only through `src/integrations/insurance-data/client.js` al
 
 - 2026-11-14 A: PR #134 merged; review fixes on `main` 930b6e4. Squad B lane opened.
 - 2026-11-14 A: Squad A running A1+A2 (`sqa/pdf-gate-sanitise`), A3 (`sqa/chat-honest-unknown`), A4 cleanup. Squad B brief: `squad-b-brief.md`.
+- 2026-11-14 A: claimed A5 (memory document) and A6 (beta flow in Knowvia_website).
