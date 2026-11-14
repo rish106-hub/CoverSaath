@@ -9,10 +9,12 @@ import { STRUCTURING_DROPPED_TAGS } from '../policy-structuring/sectioner.js';
 
 export const OCR_BLOCKS_VERSION = 'knowvia.ocr.v2';
 
-// Sarvam Document AI section types (docs.sarvam.ai digitise guide). Anything else fails closed.
+// Sarvam Document AI section types (docs.sarvam.ai digitise guide), plus 'reference', seen in live output on
+// 2026-11-14. Anything else fails closed here; the Sarvam adapter maps a tag it does not know to null first
+// (text kept, tag dropped), so a new provider tag never blocks a whole document.
 export const OCR_BLOCK_TAGS = Object.freeze([
   'headline', 'sub-headline', 'section-title', 'header', 'paragraph', 'footer', 'footnote', 'page-number',
-  'table', 'image', 'image-caption', 'photograph', 'chart', 'diagram', 'advertisement', 'folio',
+  'table', 'image', 'image-caption', 'photograph', 'chart', 'diagram', 'advertisement', 'folio', 'reference',
 ]);
 
 export const OCR_BLOCK_LIMITS = Object.freeze({

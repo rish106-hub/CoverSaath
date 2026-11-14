@@ -38,6 +38,10 @@ How to run the P0 journey (two PDFs, one holding, facts, chat): [demo-journey ru
 
 Earlier in the same run (already on main): sessions and JWT (045, ADR 0027), sync change log (046, ADR 0028), person records (047, ADR 0026). Migrations now run 001 to 065 (057 analytics outbox, 058 chat turn consent grant, 065 holding documents; numbers 059 to 064 are not used); the schema is in [data.md](../architecture/data.md).
 
+## Live run and target flow (2026-11-14)
+
+First live run (real ClamAV and Sarvam OCR, stub FSS, synthetic PDFs): [audit](../audits/2026-11-14-live-run.md), [runbook](../runbooks/live-run.md). Found and fixed: the Sarvam layout tag `reference` failed OCR for every document. Chat on the product path: 47/80 correct, 19/20 expected-unknown questions answered anyway (trust is the top gap). Owner's target architecture and its map to code: [target flow](../architecture/target-flow-2026-11-14.md). Real-data rule change, PDF sanitising and the memory document need owner sign-off and ADRs.
+
 ## Feature flags
 
 Every flag is off unless the value is exactly `true`.

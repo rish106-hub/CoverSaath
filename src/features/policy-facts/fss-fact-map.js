@@ -1,4 +1,4 @@
-// FSS fact -> CoverSaath product-term fact (ADR 0034, design note section 3). Pure: no I/O, never throws. Takes facts already parsed and
+// FSS fact -> product-term fact (ADR 0034, design note section 3). Pure: no I/O, never throws. Takes facts already parsed and
 // screened by src/integrations/insurance-data/schemas.js (`outcome: 'verified'` means non-synthetic, independently verified, evidenced and
 // its family verified or partial). Only four types map in P0:
 //   room_rent_limit (fixed_amount_per_day)         -> room_rent_limit   { amountMinor, currency }   rupees x 100
