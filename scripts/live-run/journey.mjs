@@ -1,11 +1,13 @@
 // Live P0 journey driver (docs/runbooks/demo-journey.md steps 1-7) against a local API. Synthetic PDFs only.
-// Prints statuses and coded errors; never prints tokens. Writes ids to state.json for the eval run.
-import { readFile, writeFile } from 'node:fs/promises';
+// Prints statuses and coded errors; never prints tokens and writes nothing to disk. With --eval, also asks the
+// 100 eval questions through chat v1 in the same process (scripts/live-run/eval-v1.mjs).
+import { readFile } from 'node:fs/promises';
+import { runEvalV1 } from './eval-v1.mjs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
 const here = '.local/live-run';
-const BASE = 'http://127.0.0.1:8787';
+const BASE = 'http://127.0.0.1:8787'; // loopback only: the API refuses any other Host
 const BOOT = process.env.LIVE_RUN_BOOTSTRAP_TOKEN; if (!BOOT) { console.error('Set LIVE_RUN_BOOTSTRAP_TOKEN.'); process.exit(2); }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const t0 = Date.now();
@@ -101,5 +103,8 @@ for (const q of questions) {
   let a = {}; try { a = JSON.parse(ans?.data ?? err?.data ?? '{}'); } catch {}
   log(`7 chat "${q}"`, res.status, a.status ?? '', '→', String(a.answer ?? a.text ?? a.message ?? a.code ?? '').slice(0, 220), '| sources:', JSON.stringify(a.sources ?? []).slice(0, 160), '| model:', a.model?.status ?? a.modelStatus ?? '');
 }
-await writeFile(join(here, 'state.json'), JSON.stringify({ householdId, holdingId, docs, token }), { mode: 0o600 });
+if (process.argv.includes('--eval')) {
+  const set = JSON.parse(await readFile('scripts/fixtures/synthetic-policy-questions.json', 'utf8'));
+  await runEvalV1({ base: BASE, token, householdId, holdingId, documentKinds: { [docs.policy_schedule]: 'schedule', [docs.policy_wording]: 'terms' }, questions: set.questions });
+}
 log('done');
