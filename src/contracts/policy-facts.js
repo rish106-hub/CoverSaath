@@ -114,6 +114,15 @@ export const POLICY_FACT_KEYS = Object.freeze([
   memory('declared_prior_claims', 'text', 'none', 'declarations', 'Have you made claims on other policies before?', 'household_declaration'),
   memory('declared_other_cover', 'bool', 'none', 'declarations', 'Do you have other health cover, such as from an employer?', 'household_declaration', 'k.who_has_no_evidenced_cover'),
   memory('declared_dependents_count', 'number', 'count', 'declarations', 'How many people depend on you for health costs?', 'household_declaration'),
+  // ---- Question catalogue v1 keys (src/features/question-planner/catalogue-v1.js); values are the catalogue option ids ----
+  memory('member_covered', 'bool', 'none', 'declarations', 'Is this person covered under this policy?', 'household_declaration'),
+  memory('prior_cover_years', 'enum', 'none', 'declarations', 'When did you first get health cover?', 'household_declaration'),
+  memory('member_relationship', 'enum', 'none', 'declarations', 'How is this person related to you?', 'household_declaration'),
+  memory('declared_employer_cover', 'bool', 'none', 'declarations', 'Does your employer give you health cover?', 'household_declaration'),
+  memory('home_city', 'text', 'none', 'declarations', 'Which city do you live in?', 'household_declaration'),
+  memory('preference_cashless', 'enum', 'none', 'declarations', 'In a hospital stay, what matters more to you?', 'household_declaration'),
+  memory('preference_language', 'enum', 'none', 'declarations', 'Which language do you prefer?', 'household_declaration'),
+  memory('purchase_channel', 'enum', 'none', 'declarations', 'How did you buy this policy?', 'household_declaration'),
 ]);
 
 export const POLICY_FACT_KEY_NAMES = Object.freeze(POLICY_FACT_KEYS.map(entry => entry.key));
