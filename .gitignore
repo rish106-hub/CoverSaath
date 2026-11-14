@@ -37,3 +37,4 @@ src/backend/database/postgres/migrations/test-scratch/
 *.log
 npm-debug.log*
 .tmp/
+.gstack/
