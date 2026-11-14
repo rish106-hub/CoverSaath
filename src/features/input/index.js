@@ -9,6 +9,9 @@ export { createClamdScanner } from './clamd-scanner.js';
 export { createDocumentScanWorker } from './scan-worker.js';
 export { PDF_INSPECTION_LIMITS, inspectPdf } from './pdf-inspection.js';
 export { PDF_SANDBOX_LIMITS, createSandboxedPdfInspector } from './sandboxed-pdf-inspection.js';
+export { createSandboxedPdfSanitiser, createSandboxedInsuranceGate } from './sandboxed-pdf-upload-checks.js';
+export { createPdfUploadChecks } from './pdf-upload-checks.js';
+export { INSURANCE_GATE_THRESHOLD, scoreInsuranceText, classifyInsuranceText } from './insurance-pdf-gate.js';
 export { PDF_SEGMENTATION_LIMITS, createSandboxedPdfSegmenter } from './sandboxed-pdf-segmentation.js';
 export {
   OCR_ACCEPTED_OUTPUT_VERSIONS, OCR_JOB_STATES, OCR_LIMITS, OCR_OUTPUT_VERSION, assertOcrProvider, assertOcrRepository, validateOcrOutput,

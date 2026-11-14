@@ -155,6 +155,7 @@ export const ANALYSIS_ERROR_CODES = Object.freeze({
   PDF_STRUCTURE_INVALID: entry(422, 'request', false),
   PDF_PASSWORD_REQUIRED: entry(422, 'request', false),
   PDF_ACTIVE_CONTENT: entry(422, 'request', false),
+  NOT_INSURANCE_DOCUMENT: entry(422, 'request', false),
   PDF_PAGE_LIMIT: entry(422, 'request', false),
   PDF_RESOURCE_LIMIT: entry(422, 'request', false),
   PDF_UNSUPPORTED_ENCODING: entry(422, 'request', false),

@@ -357,6 +357,8 @@ export async function extractPdfPageTexts(bytes, limitsOverride = {}) {
   const budget = { total: 0 };
   let pageList;
   try { pageList = doc.getPages(); } catch { return result('unestablished', { pageCount: 0, pages: [], reason: 'unreadable' }); }
+  // `firstPages` (the upload gate only) reads just the leading pages; pageCount still reports the whole document.
+  if (Number.isSafeInteger(limitsOverride.firstPages) && limitsOverride.firstPages > 0) pageList = pageList.slice(0, limitsOverride.firstPages);
   const pages = pageList.map((page, index) => {
     try {
       const resources = page.node.Resources();

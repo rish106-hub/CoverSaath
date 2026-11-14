@@ -33,7 +33,7 @@ function safeMetadata(record) {
 }
 
 // inspectFile(validated) runs after signature checks and before any byte is stored; it throws a
-// DocumentIntakeError to reject the file and may return { pageCount }. persistenceContext is passed
+// DocumentIntakeError to reject the file and may return { pageCount, bytes, sanitised, removed }; `bytes` replaces the upload. persistenceContext is passed
 // through to repository.createDocument so a persistent repository can commit the row, its audit
 // event and an idempotency record in one transaction.
 export function createDocumentIntakeService({ repository, storage, mode = 'live', now = () => new Date(), maxBytes, inspectFile = null } = {}) {
@@ -66,19 +66,21 @@ export function createDocumentIntakeService({ repository, storage, mode = 'live'
       const inspection = inspectFile ? await inspectFile(validated) : null;
       // Inspection can take seconds: re-check consent so a grant revoked meanwhile stores nothing.
       if (inspectFile) assertConsent(await repository.getConsent(consentGrantId), { householdId, uploadedByAdultId }, now());
-      const contentSha256 = createHash('sha256').update(validated.bytes).digest('hex');
+      // A sanitised file replaces the upload: only the rebuilt bytes are hashed, stored and counted.
+      const storedBytes = inspection?.bytes ?? validated.bytes;
+      const contentSha256 = createHash('sha256').update(storedBytes).digest('hex');
       if (await repository.findByHash(householdId, contentSha256)) throw new DocumentIntakeError('DUPLICATE_DOCUMENT', 'The same document bytes already exist for this household.');
       if (await repository.findVersion(householdId, logicalDocumentId, input.version)) throw new DocumentIntakeError('DOCUMENT_VERSION_EXISTS', 'This immutable document version already exists.');
 
       const id = randomUUID();
-      const storageKey = await storage.put({ documentId: id, householdId, bytes: validated.bytes });
+      const storageKey = await storage.put({ documentId: id, householdId, bytes: storedBytes });
       const createdAt = now().toISOString();
       const record = {
         id, householdId, caseId, uploadedByAdultId, consentGrantId, logicalDocumentId, version: input.version,
         documentKind: input.documentKind,
         originalFilename: validated.safeFilename,
         mimeType: validated.detectedMimeType,
-        byteSize: validated.bytes.length,
+        byteSize: storedBytes.length,
         contentSha256,
         storageKey,
         malwareStatus: mode === 'fixture' ? 'not_scanned_fixture' : 'pending',
@@ -86,6 +88,7 @@ export function createDocumentIntakeService({ repository, storage, mode = 'live'
         lifecycleState: 'quarantined',
         createdAt,
         deletedAt: null,
+        ...(inspection?.sanitised ? { sanitised: true, sanitisedRemoved: inspection.removed } : {}),
         evidenceBoundary: input.documentKind === 'employer_benefit_booklet'
           ? 'Employer document terms remain unverified until source-linked review. HRMS or payroll is not policy proof.'
           : 'Upload acceptance does not establish policy meaning, applicability or approval.',

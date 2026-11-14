@@ -168,7 +168,10 @@ export class DocumentRepository {
         action: 'document.uploaded',
         resourceType: 'document',
         resourceId: record.id,
-        payload: { documentKind: record.documentKind, byteSize: record.byteSize, mimeType: record.mimeType },
+        payload: {
+          documentKind: record.documentKind, byteSize: record.byteSize, mimeType: record.mimeType,
+          ...(record.sanitised ? { sanitised: true, removed: record.sanitisedRemoved } : {}),
+        },
       });
       const idempotency = context.idempotency;
       if (idempotency) {

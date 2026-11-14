@@ -80,6 +80,13 @@ async function start({ database, env, documentScanner, sarvamFetch }) {
   return { server, call, upload, stop: () => new Promise(resolve => server.close(resolve)) };
 }
 
+async function textPdf(text) {
+  const document = await PDFDocument.create();
+  const page = document.addPage([600, 400]);
+  page.drawText(text, { x: 20, y: 300, size: 8, maxWidth: 560, lineHeight: 10 });
+  return Buffer.from(await document.save({ useObjectStreams: false }));
+}
+
 async function multiPagePdf(pageCount) {
   const document = await PDFDocument.create();
   for (let page = 1; page <= pageCount; page += 1) document.addPage([300 + page, 400 + page]);
@@ -422,6 +429,36 @@ test('deletion is durably queued while storage is unconfigured and resumes after
   assert.equal(h.storedFiles().length, 0);
 });
 
+test('active PDF content is sanitised before storage and non-insurance text PDFs are rejected (ADR 0035)', postgresTestOptions(), async t => {
+  const h = await harness(t);
+  const database = h.database;
+  const app = await start({ database, env: h.env });
+  t.after(async () => { await app.stop(); });
+  const owner = await household(app, 'Sanitise');
+
+  const original = syntheticPdf('js', { extraCatalog: '/OpenAction << /S /JavaScript /JS (app.alert(1)) >>' });
+  const result = await app.upload({ ...owner, bytes: original });
+  assert.equal(result.status, 201, JSON.stringify(result.data));
+  const stored = await database.prepare('SELECT byte_size FROM document_uploads WHERE id = ?').get(result.data.document.id);
+  assert.notEqual(Number(stored.byte_size), original.length, 'the rebuilt bytes are stored, never the original');
+  // A different active file that rebuilds to the same bytes is a duplicate: hashing happens on the sanitised bytes.
+  const launch = await app.upload({ ...owner, bytes: syntheticPdf('launch', { extraCatalog: '/OpenAction << /S /Launch /F (cmd.exe) >>' }) });
+  assert.equal(launch.status, 409);
+  assert.equal(launch.data.error.code, 'DUPLICATE_DOCUMENT');
+  const audits = await database.prepare("SELECT event_payload_json FROM audit_events WHERE action = 'document.uploaded'").all();
+  assert.equal(audits.length, 1);
+  assert.equal(JSON.parse(audits[0].event_payload_json).sanitised, true);
+  assert.deepEqual(JSON.parse(audits[0].event_payload_json).removed, ['open_action']);
+
+  const recipe = await app.upload({ ...owner, bytes: await textPdf('Chocolate cake recipe. Mix two cups of flour with sugar, butter and eggs, then bake for forty minutes until golden.') });
+  assert.equal(recipe.status, 422);
+  assert.equal(recipe.data.error.code, 'NOT_INSURANCE_DOCUMENT');
+  assert.equal(h.storedFiles().length, 1);
+
+  const schedule = await app.upload({ ...owner, bytes: await textPdf('Synthetic Policy Schedule. Insurer: Example General Insurance. Sum insured 500000. Premium 12000. Waiting period 30 days. Claim exclusions apply. UIN EXAMPLEHLIP21001V012021.') });
+  assert.equal(schedule.status, 201, JSON.stringify(schedule.data));
+});
+
 test('server-side validation rejects unsafe or invalid uploads before storing anything', postgresTestOptions(), async t => {
   const h = await harness(t);
   const database = h.database;
@@ -437,8 +474,6 @@ test('server-side validation rejects unsafe or invalid uploads before storing an
     ['wrong extension', { filename: 'policy.txt' }, 400, 'EXTENSION_MISMATCH'],
     ['empty body', { bytes: Buffer.alloc(0) }, 400, 'EMPTY_FILE'],
     ['password protected', { bytes: syntheticPdf('enc', { trailerExtra: '/Encrypt 9 0 R' }) }, 422, 'PDF_PASSWORD_REQUIRED'],
-    ['javascript action', { bytes: syntheticPdf('js', { extraCatalog: '/OpenAction << /S /JavaScript /JS (app.alert(1)) >>' }) }, 422, 'PDF_ACTIVE_CONTENT'],
-    ['launch action', { bytes: syntheticPdf('launch', { extraCatalog: '/OpenAction << /S /Launch /F (cmd.exe) >>' }) }, 422, 'PDF_ACTIVE_CONTENT'],
     ['missing consent', { grantId: 'consent-does-not-exist' }, 403, 'CONSENT_REQUIRED'],
   ];
   for (const [name, overrides, status, code] of cases) {
