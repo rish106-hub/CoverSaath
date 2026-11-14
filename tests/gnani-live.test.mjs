@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGnaniVoiceProvider } from '../src/integrations/index.js';
 
-// Opt-in only (RUN_GNANI_LIVE=1). Real calls cost money and the wire format is UNVERIFIED: needs owner approval.
+// Opt-in only (RUN_GNANI_LIVE=1). Real calls cost money and the wire format is from docs.gnani.ai and not exercised live: needs owner approval.
 // Synthetic text only; no real person's speech.
 const liveEnabled = process.env.RUN_GNANI_LIVE === '1';
 const grant = { authorized: true, purpose: 'voice_intake', recipients: ['gnani'] };
