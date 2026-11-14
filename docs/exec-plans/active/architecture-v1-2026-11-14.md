@@ -20,7 +20,7 @@ Sources: `arch-a-draft.md`, `arch-b-draft.md`, `arch-a-redteam-of-b.md` (R1-R14)
 |---|---|---|---|
 | 1 | Start | "Upload policy" or "I'm in hospital now" | Consent sheet once (what is read, by whom, how to delete), naming every processor including Gnani if voice is used |
 | 2 | Checking file | Waits (3-step progress) | Insurance-PDF gate (422 for non-insurance), sanitise, scan, OCR |
-| 3 | Is this your product? | "Yes" / "No, show others" (skipped on exact UIN match) | UIN, insurer and product matched in FSS; up to 3 alternatives; "None" opens one name-fragment field |
+| 3 | Is this your product? | "Yes" / "No, show others" (skipped only on an exact UIN match to an FSS product whose UIN came from the document itself, not from a link page, sibling or ambiguous tag) | UIN, insurer and product matched in FSS; up to 3 alternatives; "None" opens one name-fragment field |
 | 4 | Who is covered | Confirms name chips, fixes relationship | Members from own PDF, `extracted_unverified` until tapped; minors flagged |
 | 5 | Up to 2 questions | Chips | Planner asks only questions that change a tile on the card (members, PED) |
 | 6 | **Policy card** | Reads, taps tiles for sources | Resolver output (ADR 0023 D3). Badges: From your policy, From insurer wording, You told us, Not checked yet, Your documents don't say |
@@ -90,7 +90,7 @@ Pipeline: push to talk (max 30 s, client VAD, Opus 16 kHz), then BFF, then `POST
 | L6 guard | section 4.2 |
 | L7 watch | `guardrail_events` (ids and codes only), nightly golden + red-team eval, per-rule kill switch |
 
-Never-rules G1-G14 (arch-b 5.1) map to checks and router rules. G7: document text is quoted evidence only; injected-PDF canary corpus must not change behaviour. Free tests: 300+ golden turns (en, Hinglish, hi), injected PDFs, bad-answer stub model. Owner metric: unsupported-claim rate, target 0.
+Never-rules G1-G14 (arch-b 5.1) map to checks and router rules. G7: document text is quoted evidence only; this includes FSS text, which comes from public insurer websites and is untrusted too. The injected-PDF canary corpus must not change behaviour. Free tests: 300+ golden turns (en, Hinglish, hi), injected PDFs, bad-answer stub model. Owner metric: unsupported-claim rate, target 0.
 
 ## 7. Memory per person
 
@@ -124,7 +124,8 @@ Bottlenecks in order: S1 provider limits and cost (priority queue, DB concurrenc
 
 ## 10. Pipelines
 
-- **Gathering (FSS, Squad B)**: insurer sites, raw PDFs (4,322 rows, 4,317 unique, all in R2), tags (pass 4 running), registry link, catalog-derived products file. Next, free: text layer with pypdf per page, insurer contacts by regex (B14), real number-format golden set (B12). Paid structuring held.
+- **Gathering (FSS, Squad B)**: insurer sites, raw PDFs (4,322 rows, 4,317 unique, all in R2), tags (pass 4 running: the document's own UIN wins over link-page UINs; 2+ distinct products without a 3:1 leader leave the UIN blank, `uin_source = ambiguous_pdf_text`), registry link, catalog-derived products file (`data/products/catalog-derived.csv`, cleaned names only, never overriding a curated UIN). Done, free: real number-format golden set (B12, `insurance-raw-docs/golden/number-formats.jsonl`, 59 cases from 220 PDFs). Running, free: insurer helplines and e-mails by regex (B14, `links/insurer-contacts.csv`). Next, free, waits on O9: text layer with pypdf per page. Paid structuring held.
+- **FSS tag quality**: every catalog tag is `extracted_unverified` with its `uin_source`; downstream code treats `link_page`, `sibling_doc_same_product` and `url` UINs as weaker than `pdf_text`. Pass 3 showed link-page UINs wrong on many Kotak, HDFC Life and Canara rows, so CoverSaath must never auto-confirm a user's product from an FSS tag alone.
 - **User (CoverSaath, Squad A)**: upload, gate, sanitise, scan, OCR (paid, held), identify, FSS match, one-tap confirm, privacy reduction, memory facts and declarations, planner, card, chat.
 - **Feedback**: signals (`feedback`, `unmet_need`, `outcome`) aggregated nightly by code and UIN; top unknowns per product become FSS parse targets.
 
@@ -137,7 +138,10 @@ Bottlenecks in order: S1 provider limits and cost (priority queue, DB concurrenc
 | Answer card + output guard | CoverSaath `sqa/answer-guard` | in progress |
 | Gnani adapter contract + stub | not started | next |
 | Beta UI: question screen, card, feedback, mic | Knowvia_website | next, mock adapter first |
-| Text layer, insurer contacts, number golden set | FSS (Squad B) | next |
+| Number golden set (B12) | `insurance-raw-docs` 5a560e2 | done |
+| Insurer contacts (B14) | `insurance-raw-docs` | running |
+| Tag pass 4 + catalog-derived products | `insurance-raw-docs`, FSS `data/products` | running |
+| Text layer | FSS (Squad B) | waits on O9 |
 
 ## 12. Owner decisions
 
