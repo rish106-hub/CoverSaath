@@ -26,8 +26,12 @@ const fail = (code, message, retryable = false, statusCode = 502) => Object.assi
 export function validateGnaniBaseUrl(value) {
   let url;
   try { url = new URL(value); } catch { return null; }
-  const loopback = ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
-  if (url.protocol === 'https:' || (url.protocol === 'http:' && loopback)) return url.origin;
+  const hostname = url.hostname.toLowerCase();
+  const isLoopback = hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1';
+  const isAllowedHttpsHost = hostname === 'api.vachana.ai';
+  const hasBaseShape = (url.pathname === '/' || url.pathname === '') && url.search === '' && url.hash === '' && url.username === '' && url.password === '';
+  if (!hasBaseShape) return null;
+  if ((url.protocol === 'https:' && isAllowedHttpsHost) || (url.protocol === 'http:' && isLoopback)) return url.origin;
   return null;
 }
 
