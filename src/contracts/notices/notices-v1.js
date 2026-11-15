@@ -29,6 +29,7 @@ export const NOTICES_V1 = Object.freeze([
       { categories: ['free_text'], data: 'The names you give to your devices and passkeys (stored sealed)', use: 'To let you tell your devices apart and remove one you no longer use.' },
       { categories: ['preference'], data: 'Your language setting', use: 'To show the service in the language you chose.' },
       { categories: ['relationship'], data: 'Your role in the household (for example owner or member)', use: 'To decide who in the household may see or change what.' },
+      { categories: ['financial'], data: 'A record of each extra-policy payment: the amount, whether it was paid, when, and the payment service order and payment references (no card, UPI or bank details)', use: 'To unlock the extra policy you paid for and to show what you paid. FOR LEGAL REVIEW.' },
     ],
     recipients: ['Our hosting and database providers, who store it for us and may not use it for any other purpose.'],
     retention: 'Until you close your account, then removed on the retention schedule.',
