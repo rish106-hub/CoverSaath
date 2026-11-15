@@ -50,6 +50,7 @@ function tokenPresent(token, textTokens, textSet) {
 
 /** 0..1: how well one registry name is found in the text. 1 for the whole phrase, else the weighted share of its distinctive tokens. */
 export function nameScore(name, normalisedText, textTokens, textSet) {
+  if (typeof name !== 'string') return 0; // no clean name: only a printed UIN can make this product a candidate
   const phrase = normalise(name);
   if (!phrase) return 0;
   if (` ${normalisedText} `.includes(` ${phrase} `)) return 1;
@@ -94,7 +95,7 @@ export function detectInsurerCandidates({ text, registry }) {
     const score = uinMatch ? Math.max(combined, 1) : combined;
     if (score >= MIN_SCORE) scored.push({ score, product, insurer });
   }
-  scored.sort((a, b) => b.score - a.score || a.product.productName.length - b.product.productName.length || (a.product.productId < b.product.productId ? -1 : 1));
+  scored.sort((a, b) => b.score - a.score || (a.product.productName ?? '').length - (b.product.productName ?? '').length || (a.product.productId < b.product.productId ? -1 : 1));
   return scored.slice(0, MAX_CANDIDATES).map(({ product, insurer }, index) => Object.freeze({
     candidateId: product.productId, insurerName: insurer.canonicalName, productName: product.productName, rank: index + 1,
   }));

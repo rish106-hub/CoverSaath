@@ -25,6 +25,8 @@ const text = (value, max = MAX_TEXT) => {
 const optionalText = (value, max = MAX_TEXT) => (value === undefined || value === null ? null : text(value, max));
 // Required but nullable (openapi `type: [string, 'null']` in a `required` list): absent fails closed, null is allowed.
 const nullableText = (value, max = MAX_TEXT) => { if (value === undefined) throw invalid(); return value === null ? null : text(value, max); };
+// A product name FSS could not read cleanly is sent as null (with name_unresolved: true); it is never a placeholder string.
+const productNameOf = value => nullableText(value);
 const oneOf = (value, allowed) => { if (typeof value !== 'string' || !allowed.has(value)) throw invalid(); return value; };
 const bool = value => { if (typeof value !== 'boolean') throw invalid(); return value; };
 const optionalDate = value => {
@@ -65,7 +67,7 @@ export function parseProduct(raw) {
   return {
     productId: text(value.product_id, 100),
     insurerId: text(value.insurer_id, 100),
-    productName: text(value.product_name),
+    productName: productNameOf(value.product_name),
     lineOfBusiness: text(value.line_of_business, 100),
     // openapi.yaml: uin_raw is required but nullable (a product may have no recorded UIN).
     uinRaw: nullableText(value.uin_raw, 100),
@@ -286,7 +288,7 @@ export function parseProductNameSearch(raw) {
     const value = object(item);
     return {
       productId: text(value.product_id, 100),
-      productName: text(value.product_name),
+      productName: productNameOf(value.product_name),
       insurerId: text(value.insurer_id, 100),
       insurerName: text(value.insurer_name),
       lineOfBusiness: text(value.line_of_business, 100),
@@ -338,7 +340,7 @@ export function parseProductExport(raw) {
     exportVersion,
     product: {
       productId: text(product.product_id, 100),
-      productName: text(product.product_name),
+      productName: productNameOf(product.product_name),
       insurerId: text(product.insurer_id, 100),
       insurerName: text(product.insurer_name),
       lineOfBusiness: text(product.line_of_business, 100),
