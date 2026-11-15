@@ -22,7 +22,7 @@ export const expectedTables = Object.freeze([
   'auth_signing_keys', 'auth_refresh_tokens', 'auth_challenges', 'webauthn_credentials', 'devices', 'notice_acceptances',
   'household_changes', 'household_sync_state',
   'person_records',
-  'policy_holdings', 'household_memory_facts', 'memory_conflicts', 'member_declarations', 'premium_payments', 'premium_dues', 'provider_calls', 'analytics_outbox',
+  'policy_holdings', 'household_memory_facts', 'memory_conflicts', 'member_declarations', 'premium_payments', 'premium_dues', 'provider_calls', 'analytics_outbox', 'policy_slot_payments',
   'memory_chunks', 'holding_documents', 'chat_threads', 'chat_turns', 'retrieval_traces', 'network_hospitals',
 ]);
 
@@ -128,7 +128,7 @@ export const criticalIndexes = Object.freeze([
   'household_changes_cursor_idx',
   'person_records_unique', 'person_records_household_type_idx', 'household_members_mobile_unique',
   'policy_holdings_household_status_idx', 'household_memory_facts_current_slot', 'household_memory_facts_read_idx', 'memory_conflicts_household_idx',
-  'memory_conflicts_one_pending', 'member_declarations_household_idx', 'premium_payments_household_idx', 'premium_dues_household_idx',
+  'memory_conflicts_one_pending', 'member_declarations_household_idx', 'premium_payments_household_idx', 'policy_slot_payments_household_idx', 'premium_dues_household_idx',
   'memory_chunks_household_idx', 'memory_chunks_source_slot', 'memory_chunks_embedding_hnsw', 'chat_threads_household_idx', 'chat_turns_thread_order', 'retrieval_traces_turn_idx',
 ]);
 
@@ -166,6 +166,7 @@ export const requiredColumns = Object.freeze({
   chat_turns: ['household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'content_enc', 'transcript_enc', 'audio_document_id', 'redacted_prompt_hash', 'consent_grant_id'],
   retrieval_traces: ['household_id', 'thread_id', 'turn_id', 'mode', 'holding_ids', 'fact_ids', 'chunk_ids', 'conflict_ids'],
   analytics_outbox: ['household_id', 'event', 'distinct_id_hash', 'properties_json'],
+  policy_slot_payments: ['household_id', 'adult_id', 'provider', 'order_id', 'payment_id', 'amount_paise', 'currency', 'status', 'paid_at'],
   provider_calls: ['household_id', 'purpose', 'provider', 'model', 'redaction_report_json', 'payload_sha256', 'input_tokens', 'output_tokens', 'cost_paise', 'status'],
   person_records: ['household_id', 'subject_member_id', 'record_type', 'slot', 'payload_ciphertext', 'completeness', 'source', 'state', 'revision'],
   holding_documents: ['household_id', 'holding_id', 'document_id', 'kind'],

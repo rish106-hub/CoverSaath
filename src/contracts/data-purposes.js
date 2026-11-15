@@ -317,6 +317,10 @@ export const DATA_REGISTRY = Object.freeze({
   // Provider call audit (migration 056, ADR 0030): counts, a sha256 of the redacted payload, usage and cost; never a prompt or a response.
   provider_calls: entry('service_operations', {},
     ['id', 'household_id', 'purpose', 'provider', 'model', 'redaction_report_json', 'payload_sha256', 'input_tokens', 'output_tokens', 'cost_paise', 'status', 'created_at']),
+  // Paid policy slots (migration 067): Razorpay order and payment ids and the amount charged for an extra policy. No payment instrument.
+  policy_slot_payments: entry('account_access',
+    { financial: ['amount_paise', 'currency', 'status', 'paid_at'], derived_identifier: ['order_id', 'payment_id'] },
+    ['id', 'household_id', 'adult_id', 'provider', 'created_at']),
   // Analytics outbox (migration 057, ADR 0033): the event name, a keyed hash of the household and closed-vocabulary properties. No free text.
   analytics_outbox: entry('analytics',
     { derived_identifier: ['distinct_id_hash'], derived_content: ['properties_json'] },

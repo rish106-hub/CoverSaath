@@ -31,6 +31,8 @@ import { TenantAccessService } from './tenant-access-service.js';
 import { createJwtTokens, readJwtIssuer, readJwtPrivateKeys } from '../security/jwt-tokens.js';
 import { resolveColumnCrypto } from '../security/column-crypto.js';
 import { createAnalyticsService } from './analytics-service.js';
+import { createPolicySlotService } from './policy-slot-service.js';
+import { PolicySlotRepository } from '../repositories/policy-slot-repository.js';
 
 // Document kinds that start a holding on upload (a policy wording or schedule).
 const HOLDING_DOCUMENT_KINDS = Object.freeze(['policy_wording', 'policy_schedule']);
@@ -187,8 +189,10 @@ export function createBackendServices(database, options = {}) {
 
   const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, referenceCache: new ReferenceCacheRepository(database), env: options.env ?? process.env, client: options.referenceClient ?? null });
 
+  const policySlots = createPolicySlotService({ repository: new PolicySlotRepository(database, { clock: options.clock }), access, env: options.env ?? process.env, client: options.razorpayClient ?? null });
+
   return {
-    ensureHolding, ensureHoldingForDocument, analytics, networkHospitals, holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, intakeQuestions, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
+    ensureHolding, ensureHoldingForDocument, analytics, networkHospitals, policySlots, holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, intakeQuestions, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     holdings, holdingPipelineRepository, memoryDocument, memory, memoryChunks, chatRepository, chatV1, modelGateway,
     emergencyInstruction,

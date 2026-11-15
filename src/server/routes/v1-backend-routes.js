@@ -19,6 +19,7 @@ import { handleDataLifecycleRoute } from './data-lifecycle-routes.js';
 import { handleHoldingsRoute } from './holdings-routes.js';
 import { handleHoldingDocumentsRoute } from './holding-documents-routes.js';
 import { handleHoldingHospitalsRoute } from './holding-hospitals-routes.js';
+import { handlePolicySlotRoute } from './policy-slot-routes.js';
 import { handleHoldingFactsRoute } from './holding-facts-routes.js';
 import { handleHoldingIntakeRoute } from './holding-intake-routes.js';
 import { handleHoldingMemoryDocumentRoute } from './holding-memory-document-routes.js';
@@ -418,6 +419,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
     const holdingsRoute = await handleHoldingsRoute({ req, url, principal, services });
     if (holdingsRoute) return holdingsRoute;
     const holdingHospitals = await handleHoldingHospitalsRoute({ req, url, principal, services }); if (holdingHospitals) return holdingHospitals;
+    const policySlot = await handlePolicySlotRoute({ req, url, principal, services, readBody }); if (policySlot) return policySlot;
     const holdingFacts = await handleHoldingFactsRoute({ req, url, principal, services }); if (holdingFacts) return holdingFacts;
     const holdingIntake = await handleHoldingIntakeRoute({ req, url, principal, services }); if (holdingIntake) return holdingIntake;
     const holdingMemoryDocument = await handleHoldingMemoryDocumentRoute({ req, url, principal, services }); if (holdingMemoryDocument) return holdingMemoryDocument;
@@ -851,6 +853,10 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         throw error;
       }
       const bytes = await readBinaryBody(req, { contentType: 'application/pdf', limitBytes: MAX_DOCUMENT_BYTES });
+      // Paid policy slots: a second (or later) policy schedule needs a verified payment (402 PAYMENT_REQUIRED otherwise).
+      if (String(req.headers['x-document-kind'] ?? '').trim() === 'policy_schedule' && services.policySlots) {
+        await services.policySlots.assertCanAddSchedule({ householdId: caseRecord.household_id, contentSha256: createHash('sha256').update(bytes).digest('hex') });
+      }
       const uploaded = await documentUploads.upload({ principal, caseRecord, headers: req.headers, bytes });
       // Product analytics (ADR 0033): the document kind (already validated against the upload list) only. A replay adds nothing.
       if (uploaded?.status === 201) void services.analytics?.track({ householdId: caseRecord.household_id, event: 'cover_uploaded', properties: { kind: String(req.headers['x-document-kind'] ?? '').trim() } });
