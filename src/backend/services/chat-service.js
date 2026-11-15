@@ -146,7 +146,7 @@ export function createChatService({ services, getEvidenceService, getReferenceDa
       if (result.stale) return { sources: [], note: 'reference_unavailable' };
       const products = result.data?.products ?? [];
       return {
-        sources: products.slice(0, 3).map(product => ({ tier: 'reference', label: `${product.productName}${product.uinRaw ? ` (UIN ${product.uinRaw})` : ''}, public reference data`, evidenceId: product.productId })),
+        sources: products.slice(0, 3).map(product => ({ tier: 'reference', label: `${[product.productName, product.uinRaw ? `UIN ${product.uinRaw}` : null].filter(Boolean).join(', ') || 'Product'}, public reference data`, evidenceId: product.productId })),
         note: products.length ? null : 'reference_no_match', ambiguous: products.length > 1,
       };
     } catch { return { sources: [], note: 'reference_unavailable' }; }

@@ -233,7 +233,7 @@ export function createHoldingProductService({
       try {
         outcome = await policyProfiles.confirm({
           householdId: holding.householdId, documentId: document.id, adultUserId, idempotencyKey,
-          statement: Object.freeze({ uin: resolved.uin, insurerName: resolved.insurerName, policyName: resolved.productName, expectedVersion }),
+          statement: Object.freeze({ uin: resolved.uin, insurerName: resolved.insurerName, ...(resolved.productName ? { policyName: resolved.productName } : {}), expectedVersion }),
         });
       } catch (error) {
         if (error?.code === 'POLICY_PROFILE_INVALID_UIN') throw coded('HOLDING_PRODUCT_UNSUPPORTED', 'That product cannot be confirmed.', 422);
