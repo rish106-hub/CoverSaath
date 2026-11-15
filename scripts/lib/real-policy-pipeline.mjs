@@ -16,12 +16,19 @@
 export const LIVE_FLAG = 'RUN_POLICY_QUESTIONS_LIVE';
 const DOCUMENT_ID_PATTERN = /^[A-Za-z0-9_-]{1,80}$/;
 
+const isLoopbackHostname = hostname => {
+  if (hostname === 'localhost' || hostname === '::1') return true;
+  if (/^127(?:\.\d{1,3}){3}$/.test(hostname)) return hostname.split('.').every(part => Number(part) >= 0 && Number(part) <= 255);
+  return false;
+};
+
 export function readRealConfig(env) {
   if (env[LIVE_FLAG] !== '1') throw Object.assign(new Error(`Real mode is opt-in. Set ${LIVE_FLAG}=1 to run it against your own API and documents.`), { code: 'LIVE_NOT_ENABLED' });
   const missing = ['EVAL_BASE_URL', 'EVAL_BEARER_TOKEN', 'EVAL_HOUSEHOLD_ID', 'EVAL_DOCUMENT_IDS'].filter(name => !env[name]);
   if (missing.length) throw Object.assign(new Error(`Missing environment variables: ${missing.join(', ')}.`), { code: 'LIVE_CONFIG_MISSING' });
   const baseUrl = new URL(env.EVAL_BASE_URL);
   if (!['http:', 'https:'].includes(baseUrl.protocol)) throw Object.assign(new Error('EVAL_BASE_URL must be http or https.'), { code: 'LIVE_CONFIG_INVALID' });
+  if (!isLoopbackHostname(baseUrl.hostname)) throw Object.assign(new Error('EVAL_BASE_URL must use a loopback host (localhost, 127.0.0.0/8, or ::1).'), { code: 'LIVE_CONFIG_INVALID' });
   const documents = new Map();
   for (const part of env.EVAL_DOCUMENT_IDS.split(',').map(text => text.trim()).filter(Boolean)) {
     const [kind, id] = part.split('=');
