@@ -37,6 +37,8 @@ test('an unnamed product is a candidate only when its UIN is printed, and never 
   assert.equal(withUin[0].candidateId, 'p-unnamed');
   assert.equal(withUin[0].productName, null);
   const byName = detectInsurerCandidates({ text: 'Synthetic Insurer Limited Synthetic Care Plan policy schedule', registry });
-  assert.ok(byName.every(c => c.candidateId !== 'p-unnamed' || c.rank > 1));
-  assert.equal(byName[0].candidateId, 'p-named');
+  // With no name the unnamed product can score only through its insurer (below the cut-off), so it is absent, not just ranked lower.
+  assert.deepEqual(byName.map(c => c.candidateId), ['p-named']);
+  const insurerOnly = detectInsurerCandidates({ text: 'Synthetic Insurer Limited policy schedule', registry });
+  assert.ok(insurerOnly.every(c => c.candidateId !== 'p-unnamed'));
 });
