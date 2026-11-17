@@ -225,3 +225,14 @@ test('embedding calls pass the same gate and audit: gated text, typed unknown wi
   assert.ok(rows.some(row => row.status === 'ungated_model_input' && row.payload_sha256 === null));
   assert.doesNotMatch(JSON.stringify(rows), /Asha|9876543210/);
 });
+
+test('the per-household daily budget over the database ledger accepts a real household id (scope fits the column check)', opts, async t => {
+  const { services } = await freshDatabase(t);
+  const budgetFor = createHouseholdDayBudget({ ledger: services.runtimeLimits, maxUsd: 1, clock: () => new Date('2026-11-17T10:00:00Z') });
+  const scope = budgetFor('household-dafa6b79-0d60-4128-9303-054a43530909');
+  const reservation = await scope.reserve(0.01, { task: 'chat_answer' });
+  assert.ok(reservation, 'a reservation under a real household id must succeed');
+  await scope.settle(reservation, 0.005);
+  const other = budgetFor('household-11111111-2222-3333-4444-555555555555');
+  assert.ok(await other.reserve(0.01, { task: 'chat_answer' }), 'each household has its own scope');
+});

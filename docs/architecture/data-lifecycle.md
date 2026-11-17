@@ -105,6 +105,7 @@ Kinds: `delete` rows removed; `scrub_prune` content scrubbed, then the row is re
 | `household_memory_facts` | delete | - | Deleted with its holding, document, member, on consent revocation and household erasure. Values are sealed. |
 | `memory_conflicts` | delete | - | Deleted with its holding or facts, on consent revocation and household erasure. Ids and closed enums only. |
 | `member_declarations` | delete | - | Deleted with its member, on consent revocation and household erasure. The label is sealed. |
+| `policy_slot_payments` | delete | - | Deleted by household erasure. Razorpay order and payment ids, the amount and status only; no card, UPI, bank or contact detail. |
 | `premium_payments` | delete | - | Deleted with its holding, on consent revocation and household erasure. Amount and agent name and code are sealed. |
 | `premium_dues` | delete | - | Deleted with its holding, on consent revocation and household erasure. Amount is sealed. |
 | `tool_scenarios` | delete | userData | Deleted. |

@@ -318,3 +318,20 @@ test('confirm-product with HOLDINGS_ENABLED off queues no pipeline jobs', opts, 
   assert.notEqual(refused.status, 200);
   assert.equal((await app.database.many("SELECT id FROM job_queue WHERE kind LIKE 'holding.%'")).length, 0);
 });
+
+test('detection: a printed UIN beats a short generic product name that also appears in the text (stress PDF regression)', () => {
+  const hdfc = {
+    insurers: [{ id: 'ins-hdfc', canonicalName: 'Northwind General Insurance Company Ltd.', aliases: [] }],
+    products: [
+      { productId: 'prod-addon-1', insurerId: 'ins-hdfc', productName: 'Add-on', uinRaw: 'NWDHLIA21271V022021' },
+      { productId: 'prod-addon-2', insurerId: 'ins-hdfc', productName: 'Add On', uinRaw: 'NWDHLIA22188V012122' },
+      { productId: 'prod-secure-old', insurerId: 'ins-hdfc', productName: 'my Secure Plan', uinRaw: 'NWDHLIP25041V062425' },
+      { productId: 'prod-secure', insurerId: 'ins-hdfc', productName: 'my Secure Plan', uinRaw: 'NWDHLIP26058V082526' },
+    ],
+  };
+  const text = 'Northwind General Insurance Company Limited\nPolicy Schedule\nProduct: my Secure Plan UIN: NWDHLIP26058V082526\nAdd on covers opted: none';
+  const found = detectInsurerCandidates({ text, registry: hdfc });
+  assert.deepEqual(found.map(item => item.candidateId), ['prod-secure']);
+  // Without a printed UIN, name matches still rank as before.
+  assert.ok(detectInsurerCandidates({ text: text.replace(/UIN: \S+/, ''), registry: hdfc }).length >= 1);
+});

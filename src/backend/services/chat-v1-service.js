@@ -118,6 +118,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
       const row = await database.one(`SELECT case_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
       if (!row?.case_id || searched.has(row.case_id)) continue;
       searched.add(row.case_id);
+      // A document whose clauses were never derived (memorise ran without embeddings) is derived now, once; a failure leaves the search as is.
+      try { await memory.ensureDocumentClauses?.({ householdId, documentId }); } catch { /* retrieval falls back to the clauses that exist */ }
       const siblings = await database.many(`SELECT id FROM document_uploads WHERE household_id = ? AND case_id = ? AND lifecycle_state = 'active' ORDER BY id LIMIT ?`, [householdId, row.case_id, MAX_CASE_DOCUMENTS]);
       const documentIds = [...new Set([documentId, ...siblings.map(item => item.id)])];
       const hits = await clauses.searchClauses({ householdId, caseId: row.case_id, documentIds, query: expandQuery(message), limit: KEYWORD_K });
@@ -312,8 +314,14 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
             // Nothing in the wording or the facts speaks to a coverage question: no model call, the fixed unknown answer stands.
             const nothingRelevant = searchedClauses && clauseHits.length === 0 && passages.length === 0 && !answersTopic;
-            const model = !nothingRelevant && (context.facts.length > 0 || passages.length > 0)
-              ? await modelAnswer({ householdId, adultId: principal.adultId, message, history, context, relevant, plan, passages, startedAt }) : null;
+            // Without vector passages (no embedding provider or grant), the clause the keyword path picked is the model's wording passage, so a
+            // model answer rests on the same printed text the deterministic answer would cite (and is gated like any passage).
+            const modelPassages = passages.length > 0 ? passages : clauseHits.map(clause => ({
+              id: clause.id, text: clause.window, scope: 'own_pdf', sourceDocumentId: clause.documentId,
+              sourceRef: `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`,
+            }));
+            const model = !nothingRelevant && (context.facts.length > 0 || modelPassages.length > 0)
+              ? await modelAnswer({ householdId, adultId: principal.adultId, message, history, context, relevant, plan, passages: modelPassages, startedAt }) : null;
 
             let text = deterministic.text;
             let answerSource = 'deterministic';
@@ -325,7 +333,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               assistantMeta = { ...model.meta, redactedPromptHash: model.redactedPromptHash };
             } else if (model?.failed) assistantMeta = { modelStatus: model.failed };
 
-            const citedPassages = passages.filter(item => usedChunks.includes(item.id));
+            const citedPassages = modelPassages.filter(item => usedChunks.includes(item.id));
             let sources = await wordingSources({ householdId, passageList: answerSource === 'model' ? citedPassages : [], clauseList: answerSource === 'model' ? [] : clauseHits });
             // Code owns the status: an answer that rests on no fact, chunk or computed check is "unknown".
             let status = usedFacts.length > 0 || usedChunks.length > 0 || sources.length > 0 || (plan?.checks.length ?? 0) > 0 ? 'evidence_found' : 'unknown';

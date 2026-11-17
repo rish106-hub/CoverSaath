@@ -194,6 +194,8 @@ export class ErasureRepository {
       await this.#count(ctx, 'policyProfiles', 'DELETE FROM policy_profiles WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'providerCalls', 'DELETE FROM provider_calls WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'analyticsOutbox', 'DELETE FROM analytics_outbox WHERE household_id = ?', [householdId]);
+      // Paid policy slots (migration 067): order and payment ids only, deleted with the household (data-lifecycle.js).
+      await this.#count(ctx, 'policySlotPayments', 'DELETE FROM policy_slot_payments WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'catalogueReviews', 'DELETE FROM catalogue_reviews WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'catalogueReviewerGrants', 'DELETE FROM catalogue_reviewer_grants WHERE household_id = ?', [householdId]);
       await this.#count(ctx, 'policyLinks', 'DELETE FROM policy_members WHERE policy_id IN (SELECT id FROM policies WHERE household_id = ?)', [householdId]);

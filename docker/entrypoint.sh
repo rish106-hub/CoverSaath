@@ -57,6 +57,9 @@ trap 'kill ${clamd_pid:-} ${freshclam_pid:-} ${worker_pid:-} "$node_pid" 2>/dev/
 status=0
 # Only the API, the worker and clamd decide the container's life.
 wait -n "$node_pid" ${worker_pid:+"$worker_pid"} ${clamd_pid:+"$clamd_pid"} || status=$?
+# Any of them ending on its own is a failure, even with exit code 0: a clean exit used to stop the machine for good (Fly does not
+# restart a machine that exits 0), which took production down on 2026-11-15. A non-zero exit lets the restart policy bring it back.
+if [ "$status" -eq 0 ]; then log unexpected_child_exit; status=1; fi
 kill ${clamd_pid:-} ${freshclam_pid:-} ${worker_pid:-} "$node_pid" 2>/dev/null || true
 # Let the API and the worker finish in-flight work after SIGTERM; the watcher and updater subshells must not hold the exit.
 wait "$node_pid" 2>/dev/null || true

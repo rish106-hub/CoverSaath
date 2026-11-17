@@ -18,7 +18,7 @@ const PINCODE = /^[0-9]{6}$/;
 const coded = (code, message, statusCode, extra = {}) => Object.assign(new Error(message), { code, statusCode, ...extra });
 const notFound = () => coded('HOLDING_NOT_FOUND', 'Holding was not found.', 404);
 
-export function createNetworkHospitalService({ repository, holdingRepository, policyHoldings, referenceCache, env = process.env, client = null }) {
+export function createNetworkHospitalService({ repository, holdingRepository, policyHoldings, referenceCache, analytics = null, env = process.env, client = null }) {
   for (const [name, dep] of Object.entries({ repository, holdingRepository, policyHoldings, referenceCache })) if (!dep) throw new TypeError(`createNetworkHospitalService needs ${name}.`);
   let built = client;
   const reference = () => { built ??= createInsuranceDataClient({ env }); return built; };
@@ -66,8 +66,10 @@ export function createNetworkHospitalService({ repository, holdingRepository, po
         throw error;
       }
       const insurerId = await insurerOf(holding);
-      if (insurerId === null) return { hospitals: [], reason: 'insurer_unknown' };
-      return { hospitals: await repository.byPincode({ pincode, insurerId }) };
+      const result = insurerId === null ? { hospitals: [], reason: 'insurer_unknown' } : { hospitals: await repository.byPincode({ pincode, insurerId }) };
+      // Product analytics (ADR 0033): the result count only. Never the pincode, insurer or a hospital. Fire-and-forget; never blocks the read.
+      void analytics?.track({ householdId: holding.householdId, event: 'hospital_search', properties: { results: result.hospitals.length } });
+      return result;
     },
   });
 }
