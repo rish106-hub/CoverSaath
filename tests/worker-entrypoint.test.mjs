@@ -49,6 +49,12 @@ test('entrypoint starts the API and the worker; a dead worker stops the containe
   assert.ok(result.ms < 6000, 'the API did not keep the container alive');
 });
 
+test('a worker that ends cleanly (exit 0) still stops the container with a failure status, so Fly restarts it', waitN, async t => {
+  const box = sandbox(t);
+  const result = await run(box, { FAKE_WORKER_LIFE: '0.5', FAKE_WORKER_EXIT: '0' });
+  assert.equal(result.code, 1, 'a clean exit is reported as a failure');
+});
+
 test('WORKER_IN_CONTAINER=false starts the API only', waitN, async t => {
   const box = sandbox(t);
   const result = await run(box, { WORKER_IN_CONTAINER: 'false', STOP_AFTER_MS: '800' });

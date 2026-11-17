@@ -170,9 +170,21 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     }
     for (const check of plan?.checks ?? []) await addSlot({ id: `check:${check.id}`, label: 'Planning check (computed)', value: check.detail, checkFactIds: check.factIds });
     for (const passage of passages) {
+      const key = alias(householdId, passage.id);
+      if (passage.unredacted) {
+        // A clause window read straight from the OCR text was never redacted: it goes through the household gate (names, contacts and
+        // the household's known identifiers are tokenised); a window the gate refuses is not sent.
+        let gated;
+        try { gated = (await gateTextForHousehold(passage.text, { householdId, loadKnownIdentifiers: loader })).gated; } catch (error) {
+          if (['RESTRICTED_EVIDENCE', 'EVIDENCE_SOURCE_LIMIT', 'PRIVACY_GATE_MALFORMED'].includes(error?.code)) continue;
+          throw error;
+        }
+        aliasToFact.set(key, { chunkId: passage.id, text: passage.text });
+        slots.push({ fact_id: key, label: gateText('Policy passage', { knownIdentifiers: [] }), value: gated });
+        continue;
+      }
       // Stored passages were redacted at write time; their tokens are renamed so they never rehydrate as this question's people.
       const text = passage.text.replace(/\{\{([A-Z][A-Z_]*_\d+)\}\}/g, '{{PASSAGE_$1}}');
-      const key = alias(householdId, passage.id);
       aliasToFact.set(key, { chunkId: passage.id, text: passage.text });
       slots.push({ fact_id: key, label: gateText('Policy passage', { knownIdentifiers: [] }), value: gateText(text, { regate: true, knownIdentifiers: [] }) });
     }
@@ -317,7 +329,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             // Without vector passages (no embedding provider or grant), the clause the keyword path picked is the model's wording passage, so a
             // model answer rests on the same printed text the deterministic answer would cite (and is gated like any passage).
             const modelPassages = passages.length > 0 ? passages : clauseHits.map(clause => ({
-              id: clause.id, text: clause.window, scope: 'own_pdf', sourceDocumentId: clause.documentId,
+              id: clause.id, text: clause.window, scope: 'own_pdf', sourceDocumentId: clause.documentId, unredacted: true,
               sourceRef: `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`,
             }));
             const model = !nothingRelevant && (context.facts.length > 0 || modelPassages.length > 0)

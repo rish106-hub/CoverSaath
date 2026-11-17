@@ -45,3 +45,10 @@ test('several values after one label stay ambiguous; schedule-of-benefits rows a
   assert.equal(found.waiting_ped.value.days, 1095);
   assert.deepEqual(found.premium_total.value, { amountMinor: 1700000, currency: 'INR' });
 });
+
+test('a text value is one cell; a "Label: value" line whose value holds a pipe is still read', () => {
+  const { facts } = extractFacts([chunk('Agent Name | TEST AGENCY | 9000000000\nGrace Period: 30 days | renewal only')]);
+  const found = byType(facts);
+  assert.deepEqual(found.seller_name.value, { text: 'TEST AGENCY' });
+  assert.equal(found.grace_period?.value?.days, 30);
+});
