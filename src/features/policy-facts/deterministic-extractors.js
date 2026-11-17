@@ -106,7 +106,10 @@ function readLine({ line, chunk, add, pairs = null }) {
     if (values.length === 1) add({ factType: 'premium_total', scopeKey: '', value: values[0], raw: sentence[0], quote: sentence[0], ...base });
   }
   const split = splitLine(line);
-  const candidates = pairs ?? (line.includes(' | ') ? rowPairs(line) : (split && split.rest ? [{ ...split, quote: line }] : []));
+  // A row with no labelled cell may still be a "Label: value" line that holds a pipe in its value: read it the old way.
+  const rows = pairs ?? (line.includes(' | ') ? rowPairs(line) : []);
+  const labelledRow = line.includes(' | ') && cellsOf(line).some(cell => isLabelCell(cell));
+  const candidates = rows.length || labelledRow ? rows : (split && split.rest ? [{ ...split, quote: line }] : []);
   for (const pair of candidates) readPair({ pair, line, base, add });
   if (MEMBER_LINE.test(line) && !NOT_MEMBER_AGE.test(line)) {
     const where = { quote: line, ...base };
@@ -143,7 +146,8 @@ function readPair({ pair, base, add }) {
       const scopeKey = spec.scoped ? slug(labelMatch[1] ?? '') : '';
       if (spec.scoped && (!scopeKey || /^(?:initial|pre_existing|ped|maternity)/.test(scopeKey))) continue;
       if (kind === 'text') {
-        const value = parse('text', rest);
+        // A text value is one printed cell: the cells after it (a phone number, a code) belong to other columns.
+        const value = parse('text', rest.split(' | ')[0]);
         if (value) add({ factType: spec.factType, scopeKey, value, raw: rest, ...where });
         continue;
       }

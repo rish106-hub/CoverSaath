@@ -67,13 +67,14 @@ export function createMemoryService({ holdingRepository, chunks, clauses, ocr = 
   // Clauses are derived deterministically from the stored OCR blocks (the same derivation the read-back routes use); an unread document is skipped.
   async function ensureClauses({ householdId, caseId, documentId }) {
     if (!ocr || typeof clauses.saveClauses !== 'function') return;
+    // Already derived: no need to load and open the OCR pages again (chat calls this on every keyword turn).
+    if ((await clauses.clauseDocumentIds({ householdId, caseId })).includes(documentId)) return;
     let stored;
     try { stored = await ocr.getDocumentBlockPages({ documentId, householdId }); } catch (error) {
       if (error?.code) return; // no stored pages yet (OCR not complete): nothing to derive, retrieval falls back to what exists
       throw error;
     }
     if (!stored?.complete) return;
-    if ((await clauses.clauseDocumentIds({ householdId, caseId })).includes(documentId)) return;
     const { clauses: built } = buildClauses(stored, { documentId, sourceVersion: stored.sourceVersion });
     if (built.length) await clauses.saveClauses({ householdId, caseId, documentId, clauses: built });
   }
@@ -130,8 +131,8 @@ export function createMemoryService({ holdingRepository, chunks, clauses, ocr = 
     async embedHolding({ householdId, holdingId }) {
       const result = (extra = {}) => Object.freeze({ embedded: 0, removed: 0, refused: 0, ...extra });
       if (!memoryEnabled(env)) return result({ skipped: 'memory_disabled' });
-      // Keyword retrieval needs the clauses whether or not embeddings run.
-      await ensureHoldingClauses({ householdId, holdingId });
+      // Keyword retrieval needs the clauses whether or not embeddings run. A failure here never fails the memorise step.
+      try { await ensureHoldingClauses({ householdId, holdingId }); } catch { /* chat derives them again on first use */ }
       if (!gateway?.enabled) return result({ skipped: 'embeddings_unavailable' });
       const holding = await holdingRepository.getHolding({ householdId, holdingId });
       if (!holding) return result({ skipped: 'holding_not_found' });
