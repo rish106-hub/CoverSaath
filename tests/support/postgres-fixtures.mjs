@@ -57,6 +57,7 @@ const defaults = {
   }),
   memory_conflicts: id => ({ id, fact_key: 'sum_insured', reason: 'two_pages', created_at: at }),
   member_declarations: id => ({ id, kind: 'habit', label_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at, updated_at: at }),
+  policy_slot_payments: id => ({ id, provider: 'razorpay', amount_paise: 19900, currency: 'INR', status: 'created', created_at: at }),
   premium_payments: id => ({ id, amount_enc: 'enc2.k1.AAAA.BBBB.CCCC', amount_band: '10k_50k', paid_on: '2026-01-15', channel: 'upi', created_at: at }),
   premium_dues: id => ({ id, due_on: '2026-02-15', amount_enc: 'enc2.k1.AAAA.BBBB.CCCC', amount_band: '10k_50k', created_at: at, updated_at: at }),
   evidence_facts: id => ({

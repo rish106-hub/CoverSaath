@@ -154,6 +154,7 @@ const PLAIN = {
   },
   premium_payments: { 'closed vocabulary, coarse amount band by design (as policy_facts, ADR 0025 D3), currency code and a calendar day; exact amount, agent name and code are sealed': ['amount_band', 'currency', 'paid_on', 'channel', 'paid_via'] },
   premium_dues: { 'closed vocabulary, coarse amount band by design, currency code and a calendar day; the exact amount is sealed': ['due_on', 'amount_band', 'currency', 'state'] },
+  policy_slot_payments: { "provider's opaque order and payment ids, closed vocabulary (provider, currency, status); no card, UPI, bank or contact detail": ['provider', 'order_id', 'payment_id', 'currency', 'status'] },
   policy_answers: {
     'opaque client idempotency key (<=128 chars)': ['idempotency_key'],
     'closed vocabulary': ['state'],
@@ -197,6 +198,7 @@ const PLAIN_NUMBERS = {
   memory_chunks: { 'token count of the redacted passage, no content': ['token_count'] },
   chat_turns: { 'turn order, token counts, cost in paise and latency of one answer, no content': ['turn_index', 'tokens_in', 'tokens_out', 'cost_paise', 'latency_ms'] },
   provider_calls: { 'token counts and cost in paise, no content': ['input_tokens', 'output_tokens', 'cost_paise'] },
+  policy_slot_payments: { 'the fixed slot price charged, in paise': ['amount_paise'] },
   household_members: { 'row revision counter': ['revision'] },
   person_records: { 'schema and row revision counters': ['schema_version', 'revision'] },
   member_declarations: { 'row revision counter': ['revision'] },

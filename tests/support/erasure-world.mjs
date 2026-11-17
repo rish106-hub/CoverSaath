@@ -77,6 +77,7 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   await insert(pool, 'member_declarations', { id: `decl-${key}`, household_id: ids.household, member_id: ids.dependent, consent_grant_id: ids.consent, declared_by_adult_id: ids.adult, label_enc: `enc2.k1.${canary('declaration')}` });
   await insert(pool, 'premium_payments', { id: `ppay-${key}`, household_id: ids.household, holding_id: ids.holding, consent_grant_id: ids.consent, paid_via: 'agent', amount_enc: `enc2.k1.${canary('premium')}`, agent_name_enc: `enc2.k1.${canary('agent-name')}`, agent_code_enc: `enc2.k1.${canary('agent-code')}` });
   await insert(pool, 'premium_dues', { id: `pdue-${key}`, household_id: ids.household, holding_id: ids.holding, consent_grant_id: ids.consent, amount_enc: `enc2.k1.${canary('due')}` });
+  await insert(pool, 'policy_slot_payments', { id: `pslot-${key}`, household_id: ids.household, adult_id: ids.adult, order_id: `order_${key}`, payment_id: `pay_${key}`, status: 'paid', paid_at: '2026-01-01T00:00:00.000Z' });
   // Memory chunks and chat (migrations 053-054, ADR 0031): every store gets a row; sealed columns hold envelope-shaped values carrying the canary.
   await insert(pool, 'memory_chunks', { id: `mchunk-${key}`, household_id: ids.household, holding_id: ids.holding, consent_grant_id: ids.consent, source_document_id: ids.document, chunk_text_enc: `enc2.k1.${canary('chunk-text')}` });
   await insert(pool, 'chat_threads', { id: `thread-${key}`, household_id: ids.household, holding_id: ids.holding, created_by_adult_id: ids.adult });

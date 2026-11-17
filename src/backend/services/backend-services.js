@@ -187,7 +187,7 @@ export function createBackendServices(database, options = {}) {
   // The owner's memory document: rendered on demand, nothing stored (services/memory-document.js).
   const memoryDocument = createMemoryDocumentService({ holdingRepository: holdingPipelineRepository, holdings, repository: new MemoryDocumentRepository(database, shared), declarations, premiums, households, env: options.env ?? process.env, clock: options.clock });
 
-  const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, referenceCache: new ReferenceCacheRepository(database), env: options.env ?? process.env, client: options.referenceClient ?? null });
+  const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, referenceCache: new ReferenceCacheRepository(database), analytics, env: options.env ?? process.env, client: options.referenceClient ?? null });
 
   const policySlots = createPolicySlotService({ repository: new PolicySlotRepository(database, { clock: options.clock }), access, env: options.env ?? process.env, client: options.razorpayClient ?? null });
 

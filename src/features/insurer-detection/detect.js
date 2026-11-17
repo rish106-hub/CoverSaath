@@ -12,6 +12,7 @@ const MAX_TEXT_CHARS = 60_000;
 const MIN_SCORE = 0.5;
 const INSURER_WEIGHT = 0.35;
 const PRODUCT_WEIGHT = 0.65;
+const UIN_SCORE = 10;
 
 // Words that name a kind of company or product rather than one of them; they never decide a match on their own.
 const GENERIC = new Set(['insurance', 'general', 'health', 'life', 'limited', 'ltd', 'co', 'company', 'corporation', 'of', 'india', 'the', 'and', 'plan', 'policy', 'plus', 'private', 'pvt']);
@@ -92,11 +93,16 @@ export function detectInsurerCandidates({ text, registry }) {
     if (!insurer) continue;
     const uinMatch = typeof product.uinRaw === 'string' && printedUins.has(product.uinRaw.toUpperCase().replace(/[^A-Z0-9]/g, ''));
     const combined = INSURER_WEIGHT * scoreInsurer(product.insurerId) + PRODUCT_WEIGHT * nameScore(product.productName, normalisedText, textTokens, textSet);
-    const score = uinMatch ? Math.max(combined, 1) : combined;
-    if (score >= MIN_SCORE) scored.push({ score, product, insurer });
+    // A printed UIN that names a registry product is decisive: it ranks above every name-only match (a short generic name such as
+    // "Add-on" can score as high as a whole-phrase match, and used to win the tie on length).
+    const score = uinMatch ? UIN_SCORE + combined : combined;
+    if (score >= MIN_SCORE) scored.push({ score, product, insurer, uinMatch });
   }
-  scored.sort((a, b) => b.score - a.score || (a.product.productName ?? '').length - (b.product.productName ?? '').length || (a.product.productId < b.product.productId ? -1 : 1));
-  return scored.slice(0, MAX_CANDIDATES).map(({ product, insurer }, index) => Object.freeze({
+  // When the text prints a registry UIN, only the products with that UIN are offered: anything else is a guess against a fact.
+  const anyUin = scored.some(item => item.uinMatch);
+  const pool = anyUin ? scored.filter(item => item.uinMatch) : scored;
+  pool.sort((a, b) => b.score - a.score || (a.product.productName ?? '').length - (b.product.productName ?? '').length || (a.product.productId < b.product.productId ? -1 : 1));
+  return pool.slice(0, MAX_CANDIDATES).map(({ product, insurer }, index) => Object.freeze({
     candidateId: product.productId, insurerName: insurer.canonicalName, productName: product.productName, rank: index + 1,
   }));
 }

@@ -85,8 +85,26 @@ export function createMemoryService({ holdingRepository, chunks, clauses, ocr = 
     return { vectors: result.output.vectors, tokens: result.metadata.inputTokens, model: result.metadata.model };
   }
 
+  // Clauses of one document (and the case it belongs to), derived from the stored OCR blocks. Chat's keyword retrieval reads policy_clauses only,
+  // so a holding whose memorise step skipped embeddings (no embedding key or grant) must still get its clauses: they never leave the backend.
+  async function ensureDocumentClauses({ householdId, documentId }) {
+    if (!clauses) return;
+    const caseRow = await database.one(`SELECT case_id FROM document_uploads WHERE id = ? AND household_id = ? AND lifecycle_state = 'active'`, [documentId, householdId]);
+    if (!caseRow?.case_id) return;
+    await ensureClauses({ householdId, caseId: caseRow.case_id, documentId });
+  }
+
+  async function ensureHoldingClauses({ householdId, holdingId }) {
+    if (!clauses) return;
+    const holding = await holdingRepository.getHolding({ householdId, holdingId });
+    if (!holding?.documentId) return;
+    const linked = await holdingRepository.linkedDocuments({ householdId, holdingId });
+    for (const documentId of [holding.documentId, ...linked.map(item => item.documentId)]) await ensureDocumentClauses({ householdId, documentId });
+  }
+
   return Object.freeze({
     enabled: () => memoryEnabled(env),
+    ensureDocumentClauses,
 
     /**
      * Embeds one query text. Resolves a vector, or null when embeddings are unavailable (flag, key, budget, gate refusal) or the acting
@@ -112,6 +130,8 @@ export function createMemoryService({ holdingRepository, chunks, clauses, ocr = 
     async embedHolding({ householdId, holdingId }) {
       const result = (extra = {}) => Object.freeze({ embedded: 0, removed: 0, refused: 0, ...extra });
       if (!memoryEnabled(env)) return result({ skipped: 'memory_disabled' });
+      // Keyword retrieval needs the clauses whether or not embeddings run.
+      await ensureHoldingClauses({ householdId, holdingId });
       if (!gateway?.enabled) return result({ skipped: 'embeddings_unavailable' });
       const holding = await holdingRepository.getHolding({ householdId, holdingId });
       if (!holding) return result({ skipped: 'holding_not_found' });

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createAiSdkRunner, createProviderModelLoader } from './ai-sdk-runner.js';
 import { createModelGateway } from './model-gateway.js';
 import { createLedgerScope, createBudgetScope } from './live-coverage-runtime.js';
@@ -33,7 +34,10 @@ export function createHouseholdDayBudget({ ledger = null, maxUsd, clock = () => 
   if (!Number.isFinite(maxUsd) || maxUsd <= 0) throw Object.assign(new Error('A per-household daily budget is required.'), { code: 'LIVE_AI_CONFIG_INVALID' });
   const memory = new Map();
   return householdId => {
-    const scope = `chat:${householdId}:${clock().toISOString().slice(0, 10)}`;
+    // model_budget_scopes.scope allows only [a-z0-9_.-]{1,64}: a household id ("household-<uuid>") with colons broke every live chat
+    // call (CHECK 23514). The scope is a short digest of the id plus the UTC day, so it fits the column and names no household.
+    const day = clock().toISOString().slice(0, 10);
+    const scope = `chat.${createHash('sha256').update(String(householdId ?? 'none')).digest('hex').slice(0, 32)}.${day}`;
     if (ledger) return createLedgerScope(ledger, scope, maxUsd);
     // SCALE: per-process; the ledger variant above is the multi-machine one.
     if (!memory.has(scope)) memory.set(scope, createBudgetScope(maxUsd));

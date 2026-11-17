@@ -69,3 +69,8 @@ primary_region = "sin"
 [[vm]]
   size = "shared-cpu-2x"
   memory = "3gb"
+
+# A process that ends on its own restarts the machine (docker/entrypoint.sh exits non-zero then). "always" also covers a clean exit.
+[[restart]]
+  policy = "always"
+  retries = 10
