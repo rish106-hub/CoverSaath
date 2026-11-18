@@ -4,7 +4,7 @@ import { ANALYTICS_EVENTS } from '../../contracts/analytics-events.js';
 import { CHAT_INTENTS } from '../../features/ai-analysis/gateway-contract.js';
 import { gateText, gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { buildDeterministicAnswer } from '../../features/insurance-rules/chat-answer.js';
-import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, selectClauseAnswers } from '../../features/insurance-rules/clause-answer.js';
+import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, selectTopicAnswers } from '../../features/insurance-rules/clause-answer.js';
 import { classifyChatMessage } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
@@ -295,7 +295,9 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             // Retrieval beyond facts: vector top-k, else a keyword match over clauses (only when no confirmed fact answers the topic).
             let mode = 'facts_only';
             let passages = [];
-            const answersTopic = factKeys.some(key => context.facts.some(fact => fact.factKey === key));
+            // A general waiting-period question names three facts (initial, pre-existing, specific disease): one found fact does not answer the whole topic.
+            const hasFact = key => context.facts.some(fact => fact.factKey === key);
+            const answersTopic = intent === 'waiting_period' && factKeys.includes('waiting_specific') ? factKeys.every(hasFact) : factKeys.some(hasFact);
             if (mayReadFacts && !answersTopic && !awaitingPlan && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
               // An embedding failure is not a turn failure: it leaves the vector undefined and the keyword path below answers.
               let vector = null;
@@ -312,11 +314,13 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               }
             }
             let clauseHits = [];
+            let missingTopics = [];
             let searchedClauses = false;
             if (mode !== 'vector' && !answersTopic && !awaitingPlan && context.documents.length > 0 && intent !== 'procedure_planning') {
               const candidates = await keywordClauses({ householdId, documents: context.documents, message });
               // Clause level: only the best sentence window that clears the relevance floor, never the page. None means "unknown", no source.
-              const picks = selectClauseAnswers({ question: message, clauses: candidates });
+              const { answers: picks, missing } = selectTopicAnswers({ question: message, clauses: candidates });
+              missingTopics = missing;
               clauseHits = picks.map(picked => ({ ...picked.clause, window: picked.text, excluded: picked.excluded, blockIndex: picked.blockIndex }));
               searchedClauses = contentTerms(message).length > 0;
               mode = 'keyword';
@@ -324,7 +328,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
 
             emit('meta', { thread_id: thread.id, intent: CHAT_INTENTS.includes(intent) ? intent : 'unknown', retrieval_mode: mode, facts_available: context.facts.length, open_conflicts: context.conflicts.length });
 
-            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan });
+            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan, missingTopics });
             const history = await chatRepository.recentTurns({ householdId, threadId });
             // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
             // Nothing in the wording or the facts speaks to a coverage question: no model call, the fixed unknown answer stands.
