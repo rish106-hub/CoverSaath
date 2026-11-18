@@ -19,6 +19,7 @@ paths = [
   '''tests/gated-text-builders\.test\.mjs''',
   '''tests/support/corpus-rows\.mjs''',
   '''tests/fakes/fake-gemini-server\.mjs''',  # removed from HEAD, still in history
+  '''tests/fss-handoff-contract\.test\.mjs''',  # synthetic HMAC test value in commit 6009fe4, removed from HEAD, still in history. Not a credential.
 ]
 
 [[allowlists]]
