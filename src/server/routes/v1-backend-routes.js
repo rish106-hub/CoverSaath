@@ -361,6 +361,14 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       const result = await services.userData.access(await readBody(req));
       return { status: result.returning ? 200 : 201, body: result };
     }
+    // FSS signed notice (ADR 0037, docs/contracts/fss-handoff-v1.md). No bearer: the HMAC over the raw body is the credential. Off (404)
+    // unless FSS_HANDOFF_ENABLED. Every refusal is the same coded 401; a notice for an unknown or erased request is dropped with a 200.
+    if (req.method === 'POST' && url.pathname === '/api/v1/fss/notices') {
+      if (!services.fssHandoff.enabled()) throw Object.assign(new Error('Not found.'), { code: 'ROUTE_NOT_FOUND', statusCode: 404 });
+      const rawBody = (await readBinaryBody(req, { contentType: 'application/json', limitBytes: 4096 })).toString('utf8');
+      const result = await services.fssHandoff.receiveNotice({ rawBody, header: req.headers['x-fss-signature'] });
+      return { status: 200, body: { result: result.result } };
+    }
     // Sign-in identity -> adult -> session (ADR 0012 D3). Only a caller holding the identity credential (the website
     // BFF) gets here; the bootstrap token is refused. The key is (issuer, subject) from an allow-listed issuer, never
     // an e-mail address. Nothing from the body is logged.
