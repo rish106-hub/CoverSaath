@@ -4,7 +4,7 @@ import { ANALYTICS_EVENTS } from '../../contracts/analytics-events.js';
 import { CHAT_INTENTS } from '../../features/ai-analysis/gateway-contract.js';
 import { gateText, gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { buildDeterministicAnswer } from '../../features/insurance-rules/chat-answer.js';
-import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer } from '../../features/insurance-rules/clause-answer.js';
+import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, selectClauseAnswers } from '../../features/insurance-rules/clause-answer.js';
 import { classifyChatMessage } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
@@ -313,8 +313,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             if (mode !== 'vector' && !answersTopic && context.documents.length > 0 && intent !== 'procedure_planning') {
               const candidates = await keywordClauses({ householdId, documents: context.documents, message });
               // Clause level: only the best sentence window that clears the relevance floor, never the page. None means "unknown", no source.
-              const picked = selectClauseAnswer({ question: message, clauses: candidates });
-              clauseHits = picked ? [{ ...picked.clause, window: picked.text, excluded: picked.excluded, blockIndex: picked.blockIndex }] : [];
+              const picks = selectClauseAnswers({ question: message, clauses: candidates });
+              clauseHits = picks.map(picked => ({ ...picked.clause, window: picked.text, excluded: picked.excluded, blockIndex: picked.blockIndex }));
               searchedClauses = contentTerms(message).length > 0;
               mode = 'keyword';
             }

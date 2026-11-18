@@ -174,3 +174,27 @@ export function selectClauseAnswer({ question, clauses }) {
   const blockIndex = blocks.length === lines.length ? blocks[best.segment.lineIndex] : (blocks[0] ?? null);
   return { clause: best.clause, text, excluded, page: best.clause.page ?? null, blockIndex: blockIndex ?? null, matched: best.matched, total: terms.length };
 }
+
+/** One question can carry several topics ("knee replacement, room rent limit, co-pay?"). Splits on question marks, commas, semicolons and "and"/"or"; a part with no content term is dropped. At most three parts. */
+export function splitTopics(question, max = 3) {
+  const parts = String(question ?? '').split(/\?|;|,|\s+(?:and|or|also|plus)\s+/i).map(part => part.trim()).filter(part => part && contentTerms(part).length > 0);
+  return parts.length > 1 ? parts.slice(0, max) : [String(question ?? '')];
+}
+
+/**
+ * Answers each topic of the question with its own best sentence window. A single-topic question gives the same one answer as
+ * selectClauseAnswer. A topic with no clause above the relevance floor gives no answer; the others still do. The same clause window is not repeated.
+ */
+export function selectClauseAnswers({ question, clauses, max = 3 }) {
+  const out = [];
+  const seen = new Set();
+  for (const topic of splitTopics(question, max)) {
+    const picked = selectClauseAnswer({ question: topic, clauses });
+    if (!picked) continue;
+    const key = `${picked.clause.id ?? picked.clause.clauseId}|${picked.text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(picked);
+  }
+  return out;
+}
