@@ -37,6 +37,8 @@ function limitsWithDefaults(limits) {
   if (!Number.isInteger(value.maxRetries) || value.maxRetries < 0 || value.maxRetries > 2) fail('invalid_gateway_config', 'maxRetries must be between zero and two.');
   if (!Number.isInteger(value.maxConcurrentCalls) || value.maxConcurrentCalls < 1 || value.maxConcurrentCalls > 8) fail('invalid_gateway_config', 'maxConcurrentCalls must be between one and eight.');
   positiveNumber(value.maxReservationUsd, 'maxReservationUsd', { allowZero: true });
+  // How long a call may wait for a free slot before it answers `gateway_busy` (null: wait as long as it takes, as before).
+  if (value.queueTimeoutMs !== undefined && value.queueTimeoutMs !== null) positiveNumber(value.queueTimeoutMs, 'queueTimeoutMs');
   return Object.freeze(value);
 }
 
@@ -90,15 +92,27 @@ export function createModelGateway({ mode, liveRunner, fixtures = {}, budget: ga
       entry.abort = () => {
         const index = waiters.indexOf(entry);
         if (index >= 0) waiters.splice(index, 1);
+        clearTimeout(entry.timer);
         reject(Object.assign(new Error('AI task was cancelled while queued.'), { code: 'aborted' }));
       };
       signal?.addEventListener('abort', entry.abort, { once: true });
+      if (bounded.queueTimeoutMs) {
+        entry.timer = setTimeout(() => {
+          const index = waiters.indexOf(entry);
+          if (index < 0) return;
+          waiters.splice(index, 1);
+          signal?.removeEventListener('abort', entry.abort);
+          reject(Object.assign(new Error('Too many AI tasks are running; try again in a moment.'), { code: 'gateway_busy' }));
+        }, bounded.queueTimeoutMs);
+        entry.timer.unref?.();
+      }
       waiters.push(entry);
     });
   };
   const release = () => {
     const next = waiters.shift();
     if (next) {
+      clearTimeout(next.timer);
       next.signal?.removeEventListener('abort', next.abort);
       next.resolve();
     } else activeCalls -= 1;

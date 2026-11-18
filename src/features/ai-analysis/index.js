@@ -17,5 +17,5 @@ export {
   sanitizeEvidenceTextForStorage,
   sealModelInput,
 } from './privacy-evidence-gate.js';
-export { CHAT_GATEWAY_LIMITS, createChatModelGateway, createHouseholdDayBudget } from './chat-runtime.js';
+export { CHAT_GATEWAY_LIMITS, chatGatewayLimits, createChatModelGateway, createHouseholdDayBudget } from './chat-runtime.js';
 export { CHAT_INTENTS, GATEWAY_TASK_LIST, MODEL_STATUSES, unknownOutput } from './gateway-contract.js';

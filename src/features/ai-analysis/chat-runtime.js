@@ -14,13 +14,19 @@ import { PROMPT_VERSION } from './prompts.js';
 // Routing is data (src/integrations model-routing, MODEL_PROVIDERS). A route with no key, no rates, no SDK adapter or no
 // entry answers a typed unknown through the gateway (nothing dispatched, reservation released). Keys come from the
 // environment inside the router only. Each gateway event becomes one provider_calls row (counts and a payload digest).
-export const CHAT_GATEWAY_LIMITS = Object.freeze({ maxInputBytes: 48_000, maxOutputTokens: 1_500, timeoutMs: 30_000, maxConcurrentCalls: 2 });
+export const CHAT_GATEWAY_LIMITS = Object.freeze({ maxInputBytes: 48_000, maxOutputTokens: 1_500, timeoutMs: 30_000, maxConcurrentCalls: 4, queueTimeoutMs: 5_000 });
+
+/** CHAT_MAX_CONCURRENT_CALLS (1 to 8, per machine) overrides the default. A bad value keeps the default. */
+export function chatGatewayLimits(env = process.env) {
+  const n = Number(env.CHAT_MAX_CONCURRENT_CALLS);
+  return Number.isInteger(n) && n >= 1 && n <= 8 ? { ...CHAT_GATEWAY_LIMITS, maxConcurrentCalls: n } : CHAT_GATEWAY_LIMITS;
+}
 const UNAVAILABLE_RESERVATION_USD = 0.000001;
 
 // A failure that must stop the chain rather than move to the next provider: the gate, the budget, the caller's own abort and
 // consent are the same for every provider, so retrying elsewhere would not help (or would bypass them).
 const NO_FAILOVER = new Set(['ungated_model_input', 'budget_refused', 'budget_not_configured', 'reservation_limit', 'reservation_exceeded', 'input_limit', 'aborted',
-  'invalid_gateway_config', 'live_not_configured', 'unsupported_ai_task', 'CONSENT_REQUIRED']);
+  'invalid_gateway_config', 'gateway_busy', 'live_not_configured', 'unsupported_ai_task', 'CONSENT_REQUIRED']);
 
 function flagOn(env) { return env.CHAT_MODEL_ENABLED === 'true'; }
 
@@ -45,7 +51,7 @@ export function createHouseholdDayBudget({ ledger = null, maxUsd, clock = () => 
   };
 }
 
-export function createChatModelGateway({ env = process.env, router, providerCalls = null, budgetFor, loadModel, createAgent, embedClientFor = null, limits = CHAT_GATEWAY_LIMITS, onEvent } = {}) {
+export function createChatModelGateway({ env = process.env, router, providerCalls = null, budgetFor, loadModel, createAgent, embedClientFor = null, limits = chatGatewayLimits(env), onEvent } = {}) {
   if (!router || typeof router.resolve !== 'function') throw new TypeError('A model router is required.');
   const enabled = flagOn(env);
   const runners = new Map();
