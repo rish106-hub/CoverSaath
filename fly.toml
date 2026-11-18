@@ -27,6 +27,7 @@ primary_region = "sin"
   #   SARVAM_OCR_ENABLED = "true"          needs SARVAM_API_KEY
   #   POLICY_STRUCTURING_ENABLED = "true"  needs GEMINI_API_KEY, LLM_MODEL and the two LLM_*_USD_PER_MILLION rates
   DATABASE_SSL_CA_PATH = "/app/docker/supabase-ca.crt"
+  DATABASE_SSL_CA_ROOT = "/app/docker"
   PUBLIC_HOSTS = "knowvia-api.fly.dev"
   TRUST_FLY_CLIENT_IP = "true"
 
