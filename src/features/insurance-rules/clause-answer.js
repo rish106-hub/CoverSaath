@@ -2,7 +2,7 @@
 // sentence window, or says nothing when no clause carries the question's content terms. Retrieval aid only: it never states
 // eligibility or money; the text it returns is verbatim wording from a clause. Wording of the fixed sentences is DRAFT, FOR LEGAL REVIEW.
 
-export const NOT_IN_DOCUMENTS_TEXT = 'The policy documents you uploaded do not say anything about this, so I cannot answer it from them. Please check with your insurer.';
+export const NOT_IN_DOCUMENTS_TEXT = 'I did not find this in the policy documents you uploaded, so I cannot confirm it from them. It may simply not be printed there. Please check with your insurer.';
 export const MAX_WINDOW_CHARS = 280;
 const RELEVANCE_FLOOR = 0.5;
 
@@ -126,6 +126,13 @@ function clears(terms, text) {
   return matched / terms.length >= RELEVANCE_FLOOR && strongMatched / strong.length >= 0.6;
 }
 
+/** How far into the segment the first question term appears, ignoring a leading section number ("4.1.a"). A label-like segment ("Room Rent At Actuals") beats one that only mentions the term later ("Modification of Room Rent ... Discount"). */
+function firstHit(terms, text) {
+  const words = wordsOf(text.replace(/^\s*(?:#|\d+)(?:[.#]\w*)*\.?\s+/, '')).map(stem);
+  const at = words.findIndex(word => terms.includes(word));
+  return at === -1 ? Number.MAX_SAFE_INTEGER : at;
+}
+
 function scoreText(terms, text) {
   const have = new Set(wordsOf(text).map(stem));
   let matched = 0;
@@ -158,7 +165,9 @@ export function selectClauseAnswer({ question, clauses }) {
       const matched = scoreText(terms, segment.text);
       if (matched < 1 || !clears(terms, segment.text)) return;
       if (required.length && scoreText(required, segment.text) < required.length) return;
-      if (!best || matched > best.matched || (matched === best.matched && segment.text.length < best.segment.text.length)) best = { clause, segments, index, segment, matched };
+      const first = firstHit(terms, segment.text);
+      const better = !best || matched > best.matched || (matched === best.matched && (first < best.first || (first === best.first && segment.text.length < best.segment.text.length)));
+      if (better) best = { clause, segments, index, segment, matched, first };
     });
   }
   if (!best) return null;
