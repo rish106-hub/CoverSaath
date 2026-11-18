@@ -128,8 +128,12 @@ test('the CA path must be an absolute regular file within the size cap', async t
   const empty = join(dir, 'empty.pem');
   writeFileSync(empty, '');
   const url = 'postgres://u:p@h/db';
-  assert.deepEqual(postgresPoolOptionsFromEnv({ DATABASE_URL: url, DATABASE_SSL_CA_PATH: ` ${good} ` }), { connectionString: url, sslCa: 'synthetic-ca-contents' });
+  assert.deepEqual(postgresPoolOptionsFromEnv({ DATABASE_URL: url, DATABASE_SSL_CA_PATH: ` ${good} `, DATABASE_SSL_CA_ROOT: dir }), { connectionString: url, sslCa: 'synthetic-ca-contents' });
   for (const bad of [big, empty, dir, 'relative/ca.pem', `${good}\0.pem`]) {
-    assert.throws(() => postgresPoolOptionsFromEnv({ DATABASE_URL: url, DATABASE_SSL_CA_PATH: bad }), { code: 'DATABASE_POOL_OPTION_INVALID' });
+    assert.throws(() => postgresPoolOptionsFromEnv({ DATABASE_URL: url, DATABASE_SSL_CA_PATH: bad, DATABASE_SSL_CA_ROOT: dir }), { code: 'DATABASE_POOL_OPTION_INVALID' });
   }
+  const other = mkdtempSync(join(tmpdir(), 'cs-ca-other-'));
+  t.after(() => rmSync(other, { recursive: true, force: true }));
+  assert.throws(() => postgresPoolOptionsFromEnv({ DATABASE_URL: url, DATABASE_SSL_CA_PATH: good, DATABASE_SSL_CA_ROOT: other }), { code: 'DATABASE_POOL_OPTION_INVALID' }, 'a CA file outside the root is refused');
+  assert.throws(() => postgresPoolOptionsFromEnv({ DATABASE_URL: url, DATABASE_SSL_CA_PATH: good }), { code: 'DATABASE_POOL_OPTION_INVALID' }, 'a CA path without a root is refused');
 });
