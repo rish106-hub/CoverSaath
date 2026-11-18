@@ -8,14 +8,17 @@ import { ROUTER_QUESTION_MAX, ROUTER_SOURCES } from '../ai-analysis/gateway-cont
 export const SCOPE_SENTENCE = 'I can answer questions about your health insurance policy: what it covers, limits, waiting periods, claims and what is in your documents. I cannot help with anything else here.';
 
 const NON_ASCII_LETTER = /[^\u0000-\u007f]/;
+// Hinglish (Hindi in Latin letters) is plain ASCII, so a topic word like "room rent" can match while the sentence is not understood.
+// Only words that are not English, so an English question never pays for a router call.
+const HINGLISH_WORD = /\b(kitn[aei]|kya|kab|kaise|kaun|kahan|kyun|mera|meri|mere|hai|hain|nahi|chahiye|bimari|dena|milega|milegi|hoga|hogi)\b/i;
 const PLACEHOLDER = /\{\{[^}]{0,40}\}\}|<[A-Z_]+_\d+>/g;
 
-/** The router runs only when the free keyword path is unsure: no topic matched, or the text is not plain ASCII (Hindi script, accents). */
+/** The router runs only when the free keyword path is unsure: no topic matched, the text is not plain ASCII (Hindi script, accents), or it reads as Hinglish. */
 export function needsRouter({ message, factKeys, hasProcedure = false }) {
   if (hasProcedure) return false;
   const text = String(message ?? '').trim();
   if (text === '') return false;
-  return factKeys.length === 0 || NON_ASCII_LETTER.test(text);
+  return factKeys.length === 0 || NON_ASCII_LETTER.test(text) || HINGLISH_WORD.test(text);
 }
 
 /**
