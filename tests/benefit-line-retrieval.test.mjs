@@ -82,3 +82,10 @@ test('the not-found answer names the topic asked about', async () => {
   assert.match(built.text, /did not find a co-payment in your policy documents/);
   assert.equal(built.status, 'unknown');
 });
+
+test('before the plan is confirmed, chat says so instead of searching passages', async () => {
+  const { buildDeterministicAnswer } = await import('../src/features/insurance-rules/chat-answer.js');
+  const built = buildDeterministicAnswer({ intent: 'coverage_question', factKeys: ['premium_total'], facts: [], clauses: [], searchedClauses: false, awaitingPlan: true });
+  assert.match(built.text, /not confirmed which plan/);
+  assert.equal(built.status, 'unknown');
+});

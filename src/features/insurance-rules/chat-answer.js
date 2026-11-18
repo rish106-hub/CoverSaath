@@ -19,7 +19,7 @@ const SOURCE = Object.freeze({
  * conflictKeys: Set of fact keys with an open conflict. clauses: [{ id, page, text }] keyword hits (used only when no fact answers).
  * Resolves { text, usedFacts, status } with status evidence_found | unknown.
  */
-export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [], searchedClauses = false }) {
+export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [], searchedClauses = false, awaitingPlan = false }) {
   const byKey = new Map();
   for (const fact of facts) if (!byKey.has(fact.factKey)) byKey.set(fact.factKey, fact);
   const lines = [];
@@ -47,7 +47,9 @@ export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys
       }
     }
     if (used.length === 0 && lines.length === 0) {
-      if (clauses.length > 0) {
+      if (awaitingPlan) {
+        lines.push('I have not read the details of your policy yet because you have not confirmed which plan it is. Confirm the plan on the Add a cover page, then ask again.');
+      } else if (clauses.length > 0) {
         for (const clause of clauses.slice(0, 3)) {
           const quote = String(clause.window ?? clause.text).replace(/\s+/g, ' ').slice(0, 300);
           const place = clause.page ? ` (page ${clause.page})` : '';

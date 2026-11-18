@@ -105,7 +105,9 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
       // Documents linked to the holding (its wording, endorsements) are searched too.
       for (const linked of await holdingRepository.linkedDocuments({ householdId, holdingId })) documents.push({ holdingId, documentId: linked.documentId });
     }
-    return { holdingIds: holdingRows.map(row => row.id), facts, conflicts, documents, places };
+    // A holding whose plan the person has not confirmed yet has no facts in scope: chat says so instead of searching passages (a heading is not an answer).
+    const awaiting = mayReadFacts && (await database.many(`SELECT id FROM policy_holdings WHERE household_id = ? AND status IN ('uploaded', 'insurer_pending', 'product_reported') ORDER BY created_at, id LIMIT ?`, [householdId, MAX_HOLDINGS])).some(row => !thread.holdingId || row.id === thread.holdingId);
+    return { holdingIds: holdingRows.map(row => row.id), facts, conflicts, documents, places, awaiting };
   }
 
   // Wording of the case: the holding's own document (the schedule) and every other active document of the same household case (the T&C
@@ -285,6 +287,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             const context = await gatherContext({ householdId, thread, mayReadFacts });
             const conflictKeys = new Set(context.conflicts.map(item => item.factKey));
             const byKey = new Set(factKeys);
+            const awaitingPlan = mayReadFacts && context.facts.length === 0 && context.awaiting === true && intent !== 'procedure_planning';
             const relevant = intent === 'procedure_planning' ? context.facts.filter(fact => fact.status !== 'extracted_unverified') : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
             const plan = intent === 'procedure_planning'
               ? planProcedure({ facts: Object.fromEntries(context.facts.filter(fact => fact.status !== 'extracted_unverified').map(fact => [fact.factKey, { id: fact.sourceIds[0], status: fact.status, value: fact.value }])), procedure: procedure ?? {} }) : null;
@@ -293,7 +296,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             let mode = 'facts_only';
             let passages = [];
             const answersTopic = factKeys.some(key => context.facts.some(fact => fact.factKey === key));
-            if (mayReadFacts && !answersTopic && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
+            if (mayReadFacts && !answersTopic && !awaitingPlan && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
               // An embedding failure is not a turn failure: it leaves the vector undefined and the keyword path below answers.
               let vector = null;
               try { vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: message }); } catch (error) {
@@ -310,7 +313,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             }
             let clauseHits = [];
             let searchedClauses = false;
-            if (mode !== 'vector' && !answersTopic && context.documents.length > 0 && intent !== 'procedure_planning') {
+            if (mode !== 'vector' && !answersTopic && !awaitingPlan && context.documents.length > 0 && intent !== 'procedure_planning') {
               const candidates = await keywordClauses({ householdId, documents: context.documents, message });
               // Clause level: only the best sentence window that clears the relevance floor, never the page. None means "unknown", no source.
               const picks = selectClauseAnswers({ question: message, clauses: candidates });
@@ -321,7 +324,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
 
             emit('meta', { thread_id: thread.id, intent: CHAT_INTENTS.includes(intent) ? intent : 'unknown', retrieval_mode: mode, facts_available: context.facts.length, open_conflicts: context.conflicts.length });
 
-            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses });
+            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan });
             const history = await chatRepository.recentTurns({ householdId, threadId });
             // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
             // Nothing in the wording or the facts speaks to a coverage question: no model call, the fixed unknown answer stands.
