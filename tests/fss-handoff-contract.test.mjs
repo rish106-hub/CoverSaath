@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createHandoffClient, normalizeHandoffRequest, parseHandoff, signNotice, verifyNotice, handoffEnabled, NOTICE_REPLAY_WINDOW_MS } from '../src/integrations/insurance-data/index.js';
 
-const SECRET = 'test-secret-0123456789abcdef';
+const SECRET = 'x'.repeat(32); // built at run time: no key-shaped literal in the file
 const body = state => JSON.stringify({ handoff_id: 'h-1', request_id: 'req-12345678', state, version_id: 'v-1' });
 
 test('a request carries identifiers only; any other field is refused', () => {
@@ -39,7 +39,7 @@ test('a notice is verified by signature and time before it is read, and only a f
 test('the client is off by default, sends only the allow-listed body with an idempotency key, and reads the state', async () => {
   assert.equal(handoffEnabled({}), false);
   await assert.rejects(createHandoffClient({ env: {} }).get('h-1'), { code: 'REFERENCE_DATA_DISABLED' });
-  const env = { REFERENCE_DATA_ENABLED: 'true', FSS_HANDOFF_ENABLED: 'true', REFERENCE_DATA_BASE_URL: 'http://127.0.0.1:9', REFERENCE_DATA_API_KEY: 'k-test' };
+  const env = { REFERENCE_DATA_ENABLED: 'true', FSS_HANDOFF_ENABLED: 'true', REFERENCE_DATA_BASE_URL: 'http://127.0.0.1:9', REFERENCE_DATA_API_KEY: 'y'.repeat(12) };
   const seen = [];
   const fetchImpl = async (url, init) => { seen.push({ url: String(url), init }); return new Response(body('accepted'), { status: 202 }); };
   const client = createHandoffClient({ env, fetchImpl });
