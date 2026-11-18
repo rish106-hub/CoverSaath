@@ -27,17 +27,17 @@
     "check": "npm run check:architecture && npm test && npm run build"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.102",
-    "@ai-sdk/deepseek": "^3.0.84",
-    "@ai-sdk/google": "^4.0.118",
-    "@ai-sdk/moonshotai": "^3.0.90",
-    "@ai-sdk/openai": "^4.0.115",
-    "@sentry/node": "^11.11.0",
-    "ai": "^7.0.170",
+    "@ai-sdk/anthropic": "^4.0.105",
+    "@ai-sdk/deepseek": "^3.0.87",
+    "@ai-sdk/google": "^4.0.121",
+    "@ai-sdk/moonshotai": "^3.0.93",
+    "@ai-sdk/openai": "^4.0.118",
+    "@sentry/node": "^11.12.0",
+    "ai": "^7.0.173",
     "jose": "6.2.17",
     "pdf-lib": "^1.17.1",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
-    "posthog-node": "5.68.2"
+    "posthog-node": "5.74.0"
   }
 }
