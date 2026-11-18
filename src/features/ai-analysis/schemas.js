@@ -1,5 +1,5 @@
 import { assertModelTask } from './responsibility-matrix.js';
-import { CHAT_ANSWER_TASK, CHAT_INTENTS, FACT_EXTRACT_TASK, GATEWAY_OUTPUT_SCHEMAS, GATEWAY_PAYLOAD_KEYS, INTENT_CLASSIFY_TASK, MAX_EMBED_TEXTS, MODEL_STATUSES, isGatewayTask } from './gateway-contract.js';
+import { CHAT_ANSWER_TASK, CHAT_INTENTS, ROUTER_QUESTION_MAX, ROUTER_SOURCES, FACT_EXTRACT_TASK, GATEWAY_OUTPUT_SCHEMAS, GATEWAY_PAYLOAD_KEYS, INTENT_CLASSIFY_TASK, MAX_EMBED_TEXTS, MODEL_STATUSES, isGatewayTask } from './gateway-contract.js';
 import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, STRUCTURING_EXTRACT_TASK, STRUCTURING_OUTPUT_SCHEMAS, isStructuringTask } from './structuring-contract.js';
 
 const SOURCE_STATES = Object.freeze(['known', 'unknown', 'conflict']);
@@ -279,8 +279,12 @@ function validateGatewayOutput(task, output, input) {
     if (output.status === 'extracted_unverified' && output.factsUsed.length === 0) fail('missing_citation', 'An answer must cite the facts it used.');
     if (assertionHasUnsupportedCertainty(output.answer, payload.facts.map(fact => comparableText(fact.value)))) fail('unsupported_claim', 'Output contains unsupported insurance certainty.');
   } else if (task === INTENT_CLASSIFY_TASK) {
-    exactObject(output, ['status', 'intent'], 'intent');
+    exactObject(output, ['status', 'intent', 'canonical_question', 'sources'], 'intent');
     if (!payload.intents.includes(output.intent) && output.intent !== 'unknown') fail('invalid_schema', 'Intent is not one of the supplied intents.');
+    if (typeof output.canonical_question !== 'string' || output.canonical_question.length > ROUTER_QUESTION_MAX) fail('invalid_schema', 'canonical_question must be bounded text.');
+    boundedArray(output.sources, 0, 3, 'sources');
+    if (output.sources.some(source => !ROUTER_SOURCES.includes(source)) || new Set(output.sources).size !== output.sources.length) fail('invalid_schema', 'A source is not in the closed list.');
+    if (output.status === 'unknown' && (output.canonical_question !== '' || output.sources.length > 0)) fail('unknown_not_preserved', 'An unknown classification carries no question and no sources.');
     if (output.status === 'unknown' && output.intent !== 'unknown') fail('unknown_not_preserved', 'An unknown classification must carry the unknown intent.');
   } else if (task === FACT_EXTRACT_TASK) {
     exactObject(output, ['status', 'facts'], 'fact extraction');

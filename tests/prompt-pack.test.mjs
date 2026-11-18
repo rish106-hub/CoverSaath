@@ -119,7 +119,7 @@ test('off-topic question: the fixed out-of-scope shape is a valid unknown; an un
   const out = validateTaskOutput('chat_answer', { status: 'unknown', answer: OUT_OF_SCOPE_ANSWER, factsUsed: [] }, offTopic);
   assert.equal(out.status, 'unknown');
   assert.throws(() => validateTaskOutput('chat_answer', { status: 'extracted_unverified', answer: 'Here is a poem.', factsUsed: [] }, offTopic), error => error.code === 'missing_citation');
-  assert.equal(validateTaskOutput('intent_classify', { status: 'unknown', intent: 'unknown' }, { payload: PAYLOADS.intent_classify }).intent, 'unknown');
+  assert.equal(validateTaskOutput('intent_classify', { status: 'unknown', intent: 'unknown', canonical_question: '', sources: [] }, { payload: PAYLOADS.intent_classify }).intent, 'unknown');
   const summary = validateTaskOutput('profile_extraction', { facts: [], summary: NOT_IN_REFERENCE_SUMMARY }, coverage());
   assert.equal(summary.facts.length, 0);
 });

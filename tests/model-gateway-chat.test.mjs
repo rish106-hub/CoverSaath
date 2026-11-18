@@ -180,7 +180,7 @@ test('model output status is only extracted_unverified, conflicting or unknown; 
   assert.doesNotThrow(() => validateTaskOutput('fact_extract', { status: 'extracted_unverified', facts: [{ key: 'waiting_period', value: '24 months', quote: 'Waiting period is 24 months.', status: 'extracted_unverified' }] }, extract));
   assert.throws(() => validateTaskOutput('fact_extract', { status: 'extracted_unverified', facts: [{ key: 'waiting_period', value: '12 months', quote: 'Waiting period is 12 months.', status: 'extracted_unverified' }] }, extract), { code: 'quote_not_found' });
   assert.throws(() => validateTaskOutput('fact_extract', { status: 'unknown', facts: [{ key: 'other', value: null, quote: '', status: 'unknown' }] }, extract), { code: 'field_not_requested' });
-  assert.doesNotThrow(() => validateTaskOutput('intent_classify', { status: 'unknown', intent: 'unknown' }, { payload: { text: 'hi', intents: ['general'] } }));
+  assert.doesNotThrow(() => validateTaskOutput('intent_classify', { status: 'unknown', intent: 'unknown', canonical_question: '', sources: [] }, { payload: { text: 'hi', intents: ['general'] } }));
   assert.doesNotThrow(() => validateTaskOutput('embed', unknownOutput('embed'), { payload: { texts: [{ text: 'a' }] } }));
 });
 
