@@ -90,7 +90,13 @@ export function createHandoffClient({ env = process.env, fetchImpl = globalThis.
     let base;
     try { base = new URL(env.REFERENCE_DATA_BASE_URL); } catch { base = null; }
     const loopback = base && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname);
-    if (!base || !env.REFERENCE_DATA_API_KEY || (base.protocol !== 'https:' && !(base.protocol === 'http:' && loopback)) || base.username || base.password || base.search || base.hash) {
+    const allowedBaseUrls = String(env.REFERENCE_DATA_ALLOWED_BASE_URLS || '')
+      .split(',')
+      .map(v => v.trim())
+      .filter(Boolean);
+    const baseUrl = base ? base.toString() : '';
+    const isAllowedBaseUrl = allowedBaseUrls.includes(baseUrl);
+    if (!base || !env.REFERENCE_DATA_API_KEY || (base.protocol !== 'https:' && !(base.protocol === 'http:' && loopback)) || base.username || base.password || base.search || base.hash || !isAllowedBaseUrl) {
       throw referenceError('REFERENCE_DATA_NOT_CONFIGURED', 'Reference data is not configured.', { statusCode: 503 });
     }
     return { origin: base.origin, basePath: base.pathname.replace(/\/+$/, ''), key: env.REFERENCE_DATA_API_KEY, timeoutMs: Math.min(5000, Math.max(100, Number(env.REFERENCE_DATA_TIMEOUT_MS) || 2000)) };
