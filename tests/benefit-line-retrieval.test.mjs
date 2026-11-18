@@ -89,3 +89,17 @@ test('before the plan is confirmed, chat says so instead of searching passages',
   assert.match(built.text, /not confirmed which plan/);
   assert.equal(built.status, 'unknown');
 });
+
+test('a multi-topic question gives one block per topic, including a not-found line', async () => {
+  const { selectTopicAnswers } = await import('../src/features/insurance-rules/clause-answer.js');
+  const { buildDeterministicAnswer } = await import('../src/features/insurance-rules/chat-answer.js');
+  const question = 'Is knee replacement covered, room rent limit, co-pay?';
+  const { answers, missing } = selectTopicAnswers({ question, clauses });
+  assert.deepEqual(answers.map(pick => pick.clause.id), ['c1']);
+  assert.deepEqual(missing, ['Is knee replacement covered', 'co-pay']);
+  const built = buildDeterministicAnswer({ intent: 'coverage_question', factKeys: [], facts: [], clauses: answers.map(pick => ({ ...pick.clause, window: pick.text })), searchedClauses: true, missingTopics: missing });
+  assert.match(built.text, /Room Rent At Actuals/);
+  assert.match(built.text, /did not find "Is knee replacement covered"/);
+  assert.match(built.text, /did not find "co-pay"/);
+  assert.deepEqual(selectTopicAnswers({ question: 'Does it cover dental?', clauses }), { answers: [], missing: [] });
+});

@@ -19,7 +19,7 @@ const SOURCE = Object.freeze({
  * conflictKeys: Set of fact keys with an open conflict. clauses: [{ id, page, text }] keyword hits (used only when no fact answers).
  * Resolves { text, usedFacts, status } with status evidence_found | unknown.
  */
-export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [], searchedClauses = false, awaitingPlan = false }) {
+export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [], searchedClauses = false, awaitingPlan = false, missingTopics = [] }) {
   const byKey = new Map();
   for (const fact of facts) if (!byKey.has(fact.factKey)) byKey.set(fact.factKey, fact);
   const lines = [];
@@ -55,6 +55,7 @@ export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys
           const place = clause.page ? ` (page ${clause.page})` : '';
           lines.push(clause.excluded ? `- Your policy wording excludes this${place}: ${quote}` : `- From your policy document${place}: ${quote}`);
         }
+        for (const topic of missingTopics) lines.push(`- I did not find "${topic}" in your policy documents. It may simply not be printed there.`);
         lines.push('These are passages as printed; they are not a confirmed term.');
       } else if (searchedClauses) {
         const named = factKeys.slice(0, 2).map(key => TOPIC_NAME[key] ?? key.replace(/_/g, ' '));

@@ -214,3 +214,20 @@ export function selectClauseAnswers({ question, clauses, max = 3 }) {
   }
   return out;
 }
+
+/** Like selectClauseAnswers, and also the topics of a multi-topic question that no clause answers (`missing`), so each one gets its own line. A one-topic question has no `missing`. */
+export function selectTopicAnswers({ question, clauses, max = 3 }) {
+  const topics = splitTopics(question, max);
+  const answers = [];
+  const missing = [];
+  const seen = new Set();
+  for (const topic of topics) {
+    const picked = selectClauseAnswer({ question: topic, clauses });
+    if (!picked) { if (topics.length > 1) missing.push(topic.replace(/\s+/g, ' ').trim().slice(0, 80)); continue; }
+    const key = `${picked.clause.id ?? picked.clause.clauseId}|${picked.text}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    answers.push(picked);
+  }
+  return { answers, missing };
+}
