@@ -4,7 +4,7 @@ import { ANALYTICS_EVENTS } from '../../contracts/analytics-events.js';
 import { CHAT_INTENTS } from '../../features/ai-analysis/gateway-contract.js';
 import { gateText, gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { buildDeterministicAnswer } from '../../features/insurance-rules/chat-answer.js';
-import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, selectTopicAnswers } from '../../features/insurance-rules/clause-answer.js';
+import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, selectTopicAnswers, exclusionWindows } from '../../features/insurance-rules/clause-answer.js';
 import { classifyChatMessage, isIdentityQuestion, isRegistryIdQuestion, REGISTRY_ID_ANSWER } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
@@ -331,12 +331,19 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             let missingTopics = [];
             let searchedClauses = false;
             if (mode !== 'vector' && !answersTopic && !awaitingPlan && holdingLines.length === 0 && context.documents.length > 0 && intent !== 'procedure_planning') {
-              const candidates = await keywordClauses({ householdId, documents: context.documents, message });
-              // Clause level: only the best sentence window that clears the relevance floor, never the page. None means "unknown", no source.
-              const { answers: picks, missing } = selectTopicAnswers({ question: message, clauses: candidates });
-              missingTopics = missing;
-              clauseHits = picks.map(picked => ({ ...picked.clause, window: picked.text, excluded: picked.excluded, blockIndex: picked.blockIndex }));
-              searchedClauses = contentTerms(message).length > 0;
+              const generalExclusion = factKeys.includes('clause_exclusion') && contentTerms(message).length === 0;
+              const candidates = await keywordClauses({ householdId, documents: context.documents, message: generalExclusion ? 'exclusions excluded not covered permanent exclusion' : message });
+              if (generalExclusion) {
+                // "What is not covered?": the exclusion clauses themselves, three at most.
+                clauseHits = exclusionWindows(candidates).map(item => ({ ...item.clause, window: item.window, excluded: true, blockIndex: item.blockIndex }));
+                searchedClauses = true;
+              } else {
+                // Clause level: only the best sentence window that clears the relevance floor, never the page. None means "unknown", no source.
+                const { answers: picks, missing } = selectTopicAnswers({ question: message, clauses: candidates });
+                missingTopics = missing;
+                clauseHits = picks.map(picked => ({ ...picked.clause, window: picked.text, excluded: picked.excluded, blockIndex: picked.blockIndex }));
+                searchedClauses = contentTerms(message).length > 0;
+              }
               mode = 'keyword';
             }
 

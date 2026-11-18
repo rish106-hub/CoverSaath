@@ -129,3 +129,19 @@ test('policy number, member id and UIN questions get a fixed answer; ordinary qu
   assert.match(REGISTRY_ID_ANSWER, /do not show or keep/);
   assert.doesNotMatch(REGISTRY_ID_ANSWER, /\d{4,}/);
 });
+
+test('"what is not covered" lists the exclusion clauses, three at most, each as an exclusion window', async () => {
+  const { exclusionWindows, contentTerms } = await import('../src/features/insurance-rules/clause-answer.js');
+  assert.equal(contentTerms('What is not covered?').length, 0);
+  const list = [
+    { id: 'a', page: 14, kind: 'exclusion', text: 'Excl01 War and nuclear risks are excluded.', blockIndexes: [2] },
+    { id: 'b', page: 14, kind: 'benefit', text: 'Hospitalisation is covered.', blockIndexes: [3] },
+    { id: 'c', page: 15, kind: 'exclusion', text: 'Excl02 Cosmetic treatment is excluded.', blockIndexes: [0] },
+    { id: 'd', page: 15, kind: 'exclusion', text: 'Excl02 Cosmetic treatment is excluded.', blockIndexes: [1] },
+    { id: 'e', page: 16, kind: 'exclusion', text: 'Excl03 Self-inflicted injury is excluded.', blockIndexes: [0] },
+    { id: 'f', page: 16, kind: 'exclusion', text: 'Excl04 Infertility is excluded.', blockIndexes: [1] },
+  ];
+  const got = exclusionWindows(list);
+  assert.deepEqual(got.map(item => item.clause.id), ['a', 'c', 'e']);
+  assert.ok(got.every(item => item.excluded === true && item.window.length <= 280));
+});
