@@ -54,3 +54,7 @@ export function classifyChatMessage(message, { hasProcedure = false } = {}) {
   else intent = 'general';
   return { intent, factKeys };
 }
+
+// "Which insurer and plan do I have?": answered from the plan the person confirmed, with no model and no passage search.
+const IDENTITY = /\b(?:(?:which|what)\s+(?:insurer|insurance\s+company|insurance|plan|policy)\b[^?]*\b(?:have|got|am\s+i\s+on|is\s+this|do\s+i\s+hold)|(?:who\s+is\s+)?my\s+(?:insurer|insurance\s+company|plan\s+name)|who\s+(?:is\s+)?(?:my\s+)?insurer)\b/i;
+export const isIdentityQuestion = message => IDENTITY.test(String(message ?? '').normalize('NFKC'));

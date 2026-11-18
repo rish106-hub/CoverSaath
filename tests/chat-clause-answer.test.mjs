@@ -37,7 +37,7 @@ test('known questions: answered from a clause window of at most 300 characters, 
     assert.ok(picked.text.length <= 300, `${item.id} window is ${picked.text.length} chars`);
     assert.ok(picked.clause.text.length > picked.text.length || picked.clause.text.split('\n').length === 1, `${item.id} pasted a whole page`);
     assert.equal(built.status, 'unknown', 'no confirmed fact: the status stays code-owned and the quote is labelled as printed wording');
-    assert.match(built.text, /From your policy document|excludes this/);
+    assert.match(built.text, /From your policy wording|excludes this/);
     assert.ok(Number.isInteger(picked.page));
   }
   assert.ok(answered >= 70, `only ${answered} of ${known.length} known questions found a clause`);

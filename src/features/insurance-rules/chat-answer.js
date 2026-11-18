@@ -10,8 +10,8 @@ const TOPIC_NAME = Object.freeze({ copay_percent: 'a co-payment', copay_zone_per
 
 const SOURCE = Object.freeze({
   user_confirmed: 'confirmed by you',
-  reviewed_reference: "from the insurer's published wording",
-  extracted_unverified: 'read from your policy document, not yet confirmed by you',
+  reviewed_reference: "from the insurer's published terms",
+  extracted_unverified: 'read from your policy schedule, not yet confirmed by you',
 });
 
 /**
@@ -19,11 +19,13 @@ const SOURCE = Object.freeze({
  * conflictKeys: Set of fact keys with an open conflict. clauses: [{ id, page, text }] keyword hits (used only when no fact answers).
  * Resolves { text, usedFacts, status } with status evidence_found | unknown.
  */
-export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [], searchedClauses = false, awaitingPlan = false, missingTopics = [] }) {
+export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [], searchedClauses = false, awaitingPlan = false, missingTopics = [], holdingLines = [] }) {
   const byKey = new Map();
   for (const fact of facts) if (!byKey.has(fact.factKey)) byKey.set(fact.factKey, fact);
   const lines = [];
   const used = [];
+
+  if (holdingLines.length > 0) return Object.freeze({ text: holdingLines.join('\n'), usedFacts: [], status: 'evidence_found' });
 
   if (intent === 'procedure_planning' && plan) {
     for (const check of plan.checks) lines.push(`- ${check.detail}`);
@@ -53,7 +55,7 @@ export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys
         for (const clause of clauses.slice(0, 3)) {
           const quote = String(clause.window ?? clause.text).replace(/\s+/g, ' ').slice(0, 300);
           const place = clause.page ? ` (page ${clause.page})` : '';
-          lines.push(clause.excluded ? `- Your policy wording excludes this${place}: ${quote}` : `- From your policy document${place}: ${quote}`);
+          lines.push(clause.excluded ? `- Your policy wording excludes this${place}: ${quote}` : `- From your policy wording${place}: ${quote}`);
         }
         for (const topic of missingTopics) lines.push(`- I did not find "${topic}" in your policy documents. It may simply not be printed there.`);
         lines.push('These are passages as printed; they are not a confirmed term.');

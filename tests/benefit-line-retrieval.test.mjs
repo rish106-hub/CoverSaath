@@ -103,3 +103,21 @@ test('a multi-topic question gives one block per topic, including a not-found li
   assert.match(built.text, /did not find "co-pay"/);
   assert.deepEqual(selectTopicAnswers({ question: 'Does it cover dental?', clauses }), { answers: [], missing: [] });
 });
+
+test('"which insurer and plan do I have" is a holding question, answered from the confirmed plan with a source label', async () => {
+  const { isIdentityQuestion } = await import('../src/features/insurance-rules/chat-intent.js');
+  const { buildDeterministicAnswer } = await import('../src/features/insurance-rules/chat-answer.js');
+  for (const yes of ['Which insurer and plan do I have?', 'who is my insurer', 'What plan am I on?', 'which insurance do I have']) assert.ok(isIdentityQuestion(yes), yes);
+  for (const no of ['What is my premium?', 'Is knee surgery covered?', 'Which room is covered?']) assert.ok(!isIdentityQuestion(no), no);
+  const built = buildDeterministicAnswer({ intent: 'general', factKeys: [], facts: [], holdingLines: ['- From the plan you confirmed: Test Insurer - Test Plan.'] });
+  assert.match(built.text, /From the plan you confirmed: Test Insurer - Test Plan/);
+  assert.equal(built.status, 'evidence_found');
+});
+
+test('every answer block names its source: schedule facts, wording clauses, insurer terms', async () => {
+  const { buildDeterministicAnswer } = await import('../src/features/insurance-rules/chat-answer.js');
+  const fact = (status, tier) => ({ factKey: 'sum_insured', entry: { label: 'The sum insured', type: 'money' }, status, value: { amountMinor: 500000, currency: 'INR' }, sourceIds: ['f1'], sourceTier: tier, checkWithInsurer: false });
+  assert.match(buildDeterministicAnswer({ intent: 'coverage_question', factKeys: ['sum_insured'], facts: [fact('extracted_unverified', 'own_pdf')] }).text, /from your policy schedule/);
+  assert.match(buildDeterministicAnswer({ intent: 'coverage_question', factKeys: ['sum_insured'], facts: [fact('reviewed_reference', 'ida_wording')] }).text, /from the insurer's published terms/);
+  assert.match(buildDeterministicAnswer({ intent: 'coverage_question', factKeys: [], facts: [], clauses: [{ id: 'c', page: 4, window: 'Room Rent At Actuals' }], searchedClauses: true }).text, /From your policy wording \(page 4\)/);
+});

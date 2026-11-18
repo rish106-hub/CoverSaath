@@ -207,7 +207,7 @@ test('no provider keys: embeddings are skipped, chat works from facts and a keyw
   const conversation = await s.thread();
   const keyed = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what does the policy say about the ambulance?' } }));
   assert.equal(keyed.answer_source, 'deterministic');
-  assert.match(keyed.answer, /From your policy document \(page 2\)/);
+  assert.match(keyed.answer, /From your policy wording \(page 2\)/);
   const trace = await s.services.chatRepository.trace({ householdId: s.a.household, turnId: keyed.turn_id });
   assert.equal(trace.mode, 'keyword');
   const noKey = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what is the room rent limit?' } }));
@@ -664,7 +664,7 @@ test('no keys: schedule fact, T&C clause with document and page, and unknown, al
   const clause = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'what does the policy say about cataract surgery?' } }));
   assert.equal(clause.answer_source, 'deterministic');
   assert.equal(clause.status, 'evidence_found');
-  assert.match(clause.answer, /From your policy document \(page 7\): Cataract surgery is admissible only after a waiting period of 24 months/);
+  assert.match(clause.answer, /From your policy wording \(page 7\): Cataract surgery is admissible only after a waiting period of 24 months/);
   assert.deepEqual(clause.sources.map(item => [item.kind, item.document_id, item.page]), [['wording', tc, 7]]);
   const unknown = answerOf(await s.turn({ threadId: conversation.id, body: { message: 'is dental treatment covered?' } }));
   assert.equal(unknown.status, 'unknown');
@@ -746,7 +746,7 @@ test('keyword fallback: zero vector hits (no chunks embedded) fall back to claus
   assert.equal(await s.count('memory_chunks'), 0);
   const answer = answerOf(await s.turn({ threadId: (await s.thread()).id, body: ambulanceQuestion }));
   assert.equal(answer.status, 'evidence_found');
-  assert.match(answer.answer, /From your policy document \(page 2\)/);
+  assert.match(answer.answer, /From your policy wording \(page 2\)/);
   assert.ok(answer.sources.some(source => source.kind === 'wording' && source.document_id === s.a.document && source.page === 2));
   assert.equal((await s.services.chatRepository.trace({ householdId: s.a.household, turnId: answer.turn_id })).mode, 'keyword');
 });
@@ -756,7 +756,7 @@ test('keyword fallback: an embedding failure does not fail the turn', opts, asyn
   const out = await s.turn({ threadId: (await s.thread()).id, body: ambulanceQuestion });
   assert.equal(out.some(([event]) => event === 'error'), false, JSON.stringify(out.find(([event]) => event === 'error')));
   const answer = answerOf(out);
-  assert.match(answer.answer, /From your policy document \(page 2\)/);
+  assert.match(answer.answer, /From your policy wording \(page 2\)/);
   assert.equal((await s.services.chatRepository.trace({ householdId: s.a.household, turnId: answer.turn_id })).mode, 'keyword');
 });
 
