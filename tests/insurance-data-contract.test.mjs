@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { createInsuranceDataClient, REFERENCE_ENDPOINTS } from '../src/integrations/index.js';
 import { readReferenceDataConfig, readServerConfig } from '../src/server/config.js';
 
@@ -174,7 +175,12 @@ function specList(yaml, schema, keyword) {
 }
 
 test('pinned required fields and enums match the insurance-data-api openapi.yaml (opt-in drift check)', { skip: process.env.IDA_OPENAPI_PATH ? false : 'IDA_OPENAPI_PATH not set' }, () => {
-  const yaml = readFileSync(process.env.IDA_OPENAPI_PATH, 'utf8');
+  const repoRoot = resolve(process.cwd());
+  const candidatePath = resolve(repoRoot, process.env.IDA_OPENAPI_PATH);
+  if (!(candidatePath === repoRoot || candidatePath.startsWith(`${repoRoot}/`))) {
+    throw new Error('IDA_OPENAPI_PATH must resolve inside the repository root');
+  }
+  const yaml = readFileSync(candidatePath, 'utf8');
   for (const [schema, fields] of Object.entries(PINNED_REQUIRED)) assert.deepEqual(specList(yaml, schema, 'required'), fields, schema);
   for (const [schema, values] of Object.entries(PINNED_ENUMS)) assert.deepEqual(specList(yaml, schema, 'enum'), values, schema);
 });
