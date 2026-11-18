@@ -121,3 +121,11 @@ test('every answer block names its source: schedule facts, wording clauses, insu
   assert.match(buildDeterministicAnswer({ intent: 'coverage_question', factKeys: ['sum_insured'], facts: [fact('reviewed_reference', 'ida_wording')] }).text, /from the insurer's published terms/);
   assert.match(buildDeterministicAnswer({ intent: 'coverage_question', factKeys: [], facts: [], clauses: [{ id: 'c', page: 4, window: 'Room Rent At Actuals' }], searchedClauses: true }).text, /From your policy wording \(page 4\)/);
 });
+
+test('policy number, member id and UIN questions get a fixed answer; ordinary questions do not', async () => {
+  const { isRegistryIdQuestion, REGISTRY_ID_ANSWER } = await import('../src/features/insurance-rules/chat-intent.js');
+  for (const yes of ['What is the UIN of my product?', 'what is my policy number', 'member id?', 'Policy No', 'e-card number']) assert.ok(isRegistryIdQuestion(yes), yes);
+  for (const no of ['What is my premium?', 'Which insurer do I have?', 'Is knee surgery covered?', 'What is my sum insured?']) assert.ok(!isRegistryIdQuestion(no), no);
+  assert.match(REGISTRY_ID_ANSWER, /do not show or keep/);
+  assert.doesNotMatch(REGISTRY_ID_ANSWER, /\d{4,}/);
+});

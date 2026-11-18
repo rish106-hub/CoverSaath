@@ -58,3 +58,8 @@ export function classifyChatMessage(message, { hasProcedure = false } = {}) {
 // "Which insurer and plan do I have?": answered from the plan the person confirmed, with no model and no passage search.
 const IDENTITY = /\b(?:(?:which|what)\s+(?:insurer|insurance\s+company|insurance|plan|policy)\b[^?]*\b(?:have|got|am\s+i\s+on|is\s+this|do\s+i\s+hold)|(?:who\s+is\s+)?my\s+(?:insurer|insurance\s+company|plan\s+name)|who\s+(?:is\s+)?(?:my\s+)?insurer)\b/i;
 export const isIdentityQuestion = message => IDENTITY.test(String(message ?? '').normalize('NFKC'));
+
+// "What is my policy number / the UIN?": a fixed answer, no model, no search. The number is never shown or stored by chat.
+const REGISTRY_ID = /\b(?:uin|(?:policy|certificate|member|customer|e-?card)\s*(?:no\.?|number|num|id)|member\s*id|customer\s*id)\b/i;
+export const isRegistryIdQuestion = message => REGISTRY_ID.test(String(message ?? '').normalize('NFKC'));
+export const REGISTRY_ID_ANSWER = 'I do not show or keep your policy number, member id or the product registration number (UIN) in this chat. They are printed on your policy schedule and e-card.';

@@ -5,7 +5,7 @@ import { CHAT_INTENTS } from '../../features/ai-analysis/gateway-contract.js';
 import { gateText, gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { buildDeterministicAnswer } from '../../features/insurance-rules/chat-answer.js';
 import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, selectTopicAnswers } from '../../features/insurance-rules/clause-answer.js';
-import { classifyChatMessage, isIdentityQuestion } from '../../features/insurance-rules/chat-intent.js';
+import { classifyChatMessage, isIdentityQuestion, isRegistryIdQuestion, REGISTRY_ID_ANSWER } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
 import { guardTurnAnswer } from './chat-answer-card.js';
@@ -300,7 +300,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             const context = await gatherContext({ householdId, thread, mayReadFacts });
             const conflictKeys = new Set(context.conflicts.map(item => item.factKey));
             const byKey = new Set(factKeys);
-            const holdingLines = mayReadFacts && isIdentityQuestion(message) && context.holdingIds.length > 0 ? await holdingNameLines({ householdId, holdingIds: context.holdingIds }) : [];
+            const holdingLines = isRegistryIdQuestion(message) ? [REGISTRY_ID_ANSWER] : (mayReadFacts && isIdentityQuestion(message) && context.holdingIds.length > 0 ? await holdingNameLines({ householdId, holdingIds: context.holdingIds }) : []);
             const awaitingPlan = mayReadFacts && context.facts.length === 0 && context.awaiting === true && intent !== 'procedure_planning';
             const relevant = intent === 'procedure_planning' ? context.facts.filter(fact => fact.status !== 'extracted_unverified') : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
             const plan = intent === 'procedure_planning'
@@ -428,7 +428,10 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               tokens: (assistantMeta.tokensIn ?? 0) + (assistantMeta.tokensOut ?? 0), ms: Date.now() - startedAt, factsUsed: usedFacts.length,
             });
           } catch (error) {
-            emit('error', { code: typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,60}$/.test(error.code) ? error.code : 'CHAT_TURN_FAILED' });
+            const failure = typeof error?.code === 'string' && /^[A-Z][A-Z0-9_]{2,60}$/.test(error.code) ? error.code : 'CHAT_TURN_FAILED';
+            // One coded operational line (fixed shape, never the message or the error text), so a failed turn can be found in the logs.
+            try { onEvent?.({ event: 'chat_turn_failed', code: failure, errorName: typeof error?.name === 'string' ? error.name.slice(0, 40) : null, latencyMs: Date.now() - startedAt }); } catch { /* logging never breaks a turn */ }
+            emit('error', { code: failure });
             return null;
           }
         },
