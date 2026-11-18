@@ -6,6 +6,8 @@ import { NOT_IN_DOCUMENTS_TEXT } from './clause-answer.js';
 // facts: it never states eligibility, claim approval or payable money as a promise; every number comes from the facts or from
 // procedure-planning.js. Wording is DRAFT and FOR LEGAL REVIEW.
 
+const TOPIC_NAME = Object.freeze({ copay_percent: 'a co-payment', copay_zone_percent: 'a co-payment', room_rent_limit: 'a room rent limit', room_category: 'a room rent limit', waiting_ped: 'a waiting period', waiting_initial: 'a waiting period', waiting_specific: 'a waiting period', sub_limit: 'a sub-limit', deductible: 'a deductible' });
+
 const SOURCE = Object.freeze({
   user_confirmed: 'confirmed by you',
   reviewed_reference: "from the insurer's published wording",
@@ -53,7 +55,10 @@ export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys
         }
         lines.push('These are passages as printed; they are not a confirmed term.');
       } else if (searchedClauses) {
-        lines.push(NOT_IN_DOCUMENTS_TEXT);
+        const named = factKeys.slice(0, 2).map(key => TOPIC_NAME[key] ?? key.replace(/_/g, ' '));
+        lines.push(named.length > 0
+          ? `I did not find ${[...new Set(named)].join(' or ')} in your policy documents. It may simply not be printed there. Please check with your insurer.`
+          : NOT_IN_DOCUMENTS_TEXT);
       } else if (factKeys.length > 0) {
         lines.push(`I do not have ${factKeys.slice(0, 2).map(key => key.replace(/_/g, ' ')).join(' or ')} confirmed for your policy yet.`);
       } else {

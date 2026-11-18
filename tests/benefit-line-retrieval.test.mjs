@@ -56,3 +56,29 @@ test('a label-like line beats a line that only mentions the term later; the unkn
   assert.match(NOT_IN_DOCUMENTS_TEXT, /did not find this/);
   assert.match(NOT_IN_DOCUMENTS_TEXT, /may simply not be printed/);
 });
+
+test('a question of frame words only ("waiting periods") finds the waiting-period lines; a heading brings the line under it', async () => {
+  const { isHeading } = await import('../src/features/insurance-rules/clause-answer.js');
+  const waiting = selectClauseAnswer({
+    question: 'What are my waiting periods?',
+    clauses: [
+      { id: 'w', documentId: 'd', page: 16, text: 'Initial waiting Period: 30 days for all illnesses except accidents.', kind: 'waiting_period', sectionPath: [], blockIndexes: [0] },
+      { id: 'x', documentId: 'd', page: 3, text: 'Cosmetic treatment is excluded.', kind: 'exclusion', sectionPath: [], blockIndexes: [0] },
+    ],
+  });
+  assert.equal(waiting.clause.id, 'w');
+  assert.ok(isHeading('Premium Details (Rs)'));
+  assert.ok(!isHeading('Room Rent up to 1% of the sum insured.'));
+  const premium = selectClauseAnswer({
+    question: 'What is my premium?',
+    clauses: [{ id: 'p', documentId: 'd', page: 4, text: 'Premium Details (Rs)\nBasic premium 40,000 GST 7,200', kind: 'schedule_fact', sectionPath: [], blockIndexes: [0, 1] }],
+  });
+  assert.match(premium.text, /Premium Details \(Rs\) Basic premium 40,000/);
+});
+
+test('the not-found answer names the topic asked about', async () => {
+  const { buildDeterministicAnswer } = await import('../src/features/insurance-rules/chat-answer.js');
+  const built = buildDeterministicAnswer({ intent: 'coverage_question', factKeys: ['copay_percent', 'copay_zone_percent'], facts: [], clauses: [], searchedClauses: true });
+  assert.match(built.text, /did not find a co-payment in your policy documents/);
+  assert.equal(built.status, 'unknown');
+});

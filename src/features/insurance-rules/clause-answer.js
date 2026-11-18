@@ -119,7 +119,9 @@ function segmentsOf(text) {
 // True when the segment carries the question: at least half of all content terms and at least 60% of the specific (non-frame) ones.
 function clears(terms, text) {
   const have = new Set(wordsOf(text).map(stem));
-  const strong = terms.filter(term => !WEAK.has(term));
+  // A question made only of frame words ("What are my waiting periods?") has no specific term: then every term decides.
+  const specific = terms.filter(term => !WEAK.has(term));
+  const strong = specific.length > 0 ? specific : terms;
   if (strong.length === 0) return false;
   const matched = terms.filter(term => have.has(term)).length;
   const strongMatched = strong.filter(term => have.has(term)).length;
@@ -139,6 +141,9 @@ function scoreText(terms, text) {
   for (const term of terms) if (have.has(term)) matched += 1;
   return matched;
 }
+
+/** A heading: at most five words, no digit, no sentence punctuation. */
+export const isHeading = text => { const t = String(text ?? '').trim(); return t.length > 0 && t.split(/\s+/).length <= 5 && !/\d/.test(t) && !/[.:;]$/.test(t); };
 
 const clip = (text, max) => (text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`);
 
@@ -175,6 +180,8 @@ export function selectClauseAnswer({ question, clauses }) {
   const next = best.segments[best.index + 1];
   // A short matching sentence takes the next one as context when that one matches too; a long page is never pasted.
   if (next && text.length < 120 && scoreText(terms, next.text) > 0 && text.length + next.text.length + 1 <= MAX_WINDOW_CHARS) text = `${text} ${next.text}`;
+  // A bare heading ("Premium Details (Rs)": a few words, no number, no sentence) says nothing alone: the line under it is its content.
+  else if (isHeading(text) && next && text.length + next.text.length + 1 <= MAX_WINDOW_CHARS) text = `${text} ${next.text}`;
   text = clip(text, MAX_WINDOW_CHARS);
   const section = (best.clause.sectionPath ?? []).join(' ');
   const excluded = EXCLUSION.test(best.segment.text) || (/exclusion/i.test(section) && best.clause.kind === 'exclusion');
