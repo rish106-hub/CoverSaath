@@ -204,7 +204,7 @@ test('synthetic PAN and Aadhaar sent through paths, queries, headers and bodies 
   // Every label value is a route template, status class or closed-set word.
   for (const line of text.split('\n')) {
     if (!line || line.startsWith('#')) continue;
-    assert.match(line, /^[a-z_]+(?:\{(?:(?:le="(?:[0-9.]+|\+Inf)"|[a-z_]+="[a-z0-9_:./-]{1,96}"),?)*\})? [0-9.e+-]+$/, line);
+    assert.match(line, /^[a-z_]+(?:\{(?:le="(?:[0-9.]+|\+Inf)"|[a-z_]+="[a-z0-9_:./-]{1,96}")(?:,(?:le="(?:[0-9.]+|\+Inf)"|[a-z_]+="[a-z0-9_:./-]{1,96}"))*\})? [0-9.e+-]+$/, line);
   }
   assert.match(text, /http_requests_total\{method="get",route="\/other",status_class="4xx"\}/);
   // The scrape counted the traffic: 404/403/401 classes appear, no route carries an id.
