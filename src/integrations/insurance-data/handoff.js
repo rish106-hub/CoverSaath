@@ -1,4 +1,4 @@
-// FSS handoff v1 (ADR 0037): CoverSaath hands the insurer lookup to the reference service as a task and gets the result back later, by a
+// FSS handoff v1 (ADR 0037): the backend hands the insurer lookup to the reference service as a task and gets the result back later, by a
 // signed notice. This module is the contract and nothing else: request and response validators, the notice signature, and a small client.
 // Identifiers only. No household, person, policy number or document text can be expressed in a request. The UIN never appears in a notice.
 // Off unless REFERENCE_DATA_ENABLED is "true" (same switch and credential as the read client) and FSS_HANDOFF_ENABLED is "true".
