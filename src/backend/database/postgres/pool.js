@@ -1,5 +1,5 @@
-import { openSync, closeSync, fstatSync, readFileSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
+import { openSync, closeSync, fstatSync, readFileSync, realpathSync } from 'node:fs';
+import { isAbsolute, sep } from 'node:path';
 import pg from 'pg';
 import { PostgresDatabaseError } from './errors.js';
 
@@ -104,14 +104,19 @@ export function createPostgresPool({
 const SSL_CA_MAX_BYTES = 256 * 1024;
 
 // The CA path is operator configuration, but it is still validated before any read: non-empty, no NUL byte,
-// absolute, a regular file and bounded in size. The size check runs on the opened descriptor, so a file that
-// changes between check and read cannot exceed the cap. Failures never echo the path.
-function readSslCaFile(caPath) {
+// absolute, constrained to DATABASE_SSL_CA_ROOT after canonicalization, a regular file and bounded in size.
+// The size check runs on the opened descriptor, so a file that changes between check and read cannot exceed the cap.
+// Failures never echo the path.
+function readSslCaFile(caPath, caRoot) {
   const invalid = () => new PostgresDatabaseError('DATABASE_POOL_OPTION_INVALID', 'DATABASE_SSL_CA_PATH could not be read.');
   if (typeof caPath !== 'string' || caPath === '' || caPath.includes('\0') || !isAbsolute(caPath)) throw invalid();
+  if (typeof caRoot !== 'string' || caRoot === '' || caRoot.includes('\0') || !isAbsolute(caRoot)) throw invalid();
   let fd;
   try {
-    fd = openSync(caPath, 'r');
+    const resolvedRoot = realpathSync(caRoot);
+    const resolvedPath = realpathSync(caPath);
+    if (!(resolvedPath === resolvedRoot || resolvedPath.startsWith(`${resolvedRoot}${sep}`))) throw invalid();
+    fd = openSync(resolvedPath, 'r');
     const stats = fstatSync(fd);
     if (!stats.isFile() || stats.size === 0 || stats.size > SSL_CA_MAX_BYTES) throw invalid();
     return readFileSync(fd, 'utf8');
@@ -123,7 +128,8 @@ function readSslCaFile(caPath) {
 }
 
 // Reads DATABASE_URL and the optional DATABASE_SSL_CA_PATH (a PEM file for a hosted database such as
-// Supabase). Errors name the variable, never its value.
+// Supabase). When DATABASE_SSL_CA_PATH is set, DATABASE_SSL_CA_ROOT must also be set to the trusted root
+// directory that contains allowed CA files. Errors name variables, never their values.
 export function postgresPoolOptionsFromEnv(env = process.env) {
   const connectionString = env.DATABASE_URL;
   if (typeof connectionString !== 'string' || connectionString.trim() === '') {
@@ -131,7 +137,11 @@ export function postgresPoolOptionsFromEnv(env = process.env) {
   }
   const caPath = env.DATABASE_SSL_CA_PATH?.trim();
   if (!caPath) return { connectionString };
-  const sslCa = readSslCaFile(caPath);
+  const caRoot = env.DATABASE_SSL_CA_ROOT?.trim();
+  if (!caRoot) {
+    throw new PostgresDatabaseError('DATABASE_POOL_OPTION_INVALID', 'DATABASE_SSL_CA_ROOT is required when DATABASE_SSL_CA_PATH is set.');
+  }
+  const sslCa = readSslCaFile(caPath, caRoot);
   return { connectionString, sslCa };
 }
 
