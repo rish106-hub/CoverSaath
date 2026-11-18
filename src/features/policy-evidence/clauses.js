@@ -6,23 +6,29 @@ import { createHash } from 'node:crypto';
 import { sectionStoredDocument } from '../policy-structuring/sectioner.js';
 import { CLAUSE_KINDS, validateClause } from '../../contracts/policy-evidence.js';
 
+const STRONG_SCHEDULE = /\b(?:policy schedule|schedule of benefits|policy period|insured member|policy number|date of (?:commencement|issue))\b/i;
 const KIND_RULES = Object.freeze([
   ['endorsement', /\b(?:endorsement|rider|add[- ]?on|addendum|optional cover)\b/i],
   ['waiting_period', /\bwaiting period\b|\bwaiting\b.{0,40}\b(?:days?|months?|years?)\b|\bmoratorium\b|\bcooling[- ]off\b/i],
   ['exclusion', /\bexclusion|\bnot (?:covered|payable|admissible)\b|\bshall not (?:be )?(?:liable|payable)\b|\bwe will not (?:pay|cover)\b/i],
-  ['schedule_fact', /\b(?:policy schedule|schedule of benefits|policy period|sum insured|premium|insured member|policy number|date of (?:commencement|issue))\b/i],
+  // Strong cues only: a benefit line that merely mentions "sum insured" or "premium" ("room rent up to 1% of the sum insured") is a limit, not a schedule.
+  ['schedule_fact', STRONG_SCHEDULE],
   ['limit', /\b(?:sub-?limit|capped|maximum|up to|per (?:day|claim|eye|year)|co-?pay|deductible|room rent|% of (?:the )?sum insured)\b/i],
   ['definition', /\b(?:means|shall mean|is defined as|definitions?)\b/i],
   // Boilerplate such as "subject to the terms of this policy" is not a condition.
   ['condition', /\b(?:subject to(?! (?:the |all )?(?:other )?(?:terms|provisions|conditions)\b)|provided (?:that|always)|on condition|conditions? (?:precedent|apply|applies)|only (?:if|when|after)|eligible only|shall be eligible|is conditional)\b/i],
   ['procedure', /\b(?:claim (?:procedure|process)|cashless|intimat|notify|grievance|reimbursement|documents? required)\b/i],
+  // Last resort: a bare "sum insured" or "premium" with no limit, condition, procedure or benefit cue reads as schedule content.
+  ['schedule_fact', /\b(?:sum insured|premium)\b/i],
   ['benefit', /\b(?:we will (?:pay|cover|reimburse)|covered|coverage|benefit|hospitali[sz]ation|treatment)\b/i],
 ]);
 
 // True when the text reads as policy-schedule content (names, numbers, premium, period), whatever kind it was filed under.
+// Strong schedule cues always count. A bare "sum insured" or "premium" counts only when no limit, condition, procedure or benefit cue
+// files the text under another kind, so a benefit line that quotes the sum insured stays readable.
 export function looksLikeSchedule(title, text) {
   const haystack = `${title ?? ''}\n${text}`;
-  return KIND_RULES.some(([kind, pattern]) => kind === 'schedule_fact' && pattern.test(haystack));
+  return KIND_RULES.some(([kind, pattern]) => kind === 'schedule_fact' && pattern === STRONG_SCHEDULE && pattern.test(haystack)) || classifyClause(title, text) === 'schedule_fact';
 }
 
 export function classifyClause(title, text) {
