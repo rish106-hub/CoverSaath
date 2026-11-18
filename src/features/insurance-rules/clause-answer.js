@@ -231,3 +231,16 @@ export function selectTopicAnswers({ question, clauses, max = 3 }) {
   }
   return { answers, missing };
 }
+
+/** "What is not covered?" has no content term ("not" and "covered" are frame words): the answer is the leading lines of the exclusion clauses themselves (at most three, one window each). */
+export function exclusionWindows(clauses, max = 3) {
+  const picked = [];
+  for (const clause of clauses) {
+    if (clause.kind !== 'exclusion') continue;
+    const text = clip(String(clause.text ?? '').replace(/\s+/g, ' ').trim(), MAX_WINDOW_CHARS);
+    if (!text || picked.some(item => item.window === text)) continue;
+    picked.push({ clause, window: text, excluded: true, blockIndex: clause.blockIndexes?.[0] ?? null });
+    if (picked.length === max) break;
+  }
+  return picked;
+}
