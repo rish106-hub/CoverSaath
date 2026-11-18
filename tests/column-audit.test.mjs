@@ -139,6 +139,8 @@ const PLAIN = {
     'ids and flags only (consent grant id, requesting adult id); read in SQL by revocation erasure, nulled on revocation': ['authorization_json'],
   },
   policies: { 'closed vocabulary': ['policy_kind', 'verification_state'] },
+  fss_handoffs: { 'opaque request id, FSS handoff and version ids, closed vocabulary (state, outcome code), attempt counter; no name, UIN or value (migration 068)': ['request_id', 'fss_handoff_id', 'fss_version_id', 'state', 'attempts', 'last_outcome'] },
+  holding_fss_links: { 'FSS product and version ids and closed vocabulary (how it matched, confidence); no name, UIN or value (migration 068)': ['fss_product_id', 'fss_version_id', 'matched_by', 'confidence'] },
   holding_documents: { 'closed vocabulary: the kind of linked document (wording, endorsement, other); ids only': ['kind'] },
   policy_holdings: { 'closed vocabulary: holding kind and lifecycle status (ADR 0032); no insurer, plan or number': ['kind', 'status'], 'closed vocabulary: outcome code of the last insurer-reference check (migration 066); no value, locator or UIN': ['reference_outcome'] },
   household_memory_facts: {

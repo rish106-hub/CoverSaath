@@ -35,3 +35,4 @@ export { PremiumRepository } from './premium-repository.js';
 export { ProviderCallRepository } from './provider-call-repository.js';
 export { MemoryChunkRepository } from './memory-chunk-repository.js';
 export { ChatRepository } from './chat-repository.js';
+export { FssHandoffRepository } from './fss-handoff-repository.js';

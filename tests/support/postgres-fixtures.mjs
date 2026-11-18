@@ -51,6 +51,8 @@ const defaults = {
   // Holdings and memory (migrations 048-052). Parents (household, holding, document, consent grant, member) are passed by the caller.
   policy_holdings: id => ({ id, kind: 'retail_health', status: 'uploaded', created_at: at, updated_at: at }),
   holding_documents: id => ({ id, kind: 'wording', created_at: at }),
+  fss_handoffs: id => ({ id, state: 'queued', created_at: at, updated_at: at }),
+  holding_fss_links: () => ({ matched_by: 'alias', confidence: 'low', matched_at: at }),
   household_memory_facts: id => ({
     id, member_scope: 'policy', fact_key: 'sum_insured', key_schema: 'policy-facts/v1', fact_class: 'personal_value', source_tier: 'own_pdf',
     status: 'extracted_unverified', value_enc: 'enc2.k1.AAAA.BBBB.CCCC', created_at: at,
