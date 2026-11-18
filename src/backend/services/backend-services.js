@@ -14,6 +14,7 @@ import { createHouseholdAppService } from './household-app-service.js';
 import { createUserDataService } from './user-data-service.js';
 import { createPersonRecordService } from './person-record-service.js';
 import { createPolicyProfileService, policyFactsEnabled } from './policy-profile-service.js';
+import { createFssHandoffService } from './fss-handoff-service.js';
 import { HoldingPipelineRepository } from '../repositories/holding-pipeline-repository.js';
 import { createHoldingsService } from './holdings-service.js';
 import { createFssReferenceFacts } from './fss-reference-facts.js';
@@ -151,7 +152,9 @@ export function createBackendServices(database, options = {}) {
     port: createReferenceDataPort({ repository: new ReferenceCacheRepository(database), client: options.referenceClient ?? createInsuranceDataClient({ env }), env }),
     repository: holdingPipelineRepository, env,
   });
-  const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, policyFacts, referenceFacts, memory, analytics, env, clock: options.clock });
+  const fssHandoffs = new FssHandoffRepository(database, { clock: options.clock });
+  const fssHandoff = createFssHandoffService({ repository: fssHandoffs, holdingRepository: holdingPipelineRepository, jobQueue, env: options.env ?? process.env, client: options.handoffClient ?? null, clock: options.clock, onEvent: options.onWarn });
+  const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, fssHandoff, policyFacts, referenceFacts, memory, analytics, env, clock: options.clock });
   holdingsHook = holdings;
   const chatRepository = new ChatRepository(database, { ...shared, households });
   const chatV1 = createChatV1Service({ onEvent: options.onWarn, chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, providerConsent, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
@@ -171,7 +174,6 @@ export function createBackendServices(database, options = {}) {
   const personRecordRepository = new PersonRecordRepository(database, { ...shared, households });
   // Holdings and memory (migrations 048-052, ADR 0032). Behaviour behind them is off unless HOLDINGS_ENABLED is exactly "true".
   const policyHoldings = new PolicyHoldingRepository(database, { ...shared, households });
-  const fssHandoffs = new FssHandoffRepository(database, { clock: options.clock });
   const memoryFacts = new MemoryFactRepository(database, { ...shared, households });
   // Intake questions (question planner, catalogue v1): answers are user_declaration memory facts; no new store.
   const intakeQuestions = createIntakeQuestionsService({ database, memoryFacts, clock: options.clock });
@@ -193,7 +195,7 @@ export function createBackendServices(database, options = {}) {
   const policySlots = createPolicySlotService({ repository: new PolicySlotRepository(database, { clock: options.clock }), access, env: options.env ?? process.env, client: options.razorpayClient ?? null });
 
   return {
-    ensureHolding, ensureHoldingForDocument, analytics, networkHospitals, policySlots, holdingProducts, holdingProductRepository, policyHoldings, fssHandoffs, memoryFacts, intakeQuestions, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
+    ensureHolding, ensureHoldingForDocument, analytics, networkHospitals, policySlots, holdingProducts, holdingProductRepository, policyHoldings, fssHandoffs, fssHandoff, memoryFacts, intakeQuestions, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     holdings, holdingPipelineRepository, memoryDocument, memory, memoryChunks, chatRepository, chatV1, modelGateway,
     emergencyInstruction,

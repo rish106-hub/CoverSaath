@@ -33,7 +33,7 @@ const permanent = (code, message) => coded(code, message, 409, { retryable: fals
 /** The reference port: values deterministic code read from the IDA reference for a holding. Default: none (reference agent wires it). */
 export const emptyReferenceFacts = Object.freeze({ async forHolding() { return []; } });
 
-export function createHoldingsService({ repository, jobQueue, policyFacts = null, referenceFacts = emptyReferenceFacts, memory = null, analytics = null, env = process.env, clock = () => new Date() }) {
+export function createHoldingsService({ repository, jobQueue, fssHandoff = null, policyFacts = null, referenceFacts = emptyReferenceFacts, memory = null, analytics = null, env = process.env, clock = () => new Date() }) {
   const enabled = () => holdingsEnabled(env);
   const requireEnabled = () => { if (!enabled()) throw coded('HOLDINGS_DISABLED', 'Holdings are disabled.', 503); };
 
@@ -171,6 +171,8 @@ export function createHoldingsService({ repository, jobQueue, policyFacts = null
       const inputSha = holdingInputSha([document.sourceVersion.replace(/[^A-Za-z0-9_.:-]/g, '_').slice(0, 128)]);
       const parse = await enqueue(HOLDING_JOB_KINDS.parseOwnPdf, holding, document, inputSha);
       const reference = await enqueue(HOLDING_JOB_KINDS.fetchReference, holding, document, inputSha);
+      // ADR 0037: also hand the lookup to FSS (own flag). Never blocks the pipeline: a failure here only means no handoff this time.
+      try { await fssHandoff?.queueForHolding({ holding, consentGrantId: document?.consentGrantId ?? null }); } catch { /* the synchronous reader still runs */ }
       return Object.freeze({ jobs: [parse.job.id, reference.job.id] });
     },
 
