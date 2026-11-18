@@ -5,7 +5,7 @@ import { CHAT_INTENTS } from '../../features/ai-analysis/gateway-contract.js';
 import { gateText, gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { buildDeterministicAnswer } from '../../features/insurance-rules/chat-answer.js';
 import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, selectTopicAnswers } from '../../features/insurance-rules/clause-answer.js';
-import { classifyChatMessage } from '../../features/insurance-rules/chat-intent.js';
+import { classifyChatMessage, isIdentityQuestion } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
 import { guardTurnAnswer } from './chat-answer-card.js';
@@ -79,6 +79,19 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
   if (!providerConsent) throw new TypeError('A provider consent resolver is required.');
   const requireEnabled = () => { if (!memoryEnabled(env)) throw coded('MEMORY_DISABLED', 'Memory is disabled.', 503); };
   const voiceAudioRetained = () => env.VOICE_AUDIO_RETAIN === 'true';
+
+  // The insurer and plan names the person confirmed (policy_profiles, sealed), one line per holding. No model, no passage search; never a UIN.
+  async function holdingNameLines({ householdId, holdingIds }) {
+    const holdings = [];
+    for (const holdingId of holdingIds) { const holding = await holdingRepository.getHolding({ householdId, holdingId }); if (holding) holdings.push(holding); }
+    const names = await holdingRepository.confirmedNames({ householdId, holdings });
+    const lines = [];
+    for (const holding of holdings) {
+      const named = names.get(holding.id);
+      if (named?.insurerName || named?.productName) lines.push(`- From the plan you confirmed: ${[named.insurerName, named.productName].filter(Boolean).join(' - ')}.`);
+    }
+    return lines.length > 0 ? lines : ['- You have not confirmed which insurer and plan this is yet. Confirm it on the Add a cover page, then ask again.'];
+  }
 
   // The facts, conflicts and holdings in scope of a thread.
   async function gatherContext({ householdId, thread, mayReadFacts }) {
@@ -287,6 +300,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             const context = await gatherContext({ householdId, thread, mayReadFacts });
             const conflictKeys = new Set(context.conflicts.map(item => item.factKey));
             const byKey = new Set(factKeys);
+            const holdingLines = mayReadFacts && isIdentityQuestion(message) && context.holdingIds.length > 0 ? await holdingNameLines({ householdId, holdingIds: context.holdingIds }) : [];
             const awaitingPlan = mayReadFacts && context.facts.length === 0 && context.awaiting === true && intent !== 'procedure_planning';
             const relevant = intent === 'procedure_planning' ? context.facts.filter(fact => fact.status !== 'extracted_unverified') : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
             const plan = intent === 'procedure_planning'
@@ -298,7 +312,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             // A general waiting-period question names three facts (initial, pre-existing, specific disease): one found fact does not answer the whole topic.
             const hasFact = key => context.facts.some(fact => fact.factKey === key);
             const answersTopic = intent === 'waiting_period' && factKeys.includes('waiting_specific') ? factKeys.every(hasFact) : factKeys.some(hasFact);
-            if (mayReadFacts && !answersTopic && !awaitingPlan && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
+            if (mayReadFacts && !answersTopic && !awaitingPlan && holdingLines.length === 0 && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
               // An embedding failure is not a turn failure: it leaves the vector undefined and the keyword path below answers.
               let vector = null;
               try { vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: message }); } catch (error) {
@@ -316,7 +330,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             let clauseHits = [];
             let missingTopics = [];
             let searchedClauses = false;
-            if (mode !== 'vector' && !answersTopic && !awaitingPlan && context.documents.length > 0 && intent !== 'procedure_planning') {
+            if (mode !== 'vector' && !answersTopic && !awaitingPlan && holdingLines.length === 0 && context.documents.length > 0 && intent !== 'procedure_planning') {
               const candidates = await keywordClauses({ householdId, documents: context.documents, message });
               // Clause level: only the best sentence window that clears the relevance floor, never the page. None means "unknown", no source.
               const { answers: picks, missing } = selectTopicAnswers({ question: message, clauses: candidates });
@@ -328,7 +342,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
 
             emit('meta', { thread_id: thread.id, intent: CHAT_INTENTS.includes(intent) ? intent : 'unknown', retrieval_mode: mode, facts_available: context.facts.length, open_conflicts: context.conflicts.length });
 
-            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan, missingTopics });
+            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan, missingTopics, holdingLines });
             const history = await chatRepository.recentTurns({ householdId, threadId });
             // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
             // Nothing in the wording or the facts speaks to a coverage question: no model call, the fixed unknown answer stands.
@@ -339,7 +353,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               id: clause.id, text: clause.window, scope: 'own_pdf', sourceDocumentId: clause.documentId, unredacted: true,
               sourceRef: `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`,
             }));
-            const model = !nothingRelevant && (context.facts.length > 0 || modelPassages.length > 0)
+            const model = !nothingRelevant && holdingLines.length === 0 && (context.facts.length > 0 || modelPassages.length > 0)
               ? await modelAnswer({ householdId, adultId: principal.adultId, message, history, context, relevant, plan, passages: modelPassages, startedAt }) : null;
 
             let text = deterministic.text;
