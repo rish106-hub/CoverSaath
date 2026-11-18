@@ -42,3 +42,17 @@ test('a single-topic question gives the same answer as before', () => {
   assert.equal(selectClauseAnswers({ question, clauses })[0].clause.id, selectClauseAnswer({ question, clauses }).clause.id);
   assert.deepEqual(selectClauseAnswers({ question: 'Does it cover dental?', clauses }), []);
 });
+
+test('a label-like line beats a line that only mentions the term later; the unknown answer says nothing was found, not that nothing exists', async () => {
+  const { NOT_IN_DOCUMENTS_TEXT } = await import('../src/features/insurance-rules/clause-answer.js');
+  const picked = selectClauseAnswer({
+    question: 'What is the room rent limit?',
+    clauses: [
+      { id: 'a', documentId: 'd', page: 5, text: 'Modification of Room Rent Discount 0', kind: 'limit', sectionPath: [], blockIndexes: [0] },
+      { id: 'b', documentId: 'd', page: 6, text: '4.1.a Room Rent At Actuals', kind: 'limit', sectionPath: [], blockIndexes: [0] },
+    ],
+  });
+  assert.equal(picked.clause.id, 'b');
+  assert.match(NOT_IN_DOCUMENTS_TEXT, /did not find this/);
+  assert.match(NOT_IN_DOCUMENTS_TEXT, /may simply not be printed/);
+});
