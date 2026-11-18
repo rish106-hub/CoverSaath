@@ -1109,9 +1109,19 @@ test('holdings and memory triggers (migrations 048-052, ADR 0032)', postgresTest
   assert.deepEqual((await pool.query('SELECT id FROM holding_documents WHERE holding_id = $1 ORDER BY id', ['h-a'])).rows.map(row => row.id), ['hd-2']);
   assert.equal(Number((await pool.query(`SELECT count(*) AS c FROM policy_holdings WHERE id = 'h-a'`)).rows[0].c), 1);
   proves('holding_documents_erase_on_document_erasure');
+  // FSS handoff state (migration 068): a row names a holding of its own household.
+  const handoff = extra => insert(pool, 'fss_handoffs', { id: 'fh-x', household_id: a.household, holding_id: 'h-a', request_id: 'req-trigger-0001', state: 'queued', created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', ...extra });
+  await rejects(handoff({ household_id: b.household }), 'fss row must name a holding of its household');
+  await rejects(handoff({ holding_id: 'h-b' }), 'fss row must name a holding of its household');
+  await handoff({ id: 'fh-1' });
+  proves('fss_handoffs_scope_insert');
+  const fssLink = extra => insert(pool, 'holding_fss_links', { holding_id: 'h-a', household_id: a.household, fss_product_id: 'p-1', matched_by: 'alias', confidence: 'low', matched_at: '2026-01-01T00:00:00.000Z', ...extra });
+  await rejects(fssLink({ household_id: b.household }), 'fss row must name a holding of its household');
+  await fssLink();
+  proves('holding_fss_links_scope_insert');
   // Document erasure removes the holding and everything hanging on it.
   await pool.query(`UPDATE document_uploads SET lifecycle_state = 'deletion_requested' WHERE id = $1`, [a.document]);
-  for (const table of ['policy_holdings', 'household_memory_facts', 'memory_conflicts', 'premium_payments', 'premium_dues']) {
+  for (const table of ['policy_holdings', 'household_memory_facts', 'memory_conflicts', 'premium_payments', 'premium_dues', 'fss_handoffs', 'holding_fss_links']) {
     assert.equal(Number((await pool.query(`SELECT count(*) AS c FROM ${table} WHERE household_id = $1`, [a.household])).rows[0].c), 0, table);
   }
   proves('policy_holdings_erase_on_document_erasure');

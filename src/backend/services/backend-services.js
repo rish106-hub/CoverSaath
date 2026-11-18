@@ -1,6 +1,6 @@
 import { holdingsEnabled } from './holdings-flag.js';
 import { createIntakeQuestionsService } from './intake-questions-service.js';
-import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, SyncRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository, PersonRecordRepository, HoldingProductRepository, ReferenceCacheRepository, PolicyHoldingRepository, MemoryFactRepository, DeclarationRepository, PremiumRepository, ProviderCallRepository, MemoryChunkRepository, ChatRepository } from '../repositories/index.js';
+import { JobQueueRepository, ErasureRepository, AppEventRepository, RuntimeLimitsRepository, AuthIdentityRepository, AuthRepository, AuthTokenRepository, AuditRepository, CaseRepository, ConsentRepository, CoverageParameterRepository, DocumentRepository, ClauseRepository, CatalogueReviewRepository, CuratedProductRepository, HouseholdRepository, HouseholdAppRepository, UserDataRepository, SyncRepository, ProfileAnswerRepository, PolicyProfileRepository, PolicyFactsRepository, OcrRepository, PolicyStructuringRepository, WorkflowRepository, PersonRecordRepository, HoldingProductRepository, ReferenceCacheRepository, PolicyHoldingRepository, MemoryFactRepository, DeclarationRepository, PremiumRepository, ProviderCallRepository, MemoryChunkRepository, ChatRepository, FssHandoffRepository } from '../repositories/index.js';
 import { createChatModelGateway, createHouseholdDayBudget } from '../../features/ai-analysis/index.js';
 import { createModelRouter, createVoyageEmbedClient, createInsuranceDataClient } from '../../integrations/index.js';
 import { createHouseholdIdentifierLoader } from './household-identifiers.js';
@@ -171,6 +171,7 @@ export function createBackendServices(database, options = {}) {
   const personRecordRepository = new PersonRecordRepository(database, { ...shared, households });
   // Holdings and memory (migrations 048-052, ADR 0032). Behaviour behind them is off unless HOLDINGS_ENABLED is exactly "true".
   const policyHoldings = new PolicyHoldingRepository(database, { ...shared, households });
+  const fssHandoffs = new FssHandoffRepository(database, { clock: options.clock });
   const memoryFacts = new MemoryFactRepository(database, { ...shared, households });
   // Intake questions (question planner, catalogue v1): answers are user_declaration memory facts; no new store.
   const intakeQuestions = createIntakeQuestionsService({ database, memoryFacts, clock: options.clock });
@@ -192,7 +193,7 @@ export function createBackendServices(database, options = {}) {
   const policySlots = createPolicySlotService({ repository: new PolicySlotRepository(database, { clock: options.clock }), access, env: options.env ?? process.env, client: options.razorpayClient ?? null });
 
   return {
-    ensureHolding, ensureHoldingForDocument, analytics, networkHospitals, policySlots, holdingProducts, holdingProductRepository, policyHoldings, memoryFacts, intakeQuestions, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
+    ensureHolding, ensureHoldingForDocument, analytics, networkHospitals, policySlots, holdingProducts, holdingProductRepository, policyHoldings, fssHandoffs, memoryFacts, intakeQuestions, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
     holdings, holdingPipelineRepository, memoryDocument, memory, memoryChunks, chatRepository, chatV1, modelGateway,
     emergencyInstruction,
