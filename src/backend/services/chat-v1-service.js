@@ -5,6 +5,7 @@ import { CHAT_INTENTS } from '../../features/ai-analysis/gateway-contract.js';
 import { gateText, gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { buildDeterministicAnswer } from '../../features/insurance-rules/chat-answer.js';
 import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, selectTopicAnswers, exclusionWindows } from '../../features/insurance-rules/clause-answer.js';
+import { SCOPE_SENTENCE, historyAnswer, needsRouter, readRoute } from '../../features/insurance-rules/chat-router.js';
 import { classifyChatMessage, isIdentityQuestion, isRegistryIdQuestion, REGISTRY_ID_ANSWER } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
@@ -161,6 +162,33 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     return out;
   }
 
+  // Each provider in the failover chain needs its own current exact grant (resolved here, re-checked right before that dispatch: audit F1);
+  // a provider without one is skipped, never sent to. The commit re-checks the winning provider's grant again inside the transaction.
+  const chatAuthorizer = ({ householdId, adultId }) => async provider => {
+    const grantId = await providerConsent.resolve({ householdId, adultId, kind: 'chat', provider });
+    if (!grantId) return null;
+    await providerConsent.require({ householdId, adultId, grantId, kind: 'chat', provider });
+    return { grantId };
+  };
+
+  // ADR 0038: one small model call that rewrites the question in plain English and names the sources that could answer it. The question goes
+  // through the household privacy gate like an answer turn; the output is validated by the gateway and again by readRoute. Any failure
+  // (flag off, no grant, busy, refusal, bad shape) returns null and the keyword path runs unchanged.
+  async function routeQuestion({ householdId, adultId, message, startedAt }) {
+    if (!gateway?.enabled || !gateway.callRouted) return null;
+    try {
+      let memoLoad;
+      const gated = (await gateTextForHousehold(message, { householdId, loadKnownIdentifiers: () => (memoLoad ??= loadKnownIdentifiers(householdId)) })).gated;
+      const input = sealModelInput('intent_classify', { payload: { text: gated, intents: [...CHAT_INTENTS] } });
+      const result = await gateway.callRouted({ task: 'intent_classify', input, householdId, authorize: chatAuthorizer({ householdId, adultId }) });
+      if (result.metadata.calls === 0) return null;
+      return readRoute(result.output);
+    } catch (error) {
+      try { onEvent?.({ event: 'chat_router_failed', code: /^[A-Za-z][A-Za-z0-9_]{2,63}$/.test(error?.code ?? '') ? error.code : 'ROUTER_FAILED', latencyMs: Date.now() - startedAt }); } catch { /* logging never breaks a turn */ }
+      return null;
+    }
+  }
+
   // Words a short answer over redacted facts. Resolves { text, factsUsed, meta } or null (use the deterministic answer).
   async function modelAnswer({ householdId, adultId, message, history, context, relevant, plan, passages, startedAt }) {
     if (!gateway?.enabled) return null;
@@ -210,14 +238,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     const input = sealModelInput('chat_answer', { payload: { question: question.gated, history: historyGated, facts: slots } });
     const redactedPromptHash = sha256(JSON.stringify({ q: question.gated.text, h: historyGated.map(turn => turn.text.text), f: slots.map(slot => [slot.fact_id, slot.label.text, slot.value.text]) }));
     let result;
-    // Each provider in the failover chain needs its own current exact grant (resolved here, re-checked right before that dispatch: audit F1);
-    // a provider without one is skipped, never sent to. The commit re-checks the winning provider's grant again inside the transaction.
-    const authorize = async provider => {
-      const grantId = await providerConsent.resolve({ householdId, adultId, kind: 'chat', provider });
-      if (!grantId) return null;
-      await providerConsent.require({ householdId, adultId, grantId, kind: 'chat', provider });
-      return { grantId };
-    };
+    const authorize = chatAuthorizer({ householdId, adultId });
     try {
       if (gateway.callRouted) result = await gateway.callRouted({ task: 'chat_answer', input, householdId, authorize });
       else {
@@ -295,12 +316,27 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
         async run(emit) {
           const startedAt = Date.now();
           try {
-            const { intent, factKeys } = classifyChatMessage(message, { hasProcedure: procedure !== null });
+            let { intent, factKeys } = classifyChatMessage(message, { hasProcedure: procedure !== null });
+            const history = await chatRepository.recentTurns({ householdId, threadId });
+            // ADR 0038: only when the free keyword path is unsure (no topic, or not plain ASCII), and never for the fixed registry-id answer.
+            let route = null;
+            if (env.CHAT_ROUTER_ENABLED === 'true' && !isRegistryIdQuestion(message) && !isIdentityQuestion(message) && needsRouter({ message, factKeys, hasProcedure: procedure !== null })) {
+              route = await routeQuestion({ householdId, adultId: principal.adultId, message, startedAt });
+              if (route?.canonical) ({ intent, factKeys } = classifyChatMessage(route.canonical, { hasProcedure: procedure !== null }));
+            }
+            // The plain-English question the retrieval below works on; the stored and shown turn stays the person's own words.
+            const asked = route?.canonical || message;
             const mayReadFacts = await chatRepository.mayReadHoldingFacts({ householdId, adultId: principal.adultId });
             const context = await gatherContext({ householdId, thread, mayReadFacts });
             const conflictKeys = new Set(context.conflicts.map(item => item.factKey));
             const byKey = new Set(factKeys);
-            const holdingLines = isRegistryIdQuestion(message) ? [REGISTRY_ID_ANSWER] : (mayReadFacts && isIdentityQuestion(message) && context.holdingIds.length > 0 ? await holdingNameLines({ householdId, holdingIds: context.holdingIds }) : []);
+            const routedOnly = source => route !== null && route.sources[0] === source && factKeys.length === 0;
+            let holdingLines;
+            if (isRegistryIdQuestion(asked)) holdingLines = [REGISTRY_ID_ANSWER];
+            else if (mayReadFacts && isIdentityQuestion(asked) && context.holdingIds.length > 0) holdingLines = await holdingNameLines({ householdId, holdingIds: context.holdingIds });
+            else if (routedOnly('history')) holdingLines = [historyAnswer(history)];
+            else if (routedOnly('out_of_scope')) holdingLines = [SCOPE_SENTENCE];
+            else holdingLines = [];
             const awaitingPlan = mayReadFacts && context.facts.length === 0 && context.awaiting === true && intent !== 'procedure_planning';
             const relevant = intent === 'procedure_planning' ? context.facts.filter(fact => fact.status !== 'extracted_unverified') : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
             const plan = intent === 'procedure_planning'
@@ -315,14 +351,14 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             if (mayReadFacts && !answersTopic && !awaitingPlan && holdingLines.length === 0 && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
               // An embedding failure is not a turn failure: it leaves the vector undefined and the keyword path below answers.
               let vector = null;
-              try { vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: message }); } catch (error) {
+              try { vector = await memory.embedQuery({ householdId, adultId: principal.adultId, text: asked }); } catch (error) {
                 vector = null;
                 // One coded operational line (fixed shape): never the message, the query or any identifier. Behaviour is unchanged.
                 try { onEvent?.({ event: 'chat_embed_failed', code: /^[A-Z][A-Z0-9_]{2,63}$/.test(error?.code ?? '') ? error.code : 'EMBED_FAILED' }); } catch { /* logging never breaks a turn */ }
               }
               if (vector) {
                 // Relevance floor: a passage must carry the question's content terms; weak vector neighbours are dropped, not shown.
-                passages = (await chunks.search({ householdId, holdingIds: context.holdingIds.length ? context.holdingIds : null, embedding: vector, limit: VECTOR_K })).filter(item => clearsRelevanceFloor(message, item.text));
+                passages = (await chunks.search({ householdId, holdingIds: context.holdingIds.length ? context.holdingIds : null, embedding: vector, limit: VECTOR_K })).filter(item => clearsRelevanceFloor(asked, item.text));
                 // Zero vector hits fall through to the keyword path (same household scope); only a vector that found passages stays 'vector'.
                 if (passages.length > 0) mode = 'vector';
               }
@@ -331,18 +367,18 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             let missingTopics = [];
             let searchedClauses = false;
             if (mode !== 'vector' && !answersTopic && !awaitingPlan && holdingLines.length === 0 && context.documents.length > 0 && intent !== 'procedure_planning') {
-              const generalExclusion = factKeys.includes('clause_exclusion') && contentTerms(message).length === 0;
-              const candidates = await keywordClauses({ householdId, documents: context.documents, message: generalExclusion ? 'exclusions excluded not covered permanent exclusion' : message });
+              const generalExclusion = factKeys.includes('clause_exclusion') && contentTerms(asked).length === 0;
+              const candidates = await keywordClauses({ householdId, documents: context.documents, message: generalExclusion ? 'exclusions excluded not covered permanent exclusion' : asked });
               if (generalExclusion) {
                 // "What is not covered?": the exclusion clauses themselves, three at most.
                 clauseHits = exclusionWindows(candidates).map(item => ({ ...item.clause, window: item.window, excluded: true, blockIndex: item.blockIndex }));
                 searchedClauses = true;
               } else {
                 // Clause level: only the best sentence window that clears the relevance floor, never the page. None means "unknown", no source.
-                const { answers: picks, missing } = selectTopicAnswers({ question: message, clauses: candidates });
+                const { answers: picks, missing } = selectTopicAnswers({ question: asked, clauses: candidates });
                 missingTopics = missing;
                 clauseHits = picks.map(picked => ({ ...picked.clause, window: picked.text, excluded: picked.excluded, blockIndex: picked.blockIndex }));
-                searchedClauses = contentTerms(message).length > 0;
+                searchedClauses = contentTerms(asked).length > 0;
               }
               mode = 'keyword';
             }
@@ -350,7 +386,6 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             emit('meta', { thread_id: thread.id, intent: CHAT_INTENTS.includes(intent) ? intent : 'unknown', retrieval_mode: mode, facts_available: context.facts.length, open_conflicts: context.conflicts.length });
 
             const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan, missingTopics, holdingLines });
-            const history = await chatRepository.recentTurns({ householdId, threadId });
             // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
             // Nothing in the wording or the facts speaks to a coverage question: no model call, the fixed unknown answer stands.
             const nothingRelevant = searchedClauses && clauseHits.length === 0 && passages.length === 0 && !answersTopic;
@@ -361,7 +396,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               sourceRef: `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`,
             }));
             const model = !nothingRelevant && holdingLines.length === 0 && (context.facts.length > 0 || modelPassages.length > 0)
-              ? await modelAnswer({ householdId, adultId: principal.adultId, message, history, context, relevant, plan, passages: modelPassages, startedAt }) : null;
+              ? await modelAnswer({ householdId, adultId: principal.adultId, message: asked, history, context, relevant, plan, passages: modelPassages, startedAt }) : null;
 
             let text = deterministic.text;
             let answerSource = 'deterministic';

@@ -13,6 +13,9 @@ export const MODEL_STATUSES = Object.freeze(['extracted_unverified', 'conflictin
 export const CHAT_INTENTS = Object.freeze([
   'coverage_question', 'waiting_period', 'sub_limit', 'procedure_planning', 'claim_process', 'premium_due', 'document_help', 'general', 'unknown',
 ]);
+// ADR 0038: where code may look for the answer. The model only names sources from this closed list; code decides whether one is possible.
+export const ROUTER_SOURCES = Object.freeze(['memory_fact', 'own_clauses', 'insurer_terms', 'holding_record', 'planner', 'history', 'out_of_scope']);
+export const ROUTER_QUESTION_MAX = 300;
 export const MAX_EMBED_TEXTS = 64;
 export const MAX_EMBED_DIMENSIONS = 4096;
 
@@ -25,7 +28,7 @@ export const GATEWAY_PAYLOAD_KEYS = Object.freeze({
 
 export const GATEWAY_INSTRUCTIONS = Object.freeze({
   [CHAT_ANSWER_TASK]: 'You answer one household insurance question in plain language using only the supplied facts. Placeholders such as {{PERSON_1}} or <NAME_1> stand for redacted personal data: keep them as printed. List the fact_id of every fact you used in factsUsed. If the facts do not answer the question, set status to unknown and say what is missing. Never state a number that is not in a fact. status is extracted_unverified or unknown.',
-  [INTENT_CLASSIFY_TASK]: 'You label one household question with exactly one intent from the supplied list, or unknown. The label is an unverified hint. status is extracted_unverified or unknown.',
+  [INTENT_CLASSIFY_TASK]: 'You read one household insurance question (it may have typos, or be Hinglish or Hindi) and return: one intent from the supplied list or unknown, the same question rewritten in plain English with no names or numbers added, and up to three sources that could answer it. The output is an unverified hint; code decides routing and never acts on it alone. status is extracted_unverified or unknown.',
   [FACT_EXTRACT_TASK]: 'You propose values for the requested fact keys from the supplied text. For each fact copy quote verbatim from the text and keep the value as printed. Omit a key the text does not state. status is extracted_unverified, conflicting (the text states two different values) or unknown.',
   [EMBED_TASK]: 'Embedding request for already gated text.',
 });
@@ -39,7 +42,10 @@ export const GATEWAY_OUTPUT_SCHEMAS = Object.freeze({
     },
   },
   [INTENT_CLASSIFY_TASK]: {
-    type: 'object', additionalProperties: false, required: ['status', 'intent'], properties: { status, intent: { type: 'string', enum: CHAT_INTENTS } },
+    type: 'object', additionalProperties: false, required: ['status', 'intent', 'canonical_question', 'sources'], properties: {
+      status, intent: { type: 'string', enum: CHAT_INTENTS }, canonical_question: { type: 'string', maxLength: ROUTER_QUESTION_MAX },
+      sources: { type: 'array', maxItems: 3, uniqueItems: true, items: { type: 'string', enum: ROUTER_SOURCES } },
+    },
   },
   [FACT_EXTRACT_TASK]: {
     type: 'object', additionalProperties: false, required: ['status', 'facts'], properties: {
@@ -62,7 +68,7 @@ export const GATEWAY_OUTPUT_SCHEMAS = Object.freeze({
 export function unknownOutput(task) {
   switch (task) {
     case CHAT_ANSWER_TASK: return { status: 'unknown', answer: 'No model answer is available right now.', factsUsed: [] };
-    case INTENT_CLASSIFY_TASK: return { status: 'unknown', intent: 'unknown' };
+    case INTENT_CLASSIFY_TASK: return { status: 'unknown', intent: 'unknown', canonical_question: '', sources: [] };
     case FACT_EXTRACT_TASK: return { status: 'unknown', facts: [] };
     case EMBED_TASK: return { status: 'unknown', dimensions: 0, vectors: [] };
     default: throw Object.assign(new Error(`No unknown output for ${task}.`), { code: 'unsupported_ai_task' });
