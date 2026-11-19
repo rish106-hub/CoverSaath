@@ -175,6 +175,13 @@ export class HoldingPipelineRepository {
     return (await this.database.many('SELECT holding_id FROM holding_documents WHERE household_id = ? AND document_id = ? ORDER BY created_at, id LIMIT 20', [householdId, documentId])).map(row => row.holding_id);
   }
 
+  /** The holdings of the household that own a document or have it linked (ids only, at most 20). */
+  async holdingsOfDocument({ householdId, documentId }) {
+    requireId(householdId, 'householdId'); requireId(documentId, 'documentId');
+    return (await this.database.many(`SELECT id AS holding_id FROM policy_holdings WHERE household_id = ? AND document_id = ?
+      UNION SELECT holding_id FROM holding_documents WHERE household_id = ? AND document_id = ? LIMIT 20`, [householdId, documentId, householdId, documentId])).map(row => row.holding_id);
+  }
+
   /**
    * Where each own-PDF fact was read: for the given current memory rows, { [row id]: { documentId, page, quote } } (quote and page from the
    * fact's primary evidence). Opened for the owning household's own answer only; never sent to a model.

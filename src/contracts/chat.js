@@ -5,7 +5,7 @@ export const CHAT_MESSAGE_MAX = 500;
 export const CHAT_PAGE_PATTERN = /^\/[a-z0-9/_-]{0,64}$/;
 export const CHAT_REQUEST_KEYS = Object.freeze(['message', 'page']);
 export const CHAT_ANSWER_STATUSES = Object.freeze(['evidence_found', 'unknown', 'out_of_scope']);
-export const CHAT_SOURCE_TIERS = Object.freeze(['household_evidence', 'reference', 'none']);
+export const CHAT_SOURCE_TIERS = Object.freeze(['household_evidence', 'insurer_wording', 'reference', 'none']);
 
 // In-app paths of the beta app. Keys are internal; values are the only route and button label a reply may carry.
 export const CHAT_ROUTES = Object.freeze({
