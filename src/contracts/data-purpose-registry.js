@@ -192,7 +192,7 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   // Gateway tasks (ADR 0030): gated chat, classification, fact-extraction and embedding text. Recipient is the routed provider
   // (the routed chat providers, in failover order; one consent scope per provider). Nothing is stored by this service; provider_calls keeps counts and a digest only.
   ...['chat_answer.payload.question', 'chat_answer.payload.history[].text', 'chat_answer.payload.facts[].label', 'chat_answer.payload.facts[].value',
-    'intent_classify.payload.text', 'fact_extract.payload.text'].map(slot => entry({
+    'intent_classify.payload.text', 'fact_extract.payload.text', 'policy_doc_prose.payload.lines[].text'].map(slot => entry({
     field: `model:${slot}`, category: 'insurance_question', purposes: ['coverage_reconstruction'], consentScope: CHAT_PROVIDER_SCOPES[CHAT_PROVIDERS[0]], recipients: CHAT_PROVIDERS, modelEligible: true,
     retention: 'not_stored_by_this_service', dataClass: 'CONFIDENTIAL', childData: 'possible', crossBorder: 'possible',
   })),

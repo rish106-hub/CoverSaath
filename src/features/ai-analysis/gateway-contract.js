@@ -6,7 +6,11 @@ export const CHAT_ANSWER_TASK = 'chat_answer';
 export const INTENT_CLASSIFY_TASK = 'intent_classify';
 export const FACT_EXTRACT_TASK = 'fact_extract';
 export const EMBED_TASK = 'embed';
-export const GATEWAY_TASK_LIST = Object.freeze([CHAT_ANSWER_TASK, INTENT_CLASSIFY_TASK, FACT_EXTRACT_TASK, EMBED_TASK]);
+// ADR 0039: rewrites the wording of policy.md fact sentences. Code owns the label, quote and citation of every line (never sent).
+export const POLICY_DOC_PROSE_TASK = 'policy_doc_prose';
+export const POLICY_DOC_PROSE_MAX_LINES = 40;
+export const POLICY_DOC_PROSE_LINE_MAX = 400;
+export const GATEWAY_TASK_LIST = Object.freeze([CHAT_ANSWER_TASK, INTENT_CLASSIFY_TASK, FACT_EXTRACT_TASK, EMBED_TASK, POLICY_DOC_PROSE_TASK]);
 export function isGatewayTask(task) { return GATEWAY_TASK_LIST.includes(task); }
 
 export const MODEL_STATUSES = Object.freeze(['extracted_unverified', 'conflicting', 'unknown']);
@@ -24,6 +28,7 @@ export const GATEWAY_PAYLOAD_KEYS = Object.freeze({
   [INTENT_CLASSIFY_TASK]: ['text', 'intents'],
   [FACT_EXTRACT_TASK]: ['text', 'keys'],
   [EMBED_TASK]: ['texts'],
+  [POLICY_DOC_PROSE_TASK]: ['lines'],
 });
 
 export const GATEWAY_INSTRUCTIONS = Object.freeze({
@@ -31,6 +36,7 @@ export const GATEWAY_INSTRUCTIONS = Object.freeze({
   [INTENT_CLASSIFY_TASK]: 'You read one household insurance question (it may have typos, or be Hinglish or Hindi) and return: one intent from the supplied list or unknown, the same question rewritten in plain English with no names or numbers added, and up to three sources that could answer it. The output is an unverified hint; code decides routing and never acts on it alone. status is extracted_unverified or unknown.',
   [FACT_EXTRACT_TASK]: 'You propose values for the requested fact keys from the supplied text. For each fact copy quote verbatim from the text and keep the value as printed. Omit a key the text does not state. status is extracted_unverified, conflicting (the text states two different values) or unknown.',
   [EMBED_TASK]: 'Embedding request for already gated text.',
+  [POLICY_DOC_PROSE_TASK]: 'You rewrite short sentences from a household insurance summary in plainer English. For each line return the same line_id with the sentence reworded. Keep every number, amount, duration and name exactly as printed, and keep placeholders such as {{PERSON_1}} as printed. Add no fact, no advice and no opinion, and drop none. status is extracted_unverified or unknown.',
 });
 
 const status = { type: 'string', enum: MODEL_STATUSES };
@@ -56,6 +62,15 @@ export const GATEWAY_OUTPUT_SCHEMAS = Object.freeze({
       } },
     },
   },
+  [POLICY_DOC_PROSE_TASK]: {
+    type: 'object', additionalProperties: false, required: ['status', 'lines'], properties: {
+      status,
+      lines: { type: 'array', maxItems: POLICY_DOC_PROSE_MAX_LINES, items: {
+        type: 'object', additionalProperties: false, required: ['line_id', 'text'],
+        properties: { line_id: { type: 'string', minLength: 1, maxLength: 16 }, text: { type: 'string', minLength: 1, maxLength: POLICY_DOC_PROSE_LINE_MAX } },
+      } },
+    },
+  },
   [EMBED_TASK]: {
     type: 'object', additionalProperties: false, required: ['status', 'dimensions', 'vectors'], properties: {
       status, dimensions: { type: 'integer', minimum: 0, maximum: MAX_EMBED_DIMENSIONS },
@@ -71,6 +86,7 @@ export function unknownOutput(task) {
     case INTENT_CLASSIFY_TASK: return { status: 'unknown', intent: 'unknown', canonical_question: '', sources: [] };
     case FACT_EXTRACT_TASK: return { status: 'unknown', facts: [] };
     case EMBED_TASK: return { status: 'unknown', dimensions: 0, vectors: [] };
+    case POLICY_DOC_PROSE_TASK: return { status: 'unknown', lines: [] };
     default: throw Object.assign(new Error(`No unknown output for ${task}.`), { code: 'unsupported_ai_task' });
   }
 }

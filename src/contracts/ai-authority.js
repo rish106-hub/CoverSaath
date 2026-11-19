@@ -59,6 +59,7 @@ export const AI_AUTHORITY_MATRIX = freezeAll({
     chat_answer: { authority: 'propose', workflowTaskKeys: [], pipeline: 'model-gateway', recordsParameterObservations: false },
     intent_classify: { authority: 'propose', workflowTaskKeys: [], pipeline: 'model-gateway', recordsParameterObservations: false },
     fact_extract: { authority: 'propose', workflowTaskKeys: [], pipeline: 'model-gateway', recordsParameterObservations: false },
+    policy_doc_prose: { authority: 'propose', workflowTaskKeys: [], pipeline: 'model-gateway', recordsParameterObservations: false },
     embed: { authority: 'propose', workflowTaskKeys: [], pipeline: 'model-gateway', recordsParameterObservations: false },
   },
 

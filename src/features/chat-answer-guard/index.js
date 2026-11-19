@@ -5,6 +5,7 @@ import { ADVICE_PHRASES, OUTCOME_PROMISE_PHRASES, firstMatch } from './banned-ph
 import { extractNumbers, isGrounded, toCanonicalValues } from './number-normaliser.js';
 import { containsContactValue, isValidContact } from './insurer-contact.js';
 export { CONTACT_PURPOSES, containsContactValue, isValidContact, pickInsurerContact } from './insurer-contact.js';
+export { PROSE_CHECK_IDS, PROSE_LINE_MAX, checkProseLine } from './prose-line.js';
 
 export const GUARD_CHECK_IDS = Object.freeze({
   shape: 'card_shape',

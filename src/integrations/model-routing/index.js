@@ -22,6 +22,7 @@ export const MODEL_ROUTES = Object.freeze({
   chat_answer: chatRoute('default'),
   intent_classify: chatRoute('classify'),
   fact_extract: chatRoute('default'),
+  policy_doc_prose: chatRoute('default'),
   embed: Object.freeze([{ provider: 'voyage', tier: 'default' }]),
 });
 

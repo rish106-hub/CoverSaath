@@ -161,6 +161,41 @@ const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}/gu;
 const DIGIT_RUN = /\d(?:[\s\-/]?\d){5,}/g;
 const maskNumbers = text => text.replace(EMAIL, HIDDEN).replace(DIGIT_RUN, HIDDEN);
 
+/**
+ * The cached insurer pack pages of one FSS version (reference_cache, public data), or null when there is none, its signature does not verify or it
+ * is another version's. Shared by the passages route and chat v1 (ADR 0039 D9).
+ */
+export async function readInsurerPack({ referenceCache, versionId }) {
+  const row = await referenceCache.get(packCacheKey('pages', versionId));
+  const body = row?.body;
+  if (!row || row.signature !== signatureFor(body) || body?.version?.versionId !== versionId || !Array.isArray(body.chunks)) return null;
+  return body;
+}
+
+/**
+ * Lines of a verified pack body that `match` accepts, with their page and page hash, skipping schedule-like lines and lines that hold an identity
+ * label (the same fail-closed filters as own passages). The line is the raw cached text, so a quote cut from it is exact against the pack.
+ */
+export function insurerPackLines({ body, match, limit }) {
+  const found = [];
+  if (!(limit > 0)) return found;
+  const shaOf = new Map();
+  for (const document of Array.isArray(body.documents) ? body.documents : []) {
+    for (const page of Array.isArray(document.pages) ? document.pages : []) shaOf.set(`${document.documentId}|${page.pageNumber}`, page.pageSha256);
+  }
+  for (const chunk of body.chunks) {
+    if (typeof chunk?.text !== 'string' || !Number.isSafeInteger(chunk.pageNumber) || chunk.pageNumber < 1) continue;
+    const pageSha256 = shaOf.get(`${chunk.documentId}|${chunk.pageNumber}`);
+    if (typeof pageSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(pageSha256)) continue;
+    for (const line of chunk.text.split('\n')) {
+      if (!match(line) || looksLikeSchedule('', line) || holdsIdentityLabel(line)) continue;
+      found.push({ chunkId: String(chunk.id), documentId: String(chunk.documentId), page: chunk.pageNumber, pageSha256, line });
+      if (found.length === limit) return found;
+    }
+  }
+  return found;
+}
+
 // Up to MAX_SNIPPET_LENGTH characters of `text` centred on the first query word, cut at word boundaries.
 function snippetAround(text, query) {
   const flat = squash(text);
@@ -471,28 +506,15 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     const found = [];
     if (words.length === 0) return found;
     for (const versionId of versionIds) {
-      const row = await services.referenceCache.get(packCacheKey('pages', versionId));
-      const body = row?.body;
-      if (!row || row.signature !== signatureFor(body) || body?.version?.versionId !== versionId || !Array.isArray(body.chunks)) continue;
-      const shaOf = new Map();
-      for (const document of Array.isArray(body.documents) ? body.documents : []) {
-        for (const page of Array.isArray(document.pages) ? document.pages : []) shaOf.set(`${document.documentId}|${page.pageNumber}`, page.pageSha256);
+      const body = await readInsurerPack({ referenceCache: services.referenceCache, versionId });
+      if (!body) continue;
+      for (const hit of insurerPackLines({ body, match: line => words.every(word => line.toLowerCase().includes(word)), limit: limit - found.length })) {
+        found.push({
+          chunkId: hit.chunkId, versionId, documentId: hit.documentId, page: hit.page, pageSha256: hit.pageSha256,
+          source: INSURER_PASSAGE_SOURCE, label: INSURER_PASSAGE_LABEL, snippet: snippetAround(maskNumbers(hit.line), query),
+        });
       }
-      for (const chunk of body.chunks) {
-        if (typeof chunk?.text !== 'string' || !Number.isSafeInteger(chunk.pageNumber) || chunk.pageNumber < 1) continue;
-        const pageSha256 = shaOf.get(`${chunk.documentId}|${chunk.pageNumber}`);
-        if (typeof pageSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(pageSha256)) continue;
-        for (const line of chunk.text.split('\n')) {
-          const lower = line.toLowerCase();
-          if (!words.every(word => lower.includes(word))) continue;
-          if (looksLikeSchedule('', line) || holdsIdentityLabel(line)) continue;
-          found.push({
-            chunkId: String(chunk.id), versionId, documentId: String(chunk.documentId), page: chunk.pageNumber, pageSha256,
-            source: INSURER_PASSAGE_SOURCE, label: INSURER_PASSAGE_LABEL, snippet: snippetAround(maskNumbers(line), query),
-          });
-          if (found.length === limit) return found;
-        }
-      }
+      if (found.length === limit) return found;
     }
     return found;
   }
