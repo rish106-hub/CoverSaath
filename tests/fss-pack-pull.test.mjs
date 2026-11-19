@@ -626,6 +626,7 @@ test('re-pull 404 pack_not_available: the cached rows of that version go, collat
   assert.equal(await s.service.pull(s.args), 'pack_not_available');
   assert.equal((await cacheRows(s)).length, 0, 'facts and pages rows are deleted');
   assert.deepEqual(s.collated, [s.holding.id, s.holding.id], 're-collated so the ida_wording rows written from the pack drop');
+  assert.equal(await s.services.fssHandoffs.linkFor(s.holding.id), null, 'the link goes, so a refill of the shared version cache cannot bring the rows back');
   const row = await handoffRow(s, s.requestId);
   assert.equal(row.lastOutcome, 'pack_not_available');
   await s.db.run('UPDATE fss_handoffs SET updated_at = ? WHERE request_id = ?', [OLD, s.requestId]);

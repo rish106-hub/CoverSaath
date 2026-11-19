@@ -205,6 +205,12 @@ export class FssHandoffRepository {
     }
   }
 
+  /** Removes the holding's link (household-scoped). True when a row was removed. Used when a gate withdraws the pack (404 on a re-pull). */
+  async unlink({ householdId, holdingId }) {
+    str(householdId, 'householdId'); str(holdingId, 'holdingId');
+    return (await this.database.run('DELETE FROM holding_fss_links WHERE holding_id = ? AND household_id = ?', [holdingId, householdId])).changes > 0;
+  }
+
   async linkFor(holdingId) {
     str(holdingId, 'holdingId');
     const row = await this.database.one('SELECT * FROM holding_fss_links WHERE holding_id = ?', [holdingId]);

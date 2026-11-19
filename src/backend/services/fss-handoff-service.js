@@ -189,11 +189,13 @@ export function createFssHandoffService({
         if (error.code === 'REFERENCE_DATA_NOT_FOUND') {
           await repository.recordOutcome({ requestId, outcome: 'pack_not_available' });
           onEvent({ type: 'fss.pull_failed', outcome: 'pack_not_available', retryable: false });
-          // A gate no longer holds: the public rows cached for this version go (facts and pages), and collate runs again so the ida_wording rows
-          // written from them drop. Nothing to re-collate for a first pull that 404s (nothing was cached or written). The cache rows are per version, so
-          // another holding's 404 may have removed them already: a handoff that had pulled before re-collates either way.
+          // A gate no longer holds: the holding's link goes (so a later refill of the same version's cache by another holding cannot bring this
+          // holding's rows back through it), the public rows cached for this version go (facts and pages), and collate runs again so the
+          // ida_wording rows written from them drop. Re-collate whenever this holding had a link or a cache row went (another holding's 404 may
+          // have removed the shared rows already). Nothing to re-collate for a first pull that 404s (no link, nothing cached).
+          const unlinked = await repository.unlink({ householdId, holdingId });
           const removed = [await referenceCache.remove(factsKey), await referenceCache.remove(packCacheKey('pages', handoff.versionId))];
-          if (removed.some(Boolean) || handoff.lastOutcome === 'pulled') await onPulled({ holding: first });
+          if (unlinked || removed.some(Boolean)) await onPulled({ holding: first });
           return 'pack_not_available';
         }
         if (error.code === 'REFERENCE_DATA_NOT_MODIFIED') return 'not_modified';
