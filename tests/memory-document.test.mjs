@@ -200,3 +200,86 @@ test('memory document: value formatting and policy number masking are pure', () 
   assert.equal(formatFactValue('money', { amountMinor: 'x' }), null);
   assert.equal(formatFactValue('duration', null), null);
 });
+
+// ADR 0039 review: the own-PDF render is byte-identical to the render before the insurer tier (commit d0de335), except for the new fixed
+// "Insurer terms your document doesn't state" section, which says none recorded here. Served through the route, which now calls
+// renderWithProse: with the prose flag off, and with it on but no model route, the text is this golden. Synthetic data only.
+const GOLDEN_OWN_RENDER = [
+  "# Memory",
+  "",
+  "> Built from your own documents and answers, shown only to you. Values read from your documents are not verified. The insurer's wording governs; check with the insurer before relying on any line. (Draft wording, FOR LEGAL REVIEW.)",
+  "",
+  "Generated DATE. Policy number shown by its last 4 characters only.",
+  "",
+  "## Policy",
+  "",
+  "- Insurer: unknown [unknown]",
+  "- Product: unknown [unknown]",
+  "- UIN: unknown [unknown]",
+  "- Version: v3 [policy record]",
+  "- Policy number: XXXXXXXXXXXX9012 [policy record]",
+  "",
+  "## People covered",
+  "",
+  "- Member member-a, adult [unknown]",
+  "",
+  "## Cover and limits",
+  "",
+  "- What is the sum insured? INR 5,00,000 (read from your document, not verified) [policy_schedule, p.2]",
+  "- What share of each claim do you pay as co-payment? 10% (read from your document, not verified) Check with the insurer. [policy_schedule, p.2]",
+  "",
+  "## Waiting periods",
+  "",
+  "- How long is the initial waiting period? Not settled: two readings disagree, see Conflicts to resolve. [unknown]",
+  "- How long is the waiting period for pre-existing diseases? 1095 days (read from your document, not verified) Check with the insurer. [policy_schedule, p.2, clause Pre-existing diseases]",
+  "",
+  "## Exclusions",
+  "",
+  "- What does the policy not cover? Cosmetic treatment is excluded. (read from your document, not verified) Check with the insurer. [policy_schedule, p.2]",
+  "",
+  "## Insurer terms your document doesn't state",
+  "",
+  "- None recorded. [unknown]",
+  "",
+  "## Declared conditions",
+  "",
+  "- Member member-a: Quillberry-marker hypertension (pre existing disease, declared on 2024-05-01, declared to the insurer) [owner statement]",
+  "",
+  "## Premiums and dues",
+  "",
+  "- Premium paid 2026-01-15: INR 12,345 by upi [owner statement]",
+  "- Premium due 2027-01-15: INR 12,345, expected [owner statement]",
+  "",
+  "## Conflicts to resolve",
+  "",
+  "- How long is the initial waiting period? Readings: 30 days or 60 days [policy_schedule, p.2]; 30 days or 60 days [insurer_wording, p.4] Check with the insurer. [unknown]",
+  "",
+  "## Open questions",
+  "",
+  "- What is the total premium you pay? [unknown]",
+  "- What is the premium before tax? [unknown]",
+  "- How much GST is in the premium? [unknown]",
+  "- What deductible applies before the policy pays? [unknown]",
+  "- What is the room rent limit per day? [unknown]",
+  "- What is the sub-limit for this treatment or disease? [unknown]",
+  "- From when to when does the policy run? [unknown]",
+  "- When was the policy issued? [unknown]",
+  "- When did the cover start? [unknown]",
+  "- When does the cover end? [unknown]",
+  "- When is the policy due for renewal? [unknown]",
+  "- How many days of grace are allowed to pay the renewal? [unknown]",
+  "- How many days do you have to cancel after buying? [unknown]",
+  "- Since when have you had cover without a break? [unknown]",
+  "- How long is the waiting period for maternity? [unknown]",
+  ""
+].join('\n');
+
+test('memory document: the own-PDF render is pinned byte for byte (flag off, and flag on without a model route)', opts, async t => {
+  for (const env of [ON, { ...ON, POLICY_DOC_PROSE_ENABLED: 'true' }]) {
+    const s = await world(t, env);
+    await seedFacts(s);
+    const r = await s.app.call(path(s.a.holding), { token: s.a.token });
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.text.replace(/^Generated \d{4}-\d{2}-\d{2}\./m, 'Generated DATE.'), GOLDEN_OWN_RENDER);
+  }
+});

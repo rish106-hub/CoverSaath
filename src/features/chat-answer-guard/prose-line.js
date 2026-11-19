@@ -21,10 +21,10 @@ export const PROSE_CHECK_IDS = Object.freeze({
 
 export const PROSE_LINE_MAX = 400;
 
-// Connecting words that carry no fact. Anything else must come from the source sentence. Negations are deliberately absent.
-const FUNCTION_WORDS = new Set(`a an the this that these those it its is are was were be been being has have had do does did of for to in on at by with from as
-  and or but if then than so per each any all your you yours our we they their them he she his her which who what when where how also about
-  can may might will would shall should could up out over under into only just here there more most less least within after before during`.split(/\s+/).filter(Boolean));
+// Connecting words that carry no fact. Anything else must come from the source sentence. Negations are deliberately absent, and so are
+// qualifiers and modals (less, more, than, only, within, after, before, up, over, under, any, all, each, per, can, may, will, should...):
+// "30 days" reworded as "less than 30 days" or "only after 30 days" is a new fact (review of ADR 0039).
+const FUNCTION_WORDS = new Set('a an the is are it its of to in on at by with from as and this that there has have do does for'.split(' '));
 // Dropping one of these from a sentence flips or hides its meaning; each one in the source must appear in the reworded sentence.
 const NEGATIONS = ['not', 'no', 'never', 'nil', 'none', 'unknown', 'excluded', 'without', 'cannot', 'neither', 'nor'];
 
@@ -38,10 +38,14 @@ export function checkProseLine({ source, text }) {
   const out = squash(text);
   const original = squash(source);
   if (out.length === 0 || out.length > PROSE_LINE_MAX || /[\r\n]/.test(String(text))) failed.add(PROSE_CHECK_IDS.length);
-  if (/[[\]"“”<>`]/.test(out)) failed.add(PROSE_CHECK_IDS.markup);
+  // Braces too: a placeholder the gate did not restore (or one the model invented) must never be served as text.
+  if (/[[\]"“”<>`{}]/.test(out)) failed.add(PROSE_CHECK_IDS.markup);
 
   const pool = extractNumbers(original);
-  for (const number of extractNumbers(out)) if (!isGrounded(number, pool)) failed.add(PROSE_CHECK_IDS.number);
+  const outPool = extractNumbers(out);
+  for (const number of outPool) if (!isGrounded(number, pool)) failed.add(PROSE_CHECK_IDS.number);
+  // And the other way: a number of the source may not be dropped ("is 30 days" -> "is days").
+  for (const number of pool) if (!isGrounded(number, outPool)) failed.add(PROSE_CHECK_IDS.number);
 
   if (firstMatch(OUTCOME_PROMISE_PHRASES, out)) failed.add(PROSE_CHECK_IDS.outcome);
   if (firstMatch(ADVICE_PHRASES, out)) failed.add(PROSE_CHECK_IDS.advice);

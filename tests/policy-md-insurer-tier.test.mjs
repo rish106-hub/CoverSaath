@@ -237,6 +237,17 @@ test('prose pass: a line that fails the guard (a changed number, a new fact, adv
   assert.ok(checkProseLine({ source: 'What is the room rent limit per day? INR 5,000', text: 'The room rent limit per day is INR 5,000 and always paid.' }).includes('no_new_facts'));
   assert.ok(checkProseLine({ source: 'Cosmetic treatment is not covered.', text: 'Cosmetic treatment is covered.' }).includes('no_new_facts'));
   assert.ok(checkProseLine({ source: 'Call the insurer', text: 'Call the insurer on 1800 123 4567' }).includes('contact_trusted'));
+  // Review of ADR 0039: qualifiers and modals are new facts, a dropped number fails, and an unrestored or invented placeholder is markup.
+  const waiting = 'How long is the initial waiting period? 30 days';
+  for (const text of ['The initial waiting period is less than 30 days.', 'The initial waiting period is more than 30 days.', 'The initial waiting period is within 30 days.',
+    'The initial waiting period is only for 30 days.', 'The initial waiting period is up to 30 days.', 'The initial waiting period may be 30 days.']) {
+    assert.ok(checkProseLine({ source: waiting, text }).includes('no_new_facts'), text);
+  }
+  assert.ok(checkProseLine({ source: waiting, text: 'The initial waiting period is days.' }).includes('number_grounded'));
+  assert.ok(checkProseLine({ source: 'What share of each claim do you pay as co-payment? 10%', text: 'You pay 10% of each claim as co-payment for all.' }).includes('no_new_facts'));
+  assert.ok(checkProseLine({ source: 'Is maternity covered? yes', text: 'Maternity is covered {{PERSON_9}}.' }).includes('no_markup'));
+  assert.deepEqual(checkProseLine({ source: 'Is maternity covered? yes', text: 'Maternity is covered.' }), []);
+  assert.deepEqual(checkProseLine({ source: waiting, text: 'The initial waiting period is 30 days.' }), []);
 });
 
 test('prose pass: a model that drops a line, answers unknown, or times out serves the deterministic render', opts, async t => {
@@ -278,6 +289,28 @@ test('prose pass: consent withdrawn while the model call runs serves the determi
   assert.equal(out.text.includes('Wording simplified'), false);
   const after = (await s.handle.pool.query('SELECT (SELECT count(*) FROM household_memory_facts) AS facts, (SELECT count(*) FROM memory_chunks) AS chunks')).rows[0];
   assert.deepEqual(after, before);
+});
+
+test('prose pass: the document grant withdrawn while the model call runs is the coded 403 even when the pass then fails its guard', opts, async t => {
+  const s = await world(t, { mode: text => `${REWORD(text)} Always paid.`, hook: async ({ handle, a }) => { await handle.pool.query('UPDATE consent_grants SET revoked_at = $1 WHERE id = $2', [new Date().toISOString(), a.consent]); } });
+  await seedTiers(s);
+  await assert.rejects(s.prose(), error => error.code === 'CONSENT_REQUIRED');
+  assert.equal(s.sent.length, 1);
+});
+
+test('prose pass: every provider that received a chunk is re-checked before serving (failover across chunks)', opts, async t => {
+  const env = { MODEL_PROVIDERS: 'gemini,anthropic', GEMINI_API_KEY: 'test-gemini-key-not-real', GEMINI_INPUT_USD_PER_MILLION: '1', GEMINI_OUTPUT_USD_PER_MILLION: '4' };
+  const s = await world(t, { env, hook: async ({ handle }) => { await handle.pool.query('UPDATE consent_grants SET revoked_at = $1 WHERE id = $2', [new Date().toISOString(), 'cr-a-gemini']); } });
+  await insert(s.handle.pool, 'consent_grants', { id: 'cr-a-gemini', household_id: s.a.household, subject_adult_id: s.a.adult, purpose: 'coverage_reconstruction' });
+  await insert(s.handle.pool, 'consent_scopes', { id: 'scope-a-gemini', consent_grant_id: 'cr-a-gemini', resource_type: 'household', action: 'derive', data_category: 'insurance_question', recipient: 'gemini' });
+  // Long product-term sentences: more than one chunk, so the second chunk fails over to anthropic after the gemini grant is withdrawn.
+  const long = word => `${word} treatment is paid as printed in the policy wording for the plan, subject to the terms and conditions of the cover and the limits shown in the schedule, and it is paid only when the treatment is medically necessary and done in a hospital as defined in the wording, for the insured person named.`;
+  for (const [key, word] of [['clause_exclusion', 'Cosmetic'], ['clause_restoration', 'Restoration'], ['clause_ayush', 'Ayurvedic'], ['room_rent_text', 'Room'], ['icu_limit_text', 'Intensive'], ['tpa_name', 'Administrator']]) await s.own(key, { text: long(word) });
+  const out = await s.prose();
+  assert.equal(s.sent.length, 2, 'two chunks, two calls');
+  assert.equal(out.source, 'deterministic');
+  assert.match(out.reason, /CONSENT_REQUIRED|consent_required/);
+  assert.equal(out.text, await s.render());
 });
 
 test('policy.md: another household is denied, for the plain render and the prose render alike', opts, async t => {
@@ -411,8 +444,14 @@ test('revocation empties everything: policy.md, chat insurer lines, the link and
   await assert.rejects(s.render(), error => ['HOLDING_NOT_FOUND', 'CONSENT_REQUIRED'].includes(error.code));
   const wording = (await import('../src/backend/services/insurer-wording-service.js')).createInsurerWording({ fssHandoffs: s.services.fssHandoffs, referenceCache: s.services.referenceCache, holdingRepository: s.services.holdingPipelineRepository });
   assert.deepEqual(await wording.linesFor({ householdId: s.a.household, holdingIds: [s.a.holding.id], question: QUESTION }), []);
-  for (const table of ['household_memory_facts', 'holding_fss_links', 'memory_chunks']) {
+  for (const table of ['household_memory_facts', 'holding_fss_links', 'memory_chunks', 'chat_threads', 'chat_turns', 'retrieval_traces']) {
     assert.equal(Number((await s.handle.pool.query(`SELECT count(*) AS n FROM public.${table} WHERE household_id = $1`, [s.a.household])).rows[0].n), 0, table);
+  }
+  // The chat store held the insurer quote (sealed); nothing of it is left anywhere after the revocation.
+  const tables = (await s.db.many("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE' AND table_name <> 'reference_cache'")).map(row => row.table_name);
+  for (const table of tables) {
+    const rows = (await s.handle.pool.query(`SELECT row_to_json(x)::text AS j FROM public."${table}" x WHERE to_jsonb(x) ? 'household_id' AND to_jsonb(x)->>'household_id' = $1`, [s.a.household])).rows;
+    assert.equal(rows.some(row => row.j.includes('Cataract surgery is covered')), false, table);
   }
   void at;
 });

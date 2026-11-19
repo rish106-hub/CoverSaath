@@ -280,7 +280,7 @@ export function createMemoryDocumentService({ holdingRepository, holdings, repos
   };
 
   // One model call for one chunk. Returns Map line -> reworded sentence, or a failure code string. Never throws a coded error the caller must treat as final.
-  async function rewriteChunk({ householdId, adultId, chunk, signal, grant }) {
+  async function rewriteChunk({ householdId, adultId, chunk, signal, grants }) {
     let known;
     const loader = () => (known ??= loadKnownIdentifiers(householdId));
     const sent = [];
@@ -308,7 +308,8 @@ export function createMemoryDocumentService({ holdingRepository, holdings, repos
     const aborted = new Promise((_, reject) => signal.addEventListener('abort', () => reject(coded('PROSE_TIMEOUT', 'The prose pass timed out.', 504)), { once: true }));
     const result = await Promise.race([gateway.callRouted({ task: POLICY_DOC_PROSE_TASK, input, householdId, signal, authorize }), aborted]);
     if (!result || result.metadata?.calls === 0 || result.output?.status !== 'extracted_unverified') return result?.metadata?.unavailableReason ?? 'model_unknown';
-    grant.value = result.authorization ?? null;
+    // Every provider that received a chunk is re-checked before serving (a failover can route chunks to different providers).
+    grants.push(result.authorization ?? null);
     const byId = new Map(result.output.lines.map(line => [line.line_id, line.text]));
     if (byId.size !== sent.length) return 'line_count';
     const rewrites = new Map();
@@ -331,8 +332,11 @@ export function createMemoryDocumentService({ holdingRepository, holdings, repos
   async function renderWithProse({ householdId = null, holdingId, adultId }) {
     const parts = await build({ householdId, holdingId, adultId });
     const deterministic = () => serialize(parts);
-    const fallback = reason => {
+    let called = false;
+    const fallback = async reason => {
       try { onEvent?.({ event: 'policy_doc_prose_fallback', reason: String(reason).replace(/[^A-Za-z0-9_:+-]/g, '_').slice(0, 80) }); } catch { /* logging never breaks a render */ }
+      // After a model call (which may take up to the timeout) the document grant is checked again: withdrawn is the coded 403, never a fallback.
+      if (called) await requireOwnedHolding({ householdId: parts.holding.householdId, holdingId, adultId });
       return { text: deterministic(), source: 'deterministic', reason };
     };
     if (!proseEnabled()) return { text: deterministic(), source: 'deterministic', reason: 'disabled' };
@@ -343,19 +347,20 @@ export function createMemoryDocumentService({ holdingRepository, holdings, repos
     if (chunks.length > 4) return fallback('too_long');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const grant = { value: null };
+    const grants = [];
     const rewrites = new Map();
     try {
       for (const chunk of chunks) {
-        const done = await rewriteChunk({ householdId: actualHousehold, adultId, chunk, signal: controller.signal, grant });
-        if (!(done instanceof Map)) return fallback(done);
+        called = true;
+        const done = await rewriteChunk({ householdId: actualHousehold, adultId, chunk, signal: controller.signal, grants });
+        if (!(done instanceof Map)) return await fallback(done);
         for (const [line, text] of done) rewrites.set(line, text);
       }
       // The commit step (here: serving). The provider grant must still be current and exact; withdrawn mid-pass means the plain version.
-      if (!grant.value?.grantId) return fallback('consent_required');
-      await providerConsent.require({ householdId: actualHousehold, adultId, grantId: grant.value.grantId, kind: 'chat', provider: grant.value.provider });
+      if (grants.length === 0 || grants.some(item => !item?.grantId)) return await fallback('consent_required');
+      for (const item of grants) await providerConsent.require({ householdId: actualHousehold, adultId, grantId: item.grantId, kind: 'chat', provider: item.provider });
     } catch (error) {
-      return fallback(typeof error?.code === 'string' && /^[A-Za-z][A-Za-z0-9_]{2,63}$/.test(error.code) ? error.code : 'prose_failed');
+      return await fallback(typeof error?.code === 'string' && /^[A-Za-z][A-Za-z0-9_]{2,63}$/.test(error.code) ? error.code : 'prose_failed');
     } finally { clearTimeout(timer); }
     // The document grant: if it was withdrawn while the call ran, the owner gets the same coded 403 as render() (never a stale text).
     await requireOwnedHolding({ householdId: actualHousehold, holdingId, adultId });
