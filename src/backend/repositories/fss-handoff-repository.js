@@ -90,8 +90,11 @@ export class FssHandoffRepository {
   /**
    * Applies a verified notice (or a poll answer). Resolves { result }: 'applied', 'duplicate' (same state again), 'ignored' (a final
    * state never changes, or the FSS handoff id differs from the stored one) or 'unknown' (no such request id: dropped, e.g. an erased holding).
+   * `afterApply(handoff)` runs INSIDE the same transaction, right after the state row is written and only when it is 'applied' (the outbox hook:
+   * the pull job is enqueued here, so a crash can never leave a matched handoff without its job). If it throws, the state change rolls back too.
+   * `reason` (a closed FSS code, GET only) is kept as last_outcome of a non-matched final state.
    */
-  async applyNotice({ requestId, fssHandoffId, state, versionId = null }) {
+  async applyNotice({ requestId, fssHandoffId, state, versionId = null, reason = null, afterApply = null }) {
     if (!FSS_NOTICE_STATES.includes(state)) invalid('state is invalid.');
     if (!FSS_ID.test(String(fssHandoffId ?? '')) || (versionId !== null && !FSS_ID.test(String(versionId))) || (versionId !== null && state !== 'matched')) invalid('fssHandoffId or versionId is invalid.');
     const at = this.clock().toISOString();
@@ -105,10 +108,22 @@ export class FssHandoffRepository {
       if (FSS_FINAL_STATES.includes(row.state) && row.state !== 'failed') return { result: 'ignored' };
       if (row.state === 'working' && state === 'accepted') return { result: 'ignored' };
       const final = FSS_FINAL_STATES.includes(state);
-      await db.run('UPDATE fss_handoffs SET fss_handoff_id = ?, state = ?, fss_version_id = ?, decided_at = ?, updated_at = ? WHERE id = ?',
-        [fssHandoffId, state, versionId, final ? at : null, at, row.id]);
-      return { result: 'applied', handoff: this.#dto(await db.one('SELECT * FROM fss_handoffs WHERE id = ?', [row.id])) };
+      const outcome = typeof reason === 'string' && OUTCOME.test(reason) && state !== 'matched' ? reason : row.last_outcome;
+      await db.run('UPDATE fss_handoffs SET fss_handoff_id = ?, state = ?, fss_version_id = ?, last_outcome = ?, decided_at = ?, updated_at = ? WHERE id = ?',
+        [fssHandoffId, state, versionId, outcome, final ? at : null, at, row.id]);
+      const handoff = this.#dto(await db.one('SELECT * FROM fss_handoffs WHERE id = ?', [row.id]));
+      if (typeof afterApply === 'function') await afterApply(handoff);
+      return { result: 'applied', handoff };
     });
+  }
+
+  /**
+   * Runs `work` in one transaction that holds the household lock (the lock order of every household write: household first). Used to check the
+   * current consent and write the link atomically: a revocation takes the same lock, so it commits wholly before or wholly after.
+   */
+  async withHousehold(householdId, work) {
+    str(householdId, 'householdId');
+    return this.database.transaction(work, { locks: [householdLock(householdId)] });
   }
 
   /** Open handoffs FSS accepted but never reported on, oldest first, for the hourly poll. */
@@ -143,9 +158,10 @@ export class FssHandoffRepository {
     if (!FSS_ID.test(String(productId ?? '')) || (versionId !== null && !FSS_ID.test(String(versionId))) || !FSS_MATCHED_BY.includes(matchedBy) || !FSS_CONFIDENCE.includes(confidence)) invalid('The link is invalid.');
     const at = this.clock().toISOString();
     try {
-      await this.database.run(`INSERT INTO holding_fss_links (holding_id, household_id, fss_product_id, fss_version_id, matched_by, confidence, matched_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+      // A nested transaction is a savepoint: the scope trigger's failure rolls back only this statement, so an enclosing transaction stays usable.
+      await this.database.transaction(() => this.database.run(`INSERT INTO holding_fss_links (holding_id, household_id, fss_product_id, fss_version_id, matched_by, confidence, matched_at) VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (holding_id) DO UPDATE SET fss_product_id = EXCLUDED.fss_product_id, fss_version_id = EXCLUDED.fss_version_id, matched_by = EXCLUDED.matched_by, confidence = EXCLUDED.confidence, matched_at = EXCLUDED.matched_at
-        WHERE holding_fss_links.household_id = EXCLUDED.household_id`, [holdingId, householdId, productId, versionId, matchedBy, confidence, at]);
+        WHERE holding_fss_links.household_id = EXCLUDED.household_id`, [holdingId, householdId, productId, versionId, matchedBy, confidence, at]));
     } catch (error) {
       if (/fss row must name a holding/.test(String(error?.message))) fail('HOLDING_NOT_FOUND', 'Holding not found.', 404);
       throw error;

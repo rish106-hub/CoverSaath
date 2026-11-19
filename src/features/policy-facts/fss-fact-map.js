@@ -1,10 +1,15 @@
 // FSS fact -> product-term fact (ADR 0034, design note section 3). Pure: no I/O, never throws. Takes facts already parsed and
 // screened by src/integrations/insurance-data/schemas.js (`outcome: 'verified'` means non-synthetic, independently verified, evidenced and
-// its family verified or partial). Only four types map in P0:
+// its family verified or partial). Eleven FSS names map to eleven CoverSaath keys (the pack's seven shown fact types plus P0's room rent and copay):
 //   room_rent_limit (fixed_amount_per_day)         -> room_rent_limit   { amountMinor, currency }   rupees x 100
 //   copay (percentage)                             -> copay_percent     { bp }                      percent x 100
 //   initial_waiting_period (duration)              -> waiting_initial   { days, original }
 //   pre_existing_disease_waiting_period (duration) -> waiting_ped       { days, original }
+//   pre_hospitalisation_days (duration)            -> pre_hospitalisation_days  { days, original }   (also FSS name pre_hospitalization_days)
+//   post_hospitalisation_days (duration)           -> post_hospitalisation_days { days, original }   (also post_hospitalization_days)
+//   free_look_period (duration)                    -> free_look_period          { days, original }
+//   day_care_covered (bool yes/no)                 -> day_care_covered          { value }            (also FSS name day_care)
+//   clause_ayush (bool yes/no)                     -> clause_ayush              { text }             (also FSS name ayush; text slot, see ayush())
 // Everything else stays absent: other fact types, facts with conditions or exceptions (a conditional term is not the headline term),
 // unusable or withheld families, values that do not fit. Nothing is guessed.
 
@@ -33,11 +38,31 @@ const duration = value => {
   return days <= 36_600 ? { days, original: [{ amount: part.value, unit }] } : null;
 };
 
+// FSS sends a yes/no key as { kind: 'bool', text: 'yes' | 'no' } (insurance-data-api profile-facts.ts factValue). Anything else is not a decided boolean.
+const yesNo = value => {
+  if (value?.kind !== 'bool' || typeof value.text !== 'string') return null;
+  const answer = value.text.trim().toLowerCase();
+  return answer === 'yes' ? true : answer === 'no' ? false : null;
+};
+const boolean = value => { const answer = yesNo(value); return answer === null ? null : { value: answer }; };
+// clause_ayush is a TEXT slot ("Is AYUSH treatment covered, and how?"), FSS reads only whether it is covered. The value is the fixed words
+// below, never FSS text, so nothing free-form enters the slot; it says nothing about "how". Wording is FOR LEGAL REVIEW.
+const ayush = value => { const answer = yesNo(value); return answer === null ? null : { text: answer ? 'AYUSH treatment is covered' : 'AYUSH treatment is not covered' }; };
+
 export const FSS_FACT_MAP = Object.freeze({
   room_rent_limit: Object.freeze({ factKey: 'room_rent_limit', transform: money }),
   copay: Object.freeze({ factKey: 'copay_percent', transform: percent }),
   initial_waiting_period: Object.freeze({ factKey: 'waiting_initial', transform: duration }),
   pre_existing_disease_waiting_period: Object.freeze({ factKey: 'waiting_ped', transform: duration }),
+  pre_hospitalisation_days: Object.freeze({ factKey: 'pre_hospitalisation_days', transform: duration }),
+  pre_hospitalization_days: Object.freeze({ factKey: 'pre_hospitalisation_days', transform: duration }),
+  post_hospitalisation_days: Object.freeze({ factKey: 'post_hospitalisation_days', transform: duration }),
+  post_hospitalization_days: Object.freeze({ factKey: 'post_hospitalisation_days', transform: duration }),
+  free_look_period: Object.freeze({ factKey: 'free_look_period', transform: duration }),
+  day_care_covered: Object.freeze({ factKey: 'day_care_covered', transform: boolean }),
+  day_care: Object.freeze({ factKey: 'day_care_covered', transform: boolean }),
+  clause_ayush: Object.freeze({ factKey: 'clause_ayush', transform: ayush }),
+  ayush: Object.freeze({ factKey: 'clause_ayush', transform: ayush }),
 });
 
 export const FSS_MAPPED_FACT_TYPES = Object.freeze(Object.keys(FSS_FACT_MAP));

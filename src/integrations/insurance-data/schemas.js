@@ -477,9 +477,12 @@ function parsePackFact(raw, { pages, shaOf }) {
   const mappedType = Object.hasOwn(PACK_TYPE_TO_FSS, factType) ? PACK_TYPE_TO_FSS[factType] : factType;
   if (!shown || evidence.length === 0 || parsedValue === null) return null;
   const scope = parsedValue.scope;
+  // A variant's applicability (plan, age, zone, sum insured) arrives as `value.conditions`, a list of strings (uin-pack-v1: profile facts). Any condition
+  // makes the fact conditional, so it never maps as the headline term. A malformed list fails the pack closed.
+  const conditions = isObject(value.value) && value.value.conditions !== undefined ? textList(value.value.conditions) : [];
   return {
     factId, factType: mappedType, valueText: parsedValue.text, value: parsedValue,
-    conditions: typeof scope === 'string' && scope.length > 0 ? [scope] : [], exceptions: [],
+    conditions: [...(typeof scope === 'string' && scope.length > 0 ? [scope] : []), ...conditions], exceptions: [],
     verificationStatus: status, taxonomyVersion: null, reviewId: null, reviewerId: null, sourceFreshness: null, evidence,
     outcome: status === 'independently_verified' ? 'verified' : 'unchecked', family: null,
   };

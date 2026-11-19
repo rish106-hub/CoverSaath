@@ -31,6 +31,8 @@ const normalizeUin = value => {
 };
 const CURSOR = /^[A-Za-z0-9_-]{1,200}$/;
 const normalizeCursor = value => { if (value === undefined) return undefined; if (typeof value !== 'string' || !CURSOR.test(value)) throw invalidRequest(); return value; };
+const HANDOFF_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
+const normalizeHandoffId = value => { if (typeof value !== 'string' || !HANDOFF_ID.test(value)) throw invalidRequest(); return value; };
 const normalizeId = value => { if (typeof value !== 'string' || !ID.test(value)) throw invalidRequest(); return value; };
 const invalidRequest = () => referenceError('REFERENCE_DATA_REQUEST_INVALID', 'Reference data request was invalid.', { statusCode: 400 });
 
@@ -125,7 +127,16 @@ export const SERVICE_ENDPOINTS = Object.freeze({
     parse: schemas.parseProductExport,
     maxBytes: EXPORT_MAX_RESPONSE_BYTES,
   },
-  // UIN reference pack v1 (docs/contracts/uin-pack-v1.md, FOR LEGAL REVIEW): page text, facts and verified quotes of one product. The UIN is read
+  // UIN reference pack of a MATCHED handoff (insurance-data-api GET /v1/handoffs/{id}/pack, docs/contracts/fss-handoff-v1.md): the pack of the version FSS
+  // matched (version-pinned, not the newest), with every gate re-checked when served. 409 handoff_not_matched -> REFERENCE_DATA_CONFLICT (retry later);
+  // 404 pack_not_available -> REFERENCE_DATA_NOT_FOUND (a gate no longer holds: permanent, do not retry). No UIN is sent: the handoff id is the key.
+  'handoff.pack': {
+    normalize: p => ({ handoffId: normalizeHandoffId(p.handoffId) }),
+    request: p => ({ path: `/v1/handoffs/${encodeURIComponent(p.handoffId)}/pack`, query: {} }),
+    parse: schemas.parsePack,
+    maxBytes: EXPORT_MAX_RESPONSE_BYTES,
+  },
+  // Fallback only (not used by the pull while handoff.pack exists). UIN reference pack v1 (docs/contracts/uin-pack-v1.md, FOR LEGAL REVIEW): page text, facts and verified quotes of one product. The UIN is read
   // server-side from the household's own profile and goes only to FSS. The response carries no UIN and no household data. No If-None-Match is
   // sent, so a 304 never happens; the cache key is the version id and the cache TTL decides when to pull again.
   'products.packByUin': {
@@ -204,7 +215,7 @@ export function createInsuranceDataClient({ env = process.env, fetchImpl = globa
     normalizeParams(endpoint, params = {}) {
       const def = definition(endpoint);
       if (params === null || typeof params !== 'object') throw invalidRequest();
-      const allowed = new Set(['q', 'uin', 'insurerId', 'productId', 'versionId', 'factType', 'cursor', 'insurer']);
+      const allowed = new Set(['q', 'uin', 'insurerId', 'productId', 'versionId', 'factType', 'cursor', 'insurer', 'handoffId']);
       if (Object.keys(params).some(key => !allowed.has(key))) throw invalidRequest();
       return def.normalize(params);
     },
@@ -242,7 +253,7 @@ export function createInsuranceDataClient({ env = process.env, fetchImpl = globa
         return { data, etag: typeof etag === 'string' && etag.length <= 200 ? etag : null };
       } catch (error) {
         // Only availability faults trip the breaker; auth, not-found and shape errors are not outages.
-        if (error instanceof ReferenceDataError && error.retryable && error.code !== 'REFERENCE_DATA_RATE_LIMITED') {
+        if (error instanceof ReferenceDataError && error.retryable && error.code !== 'REFERENCE_DATA_RATE_LIMITED' && error.code !== 'REFERENCE_DATA_CONFLICT') {
           failures += 1;
           if (failures >= BREAKER_THRESHOLD) openUntil = now() + BREAKER_OPEN_MS;
         }

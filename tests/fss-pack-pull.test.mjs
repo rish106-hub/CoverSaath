@@ -14,6 +14,8 @@ import { createInsuranceDataClient } from '../src/integrations/index.js';
 import { signNotice } from '../src/integrations/insurance-data/index.js';
 import { REFERENCE_ENDPOINTS, SERVICE_ENDPOINTS } from '../src/integrations/insurance-data/client.js';
 import { parsePack } from '../src/integrations/insurance-data/schemas.js';
+import { mapFssFacts } from '../src/features/policy-facts/fss-fact-map.js';
+import { householdLock } from '../src/backend/database/postgres/locks.js';
 import { buildJobHandlers } from '../src/server/worker.js';
 
 // Plan C1: a matched FSS handoff pulls the UIN pack (insurance-data-api docs/contracts/uin-pack-v1.md) into the reference cache, links the holding,
@@ -31,6 +33,11 @@ const PAGE_TEXT = [
   'Pre-existing diseases are covered after 36 months of continuous coverage with us.',
   'Co-payment of 20% applies to every claim made by a person aged above 60 years.',
   'Room rent is limited to Rs. 5,000 per day for a single private room.',
+  'Pre-hospitalisation medical expenses are covered for 60 days before admission.',
+  'Post-hospitalisation medical expenses are covered for 90 days after discharge.',
+  'You may return this policy within a free look period of 15 days of receipt.',
+  'Day care procedures are covered when they need less than 24 hours of stay.',
+  'Treatment under AYUSH systems is covered up to the sum insured.',
 ].join('\n');
 const quoteOf = needle => PAGE_TEXT.split('\n').find(line => line.includes(needle));
 const evidence = needle => [{ document_id: 'doc_pack_1', page_number: 4, quote: quoteOf(needle), page_sha256: SHA_PAGE }];
@@ -106,6 +113,66 @@ test('products.packByUin is a service endpoint only, GET by UIN, and a 304 is a 
   await assert.rejects(packClient(404).read('products.packByUin', { uin: UIN }), { code: 'REFERENCE_DATA_NOT_FOUND', retryable: false });
   await assert.rejects(packClient(500).read('products.packByUin', { uin: UIN }), { retryable: true });
   await assert.rejects(packClient(() => json({ nope: true })).read('products.packByUin', { uin: UIN }), { code: 'REFERENCE_DATA_RESPONSE_INVALID' });
+});
+
+test('handoff.pack is a service endpoint: GET by the FSS handoff id, no UIN in the request; 404 is permanent, 409 is retryable and never trips the breaker', async () => {
+  assert.ok('handoff.pack' in SERVICE_ENDPOINTS);
+  assert.ok(!('handoff.pack' in REFERENCE_ENDPOINTS), 'never reachable from the import-file allow-list');
+  const calls = [];
+  const ok = await packClient(() => json(rawPack()), calls).read('handoff.pack', { handoffId: 'h-1' });
+  assert.deepEqual(calls, ['/v1/handoffs/h-1/pack']);
+  assert.equal(ok.data.facts.length, 3);
+  await assert.rejects(packClient(404).read('handoff.pack', { handoffId: 'h-1' }), { code: 'REFERENCE_DATA_NOT_FOUND', retryable: false });
+  await assert.rejects(packClient(409).read('handoff.pack', { handoffId: 'h-1' }), { code: 'REFERENCE_DATA_CONFLICT', retryable: true });
+  await assert.rejects(packClient(500).read('handoff.pack', { handoffId: 'h-1' }), { retryable: true });
+  await assert.rejects(packClient(200).read('handoff.pack', { handoffId: '../x' }), { code: 'REFERENCE_DATA_REQUEST_INVALID' });
+  await assert.rejects(packClient(200).read('handoff.pack', { uin: UIN }), { code: 'REFERENCE_DATA_REQUEST_INVALID' });
+  // Five 409s in a row do not open the breaker (a not-yet-matched handoff is not an outage).
+  const client = packClient(409);
+  for (let i = 0; i < 8; i += 1) await assert.rejects(client.read('handoff.pack', { handoffId: 'h-1' }), { code: 'REFERENCE_DATA_CONFLICT' });
+});
+
+// FSS sends { kind: 'bool', text: 'yes' | 'no' } for a yes/no key and { kind: 'duration', duration: { value, unit } } for a period (insurance-data-api profile-facts.ts).
+const SEVEN = [
+  ['waiting_initial', { kind: 'duration', duration: { value: 30, unit: 'days' }, text: '30 days' }, 'Waiting period', 'waiting_initial', { days: 30 }],
+  ['waiting_ped', { kind: 'duration', duration: { value: 36, unit: 'months' }, text: '36 months' }, 'Pre-existing', 'waiting_ped', { days: 1095 }],
+  ['pre_hospitalisation_days', { kind: 'duration', duration: { value: 60, unit: 'days' }, text: '60 days' }, 'Pre-hospitalisation', 'pre_hospitalisation_days', { days: 60 }],
+  ['post_hospitalisation_days', { kind: 'duration', duration: { value: 90, unit: 'days' }, text: '90 days' }, 'Post-hospitalisation', 'post_hospitalisation_days', { days: 90 }],
+  ['free_look_period', { kind: 'duration', duration: { value: 15, unit: 'days' }, text: '15 days' }, 'free look period', 'free_look_period', { days: 15 }],
+  ['day_care_covered', { kind: 'bool', text: 'yes' }, 'Day care', 'day_care_covered', { value: true }],
+  ['clause_ayush', { kind: 'bool', text: 'yes' }, 'AYUSH', 'clause_ayush', { text: 'AYUSH treatment is covered' }],
+];
+const sevenFacts = () => SEVEN.map(([type, value, needle], i) => packFact(`pf-seven-${i}`, type, value, 'extracted_unverified', { evidence: evidence(needle) }));
+
+for (const [type, value, needle, key, expected] of SEVEN) {
+  test(`fact map: pack fact ${type} maps to ${key}, verified and unchecked, with its quote`, () => {
+    for (const status of ['independently_verified', 'extracted_unverified']) {
+      const pack = parsePack(rawPack({ facts: [packFact('pf-one', type, value, status, { evidence: evidence(needle) })] }));
+      const [row, ...rest] = mapFssFacts(pack.facts);
+      assert.equal(rest.length, 0);
+      assert.equal(row.factKey, key);
+      assert.equal(row.unchecked, status === 'extracted_unverified');
+      for (const [field, wanted] of Object.entries(expected)) assert.deepEqual(row.value[field], wanted);
+      assert.ok(row.fact.evidence[0].quote.includes(needle));
+    }
+  });
+}
+
+test('fact map: the FSS names of the same keys map too; a conditional, an unclear or a wrong-kind value never maps', () => {
+  const one = (type, value, over = {}) => mapFssFacts(parsePack(rawPack({ facts: [packFact('pf-x', type, value, 'extracted_unverified', { evidence: evidence('Day care'), ...over })] })).facts);
+  assert.equal(one('day_care', { kind: 'bool', text: 'no' })[0].value.value, false);
+  assert.equal(one('ayush', { kind: 'bool', text: 'no' })[0].value.text, 'AYUSH treatment is not covered');
+  assert.equal(one('pre_hospitalization_days', { kind: 'duration', duration: { value: 2, unit: 'months' } })[0].value.days, 60);
+  assert.equal(one('post_hospitalization_days', { kind: 'duration', duration: { value: 1, unit: 'years' } })[0].value.days, 365);
+  assert.deepEqual(one('day_care_covered', { kind: 'bool', text: 'maybe' }), [], 'not yes or no');
+  assert.deepEqual(one('day_care_covered', { kind: 'text', text: 'yes' }), [], 'wrong kind');
+  assert.deepEqual(one('clause_ayush', { kind: 'bool' }), [], 'no text');
+  assert.deepEqual(one('free_look_period', { kind: 'duration', duration: { value: 15, unit: 'hours' } }), [], 'unit the slot cannot hold');
+  assert.deepEqual(one('day_care_covered', { kind: 'bool', text: 'yes', scope: 'plan: gold' }), [], 'scope is a condition');
+  // `value.conditions` (a variant's age, zone, plan or sum insured) is a condition too: the fact is not the headline term.
+  assert.deepEqual(one('day_care_covered', { kind: 'bool', text: 'yes', conditions: ['age 18 to 35'] }), []);
+  assert.deepEqual(one('free_look_period', { kind: 'duration', duration: { value: 15, unit: 'days' }, conditions: ['zone: A'] }), []);
+  assert.throws(() => one('day_care_covered', { kind: 'bool', text: 'yes', conditions: [7] }), { code: 'REFERENCE_DATA_RESPONSE_INVALID' });
 });
 
 // --- the service, on a real database ---
@@ -253,7 +320,7 @@ test('pull: consent revoked while the pack is read means no write, no link, no c
 test('pull: 404 is permanent (outcome stored, no throw); 409, 429, 5xx and timeout rethrow for backoff; bad shape and a wrong version write nothing', opts, async t => {
   const cases = [
     [404, null, 'pack_not_available'],
-    [409, 'throws', 'unavailable'],
+    [409, 'throws', 'handoff_not_matched'],
     [429, 'throws', 'rate_limited'],
     [500, 'throws', 'unavailable'],
     [() => json({ not: 'a pack' }), null, 'response_invalid'],
@@ -293,19 +360,110 @@ test('pull: the queue retries a retryable failure with backoff and the job handl
   assert.ok(!(FSS_PULL_JOB_KIND in buildJobHandlers(s.services, { HOLDINGS_ENABLED: 'true' })));
 });
 
-test('pull: a handoff that is not matched, or another holding, is skipped; no confirmed UIN records no_uin and calls nothing', opts, async t => {
+test('pull: a handoff that is not matched, or another holding, is skipped; the pack is read by the handoff id and no UIN is sent', opts, async t => {
   const calls = [];
   const s = await world(t, { reader: packClient(() => json(rawPack()), calls) });
   const requestId = await accepted(s);
   assert.equal(await s.service.pull({ householdId: s.a.household, holdingId: s.holding.id, requestId }), 'skipped', 'still accepted');
   await s.service.receiveNotice(noticeFor(requestId));
   assert.equal(await s.service.pull({ householdId: 'household-other', holdingId: s.holding.id, requestId }), 'skipped');
-  const noUin = createFssHandoffService({
-    repository: s.services.fssHandoffs, jobQueue: s.services.jobQueue, referenceCache: new ReferenceCacheRepository(s.db), env: ENV, reader: s.reader,
-    holdingRepository: { getHolding: async a => ({ ...(await s.services.holdingPipelineRepository.getHolding(a)), policyProfileId: null }), readableDocuments: a => s.services.holdingPipelineRepository.readableDocuments(a) },
-  });
-  assert.equal(await noUin.pull({ householdId: s.a.household, holdingId: s.holding.id, requestId }), 'no_uin');
   assert.equal(calls.length, 0);
+  assert.equal(await s.service.pull({ householdId: s.a.household, holdingId: s.holding.id, requestId }), 'pulled');
+  assert.deepEqual(calls, ['/v1/handoffs/h-1/pack'], 'the handoff pack route, never the by-UIN route');
+  assert.ok(!calls.join(' ').includes(UIN));
+});
+
+test('pull: a 404 pack_not_available is recorded once and never retried; a 409 handoff_not_matched is retried by the queue and then succeeds', opts, async t => {
+  const calls = [];
+  const gone = await world(t, { reader: packClient(() => json({ error: 'pack_not_available' }, 404), calls) });
+  const requestId = await accepted(gone);
+  await gone.service.receiveNotice(noticeFor(requestId));
+  const handler = createFssPullHandler({ service: gone.service });
+  const worker = createJobWorker({ queue: new JobQueueRepository(gone.db), handlers: { [FSS_PULL_JOB_KIND]: handler }, workerId: 'test-worker', leaseMs: 60_000, heartbeatMs: 20_000 });
+  assert.equal((await worker.runOnce()).outcome, 'succeeded', 'a permanent miss completes the job: no retry storm');
+  assert.equal((await pullJobs(gone))[0].status, 'succeeded');
+  assert.equal(calls.length, 1);
+  assert.equal((await gone.services.fssHandoffs.byRequestId(requestId)).lastOutcome, 'pack_not_available');
+  assert.equal(await worker.runOnce(), null, 'nothing left to run');
+
+  let status = 409;
+  const later = await world(t, { reader: packClient(() => (status === 409 ? json({ error: 'handoff_not_matched' }, 409) : json(rawPack()))) });
+  const id = await accepted(later);
+  await later.service.receiveNotice(noticeFor(id));
+  const retry = createJobWorker({ queue: new JobQueueRepository(later.db), handlers: { [FSS_PULL_JOB_KIND]: createFssPullHandler({ service: later.service }) }, workerId: 'test-worker', leaseMs: 60_000, heartbeatMs: 20_000 });
+  assert.notEqual((await retry.runOnce()).outcome, 'succeeded');
+  assert.equal((await pullJobs(later))[0].status, 'queued', 'rescheduled with backoff');
+  assert.equal((await later.services.fssHandoffs.byRequestId(id)).lastOutcome, 'handoff_not_matched');
+  status = 200;
+  assert.equal(await later.service.pull({ householdId: later.a.household, holdingId: later.holding.id, requestId: id }), 'pulled');
+});
+
+test('outbox: the matched state and its pull job commit together; a failed enqueue rolls the state back and the replayed notice queues it', opts, async t => {
+  const s = await world(t);
+  const requestId = await accepted(s);
+  let fail = true;
+  const flaky = { enqueue: async job => { if (fail) throw new Error('queue down'); return s.services.jobQueue.enqueue(job); } };
+  const service = createFssHandoffService({
+    repository: s.services.fssHandoffs, holdingRepository: s.services.holdingPipelineRepository, jobQueue: flaky, referenceCache: new ReferenceCacheRepository(s.db),
+    env: ENV, reader: s.reader, client: { get: async () => ({ handoffId: 'h-1', requestId, state: 'matched', versionId: VERSION }) },
+  });
+  await assert.rejects(service.receiveNotice(noticeFor(requestId)), /queue down/);
+  const after = await s.services.fssHandoffs.byRequestId(requestId);
+  assert.equal(after.state, 'accepted', 'no matched state without its job');
+  assert.equal(after.versionId, null);
+  assert.equal((await pullJobs(s)).length, 0);
+  fail = false;
+  assert.deepEqual(await service.receiveNotice(noticeFor(requestId)), { result: 'applied' });
+  assert.equal((await s.services.fssHandoffs.byRequestId(requestId)).state, 'matched');
+  assert.equal((await pullJobs(s)).length, 1);
+  assert.deepEqual(await service.receiveNotice(noticeFor(requestId)), { result: 'duplicate' });
+  assert.equal((await pullJobs(s)).length, 1);
+  // The same through the poll: a failed enqueue leaves the handoff open for the next hour.
+  const polled = await world(t);
+  const id = await accepted(polled);
+  await polled.db.run("UPDATE fss_handoffs SET updated_at = '2020-01-01T00:00:00.000Z' WHERE request_id = ?", [id]);
+  const brokenPoll = createFssHandoffService({
+    repository: polled.services.fssHandoffs, holdingRepository: polled.services.holdingPipelineRepository, jobQueue: { enqueue: async () => { throw new Error('queue down'); } },
+    env: ENV, reader: polled.reader, client: { get: async () => ({ handoffId: 'h-1', requestId: id, state: 'matched', versionId: VERSION }) },
+  });
+  await assert.rejects(brokenPoll.poll(), /queue down/);
+  assert.equal((await polled.services.fssHandoffs.byRequestId(id)).state, 'accepted');
+});
+
+test('link: the consent re-check and the link are one transaction under the household lock; a revocation committing first wins', opts, async t => {
+  const reader = packClient(() => json(rawPack()));
+  const s = await world(t, { reader });
+  const requestId = await accepted(s);
+  await s.service.receiveNotice(noticeFor(requestId));
+  const original = reader.read.bind(reader);
+  let revoking = null;
+  reader.read = async (...args) => {
+    const out = await original(...args);
+    // A revocation transaction takes the household lock, revokes, and commits a moment later. It holds the lock before the pull goes on.
+    let locked;
+    const ready = new Promise(resolve => { locked = resolve; });
+    revoking = s.db.transaction(async () => {
+      await s.db.run("UPDATE consent_grants SET revoked_at = '2099-01-01T00:00:00.000Z' WHERE id = ?", [s.a.consent]);
+      locked();
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }, { locks: [householdLock(s.a.household)] });
+    await ready;
+    return out;
+  };
+  assert.equal(await s.service.pull({ householdId: s.a.household, holdingId: s.holding.id, requestId }), 'dropped', 'the re-check waited for the lock and saw the revocation');
+  await revoking;
+  assert.equal(await s.services.fssHandoffs.linkFor(s.holding.id), null);
+  assert.equal((await cacheRows(s)).length, 0);
+  assert.deepEqual(s.collated, []);
+});
+
+test('link: a link that the scope trigger refuses leaves the enclosing transaction usable and the pull dropped', opts, async t => {
+  const s = await world(t);
+  const result = await s.services.fssHandoffs.withHousehold(s.a.household, async () => {
+    await assert.rejects(s.services.fssHandoffs.link({ householdId: s.a.household, holdingId: 'hold-does-not-exist', productId: 'p-1', versionId: VERSION, matchedBy: 'uin', confidence: 'high' }), { code: 'HOLDING_NOT_FOUND' });
+    return s.db.one('SELECT 1 AS ok');
+  });
+  assert.equal(Number(result.ok), 1);
 });
 
 test('poll: two pollers never claim the same handoff (FOR UPDATE SKIP LOCKED); the claim moves the row out of the window', opts, async t => {
@@ -346,7 +504,7 @@ test('end to end: matched handoff pulls the pack, collate writes ida_wording row
   const calls = [];
   const referenceClient = packClient(url => {
     const path = new URL(String(url)).pathname;
-    return path.endsWith('/pack') ? json(rawPack()) : json({ error: 'not_found' }, 404);
+    return path.endsWith('/pack') ? json(rawPack({ facts: [...rawPack().facts, ...sevenFacts().slice(2), packFact('pf-dc-hidden', 'day_care_covered', { kind: 'bool', text: 'yes', conditions: ['age 18 to 35'] }, 'extracted_unverified', { evidence: evidence('Day care') })] })) : json({ error: 'not_found' }, 404);
   }, calls);
   const handoffClient = {
     create: async request => ({ handoffId: 'h-e2e', requestId: request.requestId, state: 'matched', versionId: VERSION }),
@@ -375,9 +533,10 @@ test('end to end: matched handoff pulls the pack, collate writes ida_wording row
   assert.equal(link.versionId, VERSION);
   const ida = await app.database.many("SELECT fact_key, status FROM household_memory_facts WHERE holding_id = ? AND source_tier = 'ida_wording' AND superseded_at IS NULL ORDER BY fact_key", [holdingId]);
   const byKey = Object.fromEntries(ida.map(row => [row.fact_key, row.status]));
-  assert.deepEqual(Object.keys(byKey), ['waiting_initial', 'waiting_ped'], 'shown:false, the unmatched quote and the scoped variant never reach the rows');
-  assert.equal(byKey.waiting_initial, 'extracted_unverified');
+  // All seven shown fact types reach the rows; shown:false, the unmatched quote, the scoped variant and the conditional variant never do.
+  assert.deepEqual(Object.keys(byKey), ['clause_ayush', 'day_care_covered', 'free_look_period', 'post_hospitalisation_days', 'pre_hospitalisation_days', 'waiting_initial', 'waiting_ped']);
   assert.equal(byKey.waiting_ped, 'reviewed_reference');
+  for (const key of Object.keys(byKey).filter(name => name !== 'waiting_ped')) assert.equal(byKey[key], 'extracted_unverified', key);
   const holdings = await services.policyHoldings.list({ householdId: s.householdId, adultId: s.adultId });
   assert.equal((await services.holdings.summaries({ householdId: s.householdId, holdings })).get(holdingId).wordingState, 'fss');
 

@@ -13,19 +13,21 @@ import { packCacheKey, signatureFor } from './reference-data-port.js';
 //   receiveNotice    signed webhook: signature and replay window first, then an idempotent, monotonic apply. Unknown request id -> dropped.
 //   poll             hourly fallback for open handoffs that never got a notice. Claims rows with FOR UPDATE SKIP LOCKED (two machines never share one).
 //
-// The first time a handoff becomes `matched` (send answer, signed notice or poll: one path, `decide`) one outbox job `holding.fss_pull` is queued.
-// A repeat of the same state is 'duplicate' and queues nothing. A crash between that commit and the enqueue loses the job until the next poll
-// finds the handoff still matched without a pull (known gap, same as queueForHolding).
-//   pull             JOB ONLY: reads the UIN pack of the owner-confirmed product (docs/contracts/uin-pack-v1.md, FOR LEGAL REVIEW), checks its version is the one
-//                    FSS matched, then writes PUBLIC data only: the holding_fss_links row (ids), the mapped facts and the page chunks in reference_cache
+// The first time a handoff becomes `matched` (send answer, signed notice or poll: one path, `decide`) one outbox job `holding.fss_pull` is queued IN THE
+// SAME TRANSACTION as the state change (repository.applyNotice `afterApply`): a crash or a failed enqueue rolls the state change back, so FSS's notice
+// retry (or the hourly poll) replays it and a matched handoff never exists without its job. A repeat of the same state is 'duplicate' and queues nothing.
+//   pull             JOB ONLY: reads the UIN pack of the MATCHED handoff (GET /v1/handoffs/{id}/pack, version-pinned and re-gated by FSS; docs/contracts/uin-pack-v1.md,
+//                    FOR LEGAL REVIEW), checks its version is the one FSS matched, then writes PUBLIC data only: the holding_fss_links row (ids; the consent re-check
+//                    and the link are ONE transaction under the household lock), the mapped facts and the page chunks in reference_cache
 //                    (keyed by version id, never by household), and queues collate. Collate writes the ida_wording rows, so it re-checks the document and
 //                    its current consent in its own transaction, and revocation erases the rows and the link. Before any write the holding and the document
-//                    consent are re-read; an erased holding or a revoked consent drops the pull (counted, no write). 404 is permanent (outcome
-//                    pack_not_available); 5xx, timeout and 429 rethrow for queue backoff.
+//                    consent are re-read; an erased holding or a revoked consent drops the pull (counted, no write). 404 pack_not_available is permanent (recorded, never
+//                    retried: a gate no longer holds); 409 handoff_not_matched, 5xx, timeout and 429 rethrow for queue backoff. No UIN is read or sent: the handoff id is the key.
 
 export const FSS_HANDOFF_JOB_KIND = 'holding.fss_handoff';
 export const FSS_PULL_JOB_KIND = 'holding.fss_pull';
-export const FSS_PULL_MAX_ATTEMPTS = 5;
+// Queue backoff is 5 s doubling (15 min cap): 8 attempts span about ten minutes, enough for a 409 (FSS not yet matched) to settle.
+export const FSS_PULL_MAX_ATTEMPTS = 8;
 export const FSS_POLL_AFTER_MS = 60 * 60_000;
 const coded = (code, message, statusCode = 400) => Object.assign(new Error(message), { code, statusCode, retryable: false });
 
@@ -41,8 +43,10 @@ export function createFssHandoffService({
 
   // The one path to a decided state (send answer, notice, poll). Queues the pull job only on the first transition to matched.
   async function decide({ requestId, answer }) {
-    const { result, handoff } = await repository.applyNotice({ requestId, fssHandoffId: answer.handoffId, state: answer.state, versionId: answer.versionId });
-    if (result === 'applied' && handoff.state === 'matched') await queuePull(handoff);
+    const { result } = await repository.applyNotice({
+      requestId, fssHandoffId: answer.handoffId, state: answer.state, versionId: answer.versionId, reason: answer.reason ?? null,
+      afterApply: async handoff => { if (handoff.state === 'matched') await queuePull(handoff); },
+    });
     return result;
   }
 
@@ -134,8 +138,7 @@ export function createFssHandoffService({
     if (!handoff || handoff.state !== 'matched' || !handoff.versionId || handoff.householdId !== householdId || handoff.holdingId !== holdingId) return 'skipped';
     const first = await stillAllowed({ householdId, holdingId });
     if (!first) return drop('holding_or_consent_gone');
-    const uin = first.policyProfileId ? await holdingRepository.confirmedUin({ householdId, policyProfileId: first.policyProfileId }) : null;
-    if (!uin) { await repository.recordOutcome({ requestId, outcome: 'no_uin' }); return 'no_uin'; }
+    if (!handoff.fssHandoffId) { await repository.recordOutcome({ requestId, outcome: 'no_handoff_id' }); return 'no_handoff_id'; }
 
     const factsKey = packCacheKey('facts', handoff.versionId);
     const owner = `fp-${randomUUID()}`;
@@ -143,12 +146,12 @@ export function createFssHandoffService({
     try {
       let pack;
       try {
-        pack = (await packs().read('products.packByUin', { uin })).data;
+        pack = (await packs().read('handoff.pack', { handoffId: handoff.fssHandoffId })).data;
       } catch (error) {
         if (!(error instanceof ReferenceDataError)) throw error;
         if (error.code === 'REFERENCE_DATA_NOT_FOUND') { await repository.recordOutcome({ requestId, outcome: 'pack_not_available' }); onEvent({ type: 'fss.pull_failed', outcome: 'pack_not_available', retryable: false }); return 'pack_not_available'; }
         if (error.code === 'REFERENCE_DATA_NOT_MODIFIED') return 'not_modified';
-        const outcome = String(error.code).toLowerCase().replace(/^reference_data_/, '').slice(0, 59);
+        const outcome = error.code === 'REFERENCE_DATA_CONFLICT' ? 'handoff_not_matched' : String(error.code).toLowerCase().replace(/^reference_data_/, '').slice(0, 59);
         await repository.recordOutcome({ requestId, outcome });
         onEvent({ type: 'fss.pull_failed', outcome, retryable: error.retryable === true });
         if (error.retryable) throw error;
@@ -159,16 +162,21 @@ export function createFssHandoffService({
         onEvent({ type: 'fss.pull_failed', outcome: 'version_mismatch', retryable: false });
         return 'version_mismatch';
       }
-      // Re-check right before the writes: the pull can take seconds, and the owner may have erased the holding or withdrawn consent meanwhile.
-      const holding = await stillAllowed({ householdId, holdingId });
+      // The consent re-check and the link are one transaction under the household lock: a revocation takes the same lock, so it commits wholly before
+      // (the link is never written) or wholly after (its erasure removes the link). The pull can take seconds, so this re-read is not the first one.
+      // Ids only. Matched by FSS's own handoff match (the pack is of the version FSS matched, checked above): high.
+      const holding = await repository.withHousehold(householdId, async () => {
+        const current = await stillAllowed({ householdId, holdingId });
+        if (!current) return null;
+        try {
+          await repository.link({ householdId, holdingId, productId: pack.product.productId, versionId: pack.version.versionId, matchedBy: 'uin', confidence: 'high' });
+        } catch (error) {
+          if (error?.code === 'HOLDING_NOT_FOUND') return null;
+          throw error;
+        }
+        return current;
+      });
       if (!holding) return drop('holding_or_consent_gone');
-      try {
-        // Ids only. Matched by the confirmed UIN, and FSS's own match (the version of the handoff) agrees with the pack's version: high.
-        await repository.link({ householdId, holdingId, productId: pack.product.productId, versionId: pack.version.versionId, matchedBy: 'uin', confidence: 'high' });
-      } catch (error) {
-        if (error?.code === 'HOLDING_NOT_FOUND') return drop('holding_gone');
-        throw error;
-      }
       const factsBody = { versionId: pack.version.versionId, uinRaw: null, wordingVersion: pack.version.wordingVersion, versionSynthetic: false, coverage: {}, facts: pack.facts, nextCursor: null };
       await referenceCache.put({ key: factsKey, etag: null, body: factsBody, signature: signatureFor(factsBody), ttlMs: EXPORT_TTL_MS });
       const pagesBody = {

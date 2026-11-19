@@ -112,7 +112,8 @@ export function startAnalyticsDrain({ services, env = process.env, client = crea
  * FSS handoff poll (ADR 0037): every FSS_POLL_INTERVAL_MS (default 1 h) calls the service's poll(), the fallback for open handoffs that never
  * got a signed notice. Off unless handoffEnabled(env) (FSS_HANDOFF_ENABLED and REFERENCE_DATA_ENABLED are exactly "true"); otherwise no timer
  * runs. One tick at a time; a failed tick is logged with a code and the loop keeps going. Logs counts and codes only: no ids, UINs or names.
- * Note: poll() takes no lease, so two worker processes may poll the same handoffs (the notice apply is idempotent, so this is wasted calls only).
+ * poll() claims its rows with FOR UPDATE SKIP LOCKED and moves their updated_at to now (FssHandoffRepository.claimForPoll), so two worker processes
+ * never poll the same handoff within the hour; no second lease is kept here.
  * Returns { tick, stop } or null.
  */
 export function startFssPollScheduler({ service, env = process.env, intervalMs = readFssPollConfig(env).intervalMs, log = () => {} } = {}) {
