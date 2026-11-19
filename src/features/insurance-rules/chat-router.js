@@ -33,6 +33,10 @@ export function readRoute(output) {
   return Object.freeze({ canonical, sources });
 }
 
+// "What did I ask earlier?" in plain English: free and deterministic, so it never depends on the router flag or a model.
+const HISTORY_QUESTION = /\b(?:what\s+(?:did|have)\s+i\s+(?:ask|asked|say|said)(?:ed)?|what\s+(?:was|were)\s+my\s+(?:last|previous|earlier|first)\s+(?:question|questions|message)s?|what\s+i\s+asked|questions?\s+(?:did|have)\s+i\s+ask(?:ed)?|(?:repeat|show|list|recap)\s+(?:my|the)\s+(?:last\s+|previous\s+|earlier\s+)?(?:question|questions)|my\s+(?:earlier|previous)\s+(?:question|questions)|\bi\s+(?:asked|said)\s+(?:you\s+)?(?:earlier|before)|(?:question|questions)\s+(?:i\s+asked\s+)?(?:earlier|before)|asked\s+(?:you\s+)?(?:earlier|before))\b/i;
+export const isHistoryQuestion = message => HISTORY_QUESTION.test(String(message ?? '').normalize('NFKC'));
+
 const HISTORY_ITEMS = 3;
 const HISTORY_CHARS = 140;
 /** "What did I ask earlier?": the person's own earlier questions of this thread, from the stored turns. No model. */

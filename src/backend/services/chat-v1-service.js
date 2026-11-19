@@ -5,7 +5,7 @@ import { CHAT_INTENTS } from '../../features/ai-analysis/gateway-contract.js';
 import { gateText, gateTextForHousehold, sealModelInput } from '../../features/ai-analysis/privacy-evidence-gate.js';
 import { buildDeterministicAnswer } from '../../features/insurance-rules/chat-answer.js';
 import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, selectTopicAnswers, exclusionWindows } from '../../features/insurance-rules/clause-answer.js';
-import { SCOPE_SENTENCE, historyAnswer, needsRouter, readRoute } from '../../features/insurance-rules/chat-router.js';
+import { SCOPE_SENTENCE, historyAnswer, isHistoryQuestion, needsRouter, readRoute } from '../../features/insurance-rules/chat-router.js';
 import { classifyChatMessage, isIdentityQuestion, isRegistryIdQuestion, REGISTRY_ID_ANSWER } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
 import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
@@ -320,7 +320,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             const history = await chatRepository.recentTurns({ householdId, threadId });
             // ADR 0038: only when the free keyword path is unsure (no topic, or not plain ASCII), and never for the fixed registry-id answer.
             let route = null;
-            if (env.CHAT_ROUTER_ENABLED === 'true' && !isRegistryIdQuestion(message) && !isIdentityQuestion(message) && needsRouter({ message, factKeys, hasProcedure: procedure !== null })) {
+            if (env.CHAT_ROUTER_ENABLED === 'true' && !isRegistryIdQuestion(message) && !isIdentityQuestion(message) && !isHistoryQuestion(message) && needsRouter({ message, factKeys, hasProcedure: procedure !== null })) {
               route = await routeQuestion({ householdId, adultId: principal.adultId, message, startedAt });
               if (route?.canonical) ({ intent, factKeys } = classifyChatMessage(route.canonical, { hasProcedure: procedure !== null }));
             }
@@ -334,7 +334,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             let holdingLines;
             if (isRegistryIdQuestion(asked)) holdingLines = [REGISTRY_ID_ANSWER];
             else if (mayReadFacts && isIdentityQuestion(asked) && context.holdingIds.length > 0) holdingLines = await holdingNameLines({ householdId, holdingIds: context.holdingIds });
-            else if (routedOnly('history')) holdingLines = [historyAnswer(history)];
+            else if (isHistoryQuestion(asked) || routedOnly('history')) holdingLines = [historyAnswer(history)];
             else if (routedOnly('out_of_scope')) holdingLines = [SCOPE_SENTENCE];
             else holdingLines = [];
             const awaitingPlan = mayReadFacts && context.facts.length === 0 && context.awaiting === true && intent !== 'procedure_planning';
@@ -345,9 +345,12 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             // Retrieval beyond facts: vector top-k, else a keyword match over clauses (only when no confirmed fact answers the topic).
             let mode = 'facts_only';
             let passages = [];
-            // A general waiting-period question names three facts (initial, pre-existing, specific disease): one found fact does not answer the whole topic.
+            // A general waiting-period question names three facts (initial, pre-existing, specific disease). The specific-disease one has no
+            // extractor, so the facts that ARE known answer it in code and the answer says plainly what was not found (no model, no search).
             const hasFact = key => context.facts.some(fact => fact.factKey === key);
-            const answersTopic = intent === 'waiting_period' && factKeys.includes('waiting_specific') ? factKeys.every(hasFact) : factKeys.some(hasFact);
+            const answersTopic = factKeys.some(hasFact);
+            // Only the all-waiting-periods question: a question naming one (pre-existing, initial, maternity) keeps its normal path.
+            const generalWaiting = intent === 'waiting_period' && factKeys.includes('waiting_specific') && answersTopic && !/pre-?\s?existing|\bped\b|initial|30[-\s]?day|first\s*30|maternity|delivery|pregnan/i.test(asked);
             if (mayReadFacts && !answersTopic && !awaitingPlan && holdingLines.length === 0 && intent !== 'procedure_planning') { // passages embed confirmed facts: owner only (audit F7)
               // An embedding failure is not a turn failure: it leaves the vector undefined and the keyword path below answers.
               let vector = null;
@@ -385,7 +388,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
 
             emit('meta', { thread_id: thread.id, intent: CHAT_INTENTS.includes(intent) ? intent : 'unknown', retrieval_mode: mode, facts_available: context.facts.length, open_conflicts: context.conflicts.length });
 
-            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan, missingTopics, holdingLines });
+            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan, missingTopics, holdingLines, generalWaiting });
             // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
             // Nothing in the wording or the facts speaks to a coverage question: no model call, the fixed unknown answer stands.
             const nothingRelevant = searchedClauses && clauseHits.length === 0 && passages.length === 0 && !answersTopic;
@@ -395,7 +398,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               id: clause.id, text: clause.window, scope: 'own_pdf', sourceDocumentId: clause.documentId, unredacted: true,
               sourceRef: `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`,
             }));
-            const model = !nothingRelevant && holdingLines.length === 0 && (context.facts.length > 0 || modelPassages.length > 0)
+            const model = !nothingRelevant && !generalWaiting && holdingLines.length === 0 && (context.facts.length > 0 || modelPassages.length > 0)
               ? await modelAnswer({ householdId, adultId: principal.adultId, message: asked, history, context, relevant, plan, passages: modelPassages, startedAt }) : null;
 
             let text = deterministic.text;

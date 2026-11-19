@@ -19,7 +19,7 @@ const SOURCE = Object.freeze({
  * conflictKeys: Set of fact keys with an open conflict. clauses: [{ id, page, text }] keyword hits (used only when no fact answers).
  * Resolves { text, usedFacts, status } with status evidence_found | unknown.
  */
-export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [], searchedClauses = false, awaitingPlan = false, missingTopics = [], holdingLines = [] }) {
+export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys = new Set(), plan = null, clauses = [], searchedClauses = false, awaitingPlan = false, missingTopics = [], holdingLines = [], generalWaiting = false }) {
   const byKey = new Map();
   for (const fact of facts) if (!byKey.has(fact.factKey)) byKey.set(fact.factKey, fact);
   const lines = [];
@@ -47,6 +47,10 @@ export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys
       } else if (conflictKeys.has(key)) {
         lines.push(`- Your policy document and the insurer's wording disagree about this (${key.replace(/_/g, ' ')}). Review the difference and choose which is right.`);
       }
+    }
+    // The specific-disease waiting period is not read from any document: say so plainly next to the ones that are known.
+    if (generalWaiting && used.length > 0 && !byKey.has('waiting_specific')) {
+      lines.push('- I did not find a waiting period for specific diseases in your policy documents. It may simply not be printed there. Please check with your insurer.');
     }
     if (used.length === 0 && lines.length === 0) {
       if (awaitingPlan) {
