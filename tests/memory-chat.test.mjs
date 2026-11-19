@@ -334,7 +334,7 @@ test('voice audio is retained only when the flag is exactly true and the documen
 });
 
 test('intent rules and fact formatting are deterministic', () => {
-  assert.deepEqual(classifyChatMessage('What is the room rent limit?'), { intent: 'coverage_question', factKeys: ['room_rent_limit', 'room_category'] });
+  assert.deepEqual(classifyChatMessage('What is the room rent limit?'), { intent: 'coverage_question', factKeys: ['room_rent_limit', 'room_rent_text', 'room_category'] });
   assert.equal(classifyChatMessage('How long is the waiting period for pre-existing diseases?').intent, 'waiting_period');
   assert.equal(classifyChatMessage('We are planning a cataract surgery next month').intent, 'procedure_planning');
   assert.equal(classifyChatMessage('anything', { hasProcedure: true }).intent, 'procedure_planning');

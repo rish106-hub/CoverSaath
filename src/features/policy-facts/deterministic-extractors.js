@@ -25,6 +25,10 @@ const SPECS = Object.freeze([
   { factType: 'premium_gst', label: i(`^(?:gst|igst|total\\s+gst|gst\\s+amount)\\b[^:|]{0,30}$`) },
   { factType: 'deductible', label: i(`^(?:annual\\s+|aggregate\\s+)?deductible$`) },
   { factType: 'room_rent_limit', label: i(`^room\\s+rent(?:\\s+(?:limit|cap|eligibility))?$`) },
+  { factType: 'room_rent_text', label: i(`^room\\s+rent(?:\\s+(?:limit|cap|eligibility))?$`), unlessMoney: true, limitText: true },
+  { factType: 'icu_limit_text', label: i(`^(?:icu|intensive\\s+care(?:\\s+unit)?)(?:\\s+(?:charges?|rent|limit|room(?:\\s+rent)?))?$`), limitText: true },
+  { factType: 'pre_hospitalisation_days', label: i(`^pre${dash}hospitali[sz]ation(?:\\s+(?:expenses|period|days|cover|medical\\s+expenses))?$`) },
+  { factType: 'post_hospitalisation_days', label: i(`^post${dash}hospitali[sz]ation(?:\\s+(?:expenses|period|days|cover|medical\\s+expenses))?$`) },
   { factType: 'policy_period', label: i(`^(?:policy\\s+period|period\\s+of\\s+(?:insurance|cover|policy)|insurance\\s+period|policy\\s+(?:term|duration))$`) },
   { factType: 'issue_date', label: i(`^(?:(?:policy\\s+)?(?:issue|issuance)\\s+date|date\\s+of\\s+issue)$`) },
   { factType: 'start_date', label: i(`^(?:(?:policy\\s+|risk\\s+)?(?:start|commencement|inception)\\s+date|date\\s+of\\s+commencement)$`) },
@@ -35,6 +39,7 @@ const SPECS = Object.freeze([
   { factType: 'free_look_period', label: i(`^free${dash}look\\s+period$`) },
   { factType: 'waiting_initial', label: i(`^(?:initial\\s+waiting\\s+period|waiting\\s+period\\s*\\(?\\s*initial\\s*\\)?)$`) },
   { factType: 'waiting_ped', label: i(`^(?:(?:pre${dash}existing\\s+(?:diseases?|conditions?)|ped)\\s+wait(?:ing)?\\s+period(?:\\s+applicable[^|]{0,40})?|waiting\\s+period\\s*(?:for\\s+)?\\(?\\s*(?:ped|pre${dash}existing[^)]*)\\)?)$`) },
+  { factType: 'waiting_specific', label: i(`^specifi(?:c|ed)(?:\\s+(?:disease|illness)(?:es)?)?(?:\\s*/\\s*procedures?)?\\s+waiting\\s+period$`), fixedScope: 'specific_diseases' },
   { factType: 'waiting_maternity', label: i(`^maternity\\s+waiting\\s+period$`) },
   { factType: 'waiting_specific', label: i(`^(?:specific\\s+disease\\s+)?waiting\\s+period\\s+(?:for|-)\\s+(.+)$`), scoped: true },
   { factType: 'claim_submission_deadline', label: i(`^(?:claim\\s+(?:intimation|submission|filing)\\s+(?:deadline|period)|reimbursement\\s+(?:submission\\s+)?(?:deadline|period))$`) },
@@ -55,9 +60,18 @@ const SPECS = Object.freeze([
   { factType: 'member_count', label: i(`^(?:number\\s+of\\s+(?:insured\\s+)?members|no\\.?\\s+of\\s+(?:lives|members|insured)|members\\s+(?:insured|covered))$`) },
 ]);
 
+const MAX_LIMIT_TEXT = 60;
 const slug = text => text.toLowerCase().normalize('NFC').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 64);
 
-const isLabelCell = cell => SPECS.some(spec => spec.label.test(cell));
+// A schedule row may start with its number ("1.1.a Room Rent", "2.12 Grace Period") and a CIS label may end with its code
+// ("Initial waiting Period (Code-Excl03)"). Both are printed noise around the label: they are removed before the label is tested.
+// The quote still holds the whole printed row.
+const ROW_NUMBER = '(?:\\d{1,2}(?:\\.\\d{1,3}){1,3}(?:\\.?[a-z])?|\\d{1,2}[.)]|\\d{1,2}\\.[a-z])[.)]?';
+const ROW_PREFIX = new RegExp(`^${ROW_NUMBER}\\s+(?=\\S)`, 'i');
+const CODE_SUFFIX = /\s*\((?:code\s*[-:]?\s*)?[a-z]{2,6}\s*-?\s*\d{1,3}\)\s*$/i;
+const labelText = cell => cell.replace(ROW_PREFIX, '').replace(CODE_SUFFIX, '').trim();
+
+const isLabelCell = cell => { const text = labelText(cell); return SPECS.some(spec => spec.label.test(text)); };
 const cellsOf = line => line.split(' | ').map(cell => cell.trim());
 
 // Label/value pairs of one table row: each cell a label matches, with the cells after it up to the next label cell. The quote is
@@ -91,6 +105,20 @@ function splitLine(line) {
   return null;
 }
 
+// A numbered row with no separator ("1.6 Post-Hospitalization 180 days", "1.1.a Room Rent  At Actuals"): the longest run of
+// words that reads as a label, the rest is the value. A number is required so a sentence is never read as a row.
+function spacedRow(line) {
+  const prefix = ROW_PREFIX.exec(line);
+  if (!prefix) return [];
+  const words = line.slice(prefix[0].length).trim().split(/\s+/);
+  for (let count = Math.min(words.length - 1, 8); count >= 1; count -= 1) {
+    const label = labelText(words.slice(0, count).join(' '));
+    const rest = words.slice(count).join(' ');
+    if (SPECS.some(spec => !spec.scoped && spec.label.test(label))) return [{ label, rest, quote: line }];
+  }
+  return [];
+}
+
 const MEMBER_LINE = /\b(?:self|spouse|child|son|daughter|father|mother|member\s*\d*|age)\b/i;
 const NOT_MEMBER_AGE = /waiting|period|term|renew|since|policy|premium|cover|tenure/i;
 
@@ -109,7 +137,8 @@ function readLine({ line, chunk, add, pairs = null }) {
   // A row with no labelled cell may still be a "Label: value" line that holds a pipe in its value: read it the old way.
   const rows = pairs ?? (line.includes(' | ') ? rowPairs(line) : []);
   const labelledRow = line.includes(' | ') && cellsOf(line).some(cell => isLabelCell(cell));
-  const candidates = rows.length || labelledRow ? rows : (split && split.rest ? [{ ...split, quote: line }] : []);
+  let candidates = rows.length || labelledRow ? rows : (split && split.rest ? [{ ...split, quote: line }] : []);
+  if (candidates.length === 0 && !line.includes(' | ')) candidates = spacedRow(line);
   for (const pair of candidates) readPair({ pair, line, base, add });
   if (MEMBER_LINE.test(line) && !NOT_MEMBER_AGE.test(line)) {
     const where = { quote: line, ...base };
@@ -124,7 +153,7 @@ function readPair({ pair, base, add }) {
   const where = { quote: pair.quote, ...base };
   {
     for (const spec of SPECS) {
-      const labelMatch = spec.label.exec(split.label);
+      const labelMatch = spec.label.exec(labelText(split.label));
       if (!labelMatch) continue;
       const { rest } = split;
       if (spec.factType === 'ncb_table') {
@@ -143,11 +172,15 @@ function readPair({ pair, base, add }) {
       }
       const definition = FACT_TYPES[spec.factType];
       const kind = definition.parse;
-      const scopeKey = spec.scoped ? slug(labelMatch[1] ?? '') : '';
+      const scopeKey = spec.fixedScope ?? (spec.scoped ? slug(labelMatch[1] ?? '') : '');
       if (spec.scoped && (!scopeKey || /^(?:initial|pre_existing|ped|maternity)/.test(scopeKey))) continue;
       if (kind === 'text') {
         // A text value is one printed cell: the cells after it (a phone number, a code) belong to other columns.
-        const value = parse('text', rest.split(' | ')[0]);
+        const cell = rest.split(' | ')[0];
+        // A printed text answer such as "At Actuals" for a limit; an amount is read as money by the fact type of the same label.
+        if (spec.unlessMoney && valuesIn('money', rest).length > 0) continue;
+        if (spec.limitText && (cell.length > MAX_LIMIT_TEXT || !/[a-z0-9]/i.test(cell))) continue;
+        const value = parse('text', cell);
         if (value) add({ factType: spec.factType, scopeKey, value, raw: rest, ...where });
         continue;
       }

@@ -6,8 +6,8 @@ const rules = (...pairs) => pairs.map(([pattern, keys]) => ({ pattern, keys }));
 
 // Topic words -> fact keys of src/contracts/policy-facts.js (an unknown key is dropped by the caller).
 export const TOPIC_RULES = Object.freeze(rules(
-  [/room\s*rent|room\s*cap|room\s*categor|private\s*room|single\s*room/, ['room_rent_limit', 'room_category']],
-  [/\bicu\b|intensive\s*care/, ['icu_limit']],
+  [/room\s*rent|room\s*cap|room\s*categor|private\s*room|single\s*room/, ['room_rent_limit', 'room_rent_text', 'room_category']],
+  [/\bicu\b|intensive\s*care/, ['icu_limit', 'icu_limit_text']],
   [/co-?\s?pay/, ['copay_percent', 'copay_zone_percent']],
   [/sub-?\s?limit/, ['sub_limit']],
   [/pre-?\s?existing|\bped\b/, ['waiting_ped']],

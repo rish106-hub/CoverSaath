@@ -22,6 +22,9 @@ export const FACT_TYPES = Object.freeze({
   premium_gst: type('money', 'money', null),
   deductible: type('money', 'money', 'd.deductible', { policyTypes: HEALTH }),
   room_rent_limit: type('money', 'money', 'd.room_rent_limit', { policyTypes: HEALTH }),
+  // The limit as printed when it is not an amount ("At Actuals"); an amount is room_rent_limit. Deterministic only.
+  room_rent_text: type('text', 'text', null, { policyTypes: HEALTH }),
+  icu_limit_text: type('text', 'text', null, { policyTypes: HEALTH }),
   sub_limit: type('money', 'money', 'd.procedure_and_disease_sub_limits', { scoped: true, policyTypes: HEALTH }),
   // Dates and periods
   policy_period: type('date_range', 'date_range', 'b.policy_period'),
@@ -37,6 +40,8 @@ export const FACT_TYPES = Object.freeze({
   waiting_ped: type('duration', 'duration', 'f.ped_waiting_period', { policyTypes: HEALTH }),
   waiting_maternity: type('duration', 'duration', 'f.maternity_waiting_period', { policyTypes: HEALTH }),
   waiting_specific: type('duration', 'duration', null, { scoped: true, policyTypes: HEALTH }),
+  pre_hospitalisation_days: type('duration', 'duration', 'e.pre_and_post_hospitalisation', { policyTypes: HEALTH }),
+  post_hospitalisation_days: type('duration', 'duration', 'e.pre_and_post_hospitalisation', { policyTypes: HEALTH }),
   claim_submission_deadline: type('duration', 'duration', 'h.reimbursement_submission_deadline', { policyTypes: HEALTH }),
   // Co-payment and no-claim bonus (basis points)
   copay_percent: type('percent', 'percent', 'd.co_pay_general', { policyTypes: HEALTH }),

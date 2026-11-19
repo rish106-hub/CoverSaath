@@ -1,4 +1,4 @@
-import { CURATED_PRODUCT_RECORDS, extractUins } from '../../features/decision-catalogue/index.js';
+import { CURATED_PRODUCT_RECORDS, extractProductUins } from '../../features/decision-catalogue/index.js';
 import { flattenBlock } from '../../features/ai-analysis/eval-extractor.js';
 import { parseProfileStatement } from '../repositories/policy-profile-repository.js';
 import { createStoredPagesReader } from './readable-document.js';
@@ -59,7 +59,7 @@ export function createPolicyProfileService({ repository, ocr, env = process.env,
 
   function proposalsFrom(text) {
     if (!text) return NO_PROPOSALS;
-    const uins = extractUins(text);
+    const uins = extractProductUins(text);
     if (uins.length > 1) return Object.freeze({ ...NO_PROPOSALS, conflicts: Object.freeze(['uin']) });
     if (uins.length === 0) return NO_PROPOSALS;
     const [uin] = uins;
