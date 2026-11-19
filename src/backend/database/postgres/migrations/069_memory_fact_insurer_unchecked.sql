@@ -5,6 +5,8 @@
 -- the document or a consent revocation exactly as the reviewed insurer rows do.
 -- Rollback: expand-only. Revert the code; a synthetic-only project may restore the old CHECK after deleting any ida_wording
 -- extracted_unverified rows.
+-- Later, on a large table: add the CHECK as NOT VALID, then VALIDATE CONSTRAINT in a separate step, so the table is not held under a long lock.
+-- Not done here (the table is small and this runs once); behaviour is unchanged.
 ALTER TABLE public.household_memory_facts DROP CONSTRAINT IF EXISTS household_memory_facts_tier_status_check;
 ALTER TABLE public.household_memory_facts ADD CONSTRAINT household_memory_facts_tier_status_check CHECK (
   (source_tier = 'own_pdf' AND status IN ('extracted_unverified', 'conflicting', 'unknown'))

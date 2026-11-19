@@ -16,6 +16,7 @@ import { resolvedConfirmedFacts } from '../src/backend/services/memory-service.j
 import { insurerFactPlaces } from '../src/backend/services/fss-reference-facts.js';
 import { guardTurnAnswer } from '../src/backend/services/chat-answer-card.js';
 import { getPolicyFactKey } from '../src/contracts/policy-facts.js';
+import { createFssReferenceFacts } from '../src/backend/services/fss-reference-facts.js';
 
 // ADR 0036: model-extracted insurer facts are shown as "not checked". Synthetic data only. The DB tests need TEST_DATABASE_URL.
 
@@ -66,6 +67,23 @@ test('parse: synthetic versions, a shown:false fact, other statuses and unusable
   assert.equal(one(verified, { coverage: { copay: 'verified' } }).outcome, 'verified');
   assert.equal(one(verified, { coverage: { copay: 'awaiting_review' } }).outcome, 'unknown', 'verified still needs its family');
   assert.equal(one({ ...verified, shown: false }, { coverage: { copay: 'verified' } }).value, null);
+});
+
+test('parse: a quote with bidi overrides or isolates, zero-width or direction marks, a BOM, or only spaces is rejected (the fact stays hidden)', () => {
+  const blanked = quote => { const parsed = one(fact({ evidence: [evidence({ quote })] })); assert.equal(parsed.outcome, 'unknown', JSON.stringify(quote)); assert.equal(parsed.value, null); };
+  for (const mark of ['\u202a', '\u202b', '\u202c', '\u202d', '\u202e', '\u2066', '\u2067', '\u2068', '\u2069', '\u200b', '\u200c', '\u200d', '\u200e', '\u200f', '\ufeff']) blanked(`A co-payment of 10%${mark} applies to every claim.`);
+  blanked(' '.repeat(20));
+  blanked('\u00a0'.repeat(20));
+  assert.equal(one(fact({ evidence: [evidence({ quote: 'A co-payment of 10% applies.' })] })).outcome, 'unchecked');
+});
+
+test('parse: shown is strict (missing or true shows; false, "false", 0, null or anything else hides)', () => {
+  assert.equal(one(fact()).outcome, 'unchecked');
+  assert.equal(one(fact({ shown: true })).outcome, 'unchecked');
+  for (const shown of [false, 'false', 'true', 0, 1, null, '', {}]) assert.equal(one(fact({ shown })).value, null, `shown ${JSON.stringify(shown)}`);
+  const verified = fact({ verification_status: 'independently_verified' });
+  for (const shown of ['false', 0, null]) assert.equal(one({ ...verified, shown }, { coverage: { copay: 'verified' } }).value, null);
+  assert.equal(one({ ...verified, shown: true }, { coverage: { copay: 'verified' } }).outcome, 'verified');
 });
 
 // ---- map ------------------------------------------------------------------------------------------------------------------------
@@ -187,6 +205,60 @@ test('chat: an unchecked insurer fact is cited only with its insurer page and qu
   assert.equal(none.card.sources.length, 0);
 });
 
+// ---- the real reader over a stub port that returns real parseFacts output --------------------------------------------------------
+const roomFact = (extra = {}) => fact({ fact_id: 'f_room', fact_type: 'room_rent_limit', value: { kind: 'room_rent_limit', limit_type: 'fixed_amount_per_day', amount: 5000, currency: 'INR' },
+  evidence: [evidence({ page_number: 7, quote: 'Room rent is limited to INR 5,000 per day.' })], ...extra });
+const pedFact = () => fact({ fact_id: 'f_ped', fact_type: 'pre_existing_disease_waiting_period', value: { kind: 'waiting_period', duration: { value: 24, unit: 'months' } },
+  evidence: [evidence({ page_number: 9, quote: 'Pre-existing diseases are covered after 24 months.' })] });
+const hiddenFact = () => fact({ fact_id: 'f_hidden', fact_type: 'initial_waiting_period', value: { kind: 'waiting_period', duration: { value: 30, unit: 'days' } }, evidence: [evidence({ quote_included: false })] });
+function stubPort(facts) {
+  const data = {
+    'insurers.resolve': { status: 'resolved', insurer: { id: 'ins1' } },
+    'products.search': { products: [{ productId: 'p1', lineOfBusiness: 'health', uinRaw: null, verificationStatus: 'verified', productName: 'Synthetic Care' }] },
+    'products.versions': { data: [{ versionId: 'v1', freshness: 'current', effectiveFrom: null, effectiveTo: null }] },
+  };
+  const parsed = parse(facts);
+  const live = [];
+  return {
+    live,
+    resolveInsurer: async () => { live.push('resolve'); return { data: data['insurers.resolve'] }; },
+    searchProducts: async () => ({ data: data['products.search'] }),
+    listVersions: async () => ({ data: data['products.versions'] }),
+    getAllFacts: async () => ({ data: parsed }),
+    peek: async endpoint => ({ data: data[endpoint] }),
+    peekFacts: async ({ cursor }) => (cursor ? null : { data: parsed }),
+  };
+}
+const stubRepository = { holdingDocument: async () => null, ownCandidates: async () => [], confirmedUin: async () => null, confirmedNames: async ({ holdings }) => new Map(holdings.map(item => [item.id, { insurerName: 'Synthetic Insurer', productName: 'Synthetic Care' }])) };
+const readerFor = facts => createFssReferenceFacts({ port: stubPort(facts), repository: stubRepository, env: { REFERENCE_DATA_ENABLED: 'true' } });
+const holdingStub = { id: 'hold-1', documentId: 'doc-1', policyProfileId: null };
+
+test('reader: refresh attaches when the only mapped facts are unchecked; a hidden fact alone is not usable', async () => {
+  assert.equal(await readerFor([roomFact(), hiddenFact()]).refresh({ householdId: 'h', holding: holdingStub }), 'attached');
+  assert.notEqual(await readerFor([hiddenFact()]).refresh({ householdId: 'h', holding: holdingStub }), 'attached');
+});
+
+test('reader: forHolding turns real parseFacts output into unchecked reference items with the quote and page sealed in the reference, ready to collate', async () => {
+  const items = await readerFor([roomFact(), pedFact(), hiddenFact()]).forHolding({ householdId: 'h', holding: holdingStub });
+  assert.deepEqual(items.map(item => item.factKey).sort(), ['room_rent_limit', 'waiting_ped']);
+  const room = items.find(item => item.factKey === 'room_rent_limit');
+  assert.equal(room.unchecked, true);
+  assert.deepEqual([room.quote, room.reference.quote, room.reference.quotePage, room.reference.verificationStatus], ['Room rent is limited to INR 5,000 per day.', 'Room rent is limited to INR 5,000 per day.', 7, 'extracted_unverified']);
+  // Collate: the insurer row is written as ida_wording extracted_unverified and its reference travels with it.
+  const slot = collateSlot({ factKey: 'room_rent_limit', ida: [room] });
+  assert.deepEqual([slot.ida.tier, slot.ida.status, slot.conflict], ['ida_wording', 'extracted_unverified', null]);
+  assert.equal(slot.ida.reference.quote, 'Room rent is limited to INR 5,000 per day.');
+  assert.equal(slot.ida.reference.reference.quotePage, 7);
+  assert.equal(slot.ida.reference.reference.quote, 'Room rent is limited to INR 5,000 per day.');
+  assert.equal(slot.ida.reference.unchecked, true);
+});
+
+test('chat: for an unchecked insurer fact the evidence is the quote only; a number found only in the formatted value does not ground the answer', () => {
+  const draft = tier => guardTurnAnswer({ status: 'evidence_found', text: 'The co-payment is 10%.', facts: [{ factId: 'm-1', factKey: 'copay_percent', status: 'extracted_unverified', tier, page: 12, quote: 'A co-payment applies to every claim.', valueText: '10%' }] });
+  assert.equal(draft('ida_wording').released, false, 'the insurer quote has no 10, so the value text may not stand in for it');
+  assert.equal(draft('own_pdf').released, true, 'own-document readings keep quote plus value as before');
+});
+
 // ---- database: write, seal, display, erase ------------------------------------------------------------------------------------
 const ON = { POLICY_FACTS_ENABLED: 'true', HOLDINGS_ENABLED: 'true', MEMORY_ENABLED: 'true' };
 const SCHEDULE = ['Sum Insured: Rs. 5,00,000/-', 'Pre-existing Diseases Waiting Period: 36 months', 'Co-payment: 20%'];
@@ -203,11 +275,11 @@ const referenceFacts = { async forHolding() { return [
 ]; } };
 const count = async (app, sql, params = []) => Number((await app.database.one(sql, params)).n);
 
-async function world(t) {
+async function world(t, referenceFactsPort = referenceFacts) {
   fixture.pages = [page(SCHEDULE), page(['Schedule of benefits'])];
   const app = await startApp(t, { env: ON });
   const s = await scenario(app, { name: 'Holding' });
-  const services = createBackendServices(app.database, { env: ON, referenceFacts });
+  const services = createBackendServices(app.database, { env: ON, referenceFacts: referenceFactsPort });
   const at = new Date().toISOString();
   s.holdingId = `hold-${s.documentId}`.slice(0, 100);
   await app.database.run("DELETE FROM job_queue WHERE kind = 'holding.detect_insurer'");
@@ -243,7 +315,7 @@ test('pipeline: an unchecked insurer fact is written as ida_wording extracted_un
   const doc = await fetch(`${app.base}/api/v1/holdings/${s.holdingId}/memory-document`, { headers: { Authorization: `Bearer ${s.token}` } });
   const markdown = await doc.text();
   assert.equal(doc.status, 200, markdown);
-  assert.match(markdown, /room rent limit per day\? INR 5,000 \(insurer wording, not checked\) Check with the insurer\./);
+  assert.match(markdown, /room rent limit per day\? INR 5,000 \(From the insurer's wording, not checked\) Check with the insurer\./);
 });
 
 test('database: the tier and status pairing accepts ida_wording extracted_unverified and still refuses user statuses on a machine tier', opts, async t => {
@@ -267,4 +339,43 @@ test('erasure: revocation erases the unchecked insurer rows; deleting the holdin
   const deleted = await second.app.call(`/api/v1/documents/${second.s.documentId}`, { method: 'DELETE', token: second.s.token });
   assert.ok([200, 202].includes(deleted.status), JSON.stringify(deleted.data));
   assert.equal(await count(second.app, 'SELECT count(*) AS n FROM household_memory_facts WHERE household_id = ?', [second.s.householdId]), 0);
+});
+
+test('pipeline: the real reader over parsed FSS facts reaches the sealed reference with its quote, page and unchecked marker; the own PED wait wins', opts, async t => {
+  const { app, s } = await world(t, createFssReferenceFacts({ port: stubPort([roomFact(), pedFact(), hiddenFact()]), repository: stubRepository, env: { ...ON, REFERENCE_DATA_ENABLED: 'true' } }));
+  const rows = await app.database.many("SELECT * FROM household_memory_facts WHERE holding_id = ? AND source_tier = 'ida_wording' AND superseded_at IS NULL", [s.holdingId]);
+  assert.deepEqual(rows.map(row => [row.fact_key, row.status]), [['room_rent_limit', 'extracted_unverified']]);
+  const services = createBackendServices(app.database, { env: ON });
+  const [memory] = (await services.holdingPipelineRepository.currentMemory({ householdId: s.householdId, holdingId: s.holdingId })).filter(row => row.tier === 'ida_wording');
+  assert.equal(memory.reference.quote, 'Room rent is limited to INR 5,000 per day.');
+  assert.equal(memory.reference.quotePage, 7);
+  assert.equal(memory.reference.verificationStatus, 'extracted_unverified', 'the unchecked marker travels with the sealed reference');
+  assert.equal(rows[0].reference_ref_enc.includes('Room rent'), false, 'sealed at rest');
+});
+
+test('refresh: a reviewed insurer row whose only change is the quote keeps its id, opens no conflict and keeps a resolved conflict resolved', opts, async t => {
+  let quote = null;
+  const reviewed = () => ({ factKey: 'copay_percent', value: { bp: 1000 }, origin: 'reference', refId: 'fss:f_copay', cacheKey: CACHE_KEY, version: 'W1', quote,
+    reference: { source: 'fss', refId: 'fss:f_copay', versionId: 'v1', factId: 'f_copay', verificationStatus: 'independently_verified', evidence: [{ documentId: 'doc_synth_1', pageNumber: 12, sha256: SHA }], cacheKey: CACHE_KEY, quote, quotePage: quote ? 12 : null, origin: 'reference' } });
+  const { app, s, services } = await world(t, { async forHolding() { return [reviewed()]; } });
+  const current = () => app.database.many("SELECT id, source_tier, status FROM household_memory_facts WHERE holding_id = ? AND superseded_at IS NULL ORDER BY id", [s.holdingId]);
+  const conflicts = () => app.database.many('SELECT id, resolution FROM memory_conflicts WHERE holding_id = ? ORDER BY id', [s.holdingId]);
+  const before = await current();
+  const ida = before.find(row => row.source_tier === 'ida_wording');
+  assert.equal(ida.status, 'conflicting', 'differing own and reviewed insurer values are both held as conflicting');
+  const openConflicts = await conflicts();
+  assert.equal(openConflicts.length, 1, 'the schedule says 20%, the reviewed insurer reading says 10%');
+  // The person resolves it, choosing the insurer reading.
+  const holding = await services.holdingPipelineRepository.getHolding({ householdId: s.householdId, holdingId: s.holdingId });
+  await services.holdings.resolveConflict({ holding, conflictId: openConflicts[0].id, adultId: s.adultId, body: { chosenFactId: ida.id } });
+  const resolved = await conflicts();
+  assert.notEqual(resolved[0].resolution, 'pending');
+  const rowsAfterResolve = await current();
+  // A refresh that only adds the quote.
+  quote = QUOTE;
+  const result = await services.holdings.collate({ householdId: s.householdId, holdingId: s.holdingId });
+  assert.ok(result, 'collate ran');
+  assert.deepEqual((await current()).map(row => row.id), rowsAfterResolve.map(row => row.id), 'no row was replaced');
+  assert.deepEqual(await conflicts(), resolved, 'no conflict opened or reopened; the resolved one stays resolved');
+  assert.equal((await current()).some(row => row.id === ida.id), true, 'the reviewed row keeps its id');
 });

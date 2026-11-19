@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ANSWER_CARD_CONTRACT, ANSWER_CARD_LIMITS, ANSWER_CARD_SOURCE_STATUSES, ANSWER_CARD_SOURCE_TIERS } from '../../contracts/answer-card.js';
+import { INSURER_UNCHECKED_LABEL } from '../../features/insurance-rules/fact-source-label.js';
 import { guardAnswerCard } from '../../features/chat-answer-guard/index.js';
 
 // Chat v1 turn -> answer-card/v1 (architecture v1 section 4, PR 138). Deterministic: the card is assembled by code from what
@@ -55,7 +56,9 @@ export function buildTurnCardDraft({ status, text, wording = [], facts = [] }) {
   }
   for (const fact of facts) {
     if (sources.length >= ANSWER_CARD_LIMITS.sources) break;
-    const evidenceText = [fact.quote, fact.valueText].filter(Boolean).join(' ');
+    // ADR 0036: an unchecked insurer fact rests on the insurer's own words only; the formatted value never stands in for the quote.
+    const insurerUnchecked = fact.tier === 'ida_wording' && fact.status === 'extracted_unverified';
+    const evidenceText = insurerUnchecked ? String(fact.quote ?? '') : [fact.quote, fact.valueText].filter(Boolean).join(' ');
     if (!squash(evidenceText)) continue;
     const id = `f-${sha(String(fact.factId)).slice(0, 16)}`;
     if (evidence[id]) continue;
@@ -63,7 +66,17 @@ export function buildTurnCardDraft({ status, text, wording = [], facts = [] }) {
     sources.push({ id, factIds: [String(fact.factId)], tier: tierOf(fact.tier), status: statusOf(fact.status), page: fact.page ?? null, clause: null, quote: quoteFrom(fact.quote || fact.valueText) });
   }
   const found = status === 'evidence_found' && sources.length > 0;
-  const { headline, explanation } = splitAnswerText(text);
+  const split = splitAnswerText(text);
+  const { headline } = split;
+  let { explanation } = split;
+  let answer = String(text ?? '');
+  // ADR 0036 D7: a card that rests on an unchecked insurer fact always carries the canonical label, added by code (never left to model
+  // text, which may drop it). It goes after the model's explanation, which is shortened to make room within the card limit.
+  if (found && sources.some(source => source.tier === 'ida_wording' && source.status === 'extracted_unverified')) {
+    const label = `${INSURER_UNCHECKED_LABEL}.`;
+    if (!explanation.includes(INSURER_UNCHECKED_LABEL)) explanation = [quoteFrom(explanation, ANSWER_CARD_LIMITS.explanation - label.length - 1), label].filter(Boolean).join(' ');
+    if (!answer.includes(INSURER_UNCHECKED_LABEL)) answer = `${answer} ${label}`.trim();
+  }
   const card = {
     contract: ANSWER_CARD_CONTRACT,
     status: found ? 'evidence_found' : 'unknown',
@@ -78,7 +91,7 @@ export function buildTurnCardDraft({ status, text, wording = [], facts = [] }) {
     actions: found ? [] : [{ kind: 'call_insurer', label: 'Call the number on your policy card' }],
     followups: [],
     speech: null,
-    answer: String(text ?? ""),
+    answer,
     legalReview: 'pending',
   };
   return { card, evidence: found ? evidence : {} };

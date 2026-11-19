@@ -113,11 +113,12 @@ function parseEvidence(raw) {
 // outside the bounds, with a control character other than a plain space, or without quote_included === true is not kept (null).
 const QUOTE_MIN = 12;
 const QUOTE_MAX = 200;
-const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+// Also bidi overrides and isolates (U+202A-202E, U+2066-2069) and zero-width or direction marks (U+200B-200F, U+FEFF): they could make a quote read differently from what was sent.
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/;
 function parseQuote(value) {
   if (value.quote_included !== true || typeof value.quote !== 'string') return null;
   const quote = value.quote;
-  if (quote.length < QUOTE_MIN || quote.length > QUOTE_MAX || CONTROL.test(quote)) return null;
+  if (quote.length < QUOTE_MIN || quote.length > QUOTE_MAX || CONTROL.test(quote) || !/\S/.test(quote)) return null;
   return quote;
 }
 
@@ -191,7 +192,8 @@ function parseFact(raw, versionSynthetic, coverageByFamily) {
   // partial. Coverage is keyed by family (FSS_FACT_FAMILY), not by fact type.
   const familyName = familyForFactType(fact.factType);
   const family = familyName === null ? null : coverageByFamily.get(familyName) ?? null;
-  const shown = value.shown !== false;
+  // Strict: a missing `shown` or exactly true is shown; anything else (false, "false", 0, null) hides the fact.
+  const shown = value.shown === undefined || value.shown === true;
   const usable = shown && fact.verificationStatus === 'independently_verified' && versionSynthetic === false
     && fact.evidence.length > 0 && USABLE_FAMILY_STATUS.has(family);
   // ADR 0036: a model-extracted fact of a non-synthetic version is kept as `unchecked` only when at least one PARSED evidence item has
