@@ -13,7 +13,7 @@ import { planProcedure } from '../src/features/insurance-rules/procedure-plannin
 import { formatFactValue } from '../src/features/insurance-rules/fact-format.js';
 import { eraseMemoryForConsentGrant, eraseMemoryForDocuments, eraseMemoryForHousehold } from '../src/backend/repositories/memory-erasure.js';
 import { createApiServer } from '../src/server/server.js';
-import { SCOPE_SENTENCE, historyAnswer, needsRouter, readRoute } from '../src/features/insurance-rules/chat-router.js';
+import { SCOPE_SENTENCE, historyAnswer, isHistoryQuestion, needsRouter, readRoute } from '../src/features/insurance-rules/chat-router.js';
 import { parseRenderedReference } from '../src/features/ai-analysis/prompt-pack.js';
 
 // Memory and chat v1 (migrations 053-054, ADR 0031, ADR 0029): the success path (confirmed fact -> answer citing its id, redaction counts
@@ -204,4 +204,37 @@ test('router: readRoute keeps a unique, closed list of at most three sources and
   assert.equal(needsRouter({ message: 'hello', factKeys: [] }), true);
   assert.equal(needsRouter({ message: 'cataract next month', factKeys: [], hasProcedure: true }), false);
   assert.match(historyAnswer([]), /not asked anything/);
+});
+
+test('waiting periods: a general question lists the known ones and says the specific-disease one was not found', opts, async t => {
+  const s = await scenario(t);
+  await s.services.memoryFacts.insertFact({
+    householdId: s.a.household, holdingId: s.holding.id, factKey: 'waiting_ped', tier: 'ida_wording', status: 'reviewed_reference', value: { value: { days: 1095 }, alternatives: [] }, consentGrantId: s.a.coverageGrant,
+    provenance: { sourceDocumentId: s.a.document }, referenceRef: { refId: 'ref-2', cacheKey: 'cache-2', version: '1', quote: 'as published' },
+  });
+  const answer = await ask(s, 'What are all my waiting periods?');
+  assert.equal(answer.status, 'evidence_found');
+  assert.match(answer.answer, /30 days/);
+  assert.match(answer.answer, /1095 days|3 years/);
+  assert.match(answer.answer, /specific.disease|specific illness/i);
+  assert.doesNotMatch(answer.answer, /documents don't say|did not find this in the policy documents/i);
+  assert.equal(answer.facts_used.length, 2);
+});
+
+test('history: "what did I ask earlier" is answered by code with the router off, and never calls a model', opts, async t => {
+  const s = await scenario(t);
+  const conversation = await s.thread();
+  await ask(s, 'what is the room rent limit?', conversation);
+  const before = { ...s.calls };
+  const answer = await ask(s, 'What did I ask earlier?', conversation);
+  assert.match(answer.answer, /^From this conversation: you asked earlier/);
+  assert.match(answer.answer, /what is the room rent limit\?/);
+  assert.deepEqual(s.calls, before);
+});
+
+test('history: isHistoryQuestion matches plain English history questions only', () => {
+  for (const yes of ['What did I ask earlier?', 'what did i ask', 'What was my last question?', 'what was my previous question', 'Repeat my question', 'repeat my last question', 'What have I asked?', 'what have i asked before', 'Which question did I ask earlier', 'what I asked before'])
+    assert.equal(isHistoryQuestion(yes), true, yes);
+  for (const no of ['What is my waiting period before claim?', 'Is cataract covered earlier than 2 years?', 'What is the room rent limit?', 'Did I ask for a copay?', '', null, undefined])
+    assert.equal(isHistoryQuestion(no), false, String(no));
 });
