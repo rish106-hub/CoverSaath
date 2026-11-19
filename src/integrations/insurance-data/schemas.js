@@ -385,7 +385,7 @@ const PACK_MAX_EVIDENCE = 5;
 const PACK_MAX_PAGE_BYTES = 5_000_000;
 const PACK_MAX_LIMITATIONS = 50;
 const PACK_STATUS = new Set(['extracted_unverified', 'independently_verified']);
-// Profile facts carry CoverSaath keys; published facts carry FSS types. Both map to the FSS type the mapper is keyed on.
+// Profile facts carry consumer keys; published facts carry FSS types. Both map to the FSS type the mapper is keyed on.
 const PACK_TYPE_TO_FSS = Object.freeze({
   room_rent_limit: 'room_rent_limit',
   copay_percent: 'copay',
