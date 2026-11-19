@@ -50,13 +50,15 @@ test('drift: every fact type of fact-types.js is named by exactly one key with t
 
 test('status vocabulary: machine rows never reach a user or reference status, and there is no bare "confirmed"', () => {
   assert.deepEqual(TIER_STATUSES.own_pdf, ['extracted_unverified', 'conflicting', 'unknown']);
-  assert.deepEqual(TIER_STATUSES.ida_wording, ['reviewed_reference', 'conflicting', 'unknown']);
+  assert.deepEqual(TIER_STATUSES.ida_wording, ['reviewed_reference', 'extracted_unverified', 'conflicting', 'unknown']); // ADR 0036
   assert.deepEqual(TIER_STATUSES.user_declaration, ['user_confirmed']);
   assert.equal(MEMORY_STATUSES.includes('confirmed'), false);
   assert.equal(isTierStatus('own_pdf', 'user_confirmed'), false);
   assert.equal(isTierStatus('own_pdf', 'reviewed_reference'), false);
   assert.equal(isTierStatus('user_declaration', 'extracted_unverified'), false);
   assert.equal(isTierStatus('ida_wording', 'reviewed_reference'), true);
+  assert.equal(isTierStatus('ida_wording', 'extracted_unverified'), true);
+  assert.equal(isTierStatus('ida_wording', 'user_confirmed'), false);
   assert.deepEqual(CAPTURE_METHODS, ['typed', 'voice_transcript', 'box_confirm', 'conflict_resolution']);
 });
 

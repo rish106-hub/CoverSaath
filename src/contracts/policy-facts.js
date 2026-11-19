@@ -32,7 +32,7 @@ export const FACT_KEY_PATTERN = /^[a-z][a-z0-9_]{2,63}$/;
 // "confirmed" alone is never a status (AI.md, ADR 0003, ADR 0009).
 export const TIER_STATUSES = Object.freeze({
   own_pdf: Object.freeze(['extracted_unverified', 'conflicting', 'unknown']),
-  ida_wording: Object.freeze(['reviewed_reference', 'conflicting', 'unknown']),
+  ida_wording: Object.freeze(['reviewed_reference', 'extracted_unverified', 'conflicting', 'unknown']),
   user_declaration: Object.freeze(['user_confirmed']),
 });
 export const MEMORY_STATUSES = Object.freeze([...new Set(Object.values(TIER_STATUSES).flat())]);

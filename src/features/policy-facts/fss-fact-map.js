@@ -42,16 +42,20 @@ export const FSS_FACT_MAP = Object.freeze({
 
 export const FSS_MAPPED_FACT_TYPES = Object.freeze(Object.keys(FSS_FACT_MAP));
 
-/** Maps parsed FSS facts to [{ factKey, value, fact }]. `fact` is the source fact (for its evidence). */
+/**
+ * Maps parsed FSS facts to [{ factKey, value, fact, unchecked }]. `fact` is the source fact (for its evidence). `outcome: 'verified'`
+ * is a reviewed insurer reading (`unchecked: false`); `outcome: 'unchecked'` is a model-extracted one that FSS has not reviewed
+ * (`unchecked: true`, ADR 0036): it becomes an ida_wording row with status extracted_unverified, never reviewed_reference.
+ */
 export function mapFssFacts(facts) {
   const out = [];
   for (const fact of Array.isArray(facts) ? facts : []) {
-    if (!fact || fact.outcome !== 'verified' || !Object.hasOwn(FSS_FACT_MAP, fact.factType)) continue;
+    if (!fact || (fact.outcome !== 'verified' && fact.outcome !== 'unchecked') || !Object.hasOwn(FSS_FACT_MAP, fact.factType)) continue;
     if ((fact.conditions?.length ?? 0) > 0 || (fact.exceptions?.length ?? 0) > 0) continue;
     const entry = FSS_FACT_MAP[fact.factType];
     const value = entry.transform(fact.value);
     if (value === null) continue;
-    out.push(Object.freeze({ factKey: entry.factKey, value, fact }));
+    out.push(Object.freeze({ factKey: entry.factKey, value, fact, unchecked: fact.outcome === 'unchecked' }));
   }
   return out;
 }
@@ -63,6 +67,9 @@ const SAFE_ID = /[^A-Za-z0-9_.:-]/g;
  * Reads return only { source, pageNumber, verificationStatus } of it (holdings-service sourceView).
  */
 export function fssEvidence({ fact, versionId, cacheKey }) {
+  // ADR 0036: the verbatim insurer quote (12..200 characters, already checked by the parser) and the page it is on. It is sealed with the
+  // reference and read back from it only; the first evidence item that has one wins.
+  const quoted = (fact.evidence ?? []).find(item => typeof item.quote === 'string' && item.quote.length > 0);
   return Object.freeze({
     source: 'fss',
     refId: `fss:${String(fact.factId).replace(SAFE_ID, '_').slice(0, 120)}`,
@@ -75,6 +82,7 @@ export function fssEvidence({ fact, versionId, cacheKey }) {
     verificationStatus: fact.verificationStatus,
     evidence: Object.freeze((fact.evidence ?? []).map(item => Object.freeze({ documentId: item.documentId, pageNumber: item.pageNumber, sha256: item.sha256 }))),
     cacheKey,
-    quote: null,
+    quote: quoted?.quote ?? null,
+    quotePage: quoted ? quoted.pageNumber : null,
   });
 }

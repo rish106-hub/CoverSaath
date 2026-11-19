@@ -106,7 +106,19 @@ function parseEvidence(raw) {
   if (!Number.isInteger(value.page_number) || value.page_number < 1) throw invalid();
   const pageSha256 = value.page_sha256 === undefined || value.page_sha256 === null ? null : text(value.page_sha256, 64);
   if (pageSha256 !== null && !SHA256.test(pageSha256)) throw invalid();
-  return { documentId: text(value.document_id, 100), pageNumber: value.page_number, sha256, pageSha256 };
+  return { documentId: text(value.document_id, 100), pageNumber: value.page_number, sha256, pageSha256, quote: parseQuote(value) };
+}
+
+// ADR 0036: a verbatim quote of 12..200 characters, kept exactly as sent (never trimmed), only when FSS says quote_included. A quote
+// outside the bounds, with a control character other than a plain space, or without quote_included === true is not kept (null).
+const QUOTE_MIN = 12;
+const QUOTE_MAX = 200;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+function parseQuote(value) {
+  if (value.quote_included !== true || typeof value.quote !== 'string') return null;
+  const quote = value.quote;
+  if (quote.length < QUOTE_MIN || quote.length > QUOTE_MAX || CONTROL.test(quote)) return null;
+  return quote;
 }
 
 // FSS fact type -> coverage family. Mirrors insurance-data-api apps/api/src/products.routes.ts (the `families` CTE and
@@ -179,9 +191,17 @@ function parseFact(raw, versionSynthetic, coverageByFamily) {
   // partial. Coverage is keyed by family (FSS_FACT_FAMILY), not by fact type.
   const familyName = familyForFactType(fact.factType);
   const family = familyName === null ? null : coverageByFamily.get(familyName) ?? null;
-  const usable = fact.verificationStatus === 'independently_verified' && versionSynthetic === false
+  const shown = value.shown !== false;
+  const usable = shown && fact.verificationStatus === 'independently_verified' && versionSynthetic === false
     && fact.evidence.length > 0 && USABLE_FAMILY_STATUS.has(family);
-  const outcome = usable ? 'verified' : family === 'conflicting_evidence' ? 'conflicting' : 'unknown';
+  // ADR 0036: a model-extracted fact of a non-synthetic version is kept as `unchecked` only when at least one PARSED evidence item has
+  // a page and a valid quote (the gate is on the parsed items, never on the raw array). FSS may also send a per-fact `shown`: false
+  // blanks it. It is never `verified`.
+  const unchecked = !usable && fact.verificationStatus === 'extracted_unverified' && versionSynthetic === false && shown
+    && family !== 'conflicting_evidence' && family !== 'not_permitted'
+    && fact.evidence.some(item => item.pageNumber >= 1 && item.quote !== null);
+  const outcome = usable ? 'verified' : unchecked ? 'unchecked' : family === 'conflicting_evidence' ? 'conflicting' : 'unknown';
+  if (unchecked) return { ...fact, outcome, family: familyName };
   // Never carry the value forward unless usable: a non-usable fact is `unknown`/`conflicting`, not a decided value.
   // Conditions and exceptions qualify a value, so they are dropped with it.
   if (!usable) return { ...fact, valueText: null, value: null, conditions: [], exceptions: [], outcome, family: familyName };

@@ -10,6 +10,11 @@
 export const PLANNING_VERSION = 'procedure-planning.1';
 const DAY_MS = 86_400_000;
 
+// ADR 0036 D6, never a verdict: planning reads only reviewed_reference and user_confirmed facts. An extracted_unverified fact of any
+// tier (an own-PDF reading, or an unchecked insurer reading from ida_wording) never reaches planProcedure, a computed check or a rule.
+const PLANNING_STATUSES = new Set(['reviewed_reference', 'user_confirmed']);
+export const procedureInputFacts = facts => (Array.isArray(facts) ? facts : []).filter(fact => PLANNING_STATUSES.has(fact?.status));
+
 const inr = minor => `INR ${(minor / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const isoOf = ms => new Date(ms).toISOString().slice(0, 10);
 const parseDay = iso => {

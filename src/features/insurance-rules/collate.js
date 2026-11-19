@@ -15,6 +15,10 @@
 //   * own_pdf rows are only extracted_unverified or conflicting. No row is ever plain "confirmed".
 //   * Missing means unknown: nothing is written for a tier with no value; the read-time resolver answers unknown.
 //
+// ADR 0036: an insurer value that a model extracted and FSS has not reviewed (item.unchecked === true) is held as an ida_wording row
+// with status extracted_unverified. It is never a decided value, never promoted, and never raises a conflict: when the own PDF
+// has the slot the unchecked insurer row is dropped; otherwise it is shown labelled "not checked" (resolveSlot).
+//
 // Fact classes (ADR 0023 D3):
 //   product_term           IDA primary, own PDF corroborates. Equal -> reviewed_reference citing both. Differ -> both conflicting,
 //                          conflict own_vs_insurer. The user may choose (ADR 0032, FOR LEGAL REVIEW); chat keeps both quotes and says
@@ -77,13 +81,23 @@ function idaIntent(entry, ida, refused) {
     return null;
   }
   const usable = [];
+  const unchecked = [];
   for (const item of ida ?? []) {
     if (!item || !IDA_ORIGINS.has(item.origin)) { refused.push('IDA_ORIGIN_REFUSED'); continue; }
     if (item.origin !== 'reference') { refused.push('MODEL_REFERENCE_REFUSED'); continue; }
     if (equalityKey(entry.type, item.value) === null) { refused.push('IDA_VALUE_INVALID'); continue; }
-    usable.push(item);
+    (item.unchecked === true ? unchecked : usable).push(item);
   }
-  if (usable.length === 0) return null;
+  // A reviewed insurer value outranks an unchecked one for the same slot.
+  if (usable.length === 0) {
+    const uncheckedValues = distinctValues(entry.type, unchecked.map(item => item.value));
+    // Two different unchecked values are not shown at all (nothing is guessed, and an unchecked value never makes a conflict).
+    if (uncheckedValues.length !== 1) return null;
+    return {
+      tier: 'ida_wording', status: 'extracted_unverified', value: uncheckedValues[0], alternatives: [], policyFactId: null,
+      referenceId: unchecked[0].refId, reference: unchecked[0], modelSourced: false,
+    };
+  }
   const values = distinctValues(entry.type, usable.map(item => item.value));
   return {
     tier: 'ida_wording',
@@ -115,6 +129,9 @@ export function collateSlot({ factKey, own = [], ida = [], declaration = null })
   let ownRow = ownIntent(entry, own, refused);
   let idaRow = idaIntent(entry, ida, refused);
   let conflict = null;
+
+  // ADR 0036: with an own-PDF reading of the slot, an unchecked insurer row is dropped (not written) and raises no conflict.
+  if (ownRow && idaRow?.status === 'extracted_unverified') idaRow = null;
 
   if (ownRow && idaRow) {
     const agree = ownRow.status === 'extracted_unverified' && idaRow.status === 'reviewed_reference'
@@ -152,6 +169,8 @@ export function assertMachineRowAuthority(row) {
   if (!isTierStatus(row.tier, row.status) || row.status === 'user_confirmed' || row.status === 'unknown') refuse();
   if (row.status === 'reviewed_reference' && (row.tier !== 'ida_wording' || row.modelSourced !== false || row.reference?.origin !== 'reference')) refuse();
   if (row.tier === 'own_pdf' && row.status === 'reviewed_reference') refuse();
+  // An unchecked insurer row rests on a deterministic reading of the FSS record, never on model output of ours, and carries its reference.
+  if (row.tier === 'ida_wording' && row.status === 'extracted_unverified' && (row.modelSourced !== false || row.reference?.origin !== 'reference' || row.reference?.unchecked !== true)) refuse();
   return row;
 }
 
@@ -164,6 +183,9 @@ export function resolveSlot({ factKey, own = null, ida = null, declaration = nul
   const entry = getPolicyFactKey(factKey);
   if (!entry) throw coded('COLLATE_FACT_KEY_UNKNOWN', 'The fact key is not in the registry.');
   const productTerm = entry.factClass === 'product_term';
+  // ADR 0036: an unchecked insurer row (ida_wording, extracted_unverified) takes no part in agreement, conflict or declaration logic.
+  const unchecked = ida?.status === 'extracted_unverified' ? ida : null;
+  if (unchecked) ida = null;
   const machine = [own, ida].filter(row => row && row.status !== 'unknown');
   const machineValues = machine.flatMap(row => (row.status === 'conflicting' ? row.alternatives ?? [] : [row.value]));
   const out = (status, value, sourceTier, sources, alternatives = []) => Object.freeze({
@@ -192,5 +214,7 @@ export function resolveSlot({ factKey, own = null, ida = null, declaration = nul
   if (machine.some(row => row.status === 'conflicting')) return out('conflicting', null, null, machine, distinctValues(entry.type, machineValues));
   if (productTerm && ida?.status === 'reviewed_reference') return out('reviewed_reference', ida.value, 'ida_wording', machine);
   if (own?.status === 'extracted_unverified') return out('extracted_unverified', own.value, 'own_pdf', [own]);
+  // Last resort, never promoted: the insurer's wording as read by a model and not checked (FOR LEGAL REVIEW: shown as "not checked").
+  if (productTerm && unchecked) return Object.freeze({ status: 'extracted_unverified', value: unchecked.value ?? null, sourceTier: 'ida_wording', sourceIds: Object.freeze([unchecked.id]), alternatives: Object.freeze([]), checkWithInsurer: true });
   return out('unknown', null, null, []);
 }
