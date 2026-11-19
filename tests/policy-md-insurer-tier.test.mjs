@@ -204,6 +204,17 @@ test('prose pass: fact sentences are reworded, label, quote and citation stay as
   }
 });
 
+test('prose pass: a personal value (a seller name) is in the plain render but never in the prompt', opts, async t => {
+  const s = await world(t);
+  await seedTiers(s);
+  await s.own('seller_name', { text: 'Quillberry Agency' });
+  assert.ok((await s.render()).includes('Quillberry Agency'));
+  const out = await s.prose();
+  assert.equal(out.source, 'prose', out.reason);
+  assert.equal(s.sent[0].includes('Quillberry'), false);
+  assert.ok(out.text.includes('Quillberry Agency'), 'the line stays, as code wrote it');
+});
+
 test('prose pass: a line that fails the guard (a changed number, a new fact, advice) serves the deterministic render', opts, async t => {
   const cases = [
     ['changed number', text => REWORD(text).replace('5,000', '6,000')],
@@ -232,6 +243,9 @@ test('prose pass: a model that drops a line, answers unknown, or times out serve
   const dropped = await world(t, { mode: () => '' });
   await seedTiers(dropped);
   assert.equal((await dropped.prose()).source, 'deterministic');
+  const unknown = await world(t, { mode: () => null });
+  await seedTiers(unknown);
+  assert.equal((await unknown.prose()).source, 'deterministic');
   const slow = await world(t, { env: { POLICY_DOC_PROSE_TIMEOUT_MS: '100' }, hook: () => new Promise(resolve => setTimeout(resolve, 600)) });
   await seedTiers(slow);
   const out = await slow.prose();
@@ -358,16 +372,25 @@ test('chat v1: no link, no pack, or a pack of another version gives the plain un
 });
 
 test('chat v1: rules never see insurer facts or passages, a procedure question reads no insurer text', opts, async t => {
+  const ask = s => s.turn(s.a, 'I plan a cataract surgery on 2027-03-01. Will room rent be a problem?', { procedure: { planned_date: '2027-03-01', room_rent_per_day_inr: 9000, estimated_cost_inr: 120000, stay_days: 2 } });
   const s = await chatWorld(t);
-  await s.insurer('room_rent_limit', { amountMinor: 500_000, currency: 'INR' }, ROOM_QUOTE, 7);
-  const out = await s.turn(s.a, 'I plan a cataract surgery on 2027-03-01. Will room rent be a problem?', { procedure: { planned_date: '2027-03-01', room_rent_per_day_inr: 9000, estimated_cost_inr: 120000, stay_days: 2 } });
-  const answer = answerOf(out);
-  assert.ok(answer, JSON.stringify(out));
-  for (const check of answer.computed?.checks ?? []) assert.equal(JSON.stringify(check.fact_ids ?? []).includes('ref-room_rent_limit'), false);
-  assert.equal(JSON.stringify(answer.computed ?? {}).includes('5,000'), false);
-  assert.equal(answer.facts_used.some(item => item.source_tier === 'ida_wording'), false);
+  const insurerId = (await s.insurer('room_rent_limit', { amountMinor: 500_000, currency: 'INR' }, ROOM_QUOTE, 7)).fact.id;
+  const answer = answerOf(await ask(s));
+  assert.ok(answer, 'a turn answered');
+  assert.ok(answer.computed, 'the planner ran');
+  assert.equal(answer.computed.checks.some(check => check.id === 'room_rent'), false, 'the planner never received the insurer room rent');
+  for (const check of answer.computed.checks) assert.equal((check.fact_ids ?? []).includes(insurerId), false);
+  assert.equal(JSON.stringify(answer.computed).includes('5,000'), false);
+  assert.equal(answer.facts_used.some(item => item.fact_id === insurerId || item.source_tier === 'ida_wording'), false);
   assert.equal(answer.sources.some(item => item.kind === 'insurer_wording'), false);
-  assert.equal(answer.card.sources.some(item => item.quote.includes('cataract')), false);
+  assert.equal(answer.card.sources.some(item => item.tier === 'ida_wording'), false);
+  // Control: the same question with a REVIEWED insurer room rent does reach the planner (ADR 0036 allowlist), so the absence above is the filter, not the question.
+  const control = await chatWorld(t);
+  const reviewedId = (await control.insurer('room_rent_limit', { amountMinor: 500_000, currency: 'INR' }, ROOM_QUOTE, 7, { status: 'reviewed_reference' })).fact.id;
+  const withReviewed = answerOf(await ask(control));
+  const check = withReviewed.computed.checks.find(item => item.id === 'room_rent');
+  assert.ok(check, JSON.stringify(withReviewed.computed.checks));
+  assert.deepEqual(check.fact_ids, [reviewedId]);
 });
 
 test('chat v1: another household cannot read the thread or the insurer lines, and linesFor refuses a foreign household', opts, async t => {

@@ -88,7 +88,7 @@ const citation = ({ documentKind, pageNumber, clauseLabel }) => {
 };
 
 // A fact line, kept in two parts so the prose pass can reword the sentence and code can re-append the tail unchanged.
-const factLine = (sentence, tail) => ({ text: `- ${sentence}${tail}`, sentence, tail });
+const factLine = (sentence, tail, factClass) => ({ text: `- ${sentence}${tail}`, sentence, tail, factClass });
 const lineText = line => (typeof line === 'string' ? line : line.text);
 
 export function createMemoryDocumentService({ holdingRepository, holdings, repository, declarations, premiums, households, gateway = null, providerConsent = null, loadKnownIdentifiers = null, env = process.env, clock = () => new Date(), proseTimeoutMs = null, onEvent = null }) {
@@ -177,7 +177,7 @@ export function createMemoryDocumentService({ holdingRepository, holdings, repos
       // FOR LEGAL REVIEW (ADR 0036): an unchecked insurer reading is labelled by tier and status together.
       const status = fact.status === 'extracted_unverified' ? (fact.sourceTier === 'ida_wording' ? ` (${factSourceLabel(fact)})` : ' (read from your document, not verified)') : fact.status === 'reviewed_reference' ? ' (insurer wording)' : fact.status === 'user_confirmed' ? ' (you stated this)' : '';
       const insurerNote = fact.checkWithInsurer ? ' Check with the insurer.' : '';
-      section.push(factLine(`${label} ${text}`, `${status}${insurerNote}${cited.quote ? ` Quote: "${cited.quote}"` : ''} ${cited.text}`));
+      section.push(factLine(`${label} ${text}`, `${status}${insurerNote}${cited.quote ? ` Quote: "${cited.quote}"` : ''} ${cited.text}`, entry?.factClass));
     }
     for (const key of factsView.unknownKeys) {
       const entry = getPolicyFactKey(key);
@@ -259,7 +259,8 @@ export function createMemoryDocumentService({ holdingRepository, holdings, repos
     const found = [];
     for (const name of PROSE_SECTIONS) {
       for (const line of parts.sections.get(name)) {
-        if (typeof line !== 'string' && line.sentence.length <= POLICY_DOC_PROSE_LINE_MAX - 20) found.push(line);
+        // Product terms only: a personal value (seller or agent name and code, member data) can carry an identifier and never goes to the model.
+        if (typeof line !== 'string' && line.factClass === 'product_term' && line.sentence.length <= POLICY_DOC_PROSE_LINE_MAX - 20) found.push(line);
       }
     }
     return found.map((line, index) => ({ id: `l${index + 1}`, line }));
