@@ -30,7 +30,8 @@ async function world(t) {
   const adult = async name => (await services.households.createAdult({ displayName: `Synthetic ${name}` })).id;
   const people = { curator: await adult('curator'), checker: await adult('checker'), second: await adult('second checker'), nobody: await adult('nobody') };
   const repo = services.curatedProducts;
-  const expiry = (days = 30) => new Date(now.getTime() + days * 86_400_000).toISOString();
+  // The fixture clock is fixed, but the HTTP server under test reads the real clock: measure expiry from whichever is later, so a role never lapses as the calendar moves on.
+  const expiry = (days = 30) => new Date(Math.max(now.getTime(), Date.now()) + days * 86_400_000).toISOString();
   const keys = checkerKeyring();
   const grantChecker = adultUserId => repo.grantRole({ adultUserId, role: 'checker', operatorId: 'test-operator', expiresAt: expiry(), publicKey: keys.publicKey(adultUserId) });
   const grants = {
