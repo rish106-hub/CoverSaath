@@ -14,6 +14,7 @@ export const referenceError = (code, message, options) => new ReferenceDataError
 
 export function errorForStatus(status, retryAfterMs = null) {
   if (status === 401 || status === 403) return referenceError('REFERENCE_DATA_AUTH_FAILED', 'Reference data service rejected the server credential.', { statusCode: 503 });
+  if (status === 304) return referenceError('REFERENCE_DATA_NOT_MODIFIED', 'Reference data was not modified.', { statusCode: 304 });
   if (status === 404) return referenceError('REFERENCE_DATA_NOT_FOUND', 'Reference data was not found.', { statusCode: 404 });
   if (status === 429) return referenceError('REFERENCE_DATA_RATE_LIMITED', 'Reference data service rate limit reached.', { retryable: true, statusCode: 503, retryAfterMs });
   if (status === 400) return referenceError('REFERENCE_DATA_REQUEST_REJECTED', 'Reference data service rejected the request.', { statusCode: 502 });

@@ -11,8 +11,8 @@ import { createPolicyFactsHandler } from '../backend/jobs/policy-facts-handler.j
 import { createHoldingCreateHandler, createHoldingHandlers } from '../backend/jobs/holding-pipeline-handlers.js';
 import { holdingsEnabled } from '../backend/services/holdings-flag.js';
 import { createDetectInsurerHandler, createReferenceImportHandler } from '../backend/jobs/holding-product-handlers.js';
-import { FSS_HANDOFF_JOB_KIND } from '../backend/services/fss-handoff-service.js';
-import { createFssHandoffHandler } from '../backend/jobs/fss-handoff-handler.js';
+import { FSS_HANDOFF_JOB_KIND, FSS_PULL_JOB_KIND } from '../backend/services/fss-handoff-service.js';
+import { createFssHandoffHandler, createFssPullHandler } from '../backend/jobs/fss-handoff-handler.js';
 import { createPosthogClient, handoffEnabled } from '../integrations/index.js';
 import { readFssPollConfig } from './config.js';
 import { HOLDING_CREATE_JOB_KIND } from '../contracts/holdings.js';
@@ -40,7 +40,11 @@ export function buildJobHandlers(services, env = process.env) {
     handlers[REFERENCE_IMPORT_JOB_KIND] = createReferenceImportHandler({ service: services.holdingProducts, hospitals: services.networkHospitals });
   }
   // holding.fss_handoff (ADR 0037): sends the insurer lookup to FSS as a task. Needs REFERENCE_DATA_ENABLED and FSS_HANDOFF_ENABLED.
-  if (holdingsEnabled(env) && handoffEnabled(env)) handlers[FSS_HANDOFF_JOB_KIND] = createFssHandoffHandler({ service: services.fssHandoff });
+  // holding.fss_pull: on matched, pulls the UIN pack into the reference cache and queues collate.
+  if (holdingsEnabled(env) && handoffEnabled(env)) {
+    handlers[FSS_HANDOFF_JOB_KIND] = createFssHandoffHandler({ service: services.fssHandoff });
+    handlers[FSS_PULL_JOB_KIND] = createFssPullHandler({ service: services.fssHandoff });
+  }
   return Object.freeze(handlers);
 }
 

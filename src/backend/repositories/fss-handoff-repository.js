@@ -117,6 +117,26 @@ export class FssHandoffRepository {
     return rows.map(row => this.#dto(row));
   }
 
+  /**
+   * Claims open handoffs for one poller (hourly fallback). One statement: rows another poller holds locked are skipped (FOR UPDATE SKIP LOCKED) and
+   * a claimed row's updated_at moves to now, so it leaves the poll window for an hour. Two machines polling at once never take the same handoff.
+   * No transaction is held while FSS is called. A claim that finds FSS silent simply waits for the next hour, which is the poll cadence anyway.
+   */
+  async claimForPoll({ olderThanIso, limit = 20 }) {
+    const at = this.clock().toISOString();
+    const rows = await this.database.many(`UPDATE fss_handoffs SET updated_at = ? WHERE id IN (
+        SELECT id FROM fss_handoffs WHERE state IN ('accepted', 'working') AND updated_at <= ? ORDER BY updated_at ASC LIMIT ? FOR UPDATE SKIP LOCKED
+      ) RETURNING *`, [at, olderThanIso, Math.min(Math.max(limit, 1), 100)]);
+    return rows.map(row => this.#dto(row)).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
+  }
+
+  /** Stores the closed outcome of the last pull of a matched handoff's pack (nothing else changes). False when there is no such handoff. */
+  async recordOutcome({ requestId, outcome }) {
+    if (!OUTCOME.test(String(outcome ?? ''))) invalid('outcome is invalid.');
+    const changed = await this.database.run('UPDATE fss_handoffs SET last_outcome = ?, updated_at = ? WHERE request_id = ?', [outcome, this.clock().toISOString(), requestId]);
+    return changed.changes > 0;
+  }
+
   /** Records (or replaces) the mapping of a holding to the FSS product it matched. */
   async link({ householdId, holdingId, productId, versionId = null, matchedBy, confidence }) {
     str(householdId, 'householdId'); str(holdingId, 'holdingId');

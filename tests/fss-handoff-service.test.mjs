@@ -24,6 +24,7 @@ async function world(t, { client, names = { insurerName: 'Test Insurer', product
     getHolding: async () => ({ ...holding, householdId: a.household, policyProfileId: null }),
     confirmedNames: async () => new Map([[holding.id, names]]),
     confirmedUin: async () => null,
+    holdingDocument: async () => ({ id: a.document, consentGrantId: a.consent }),
   };
   const calls = [];
   const events = [];

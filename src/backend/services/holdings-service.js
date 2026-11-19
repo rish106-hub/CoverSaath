@@ -353,6 +353,13 @@ export function createHoldingsService({ repository, jobQueue, fssHandoff = null,
       return Object.freeze({ queued });
     },
 
+    /** Queues a collate for a holding (after new insurer facts were cached for it). Quiet no-op until the holding has parsed. */
+    async queueCollateFor({ householdId, holdingId }) {
+      if (!enabled()) return null;
+      const holding = await repository.getHolding({ householdId, holdingId });
+      return holding ? queueCollate(holding) : null;
+    },
+
     async unlinkDocument({ holding, documentId }) {
       requireEnabled();
       const { unlinked } = await repository.unlinkDocument({ householdId: holding.householdId, holdingId: holding.id, documentId });

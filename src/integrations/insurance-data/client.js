@@ -125,6 +125,15 @@ export const SERVICE_ENDPOINTS = Object.freeze({
     parse: schemas.parseProductExport,
     maxBytes: EXPORT_MAX_RESPONSE_BYTES,
   },
+  // UIN reference pack v1 (docs/contracts/uin-pack-v1.md, FOR LEGAL REVIEW): page text, facts and verified quotes of one product. The UIN is read
+  // server-side from the household's own profile and goes only to FSS. The response carries no UIN and no household data. No If-None-Match is
+  // sent, so a 304 never happens; the cache key is the version id and the cache TTL decides when to pull again.
+  'products.packByUin': {
+    normalize: p => ({ uin: normalizeUin(p.uin) }),
+    request: p => ({ path: `/v1/products/by-uin/${encodeURIComponent(p.uin)}/pack`, query: {} }),
+    parse: schemas.parsePack,
+    maxBytes: EXPORT_MAX_RESPONSE_BYTES,
+  },
 });
 const ALL_ENDPOINTS = Object.freeze({ ...REFERENCE_ENDPOINTS, ...SERVICE_ENDPOINTS });
 
