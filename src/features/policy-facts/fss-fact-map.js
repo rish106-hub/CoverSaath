@@ -1,6 +1,6 @@
 // FSS fact -> product-term fact (ADR 0034, design note section 3). Pure: no I/O, never throws. Takes facts already parsed and
 // screened by src/integrations/insurance-data/schemas.js (`outcome: 'verified'` means non-synthetic, independently verified, evidenced and
-// its family verified or partial). Eleven FSS names map to eleven CoverSaath keys (the pack's seven shown fact types plus P0's room rent and copay):
+// its family verified or partial). Eleven FSS names map to eleven product-term fact keys (the pack's seven shown fact types plus P0's room rent and copay):
 //   room_rent_limit (fixed_amount_per_day)         -> room_rent_limit   { amountMinor, currency }   rupees x 100
 //   copay (percentage)                             -> copay_percent     { bp }                      percent x 100
 //   initial_waiting_period (duration)              -> waiting_initial   { days, original }
