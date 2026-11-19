@@ -10,7 +10,7 @@ export { CURATED_OFFICIAL_SOURCES, CURATED_PRODUCT_RECORDS } from './curated-sou
 export { typedTwin, typedTwins } from './typed-candidates.js';
 export { associateDocuments, extractPolicyNumbers, logicalPolicyId } from './association.js';
 export { toHandoff, assertHandoffContract, HANDOFF_VERSION, HANDOFF_STATES } from './handoff.js';
-export { validateCuratedProduct, validateCuratedFacts, validateSourceIdentity, curatedFreshness, loadCuratedProducts, compareToCurated, extractUins, sha256Hex } from './curated-products.js';
+export { validateCuratedProduct, validateCuratedFacts, validateSourceIdentity, curatedFreshness, loadCuratedProducts, compareToCurated, extractUins, extractProductUins, sha256Hex } from './curated-products.js';
 export { verifySourceEvidence, normalisePageTexts, MAX_SOURCE_BYTES } from './source-verification.js';
 export {
   CURATED_ACTION_VERSION, CuratedActionError, generateCheckerKeyPair, signCuratedAction, readCuratedAction, verifyCuratedActionSignature,

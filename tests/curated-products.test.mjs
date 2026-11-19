@@ -1,7 +1,7 @@
 // Curated insurer products: strict shape, derived verification, UIN comparison that informs and never overrides. Synthetic data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateCuratedProduct, loadCuratedProducts, compareToCurated, extractUins, CURATED_PRODUCT_RECORDS, buildDecisionCatalogue } from '../src/features/decision-catalogue/index.js';
+import { validateCuratedProduct, loadCuratedProducts, compareToCurated, extractUins, extractProductUins, CURATED_PRODUCT_RECORDS, buildDecisionCatalogue } from '../src/features/decision-catalogue/index.js';
 
 const today = '2026-10-20';
 const record = (over = {}) => ({

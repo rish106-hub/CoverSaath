@@ -91,8 +91,8 @@ export const POLICY_FACT_KEYS = Object.freeze([
   mapped('clause_restoration', 'text', 'none', 'cover', 'How does the sum insured get restored after a claim?', 'product_term', 'd.restoration_recharge'),
   mapped('clause_ayush', 'text', 'none', 'cover', 'Is AYUSH treatment covered, and how?', 'product_term', 'e.ayush'),
   // ---- Memory-only keys: product terms (insurer wording first, own PDF corroborates) ----
-  memory('pre_hospitalisation_days', 'duration', 'days', 'cover', 'How many days before admission are costs covered?', 'product_term', 'e.pre_and_post_hospitalisation'),
-  memory('post_hospitalisation_days', 'duration', 'days', 'cover', 'How many days after discharge are costs covered?', 'product_term', 'e.pre_and_post_hospitalisation'),
+  mapped('pre_hospitalisation_days', 'duration', 'days', 'cover', 'How many days before admission are costs covered?', 'product_term', 'e.pre_and_post_hospitalisation'),
+  mapped('post_hospitalisation_days', 'duration', 'days', 'cover', 'How many days after discharge are costs covered?', 'product_term', 'e.pre_and_post_hospitalisation'),
   memory('day_care_covered', 'bool', 'none', 'cover', 'Are day-care procedures covered?', 'product_term', 'e.day_care_procedures'),
   memory('maternity_covered', 'bool', 'none', 'cover', 'Is maternity covered?', 'product_term', 'e.maternity_and_newborn'),
   memory('restoration_available', 'bool', 'none', 'cover', 'Is the sum insured restored after it is used up?', 'product_term', 'd.restoration_recharge'),
@@ -123,6 +123,9 @@ export const POLICY_FACT_KEYS = Object.freeze([
   memory('preference_cashless', 'enum', 'none', 'declarations', 'In a hospital stay, what matters more to you?', 'household_declaration'),
   memory('preference_language', 'enum', 'none', 'declarations', 'Which language do you prefer?', 'household_declaration'),
   memory('purchase_channel', 'enum', 'none', 'declarations', 'How did you buy this policy?', 'household_declaration'),
+  // ---- Text limits as printed in the schedule ("At Actuals"); a fact type each (fact-types.js), deterministic reading only ----
+  mapped('room_rent_text', 'text', 'none', 'limits', 'What does the policy print for the room rent limit?', 'product_term'),
+  mapped('icu_limit_text', 'text', 'none', 'limits', 'What does the policy print for the ICU charge limit?', 'product_term'),
 ]);
 
 export const POLICY_FACT_KEY_NAMES = Object.freeze(POLICY_FACT_KEYS.map(entry => entry.key));

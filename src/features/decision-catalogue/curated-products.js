@@ -28,6 +28,32 @@ export function extractUins(value) {
   return [...found];
 }
 
+const ADD_ON_CONTEXT = /\b(?:add[\s-]*ons?|riders?)\b[^\n]{0,30}$/i;
+const PRODUCT_CONTEXT = /\bproduct\s*$/i;
+
+/**
+ * The UIN of the product a document is for. A schedule can print the product UIN in its footer and an add-on or rider UIN beside it;
+ * the add-on UIN is not the product. Order: exactly one distinct "Product UIN" wins; else the distinct UINs that are not labelled
+ * add-on or rider; else every distinct UIN (the caller treats several as a conflict). Never guesses between two product UINs.
+ */
+export function extractProductUins(value) {
+  const text = String(value ?? '');
+  const all = [];
+  const product = new Set();
+  const plain = new Set();
+  for (const match of text.matchAll(PRINTED_UIN)) {
+    const uin = match[1].toUpperCase();
+    if (!(/\d/.test(uin) && /[A-Z]/.test(uin))) continue;
+    all.push(uin);
+    const before = text.slice(Math.max(0, match.index - 40), match.index);
+    if (PRODUCT_CONTEXT.test(before)) product.add(uin);
+    if (!ADD_ON_CONTEXT.test(before)) plain.add(uin);
+  }
+  if (product.size === 1) return [...product];
+  if (product.size === 0 && plain.size === 1) return [...plain];
+  return [...new Set(all)];
+}
+
 const httpsUrl = value => {
   try { const url = new URL(value); return url.protocol === 'https:' && !url.username && !url.password && String(value).length <= 500; } catch { return false; }
 };
