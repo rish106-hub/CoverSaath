@@ -81,14 +81,15 @@ test('parsePack: shown false and unchecked-without-a-quote facts are absent; ver
   const byId = Object.fromEntries(pack.facts.map(fact => [fact.factId, fact]));
   assert.equal(byId['pf-initial'].outcome, 'unchecked');
   assert.equal(byId['pf-initial'].factType, 'initial_waiting_period');
-  assert.equal(byId['pf-ped'].outcome, 'verified');
+  assert.equal(byId['pf-ped'].outcome, 'unchecked', 'a pack fact is never reviewed, even when FSS flags it independently_verified');
+  assert.equal(byId['pf-ped'].verificationStatus, 'extracted_unverified');
   assert.equal(byId['pf-ped'].evidence[0].sha256, SHA_DOC, 'the document sha comes from the pack documents');
   assert.deepEqual(byId['pf-scoped'].conditions, ['plan: gold']);
   assert.equal(pack.product.productId, 'prod_pack_1');
   assert.equal(pack.documents[0].sourcePages[0].pageNumber, 4);
 });
 
-test('parsePack: strict shape and the contract bounds fail the whole pack closed', () => {
+test('parsePack: wrong shapes and the contract bounds fail the whole pack closed (unknown keys are ignored, not rejected)', () => {
   const bad = body => assert.throws(() => parsePack(body), { code: 'REFERENCE_DATA_RESPONSE_INVALID' });
   bad(null);
   bad({ ...rawPack(), pack_version: 'short' });
@@ -151,7 +152,7 @@ for (const [type, value, needle, key, expected] of SEVEN) {
       const [row, ...rest] = mapFssFacts(pack.facts);
       assert.equal(rest.length, 0);
       assert.equal(row.factKey, key);
-      assert.equal(row.unchecked, status === 'extracted_unverified');
+      assert.equal(row.unchecked, true, 'a pack fact is always held as not checked');
       for (const [field, wanted] of Object.entries(expected)) assert.deepEqual(row.value[field], wanted);
       assert.ok(row.fact.evidence[0].quote.includes(needle));
     }
@@ -234,9 +235,9 @@ test('the poll path queues one pull job on the first matched answer only; a fina
   const s = await world(t);
   const requestId = await accepted(s);
   await s.db.run("UPDATE fss_handoffs SET updated_at = '2020-01-01T00:00:00.000Z' WHERE request_id = ?", [requestId]);
-  assert.deepEqual(await s.service.poll(), { polled: 1 });
+  assert.equal((await s.service.poll()).polled, 1);
   assert.equal((await pullJobs(s)).length, 1);
-  assert.deepEqual(await s.service.poll(), { polled: 0 }, 'a decided handoff is no longer open');
+  assert.equal((await s.service.poll()).polled, 0, 'a decided handoff is no longer open');
   assert.equal((await pullJobs(s)).length, 1);
 
   const send = await world(t);
@@ -289,7 +290,7 @@ test('pull: an erased holding is dropped and counted, and nothing is written', o
   racing.reader.read = async (...args) => { const out = await original(...args); await racing.db.run('DELETE FROM policy_holdings WHERE id = ?', [racing.holding.id]); return out; };
   // The erased holding takes its handoff with it, so run the race with the holding only checked through the document: use the document's lifecycle instead.
   assert.ok(['dropped', 'skipped'].includes(await racing.service.pull({ householdId: racing.a.household, holdingId: racing.holding.id, requestId: id })));
-  assert.equal((await cacheRows(racing)).length, 0);
+  assert.ok(!JSON.stringify(await cacheRows(racing)).includes(racing.a.household), 'only public, version-keyed rows may exist; no link, no household data');
   assert.equal(await racing.services.fssHandoffs.linkFor(racing.holding.id), null);
 });
 
@@ -305,7 +306,7 @@ test('pull: consent revoked while the pack is read means no write, no link, no c
     return out;
   };
   assert.equal(await s.service.pull({ householdId: s.a.household, holdingId: s.holding.id, requestId }), 'dropped');
-  assert.equal((await cacheRows(s)).length, 0);
+  assert.ok(!JSON.stringify(await cacheRows(s)).includes(s.a.household), 'only public, version-keyed rows may exist (written before the lock); no link, no collate');
   assert.equal(await s.services.fssHandoffs.linkFor(s.holding.id), null);
   assert.deepEqual(s.collated, []);
   assert.ok(s.events.some(event => event.type === 'fss.pull_dropped'));
@@ -422,11 +423,14 @@ test('outbox: the matched state and its pull job commit together; a failed enque
   const polled = await world(t);
   const id = await accepted(polled);
   await polled.db.run("UPDATE fss_handoffs SET updated_at = '2020-01-01T00:00:00.000Z' WHERE request_id = ?", [id]);
-  const brokenPoll = createFssHandoffService({
+  const events = [];
+  const logged = createFssHandoffService({
     repository: polled.services.fssHandoffs, holdingRepository: polled.services.holdingPipelineRepository, jobQueue: { enqueue: async () => { throw new Error('queue down'); } },
-    env: ENV, reader: polled.reader, client: { get: async () => ({ handoffId: 'h-1', requestId: id, state: 'matched', versionId: VERSION }) },
+    env: ENV, reader: polled.reader, client: { get: async () => ({ handoffId: 'h-1', requestId: id, state: 'matched', versionId: VERSION }) }, onEvent: event => events.push(event),
   });
-  await assert.rejects(brokenPoll.poll(), /queue down/);
+  assert.deepEqual(await logged.poll(), { polled: 0, requeued: 0, gaveUp: 0 }, 'a failing row is caught, not thrown');
+  assert.deepEqual(events.filter(e => e.type === 'fss.poll_row_failed').map(e => [e.stage, e.code]), [['open', 'FSS_POLL_ROW_FAILED']], 'the code only is reported');
+  assert.ok(!JSON.stringify(events).includes('queue down'));
   assert.equal((await polled.services.fssHandoffs.byRequestId(id)).state, 'accepted');
 });
 
@@ -453,7 +457,7 @@ test('link: the consent re-check and the link are one transaction under the hous
   assert.equal(await s.service.pull({ householdId: s.a.household, holdingId: s.holding.id, requestId }), 'dropped', 'the re-check waited for the lock and saw the revocation');
   await revoking;
   assert.equal(await s.services.fssHandoffs.linkFor(s.holding.id), null);
-  assert.equal((await cacheRows(s)).length, 0);
+  assert.ok(!JSON.stringify(await cacheRows(s)).includes(s.a.household));
   assert.deepEqual(s.collated, []);
 });
 
@@ -535,8 +539,7 @@ test('end to end: matched handoff pulls the pack, collate writes ida_wording row
   const byKey = Object.fromEntries(ida.map(row => [row.fact_key, row.status]));
   // All seven shown fact types reach the rows; shown:false, the unmatched quote, the scoped variant and the conditional variant never do.
   assert.deepEqual(Object.keys(byKey), ['clause_ayush', 'day_care_covered', 'free_look_period', 'post_hospitalisation_days', 'pre_hospitalisation_days', 'waiting_initial', 'waiting_ped']);
-  assert.equal(byKey.waiting_ped, 'reviewed_reference');
-  for (const key of Object.keys(byKey).filter(name => name !== 'waiting_ped')) assert.equal(byKey[key], 'extracted_unverified', key);
+  for (const key of Object.keys(byKey)) assert.equal(byKey[key], 'extracted_unverified', `${key}: nothing from a pack is reviewed_reference`);
   const holdings = await services.policyHoldings.list({ householdId: s.householdId, adultId: s.adultId });
   assert.equal((await services.holdings.summaries({ householdId: s.householdId, holdings })).get(holdingId).wordingState, 'fss');
 
@@ -548,4 +551,160 @@ test('end to end: matched handoff pulls the pack, collate writes ida_wording row
   // The cache keeps only public insurer text; no household id is in any pulled key or body.
   const cached = JSON.stringify(await app.database.many("SELECT key, body FROM reference_cache WHERE key LIKE 'handoff.pack.%'"));
   assert.ok(!cached.includes(s.householdId) && !cached.includes(holdingId));
+});
+
+// --- review fixes: redrive of a dead pull, pack staleness, rights withdrawal, per-row poll errors ---
+
+const OLD = '2020-01-01T00:00:00.000Z';
+async function matchedWorld(t, opts2 = { reader: packClient(() => json(rawPack())) }) {
+  const s = await world(t, opts2);
+  const requestId = await accepted(s);
+  await s.service.receiveNotice(noticeFor(requestId));
+  return { ...s, requestId, args: { householdId: s.a.household, holdingId: s.holding.id, requestId } };
+}
+const handoffRow = (s, requestId) => s.services.fssHandoffs.byRequestId(requestId);
+
+test('poll redrive: a matched handoff whose pull job died is re-queued after an hour, a live job is never doubled, and it gives up at the cap', opts, async t => {
+  const s = await matchedWorld(t);
+  const cap = (await import('../src/backend/repositories/fss-handoff-repository.js')).FSS_PULL_REDRIVE_MAX;
+  assert.equal((await pullJobs(s)).length, 1);
+  // Not an hour old yet: nothing happens.
+  assert.deepEqual(await s.service.poll(), { polled: 0, requeued: 0, gaveUp: 0 });
+  // An hour later with the job still queued: claimed, but the dedupe key keeps one job.
+  await s.db.run('UPDATE fss_handoffs SET updated_at = ? WHERE request_id = ?', [OLD, s.requestId]);
+  assert.equal((await s.service.poll()).requeued, 1);
+  assert.equal((await pullJobs(s)).length, 1, 'the live job was not doubled');
+  assert.equal((await handoffRow(s, s.requestId)).pullAttempts, 1);
+  // The job died: the next hourly poll queues a new one.
+  await s.db.run("UPDATE job_queue SET status = 'dead', finished_at = now() WHERE kind = ?", [FSS_PULL_JOB_KIND]);
+  await s.db.run('UPDATE fss_handoffs SET updated_at = ? WHERE request_id = ?', [OLD, s.requestId]);
+  assert.equal((await s.service.poll()).requeued, 1);
+  const jobs = await pullJobs(s);
+  assert.deepEqual(jobs.map(job => job.status).sort(), ['dead', 'queued']);
+  assert.equal((await handoffRow(s, s.requestId)).pullAttempts, 2);
+  // A pull that finished is terminal: never redriven.
+  assert.equal(await s.service.pull(s.args), 'pulled');
+  assert.equal((await handoffRow(s, s.requestId)).pullAttempts, 0, 'a finished pull clears the counter');
+  await s.db.run('UPDATE fss_handoffs SET updated_at = ? WHERE request_id = ?', [OLD, s.requestId]);
+  assert.equal((await s.service.poll()).requeued, 0, 'pulled and fresh: nothing to redrive');
+
+  // At the cap it gives up: outcome pull_gave_up, no new job, and it stays given up.
+  const g = await matchedWorld(t);
+  await s.db.run("UPDATE job_queue SET status = 'dead', finished_at = now() WHERE kind = ?", [FSS_PULL_JOB_KIND]);
+  await g.db.run("UPDATE job_queue SET status = 'dead', finished_at = now() WHERE kind = ?", [FSS_PULL_JOB_KIND]);
+  await g.db.run('UPDATE fss_handoffs SET updated_at = ?, pull_attempts = ? WHERE request_id = ?', [OLD, cap, g.requestId]);
+  assert.deepEqual(await g.service.poll(), { polled: 0, requeued: 0, gaveUp: 1 });
+  assert.equal((await handoffRow(g, g.requestId)).lastOutcome, 'pull_gave_up');
+  assert.deepEqual((await pullJobs(g)).map(job => job.status), ['dead']);
+  await g.db.run('UPDATE fss_handoffs SET updated_at = ? WHERE request_id = ?', [OLD, g.requestId]);
+  assert.deepEqual(await g.service.poll(), { polled: 0, requeued: 0, gaveUp: 0 });
+});
+
+test('poll refresh: a pulled pack whose cached facts are stale is pulled again; a fresh one is left alone', opts, async t => {
+  const calls = [];
+  const s = await matchedWorld(t, { reader: packClient(() => json(rawPack()), calls) });
+  assert.equal(await s.service.pull(s.args), 'pulled');
+  await s.db.run("UPDATE job_queue SET status = 'succeeded', finished_at = now() WHERE kind = ?", [FSS_PULL_JOB_KIND]);
+  // Pulled a day ago but the cache is fresh (another holding refreshed it): looked at, not re-pulled.
+  await s.db.run('UPDATE fss_handoffs SET updated_at = ? WHERE request_id = ?', [OLD, s.requestId]);
+  assert.equal((await s.service.poll()).requeued, 0);
+  assert.equal((await pullJobs(s)).length, 1);
+  // The cache went stale: the next window re-queues the pull.
+  await s.db.run('UPDATE fss_handoffs SET updated_at = ? WHERE request_id = ?', [OLD, s.requestId]);
+  await s.db.run("UPDATE reference_cache SET status = 'stale', stale_after = now() - interval '1 hour' WHERE key = ?", [packCacheKey('facts', VERSION)]);
+  assert.equal((await s.service.poll()).requeued, 1);
+  assert.deepEqual((await pullJobs(s)).map(job => job.status).sort(), ['queued', 'succeeded']);
+});
+
+test('re-pull 404 pack_not_available: the cached rows of that version go, collate runs again, and the outcome is terminal', opts, async t => {
+  let gone = false;
+  const s = await matchedWorld(t, { reader: packClient(() => (gone ? json({ error: 'pack_not_available' }, 404) : json(rawPack()))) });
+  assert.equal(await s.service.pull(s.args), 'pulled');
+  assert.equal((await cacheRows(s)).length, 2);
+  assert.deepEqual(s.collated, [s.holding.id]);
+  gone = true;
+  assert.equal(await s.service.pull(s.args), 'pack_not_available');
+  assert.equal((await cacheRows(s)).length, 0, 'facts and pages rows are deleted');
+  assert.deepEqual(s.collated, [s.holding.id, s.holding.id], 're-collated so the ida_wording rows written from the pack drop');
+  const row = await handoffRow(s, s.requestId);
+  assert.equal(row.lastOutcome, 'pack_not_available');
+  await s.db.run('UPDATE fss_handoffs SET updated_at = ? WHERE request_id = ?', [OLD, s.requestId]);
+  assert.equal((await s.service.poll()).requeued, 0, 'pack_not_available is never redriven');
+  // A first pull that 404s has nothing cached and nothing to re-collate.
+  const first = await matchedWorld(t, { reader: packClient(404) });
+  assert.equal(await first.service.pull(first.args), 'pack_not_available');
+  assert.deepEqual(first.collated, []);
+});
+
+test('poll: one row failing with any error is caught and reported by code; the other rows are still polled', opts, async t => {
+  const s = await world(t);
+  const events = [];
+  const a = await accepted(s);
+  const second = await seedWorld(s.handle.pool, 'b');
+  const holdingB = await s.services.policyHoldings.create({ householdId: second.household, adultId: second.adult, documentId: second.document, kind: 'retail_health', policyId: second.policy });
+  const { requestId: b } = await s.service.queueForHolding({ holding: { ...holdingB, householdId: second.household } });
+  await s.services.fssHandoffs.recordAccepted({ requestId: b, fssHandoffId: 'h-2', state: 'accepted' });
+  await s.db.run('UPDATE fss_handoffs SET updated_at = ?', [OLD]);
+  const service = createFssHandoffService({
+    repository: s.services.fssHandoffs, holdingRepository: s.services.holdingPipelineRepository, jobQueue: s.services.jobQueue, referenceCache: new ReferenceCacheRepository(s.db),
+    env: ENV, reader: s.reader, onEvent: event => events.push(event),
+    client: { get: async id => { if (id === 'h-1') throw Object.assign(new TypeError('boom with detail'), { code: 'SOME_CODE' }); return { handoffId: 'h-2', requestId: b, state: 'no_match', versionId: null }; } },
+  });
+  assert.equal((await service.poll()).polled, 1, 'the second handoff was still polled');
+  assert.equal((await s.services.fssHandoffs.byRequestId(b)).state, 'no_match');
+  assert.equal((await s.services.fssHandoffs.byRequestId(a)).state, 'accepted');
+  assert.deepEqual(events.filter(e => e.type === 'fss.poll_row_failed').map(e => e.code), ['SOME_CODE']);
+  assert.ok(!JSON.stringify(events).includes('boom'));
+});
+
+test('pull: the public cache rows are written before the household-locked link transaction starts', opts, async t => {
+  const s = await matchedWorld(t, { reader: packClient(() => json(rawPack())) });
+  let atLock = null;
+  const real = s.services.fssHandoffs;
+  const repository = new Proxy(real, { get: (target, key) => {
+    if (key === 'withHousehold') return async (householdId, work) => { atLock = (await cacheRows(s)).length; return target.withHousehold(householdId, work); };
+    const member = target[key];
+    return typeof member === 'function' ? member.bind(target) : member;
+  } });
+  const service = createFssHandoffService({ repository, holdingRepository: s.services.holdingPipelineRepository, jobQueue: s.services.jobQueue, referenceCache: new ReferenceCacheRepository(s.db), env: ENV, reader: s.reader });
+  assert.equal(await service.pull(s.args), 'pulled');
+  assert.equal(atLock, 2, 'facts and pages were already cached when the lock was taken');
+});
+
+// --- schema fixes ---
+
+test('parsePack: a duplicate document id or a duplicate page number fails the whole pack closed', () => {
+  const bad = body => assert.throws(() => parsePack(body), { code: 'REFERENCE_DATA_RESPONSE_INVALID' });
+  const doc = rawPack().documents[0];
+  bad(rawPack({ documents: [doc, { ...doc }] }));
+  bad(rawPack({ documents: [{ ...doc, pages: [doc.pages[0], { ...doc.pages[0] }] }] }));
+  assert.ok(parsePack(rawPack({ documents: [doc, { ...doc, document_id: 'doc_pack_2' }] })));
+});
+
+test('parsePack: evidence whose page_sha256 differs from the cited page is dropped, and a fact left with no evidence is hidden', () => {
+  const wrong = rawPack({ facts: [packFact('pf-w', 'waiting_initial', { kind: 'duration', duration: { value: 30, unit: 'days' }, text: '30 days' }, 'extracted_unverified', { evidence: [{ ...evidence('Waiting period')[0], page_sha256: 'a'.repeat(64) }] })] });
+  assert.deepEqual(parsePack(wrong).facts, []);
+  assert.equal(parsePack(rawPack()).facts.length, 3, 'the matching hash is kept');
+});
+
+test('parsePack: a non-null applicable_condition makes the fact conditional, so it never maps', () => {
+  const fact = (value, id) => packFact(id, 'waiting_initial', { kind: 'duration', duration: { value: 30, unit: 'days' }, text: '30 days', ...value }, 'extracted_unverified');
+  const pack = parsePack(rawPack({ facts: [fact({ applicable_condition: 'accidents only' }, 'pf-c'), fact({ applicable_condition: null }, 'pf-n'), fact({}, 'pf-u')] }));
+  const byId = Object.fromEntries(pack.facts.map(item => [item.factId, item]));
+  assert.deepEqual(byId['pf-c'].conditions, ['accidents only']);
+  assert.deepEqual(mapFssFacts(pack.facts).map(row => row.fact.factId), ['pf-n', 'pf-u']);
+});
+
+test('clause_ayush maps only when unchecked: a reviewed ayush fact (a live exporter fact) is excluded, so it never joins an agree or conflict decision', () => {
+  const ayush = { factId: 'a1', factType: 'clause_ayush', value: { kind: 'bool', text: 'yes' }, conditions: [], exceptions: [], evidence: [] };
+  assert.deepEqual(mapFssFacts([{ ...ayush, outcome: 'verified' }]), []);
+  assert.equal(mapFssFacts([{ ...ayush, outcome: 'unchecked' }]).length, 1);
+  assert.equal(mapFssFacts([{ ...ayush, factType: 'ayush', outcome: 'verified' }]).length, 0);
+});
+
+test('a pack fact flagged independently_verified is held as extracted_unverified, never reviewed_reference', () => {
+  const pack = parsePack(rawPack({ facts: [packFact('pf-r', 'waiting_ped', { kind: 'duration', duration: { value: 36, unit: 'months' }, text: '36 months' }, 'independently_verified', { evidence: evidence('Pre-existing') })] }));
+  const [row] = mapFssFacts(pack.facts);
+  assert.equal(row.unchecked, true);
+  assert.equal(row.fact.verificationStatus, 'extracted_unverified');
 });

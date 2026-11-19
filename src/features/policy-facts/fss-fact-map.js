@@ -78,6 +78,9 @@ export function mapFssFacts(facts) {
     if (!fact || (fact.outcome !== 'verified' && fact.outcome !== 'unchecked') || !Object.hasOwn(FSS_FACT_MAP, fact.factType)) continue;
     if ((fact.conditions?.length ?? 0) > 0 || (fact.exceptions?.length ?? 0) > 0) continue;
     const entry = FSS_FACT_MAP[fact.factType];
+    // clause_ayush is a fixed-words text slot (it says nothing about "how"): it is shown only as not checked, never as a reviewed reading, so it
+    // can never take part in an agree or conflict decision with the person's own policy.
+    if (entry.factKey === 'clause_ayush' && fact.outcome === 'verified') continue;
     const value = entry.transform(fact.value);
     if (value === null) continue;
     out.push(Object.freeze({ factKey: entry.factKey, value, fact, unchecked: fact.outcome === 'unchecked' }));

@@ -13,6 +13,10 @@ const FSS_NOTICE_STATES = Object.freeze(['accepted', 'working', 'matched', 'no_m
 export const FSS_MATCHED_BY = Object.freeze(['alias', 'uin', 'manual']);
 export const FSS_CONFIDENCE = Object.freeze(['high', 'medium', 'low']);
 export const FSS_MAX_ATTEMPTS = 3;
+// A matched handoff whose pull never finished (its job died) is re-queued by the hourly poll, at most this many times (about three days), then
+// the outcome 'pull_gave_up' stops it. These outcomes end the redrive: the pull is done or can never succeed (a gate no longer holds, a wrong version).
+export const FSS_PULL_REDRIVE_MAX = 72;
+export const FSS_PULL_TERMINAL_OUTCOMES = Object.freeze(['pulled', 'pack_not_available', 'version_mismatch', 'no_handoff_id', 'pull_gave_up']);
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
 const FSS_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
 const OUTCOME = /^[a-z][a-z0-9_]{1,59}$/;
@@ -28,7 +32,7 @@ export class FssHandoffRepository {
   #dto(row) {
     return row ? Object.freeze({
       id: row.id, householdId: row.household_id, holdingId: row.holding_id, requestId: row.request_id, fssHandoffId: row.fss_handoff_id,
-      versionId: row.fss_version_id, state: row.state, attempts: row.attempts, lastOutcome: row.last_outcome,
+      versionId: row.fss_version_id, state: row.state, attempts: row.attempts, pullAttempts: row.pull_attempts, lastOutcome: row.last_outcome,
       createdAt: row.created_at, updatedAt: row.updated_at, decidedAt: row.decided_at,
     }) : null;
   }
@@ -145,10 +149,43 @@ export class FssHandoffRepository {
     return rows.map(row => this.#dto(row)).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1));
   }
 
+  /**
+   * Claims matched handoffs whose pull never finished (the last outcome is not terminal) and that sat untouched since `olderThanIso`, for the hourly
+   * poll to re-queue. One statement per step, FOR UPDATE SKIP LOCKED (two pollers never take the same row); a claimed row's updated_at moves to now and
+   * its pull_attempts goes up by one. A row already at `maxAttempts` is not claimed: it is given up (outcome 'pull_gave_up', terminal). Resolves
+   * { claimed: [handoff], gaveUp: number }.
+   */
+  async claimPullRedrive({ olderThanIso, limit = 20, maxAttempts = FSS_PULL_REDRIVE_MAX }) {
+    const at = this.clock().toISOString();
+    const cap = Math.min(Math.max(limit, 1), 100);
+    const stuck = `state = 'matched' AND fss_version_id IS NOT NULL AND (last_outcome IS NULL OR last_outcome NOT IN (${FSS_PULL_TERMINAL_OUTCOMES.map(() => '?').join(', ')})) AND updated_at <= ?`;
+    const terminal = [...FSS_PULL_TERMINAL_OUTCOMES];
+    const gaveUp = await this.database.many(`UPDATE fss_handoffs SET last_outcome = 'pull_gave_up', updated_at = ? WHERE id IN (
+        SELECT id FROM fss_handoffs WHERE ${stuck} AND pull_attempts >= ? ORDER BY updated_at ASC LIMIT ? FOR UPDATE SKIP LOCKED
+      ) RETURNING id`, [at, ...terminal, olderThanIso, maxAttempts, cap]);
+    const rows = await this.database.many(`UPDATE fss_handoffs SET updated_at = ?, pull_attempts = pull_attempts + 1 WHERE id IN (
+        SELECT id FROM fss_handoffs WHERE ${stuck} AND pull_attempts < ? ORDER BY updated_at ASC LIMIT ? FOR UPDATE SKIP LOCKED
+      ) RETURNING *`, [at, ...terminal, olderThanIso, maxAttempts, cap]);
+    return { claimed: rows.map(row => this.#dto(row)), gaveUp: gaveUp.length };
+  }
+
+  /**
+   * Claims matched handoffs whose pack was pulled (outcome 'pulled') a day or more ago, so the poll can check that the cached pack is still fresh
+   * (the rights gate may have closed since). The claim moves updated_at to now: the same row is looked at once per window. SKIP LOCKED as above.
+   */
+  async claimPullRefresh({ olderThanIso, limit = 20 }) {
+    const at = this.clock().toISOString();
+    const rows = await this.database.many(`UPDATE fss_handoffs SET updated_at = ? WHERE id IN (
+        SELECT id FROM fss_handoffs WHERE state = 'matched' AND fss_version_id IS NOT NULL AND last_outcome = 'pulled' AND updated_at <= ? ORDER BY updated_at ASC LIMIT ? FOR UPDATE SKIP LOCKED
+      ) RETURNING *`, [at, olderThanIso, Math.min(Math.max(limit, 1), 100)]);
+    return rows.map(row => this.#dto(row));
+  }
+
   /** Stores the closed outcome of the last pull of a matched handoff's pack (nothing else changes). False when there is no such handoff. */
   async recordOutcome({ requestId, outcome }) {
     if (!OUTCOME.test(String(outcome ?? ''))) invalid('outcome is invalid.');
-    const changed = await this.database.run('UPDATE fss_handoffs SET last_outcome = ?, updated_at = ? WHERE request_id = ?', [outcome, this.clock().toISOString(), requestId]);
+    // A finished pull clears the redrive counter (a later refresh that fails starts its own count).
+    const changed = await this.database.run('UPDATE fss_handoffs SET last_outcome = ?, updated_at = ?, pull_attempts = CASE WHEN ? = \'pulled\' THEN 0 ELSE pull_attempts END WHERE request_id = ?', [outcome, this.clock().toISOString(), outcome, requestId]);
     return changed.changes > 0;
   }
 

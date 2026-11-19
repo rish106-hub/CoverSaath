@@ -29,6 +29,8 @@ export const FSS_PULL_JOB_KIND = 'holding.fss_pull';
 // Queue backoff is 5 s doubling (15 min cap): 8 attempts span about ten minutes, enough for a 409 (FSS not yet matched) to settle.
 export const FSS_PULL_MAX_ATTEMPTS = 8;
 export const FSS_POLL_AFTER_MS = 60 * 60_000;
+// A pulled pack's cache rows live EXPORT_TTL_MS (24 h); the poll re-pulls a linked holding's pack once its cached facts are no longer fresh.
+export const FSS_PACK_REFRESH_AFTER_MS = EXPORT_TTL_MS;
 const coded = (code, message, statusCode = 400) => Object.assign(new Error(message), { code, statusCode, retryable: false });
 
 export function createFssHandoffService({
@@ -108,18 +110,53 @@ export function createFssHandoffService({
     return { result };
   }
 
+  // One row failing (any error) never stops the others: the code only is reported (no id, name or text), the row is looked at again next window.
+  const rowFailed = (stage, error) => onEvent({ type: 'fss.poll_row_failed', stage, code: typeof error?.code === 'string' ? error.code.slice(0, 60) : 'FSS_POLL_ROW_FAILED' });
+
+  /**
+   * Hourly fallback. Three jobs, each claimed with FOR UPDATE SKIP LOCKED so two machines never share a row:
+   *   1. open handoffs FSS never reported on: ask FSS (Get) and apply the answer through `decide`.
+   *   2. matched handoffs whose pull never finished (the job died): re-queue the pull (same dedupe key, so a live job is never doubled), at most
+   *      FSS_PULL_REDRIVE_MAX times, then the outcome 'pull_gave_up'.
+   *   3. matched handoffs already pulled, whose cached facts are no longer fresh (24 h): re-queue the pull, so a rights gate that closed is noticed
+   *      (the pull's 404 pack_not_available then deletes the cached rows and re-collates).
+   */
   async function poll({ limit = 20 } = {}) {
     if (!enabled()) return { polled: 0 };
-    const open = await repository.claimForPoll({ olderThanIso: new Date(clock().getTime() - FSS_POLL_AFTER_MS).toISOString(), limit });
+    const now = clock().getTime();
+    const open = await repository.claimForPoll({ olderThanIso: new Date(now - FSS_POLL_AFTER_MS).toISOString(), limit });
     let polled = 0;
     for (const handoff of open) {
       if (!handoff.fssHandoffId) continue;
       try {
         const answer = await api().get(handoff.fssHandoffId);
         if (answer.requestId === handoff.requestId) { await decide({ requestId: handoff.requestId, answer }); polled += 1; }
-      } catch (error) { if (!(error instanceof ReferenceDataError)) throw error; }
+      } catch (error) { rowFailed('open', error); }
     }
-    return { polled };
+    let requeued = 0;
+    let gaveUp = 0;
+    try {
+      const redrive = await repository.claimPullRedrive({ olderThanIso: new Date(now - FSS_POLL_AFTER_MS).toISOString(), limit });
+      gaveUp = redrive.gaveUp;
+      for (const handoff of redrive.claimed) {
+        try { await queuePull(handoff); requeued += 1; } catch (error) { rowFailed('redrive', error); }
+      }
+    } catch (error) { rowFailed('redrive_claim', error); }
+    if (referenceCache) {
+      try {
+        const pulled = await repository.claimPullRefresh({ olderThanIso: new Date(now - FSS_PACK_REFRESH_AFTER_MS).toISOString(), limit });
+        for (const handoff of pulled) {
+          try {
+            const row = handoff.versionId ? await referenceCache.get(packCacheKey('facts', handoff.versionId)) : null;
+            if (row?.fresh) continue;
+            await queuePull(handoff);
+            requeued += 1;
+          } catch (error) { rowFailed('refresh', error); }
+        }
+      } catch (error) { rowFailed('refresh_claim', error); }
+    }
+    if (gaveUp > 0) onEvent({ type: 'fss.pull_gave_up', count: gaveUp });
+    return { polled, requeued, gaveUp };
   }
 
   // Re-reads the holding and the current document consent. Null when either is gone (an erased holding, a revoked or expired consent).
@@ -149,7 +186,16 @@ export function createFssHandoffService({
         pack = (await packs().read('handoff.pack', { handoffId: handoff.fssHandoffId })).data;
       } catch (error) {
         if (!(error instanceof ReferenceDataError)) throw error;
-        if (error.code === 'REFERENCE_DATA_NOT_FOUND') { await repository.recordOutcome({ requestId, outcome: 'pack_not_available' }); onEvent({ type: 'fss.pull_failed', outcome: 'pack_not_available', retryable: false }); return 'pack_not_available'; }
+        if (error.code === 'REFERENCE_DATA_NOT_FOUND') {
+          await repository.recordOutcome({ requestId, outcome: 'pack_not_available' });
+          onEvent({ type: 'fss.pull_failed', outcome: 'pack_not_available', retryable: false });
+          // A gate no longer holds: the public rows cached for this version go (facts and pages), and collate runs again so the ida_wording rows
+          // written from them drop. Nothing to re-collate for a first pull that 404s (nothing was cached or written). The cache rows are per version, so
+          // another holding's 404 may have removed them already: a handoff that had pulled before re-collates either way.
+          const removed = [await referenceCache.remove(factsKey), await referenceCache.remove(packCacheKey('pages', handoff.versionId))];
+          if (removed.some(Boolean) || handoff.lastOutcome === 'pulled') await onPulled({ holding: first });
+          return 'pack_not_available';
+        }
         if (error.code === 'REFERENCE_DATA_NOT_MODIFIED') return 'not_modified';
         const outcome = error.code === 'REFERENCE_DATA_CONFLICT' ? 'handoff_not_matched' : String(error.code).toLowerCase().replace(/^reference_data_/, '').slice(0, 59);
         await repository.recordOutcome({ requestId, outcome });
@@ -162,6 +208,16 @@ export function createFssHandoffService({
         onEvent({ type: 'fss.pull_failed', outcome: 'version_mismatch', retryable: false });
         return 'version_mismatch';
       }
+      // Public data first (keyed by version, never by household; nothing here is consent-bound), so the household lock below is held only for the
+      // consent re-check and the link, not for these writes.
+      const factsBody = { versionId: pack.version.versionId, uinRaw: null, wordingVersion: pack.version.wordingVersion, versionSynthetic: false, coverage: {}, facts: pack.facts, nextCursor: null };
+      await referenceCache.put({ key: factsKey, etag: null, body: factsBody, signature: signatureFor(factsBody), ttlMs: EXPORT_TTL_MS });
+      const pagesBody = {
+        packVersion: pack.packVersion, product: pack.product, version: pack.version,
+        documents: pack.documents.map(({ sourcePages, ...rest }) => ({ ...rest, pages: sourcePages.map(({ text, ...page }) => page) })),
+        chunks: chunkExport(pack.documents),
+      };
+      await referenceCache.put({ key: packCacheKey('pages', handoff.versionId), etag: null, body: pagesBody, signature: signatureFor(pagesBody), ttlMs: EXPORT_TTL_MS });
       // The consent re-check and the link are one transaction under the household lock: a revocation takes the same lock, so it commits wholly before
       // (the link is never written) or wholly after (its erasure removes the link). The pull can take seconds, so this re-read is not the first one.
       // Ids only. Matched by FSS's own handoff match (the pack is of the version FSS matched, checked above): high.
@@ -177,14 +233,6 @@ export function createFssHandoffService({
         return current;
       });
       if (!holding) return drop('holding_or_consent_gone');
-      const factsBody = { versionId: pack.version.versionId, uinRaw: null, wordingVersion: pack.version.wordingVersion, versionSynthetic: false, coverage: {}, facts: pack.facts, nextCursor: null };
-      await referenceCache.put({ key: factsKey, etag: null, body: factsBody, signature: signatureFor(factsBody), ttlMs: EXPORT_TTL_MS });
-      const pagesBody = {
-        packVersion: pack.packVersion, product: pack.product, version: pack.version,
-        documents: pack.documents.map(({ sourcePages, ...rest }) => ({ ...rest, pages: sourcePages.map(({ text, ...page }) => page) })),
-        chunks: chunkExport(pack.documents),
-      };
-      await referenceCache.put({ key: packCacheKey('pages', handoff.versionId), etag: null, body: pagesBody, signature: signatureFor(pagesBody), ttlMs: EXPORT_TTL_MS });
       await repository.recordOutcome({ requestId, outcome: 'pulled' });
       // Collate reads the cached facts through the link and writes the ida_wording rows (consent re-checked in its own transaction).
       await onPulled({ holding });

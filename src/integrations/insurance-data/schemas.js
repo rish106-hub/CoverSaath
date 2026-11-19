@@ -418,19 +418,24 @@ export function parsePack(raw) {
     const sha256 = text(doc.sha256, 64);
     if (!SHA256.test(sha256)) throw invalid();
     const sourcePages = array(doc.pages, MAX_PAGES_PER_DOCUMENT).map(parsePackPage);
+    // A page number twice in one document is ambiguous (which text does a quote cite?): the whole pack fails closed.
+    if (new Set(sourcePages.map(page => page.pageNumber)).size !== sourcePages.length) throw invalid();
     for (const page of sourcePages) pageBytes += Buffer.byteLength(page.text);
     if (pageBytes > PACK_MAX_PAGE_BYTES) throw invalid();
     return { documentId: text(doc.document_id, 100), sha256, sourcePages };
   });
+  // The same document id twice would let the later entry overwrite the earlier one's hash and pages: the whole pack fails closed.
+  if (new Set(documents.map(doc => doc.documentId)).size !== documents.length) throw invalid();
   const pages = new Map();
+  const pageShas = new Map();
   const shaOf = new Map();
   for (const doc of documents) {
     shaOf.set(doc.documentId, doc.sha256);
-    for (const page of doc.sourcePages) pages.set(`${doc.documentId}|${page.pageNumber}`, page.text);
+    for (const page of doc.sourcePages) { pages.set(`${doc.documentId}|${page.pageNumber}`, page.text); pageShas.set(`${doc.documentId}|${page.pageNumber}`, page.pageSha256); }
   }
   const facts = [];
   for (const rawFact of array(value.facts ?? [], PACK_MAX_FACTS)) {
-    const fact = parsePackFact(rawFact, { pages, shaOf });
+    const fact = parsePackFact(rawFact, { pages, pageShas, shaOf });
     if (fact) facts.push(fact);
   }
   return {
@@ -455,9 +460,9 @@ export function parsePack(raw) {
 }
 
 // Null for a fact the consumer may not use (shown false, an unknown status, no checkable evidence). Throws only on a wrong shape.
-function parsePackFact(raw, { pages, shaOf }) {
+function parsePackFact(raw, { pages, pageShas, shaOf }) {
   const value = object(raw);
-  const status = oneOf(value.status, PACK_STATUS);
+  oneOf(value.status, PACK_STATUS); // an unknown status fails the pack closed; the value is never trusted past 'unchecked' (below)
   const shown = bool(value.shown);
   const factType = text(value.fact_type, 100);
   const factId = text(value.fact_id, 100);
@@ -471,19 +476,26 @@ function parsePackFact(raw, { pages, shaOf }) {
     const quote = parseQuote({ quote_included: true, quote: entry.quote });
     const sha256 = shaOf.get(documentId) ?? null;
     const page = pages.get(`${documentId}|${entry.page_number}`);
+    // The evidence must cite the page it was read from: a page hash that differs from the pack's own page hash is dropped, not trusted.
+    if (pageShas.get(`${documentId}|${entry.page_number}`) !== pageSha256) continue;
     if (quote === null || sha256 === null || page === undefined || !(page.includes(quote) || collapse(page).includes(collapse(quote)))) continue;
     evidence.push({ documentId, pageNumber: entry.page_number, sha256, pageSha256, quote });
   }
   const mappedType = Object.hasOwn(PACK_TYPE_TO_FSS, factType) ? PACK_TYPE_TO_FSS[factType] : factType;
   if (!shown || evidence.length === 0 || parsedValue === null) return null;
   const scope = parsedValue.scope;
+  const applicable = parsedValue.applicableCondition;
   // A variant's applicability (plan, age, zone, sum insured) arrives as `value.conditions`, a list of strings (uin-pack-v1: profile facts). Any condition
   // makes the fact conditional, so it never maps as the headline term. A malformed list fails the pack closed.
   const conditions = isObject(value.value) && value.value.conditions !== undefined ? textList(value.value.conditions) : [];
   return {
     factId, factType: mappedType, valueText: parsedValue.text, value: parsedValue,
-    conditions: [...(typeof scope === 'string' && scope.length > 0 ? [scope] : []), ...conditions], exceptions: [],
-    verificationStatus: status, taxonomyVersion: null, reviewId: null, reviewerId: null, sourceFreshness: null, evidence,
-    outcome: status === 'independently_verified' ? 'verified' : 'unchecked', family: null,
+    conditions: [...(typeof scope === 'string' && scope.length > 0 ? [scope] : []), ...(typeof applicable === 'string' && applicable.length > 0 ? [applicable] : []), ...conditions], exceptions: [],
+    // A pack fact is NEVER a reviewed reading, whatever FSS calls it: the published pack carries no conditions or exceptions list, so an
+    // `independently_verified` flag cannot yet prove the value is the headline term. It stays 'unchecked' (extracted_unverified, ADR 0036 / 0037)
+    // until FSS carries conditions and exceptions on published facts. The status kept here is the downgraded one, so nothing downstream reads
+    // the raw flag.
+    verificationStatus: 'extracted_unverified', taxonomyVersion: null, reviewId: null, reviewerId: null, sourceFreshness: null, evidence,
+    outcome: 'unchecked', family: null,
   };
 }
