@@ -31,9 +31,9 @@ const pack = (versionId, lines, sha = SHA_PAGE) => ({
   chunks: [{ id: `doc_${versionId}:p7:c0`, documentId: `doc_${versionId}`, pageNumber: 7, text: lines.join('\n') }],
 });
 
-async function world(t, { env = {}, link = true } = {}) {
+async function world(t, { env = {}, link = true, read = true } = {}) {
   const app = await startApp(t, { env: { ...ENV, ...env } });
-  const s = await scenario(app);
+  const s = await scenario(app, { read });
   const services = createBackendServices(app.database, { env: { ...ENV, ...env } });
   const at = new Date().toISOString();
   const holdingId = `hold-${s.documentId}`.slice(0, 100);
@@ -154,4 +154,32 @@ test('C4: chat v0 cites insurer wording as its own tier, after the household sou
   assert.ok(res.data.reply.includes("From the insurer's wording, not checked"));
   await w.services.fssHandoffs.unlink({ householdId: w.s.householdId, holdingId: w.holdingId });
   assert.ok(!(await ask()).data.sources.some(source => source.tier === 'insurer_wording'));
+});
+
+test('C4: revoking the reading grant erases the holding and its link, so the insurer list and chat insurer sources are empty', pgOptions, async t => {
+  const w = await world(t, { env: { CHAT_ENABLED: 'true', APP_EVENTS_ENABLED: 'false' } });
+  await w.put(VERSION, pack(VERSION, [ROOM]));
+  assert.equal((await w.get()).data.insurerPassages.length, 1);
+  const revoked = await w.app.call(`/api/v1/consents/${w.s.readingGrantId}/revoke`, { method: 'POST', token: w.s.token, body: { reason: 'test' } });
+  assert.equal(revoked.status, 200, JSON.stringify(revoked.data));
+  assert.equal(await w.services.fssHandoffs.linkFor(w.holdingId), null, 'the link goes with the holding');
+  const after = await w.get();
+  assert.equal(after.status, 200);
+  assert.deepEqual(after.data.insurerPassages, []);
+  const chat = await w.app.call(`/api/v1/households/${w.s.householdId}/chat`, { method: 'POST', token: w.s.token, body: { message: 'What is the room rent limit?' } });
+  assert.ok(!chat.data.sources.some(source => source.tier === 'insurer_wording'), JSON.stringify(chat.data.sources));
+});
+
+test('C4: chat v0 with only insurer wording never calls it wording from your documents and gives no pageRef', pgOptions, async t => {
+  // The own document is not read yet (no reading grant), so only the linked plan's public wording can match.
+  const w = await world(t, { env: { CHAT_ENABLED: 'true', APP_EVENTS_ENABLED: 'false' }, read: false });
+  await w.put(VERSION, pack(VERSION, [ROOM]));
+  const res = await w.app.call(`/api/v1/households/${w.s.householdId}/chat`, { method: 'POST', token: w.s.token, body: { message: 'What is the room rent limit?' } });
+  assert.equal(res.status, 200, JSON.stringify(res.data));
+  assert.equal(res.data.answerStatus, 'evidence_found');
+  assert.deepEqual(res.data.sources.map(source => source.tier), ['insurer_wording']);
+  assert.ok(res.data.reply.startsWith('This was not found in your documents.'), res.data.reply);
+  assert.ok(!res.data.reply.includes('wording read from your documents'), res.data.reply);
+  assert.ok(res.data.reply.includes('not read from your documents'), res.data.reply);
+  assert.equal(res.data.pageRef, undefined);
 });

@@ -39,6 +39,8 @@ const FIELD_LABELS = Object.freeze({
 });
 // FOR LEGAL REVIEW.
 const INSURER_LABEL = "From the insurer's wording, not checked";
+// FOR LEGAL REVIEW. Insurer wording is public product text, never "read from your documents" (ADR 0036 D7: label by tier).
+const INSURER_NOTICE = "The insurer's wording is general product text for your linked plan, not read from your documents and not checked. It is not a decision on cover, eligibility, claim approval or payment. (Draft wording, for legal review.)";
 const NOTICE = 'This is wording read from your documents. It is not a decision on cover, eligibility, claim approval or payment. (Draft wording, for legal review.)';
 
 // Only a UIN-shaped token is ever sent to the reference port, never the message: no user text leaves the process.
@@ -209,18 +211,19 @@ export function createChatService({ services, getEvidenceService, getReferenceDa
       found.sources.length ? 'I am showing wording exactly as stored. Open the document to check it.' : 'Nothing matched, so I am not guessing. Open your documents to add or read a policy.',
     ];
     const insurerLines = found.insurer.map(source => `Page ${source.page}: "${source.quote}"`);
-    const insurerText = insurerLines.length ? ` ${INSURER_LABEL}. ${insurerLines.join(' ')}` : '';
+    const insurerText = insurerLines.length ? ` ${INSURER_LABEL}. ${insurerLines.join(' ')} ${INSURER_NOTICE}` : '';
+    // No pageRef here: the page is in the insurer's wording, not in the household's own documents behind the route.
     if (!found.sources.length && found.insurer.length) {
-      return done('evidence_found', `This was not found in your documents.${insurerText} ${NOTICE}${skipped}`, [...steps.slice(0, 2), 'I also looked in the insurer wording for your linked plan. It is shown as it is stored and is not checked.'],
-        { sources: found.insurer, pageRef: `Page ${found.insurer[0].page}`, ...withRoute('documents') });
+      return done('evidence_found', `This was not found in your documents.${insurerText}${skipped}`, [...steps.slice(0, 2), 'I also looked in the insurer wording for your linked plan. It is shown as it is stored and is not checked.'],
+        { sources: found.insurer, ...withRoute('documents') });
     }
     if (!found.sources.length) return done('unknown', `This was not found in your documents.${skipped}`, steps, withRoute('documents'));
     const lines = found.sources.map(source => (source._value
       ? `${source.label}: ${source._value}${source.page ? ` (page ${source.page})` : ''}.`
       : `${source.page ? `Page ${source.page}` : 'Your documents'}: "${source.quote}"`));
     const sources = [...found.sources.map(({ _value, ...rest }) => rest), ...found.insurer];
-    const first = sources.find(source => source.page);
-    return done('evidence_found', `From your documents. ${lines.join(' ')}${insurerText} ${NOTICE}${skipped}`, steps,
+    const first = sources.find(source => source.page && source.tier !== 'insurer_wording');
+    return done('evidence_found', `From your documents. ${lines.join(' ')} ${NOTICE}${insurerText}${skipped}`, steps,
       { sources, ...(first ? { pageRef: `Page ${first.page}` } : {}), ...withRoute('documents') });
   }
 
