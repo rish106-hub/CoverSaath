@@ -442,6 +442,6 @@ function sourceView(row, quotes = new Map(), kinds = new Map()) {
 }
 
 function fssSourceView(reference) {
-  const pageNumber = reference.evidence?.[0]?.pageNumber;
+  const pageNumber = reference.quotePage ?? reference.evidence?.[0]?.pageNumber;
   return { source: 'fss', pageNumber: Number.isInteger(pageNumber) ? pageNumber : null, verificationStatus: typeof reference.verificationStatus === 'string' ? reference.verificationStatus : null };
 }

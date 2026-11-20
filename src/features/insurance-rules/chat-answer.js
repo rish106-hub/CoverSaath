@@ -1,5 +1,6 @@
 import { formatFactValue } from './fact-format.js';
 import { NOT_IN_DOCUMENTS_TEXT } from './clause-answer.js';
+import { factSourceLabel } from './fact-source-label.js';
 
 // The deterministic chat answer (chat v0 behaviour carried into v1, complete.md 3.3). Used when CHAT_MODEL_ENABLED is not "true", when
 // the budget is spent, when the provider is unavailable, and whenever the model output fails the code's checks. A template over typed
@@ -8,11 +9,6 @@ import { NOT_IN_DOCUMENTS_TEXT } from './clause-answer.js';
 
 const TOPIC_NAME = Object.freeze({ copay_percent: 'a co-payment', copay_zone_percent: 'a co-payment', room_rent_limit: 'a room rent limit', room_category: 'a room rent limit', waiting_ped: 'a waiting period', waiting_initial: 'a waiting period', waiting_specific: 'a waiting period', sub_limit: 'a sub-limit', deductible: 'a deductible' });
 
-const SOURCE = Object.freeze({
-  user_confirmed: 'confirmed by you',
-  reviewed_reference: "from the insurer's published terms",
-  extracted_unverified: 'read from your policy schedule, not yet confirmed by you',
-});
 
 /**
  * facts: [{ factKey, entry, status, value, sourceIds, sourceTier, checkWithInsurer, holdingId }] (confirmed only).
@@ -43,7 +39,7 @@ export function buildDeterministicAnswer({ intent, factKeys, facts, conflictKeys
         const value = formatFactValue(fact.entry.type, fact.value);
         if (value === null) continue;
         used.push(fact);
-        lines.push(`- ${fact.entry.label} ${value} (${SOURCE[fact.status] ?? 'on record'}).${fact.checkWithInsurer ? ' Check with your insurer to be sure.' : ''}`);
+        lines.push(`- ${fact.entry.label} ${value} (${factSourceLabel(fact) ?? 'on record'}).${fact.checkWithInsurer ? ' Check with your insurer to be sure.' : ''}`);
       } else if (conflictKeys.has(key)) {
         lines.push(`- Your policy document and the insurer's wording disagree about this (${key.replace(/_/g, ' ')}). Review the difference and choose which is right.`);
       }

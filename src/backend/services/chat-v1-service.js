@@ -8,9 +8,11 @@ import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, se
 import { SCOPE_SENTENCE, historyAnswer, isHistoryQuestion, needsRouter, readRoute } from '../../features/insurance-rules/chat-router.js';
 import { classifyChatMessage, isIdentityQuestion, isRegistryIdQuestion, REGISTRY_ID_ANSWER } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
-import { planProcedure } from '../../features/insurance-rules/procedure-planning.js';
+import { modelSlotSuffix } from '../../features/insurance-rules/fact-source-label.js';
+import { planProcedure, procedureInputFacts } from '../../features/insurance-rules/procedure-planning.js';
 import { guardTurnAnswer } from './chat-answer-card.js';
 import { memoryEnabled, resolvedConfirmedFacts } from './memory-service.js';
+import { insurerFactPlaces } from './fss-reference-facts.js';
 
 // Chat v1 (complete.md 3.3, ADR 0031): threads, and turns streamed as SSE. Off unless MEMORY_ENABLED is exactly "true".
 //
@@ -111,8 +113,14 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
       }
       const rows = await holdingRepository.currentMemory({ householdId, holdingId });
       // Own-document readings still unverified are served too, with their status kept (never presented as confirmed).
-      for (const fact of resolvedConfirmedFacts(rows, { includeUnverified: true })) facts.push({ ...fact, holdingId });
+      const insurerPlaces = insurerFactPlaces(rows);
+      for (const fact of resolvedConfirmedFacts(rows, { includeUnverified: true })) {
+        // ADR 0036 D6: an unchecked insurer fact is served (and cited) only with its insurer page and quote; with no quote it is not cited at all.
+        if (fact.sourceTier === 'ida_wording' && fact.status === 'extracted_unverified' && !insurerPlaces.get(fact.sourceIds[0])?.quote) continue;
+        facts.push({ ...fact, holdingId });
+      }
       for (const [id, place] of await holdingRepository.ownFactSources({ householdId, rows })) places.set(id, place);
+      for (const [id, place] of insurerPlaces) places.set(id, place);
       for (const conflict of await holdingRepository.listConflicts({ householdId, holdingId, pendingOnly: true })) conflicts.push({ id: conflict.id, factKey: conflict.factKey, holdingId });
       const holding = await holdingRepository.getHolding({ householdId, holdingId });
       if (holding?.documentId) documents.push({ holdingId, documentId: holding.documentId });
@@ -209,7 +217,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
     for (const fact of relevant.slice(0, MAX_FACTS_TO_MODEL)) {
       const value = formatFactValue(fact.entry.type, fact.value);
       // The model is told, in the label, that a reading from the household's own document is not confirmed.
-      if (value !== null) await addSlot({ id: fact.sourceIds[0], label: fact.status === 'extracted_unverified' ? `${fact.entry.label} (read from the policy document, not confirmed)` : fact.entry.label, value, fact });
+      if (value !== null) await addSlot({ id: fact.sourceIds[0], label: modelSlotSuffix(fact) ? `${fact.entry.label} ${modelSlotSuffix(fact)}` : fact.entry.label, value, fact });
     }
     for (const check of plan?.checks ?? []) await addSlot({ id: `check:${check.id}`, label: 'Planning check (computed)', value: check.detail, checkFactIds: check.factIds });
     for (const passage of passages) {
@@ -338,9 +346,9 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             else if (routedOnly('out_of_scope')) holdingLines = [SCOPE_SENTENCE];
             else holdingLines = [];
             const awaitingPlan = mayReadFacts && context.facts.length === 0 && context.awaiting === true && intent !== 'procedure_planning';
-            const relevant = intent === 'procedure_planning' ? context.facts.filter(fact => fact.status !== 'extracted_unverified') : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
+            const relevant = intent === 'procedure_planning' ? procedureInputFacts(context.facts) : [...context.facts.filter(fact => byKey.has(fact.factKey)), ...context.facts.filter(fact => !byKey.has(fact.factKey))];
             const plan = intent === 'procedure_planning'
-              ? planProcedure({ facts: Object.fromEntries(context.facts.filter(fact => fact.status !== 'extracted_unverified').map(fact => [fact.factKey, { id: fact.sourceIds[0], status: fact.status, value: fact.value }])), procedure: procedure ?? {} }) : null;
+              ? planProcedure({ facts: Object.fromEntries(procedureInputFacts(context.facts).map(fact => [fact.factKey, { id: fact.sourceIds[0], status: fact.status, value: fact.value }])), procedure: procedure ?? {} }) : null;
 
             // Retrieval beyond facts: vector top-k, else a keyword match over clauses (only when no confirmed fact answers the topic).
             let mode = 'facts_only';

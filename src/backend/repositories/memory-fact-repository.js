@@ -10,7 +10,7 @@ import { LIST_LIMIT, fail, invalid, requireGrant, requirePerson, str } from './h
 //     household_memory_facts.value_enc.<row id>); the row is append-only: a changed value supersedes the current row of its slot and
 //     tier (the old row is stamped superseded_at, the new one names it in supersedes_id); an identical write is a no-op.
 //   * Machine tiers hold machine statuses only (own_pdf: extracted_unverified | conflicting | unknown; ida_wording:
-//     reviewed_reference | conflicting | unknown). Only a household adult writes the user tier (user_confirmed). The database CHECKs
+//     reviewed_reference | extracted_unverified | conflicting | unknown; ADR 0036: an insurer fact read by a model is shown as not checked). Only a household adult writes the user tier (user_confirmed). The database CHECKs
 //     repeat every pairing; this code refuses first with a coded error.
 //   * Every read and write is scoped to a household the acting adult can see; a person is required for user-tier writes and for
 //     reads. A system caller (a job: adultId null) may write machine tiers and open or close conflicts by rule; it never reads.

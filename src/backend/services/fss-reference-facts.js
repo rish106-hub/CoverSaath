@@ -11,7 +11,7 @@ import { cacheKeyFor } from './reference-data-port.js';
 //                                         (REFERENCE_OUTCOMES) that the caller stores on the holding. No retry here, no retry storm.
 //   forHolding({ householdId, holding })  READ SIDE (collate, queueCollate). Cache only (port.peek): it never calls FSS. Returns the four mapped
 //                                         families as reference items for collate.js: { factKey, value, origin: 'reference', refId, cacheKey,
-//                                         version, quote: null, reference: <sealed evidence> }. Nothing is returned until refresh has cached
+//                                         version, quote, reference: <sealed evidence> }, plus `unchecked: true` for a model-extracted fact FSS has not reviewed (ADR 0036). Nothing is returned until refresh has cached
 //                                         the match and the facts, and an unusable or withheld family is simply absent.
 //
 // UIN rule: the confirmed UIN is read from policy_profiles inside this process and used only as a search parameter. It is in no return
@@ -56,9 +56,10 @@ export function createFssReferenceFacts({ port, repository, env = process.env })
 
   function items({ facts, versionId, version }) {
     const cacheKey = cacheKeyFor('versions.facts', { versionId });
-    return mapFssFacts(facts).map(({ factKey, value, fact }) => {
+    return mapFssFacts(facts).map(({ factKey, value, fact, unchecked }) => {
       const reference = fssEvidence({ fact, versionId, cacheKey });
-      return { factKey, value, origin: 'reference', refId: reference.refId, cacheKey, version, quote: null, reference };
+      // ADR 0036: `unchecked` items (model-extracted, not reviewed) carry their quote; collate turns them into extracted_unverified rows.
+      return { factKey, value, origin: 'reference', refId: reference.refId, cacheKey, version, quote: reference.quote, reference, ...(unchecked ? { unchecked: true } : {}) };
     });
   }
 
@@ -110,4 +111,21 @@ async function collectCachedPages({ port, versionId, first }) {
     cursor = hit.data.nextCursor ?? null;
   }
   return merged;
+}
+
+/**
+ * ADR 0036 D6: the page and verbatim quote of each unchecked insurer row (ida_wording, extracted_unverified), read from its sealed reference
+ * (already opened by the repository for the owner's own read). Map memory row id -> { documentId: null, page, quote }. A row with no
+ * quote has no entry. The quote is the only text; no cache key, version, UIN or reviewer leaves here.
+ */
+export function insurerFactPlaces(rows) {
+  const out = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (row?.tier !== 'ida_wording' || row.status !== 'extracted_unverified') continue;
+    const quote = row.reference?.quote;
+    if (typeof quote !== 'string' || quote.length === 0) continue;
+    const page = row.reference?.quotePage ?? row.reference?.evidence?.[0]?.pageNumber;
+    out.set(row.id, Object.freeze({ documentId: null, page: Number.isInteger(page) ? page : null, quote }));
+  }
+  return out;
 }

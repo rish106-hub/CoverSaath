@@ -1,4 +1,5 @@
 import { POLICY_FACT_KEYS, getPolicyFactKey } from '../../contracts/policy-facts.js';
+import { factSourceLabel } from '../../features/insurance-rules/fact-source-label.js';
 import { holdingsEnabled } from './holdings-flag.js';
 import { memoryEnabled } from './memory-service.js';
 
@@ -145,7 +146,8 @@ export function createMemoryDocumentService({ holdingRepository, holdings, repos
       const text = fact.status === 'unknown' ? null : formatFactValue(fact.valueType, fact.value);
       if (text === null) { unknownLabels.push(label); section.push(`- ${label} Unknown. [unknown]`); continue; }
       const cited = citeFact(fact);
-      const status = fact.status === 'extracted_unverified' ? ' (read from your document, not verified)' : fact.status === 'reviewed_reference' ? ' (insurer wording)' : fact.status === 'user_confirmed' ? ' (you stated this)' : '';
+      // FOR LEGAL REVIEW (ADR 0036): an unchecked insurer reading is labelled by tier and status together.
+      const status = fact.status === 'extracted_unverified' ? (fact.sourceTier === 'ida_wording' ? ` (${factSourceLabel(fact)})` : ' (read from your document, not verified)') : fact.status === 'reviewed_reference' ? ' (insurer wording)' : fact.status === 'user_confirmed' ? ' (you stated this)' : '';
       const insurerNote = fact.checkWithInsurer ? ' Check with the insurer.' : '';
       section.push(`- ${label} ${text}${status}${insurerNote}${cited.quote ? ` Quote: "${cited.quote}"` : ''} ${cited.text}`);
     }

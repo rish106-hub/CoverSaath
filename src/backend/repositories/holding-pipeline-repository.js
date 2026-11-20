@@ -45,6 +45,8 @@ const holdingShape = row => (row ? Object.freeze({
   referenceOutcome: row.reference_outcome ?? null, referenceCheckedAt: isoOrNull(row.reference_checked_at),
 }) : null);
 
+const withoutQuote = reference => { const { quote, quotePage, ...rest } = reference ?? {}; return rest; };
+
 export class HoldingPipelineRepository {
   constructor(database, { clock = () => new Date(), audit = null, ...options } = {}) {
     if (!database || typeof database.transaction !== 'function') throw new TypeError('A database is required.');
@@ -435,7 +437,9 @@ export class HoldingPipelineRepository {
           const existing = currentBy.get(`${slot.factKey}|${tier}`);
           const same = existing && existing.status === intent.status && existing.sealedPayload === payload
             && (existing.policyFactId ?? null) === (intent.policyFactId ?? null)
-            && (tier !== 'ida_wording' || canonicalJson(existing.reference ?? {}) === canonicalJson(reference));
+            // The quote and its page are display evidence, not identity (ADR 0036): a refresh that only adds or changes them keeps the row
+            // (rows are immutable; a new id would reopen reviewed conflicts and any the person already resolved).
+            && (tier !== 'ida_wording' || canonicalJson(withoutQuote(existing.reference)) === canonicalJson(withoutQuote(reference)));
           if (same) { ids[tier] = existing.id; counts.kept += 1; continue; }
           if (existing) { await this.#supersede(householdId, existing.id, at); counts.retired += 1; }
           const id = `hmf-${randomUUID()}`;
