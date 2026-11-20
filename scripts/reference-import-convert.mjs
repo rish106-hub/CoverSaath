@@ -3,7 +3,7 @@
 // Validates the export, converts, runs the importer's own validator (no database), writes the file with mode 0600 and prints
 // counts only. Never prints a quote, value, name or identifier. Refuses to overwrite without --force. No network, no database.
 // Synthetic data unless the owner has recorded source rights (FOR LEGAL REVIEW).
-import { chmod, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, open, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { convertAndCheck } from './lib/ida-export-convert.mjs';
@@ -17,8 +17,11 @@ export async function runConvert({ inPath, outPath, force = false }) {
   if (resolve(inPath) === resolve(outPath)) throw fail('IDA_EXPORT_USAGE', '--in and --out must differ.');
   let exp;
   try {
-    if ((await stat(inPath)).size > MAX_FILE_BYTES) throw new Error('too large');
-    exp = JSON.parse(await readFile(inPath, 'utf8'));
+    const handle = await open(inPath, 'r');
+    try {
+      if ((await handle.stat()).size > MAX_FILE_BYTES) throw new Error('too large');
+      exp = JSON.parse(await handle.readFile('utf8'));
+    } finally { await handle.close(); }
   } catch {
     throw fail('IDA_EXPORT_UNREADABLE', 'Export file is not readable JSON within 8 MB.');
   }
