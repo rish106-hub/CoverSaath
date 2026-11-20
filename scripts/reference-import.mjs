@@ -5,7 +5,7 @@
 // A write to a non-loopback database host needs --yes; the host name (never user, password or query) is printed first.
 // Prints counts only, never a key, name or value. Synthetic data only unless the owner has recorded source rights
 // (data_class "owner_approved" plus --allow-owner-approved). FOR LEGAL REVIEW before any non-synthetic import.
-import { readFile, stat } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { createPostgresPool, postgresPoolOptionsFromEnv } from '../src/backend/database/postgres/index.js';
 import { createDatabase } from '../src/backend/database/postgres/db.js';
 import { ReferenceCacheRepository } from '../src/backend/repositories/index.js';
@@ -42,8 +42,11 @@ let pool;
 try {
   let document;
   try {
-    if ((await stat(options.file)).size > MAX_FILE_BYTES) throw new Error('too large');
-    document = JSON.parse(await readFile(options.file, 'utf8'));
+    const handle = await open(options.file, 'r');
+    try {
+      if ((await handle.stat()).size > MAX_FILE_BYTES) throw new Error('too large');
+      document = JSON.parse(await handle.readFile('utf8'));
+    } finally { await handle.close(); }
   } catch {
     throw Object.assign(new Error('Import file is not readable JSON within 8 MB.'), { code: 'REFERENCE_IMPORT_UNREADABLE' });
   }

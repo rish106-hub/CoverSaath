@@ -126,7 +126,7 @@ test('flag on and consent: one row with the hash, the allowlisted properties and
   assert.equal(rows[0].distinct_id_hash, distinctIdHash(a.household, SALT));
   assert.deepEqual(JSON.parse(rows[0].properties_json), { channel: 'upi', via: 'agent' });
   assert.equal(rows[0].sent_at, null);
-  assert.ok(!JSON.stringify(rows[0]).includes(a.household.replace('household-', 'household-')) || rows[0].household_id === a.household, 'only the household_id column names it');
+  assert.ok(!JSON.stringify(rows[0]).includes(a.household) || rows[0].household_id === a.household, 'only the household_id column names it');
   assert.ok(![rows[0].distinct_id_hash, rows[0].properties_json, rows[0].event].some(value => value.includes(a.household)));
 });
 
