@@ -8,6 +8,7 @@ import { createMemoryService } from './memory-service.js';
 import { createMemoryDocumentService } from './memory-document.js';
 import { MemoryDocumentRepository } from '../repositories/memory-document-repository.js';
 import { createChatV1Service } from './chat-v1-service.js';
+import { createInsurerWording } from './insurer-wording-service.js';
 import { createProviderConsent } from './provider-consent.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
@@ -163,7 +164,8 @@ export function createBackendServices(database, options = {}) {
   const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, fssHandoff, policyFacts, referenceFacts, memory, analytics, env, clock: options.clock });
   holdingsHook = holdings;
   const chatRepository = new ChatRepository(database, { ...shared, households });
-  const chatV1 = createChatV1Service({ onEvent: options.onWarn, chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, providerConsent, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
+  const insurerWording = createInsurerWording({ fssHandoffs, referenceCache: referenceCacheRepository, holdingRepository: holdingPipelineRepository });
+  const chatV1 = createChatV1Service({ onEvent: options.onWarn, insurerWording, chatRepository, holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, database, memory, providerConsent, gateway: modelGateway, loadKnownIdentifiers, env, clock: options.clock });
   const documents = new DocumentRepository(database, { ...shared, coverageParameters, consents });
   const access = new TenantAccessService(database, { auth, authTokens, households, consents, env: options.env ?? {}, columnCrypto });
   const householdApp = new HouseholdAppRepository(database, shared);
@@ -194,7 +196,7 @@ export function createBackendServices(database, options = {}) {
   });
 
   // The owner's memory document: rendered on demand, nothing stored (services/memory-document.js).
-  const memoryDocument = createMemoryDocumentService({ holdingRepository: holdingPipelineRepository, holdings, repository: new MemoryDocumentRepository(database, shared), declarations, premiums, households, env: options.env ?? process.env, clock: options.clock });
+  const memoryDocument = createMemoryDocumentService({ holdingRepository: holdingPipelineRepository, holdings, repository: new MemoryDocumentRepository(database, shared), declarations, premiums, households, gateway: modelGateway, providerConsent, loadKnownIdentifiers, onEvent: options.onWarn, env: options.env ?? process.env, clock: options.clock });
 
   const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, referenceCache: new ReferenceCacheRepository(database), analytics, env: options.env ?? process.env, client: options.referenceClient ?? null });
 

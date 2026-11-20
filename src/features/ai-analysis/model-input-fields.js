@@ -10,7 +10,7 @@
 // docs/architecture/dpdp-purpose-registry.md).
 import { CLAUSE_KINDS } from '../../contracts/policy-evidence.js';
 import { POLICY_PARAMETER_REGISTRY_VERSION, POLICY_PARAMETER_VALUE_TYPES, getPolicyParameterRegistry } from '../coverage-analysis/policy-parameter-registry.js';
-import { CHAT_ANSWER_TASK, CHAT_INTENTS, EMBED_TASK, FACT_EXTRACT_TASK, INTENT_CLASSIFY_TASK, MAX_EMBED_TEXTS } from './gateway-contract.js';
+import { CHAT_ANSWER_TASK, CHAT_INTENTS, EMBED_TASK, FACT_EXTRACT_TASK, INTENT_CLASSIFY_TASK, MAX_EMBED_TEXTS, POLICY_DOC_PROSE_MAX_LINES, POLICY_DOC_PROSE_TASK } from './gateway-contract.js';
 import {
   EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, INVESTIGATION_CHECKLIST_KINDS, STRUCTURING_CHUNK_KINDS,
   MAX_CHUNK_BLOCK_INDEXES, STRUCTURING_EXTRACT_TASK, STRUCTURING_RECONCILE_TASK,
@@ -105,6 +105,7 @@ export const MODEL_INPUT_FIELDS = Object.freeze({
   }),
   [INTENT_CLASSIFY_TASK]: object({ payload: object({ text: gated, intents: array(enumOf(CHAT_INTENTS), 1, 20) }) }),
   [FACT_EXTRACT_TASK]: object({ payload: object({ text: gated, keys: array(id(/^[a-z][a-z0-9_.]{0,79}$/), 1, 40) }) }),
+  [POLICY_DOC_PROSE_TASK]: object({ payload: object({ lines: array(object({ line_id: id(/^l[1-9]\d{0,2}$/), text: gated }), 1, POLICY_DOC_PROSE_MAX_LINES) }) }),
   [EMBED_TASK]: object({ payload: object({ texts: array(object({ text: gated }), 1, MAX_EMBED_TEXTS) }) }),
   [EVIDENCE_SWEEP_TASK]: object({
     payload: object({

@@ -33,6 +33,7 @@ const PAYLOADS = {
   chat_answer: { question: 'What is my room rent limit?', history: [{ role: 'user', text: 'hi' }], facts: [{ fact_id: `fact_${hex(5)}`, label: 'Room rent', value: 'up to 1% of Sum Insured per day' }, { fact_id: `fact_${hex(6)}`, label: 'Note', value: INJECTION }] },
   intent_classify: { text: 'What is the waiting period for knee surgery?', intents: ['waiting_period', 'general', 'unknown'] },
   fact_extract: { text: `Initial waiting period: 30 days. ${INJECTION}`, keys: ['initial_waiting_period'] },
+  policy_doc_prose: { lines: [{ line_id: 'l1', text: `What is the room rent limit per day? INR 5,000. ${INJECTION}` }] },
   embed: { texts: [{ text: 'Room rent limit' }] },
   field_adjudicate: { fields: [{ field: 'room_rent_limit', reading_a: { value: '1%', page: 2 }, reading_b: null, snippets: [{ page: 2, text: 'Room Rent | 1% of SI' }, { page: 3, text: INJECTION }] }] },
 };

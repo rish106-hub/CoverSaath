@@ -1,5 +1,5 @@
 import { assertModelTask } from './responsibility-matrix.js';
-import { CHAT_ANSWER_TASK, CHAT_INTENTS, ROUTER_QUESTION_MAX, ROUTER_SOURCES, FACT_EXTRACT_TASK, GATEWAY_OUTPUT_SCHEMAS, GATEWAY_PAYLOAD_KEYS, INTENT_CLASSIFY_TASK, MAX_EMBED_TEXTS, MODEL_STATUSES, isGatewayTask } from './gateway-contract.js';
+import { CHAT_ANSWER_TASK, CHAT_INTENTS, ROUTER_QUESTION_MAX, ROUTER_SOURCES, FACT_EXTRACT_TASK, GATEWAY_OUTPUT_SCHEMAS, GATEWAY_PAYLOAD_KEYS, INTENT_CLASSIFY_TASK, MAX_EMBED_TEXTS, MODEL_STATUSES, POLICY_DOC_PROSE_LINE_MAX, POLICY_DOC_PROSE_MAX_LINES, POLICY_DOC_PROSE_TASK, isGatewayTask } from './gateway-contract.js';
 import { EVIDENCE_INVESTIGATE_TASK, EVIDENCE_SWEEP_TASK, STRUCTURING_EXTRACT_TASK, STRUCTURING_OUTPUT_SCHEMAS, isStructuringTask } from './structuring-contract.js';
 
 const SOURCE_STATES = Object.freeze(['known', 'unknown', 'conflict']);
@@ -254,6 +254,10 @@ function validateGatewayInput(task, input) {
     text(payload.text, 2000, 'text');
     boundedArray(payload.intents, 1, 20, 'intents');
     if (payload.intents.some(intent => !CHAT_INTENTS.includes(intent))) fail('invalid_schema', 'An intent is not in the closed list.');
+  } else if (task === POLICY_DOC_PROSE_TASK) {
+    boundedArray(payload.lines, 1, POLICY_DOC_PROSE_MAX_LINES, 'lines');
+    for (const line of payload.lines) { exactObject(line, ['line_id', 'text'], 'prose line'); text(line.line_id, 16, 'line id'); text(line.text, POLICY_DOC_PROSE_LINE_MAX, 'line text'); }
+    if (new Set(payload.lines.map(line => line.line_id)).size !== payload.lines.length) fail('invalid_schema', 'Line ids must be unique.');
   } else if (task === FACT_EXTRACT_TASK) {
     text(payload.text, 16_000, 'text');
     boundedArray(payload.keys, 1, 40, 'keys');
@@ -286,6 +290,14 @@ function validateGatewayOutput(task, output, input) {
     if (output.sources.some(source => !ROUTER_SOURCES.includes(source)) || new Set(output.sources).size !== output.sources.length) fail('invalid_schema', 'A source is not in the closed list.');
     if (output.status === 'unknown' && (output.canonical_question !== '' || output.sources.length > 0)) fail('unknown_not_preserved', 'An unknown classification carries no question and no sources.');
     if (output.status === 'unknown' && output.intent !== 'unknown') fail('unknown_not_preserved', 'An unknown classification must carry the unknown intent.');
+  } else if (task === POLICY_DOC_PROSE_TASK) {
+    exactObject(output, ['status', 'lines'], 'policy prose');
+    if (output.status === 'conflicting') fail('invalid_schema', 'A prose rewrite is extracted_unverified or unknown.');
+    boundedArray(output.lines, 0, POLICY_DOC_PROSE_MAX_LINES, 'lines');
+    const known = new Set(payload.lines.map(line => line.line_id));
+    for (const line of output.lines) { exactObject(line, ['line_id', 'text'], 'prose line'); text(line.text, POLICY_DOC_PROSE_LINE_MAX, 'line text'); if (!known.has(line.line_id)) fail('missing_citation', 'A rewritten line must carry a supplied line id.'); }
+    if (new Set(output.lines.map(line => line.line_id)).size !== output.lines.length) fail('invalid_schema', 'Line ids must be unique.');
+    if (output.status === 'unknown' && output.lines.length > 0) fail('unknown_not_preserved', 'An unknown rewrite carries no lines.');
   } else if (task === FACT_EXTRACT_TASK) {
     exactObject(output, ['status', 'facts'], 'fact extraction');
     boundedArray(output.facts, 0, 40, 'facts');

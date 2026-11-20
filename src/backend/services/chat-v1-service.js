@@ -8,9 +8,9 @@ import { clearsRelevanceFloor, contentTerms, expandQuery, selectClauseAnswer, se
 import { SCOPE_SENTENCE, historyAnswer, isHistoryQuestion, needsRouter, readRoute } from '../../features/insurance-rules/chat-router.js';
 import { classifyChatMessage, isIdentityQuestion, isRegistryIdQuestion, REGISTRY_ID_ANSWER } from '../../features/insurance-rules/chat-intent.js';
 import { formatFactValue } from '../../features/insurance-rules/fact-format.js';
-import { modelSlotSuffix } from '../../features/insurance-rules/fact-source-label.js';
+import { INSURER_UNCHECKED_LABEL, modelSlotSuffix } from '../../features/insurance-rules/fact-source-label.js';
 import { planProcedure, procedureInputFacts } from '../../features/insurance-rules/procedure-planning.js';
-import { guardTurnAnswer } from './chat-answer-card.js';
+import { guardTurnAnswer, quoteFrom } from './chat-answer-card.js';
 import { memoryEnabled, resolvedConfirmedFacts } from './memory-service.js';
 import { insurerFactPlaces } from './fss-reference-facts.js';
 
@@ -78,7 +78,15 @@ function validateProcedure(raw) {
   return procedure;
 }
 
-export function createChatV1Service({ chatRepository, holdingRepository, chunks, clauses, database, memory, providerConsent, gateway = null, loadKnownIdentifiers, env = process.env, clock = () => new Date(), onEvent = null }) {
+// ADR 0039 D9. The reply when the person's own documents do not answer but the insurer's wording for the linked plan has a matching line.
+// Deterministic; the label is the canonical one (by tier), and the text never calls insurer wording "your documents". FOR LEGAL REVIEW.
+const INSURER_PASSAGE_NOTICE = 'This is general product text for your linked plan, not read from the documents you uploaded and not a decision on cover, eligibility or claims. (Draft wording, FOR LEGAL REVIEW.)';
+export function insurerPassageAnswer(lines) {
+  const quotes = lines.map(item => `"${quoteFrom(item.line)}"`).join(' ');
+  return `The documents you uploaded don't say. ${INSURER_UNCHECKED_LABEL}: ${quotes} ${INSURER_PASSAGE_NOTICE}`;
+}
+
+export function createChatV1Service({ chatRepository, holdingRepository, chunks, clauses, database, memory, providerConsent, gateway = null, insurerWording = null, loadKnownIdentifiers, env = process.env, clock = () => new Date(), onEvent = null }) {
   if (!providerConsent) throw new TypeError('A provider consent resolver is required.');
   const requireEnabled = () => { if (!memoryEnabled(env)) throw coded('MEMORY_DISABLED', 'Memory is disabled.', 503); };
   const voiceAudioRetained = () => env.VOICE_AUDIO_RETAIN === 'true';
@@ -394,9 +402,18 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               mode = 'keyword';
             }
 
+            // ADR 0039 D9: the own documents and facts did not answer; the insurer's wording for the linked plan may. Owner only, deterministic, never a model
+            // input, never memory chunks, never the planner or rules (procedure questions are excluded here and insurer facts are filtered out of them above).
+            let insurerLines = [];
+            if (insurerWording && mayReadFacts && !answersTopic && !awaitingPlan && holdingLines.length === 0 && intent !== 'procedure_planning' && clauseHits.length === 0 && passages.length === 0
+              && contentTerms(asked).length > 0 && context.holdingIds.length > 0) {
+              insurerLines = await insurerWording.linesFor({ householdId, holdingIds: context.holdingIds, question: asked, limit: 2 });
+            }
+
             emit('meta', { thread_id: thread.id, intent: CHAT_INTENTS.includes(intent) ? intent : 'unknown', retrieval_mode: mode, facts_available: context.facts.length, open_conflicts: context.conflicts.length });
 
-            const deterministic = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan, missingTopics, holdingLines, generalWaiting });
+            const deterministicBase = buildDeterministicAnswer({ intent, factKeys, facts: relevant, conflictKeys, plan, clauses: clauseHits, searchedClauses, awaitingPlan, missingTopics, holdingLines, generalWaiting });
+            const deterministic = insurerLines.length > 0 ? { ...deterministicBase, text: insurerPassageAnswer(insurerLines), usedFacts: [] } : deterministicBase;
             // No current chat grant for any ready provider (purpose + recipient + scope) means no model call: the deterministic answer stands (audit F1).
             // Nothing in the wording or the facts speaks to a coverage question: no model call, the fixed unknown answer stands.
             const nothingRelevant = searchedClauses && clauseHits.length === 0 && passages.length === 0 && !answersTopic;
@@ -406,7 +423,7 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
               id: clause.id, text: clause.window, scope: 'own_pdf', sourceDocumentId: clause.documentId, unredacted: true,
               sourceRef: `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`,
             }));
-            const model = !nothingRelevant && !generalWaiting && holdingLines.length === 0 && (context.facts.length > 0 || modelPassages.length > 0)
+            const model = insurerLines.length === 0 && !nothingRelevant && !generalWaiting && holdingLines.length === 0 && (context.facts.length > 0 || modelPassages.length > 0)
               ? await modelAnswer({ householdId, adultId: principal.adultId, message: asked, history, context, relevant, plan, passages: modelPassages, startedAt }) : null;
 
             let text = deterministic.text;
@@ -422,6 +439,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             const citedPassages = modelPassages.filter(item => usedChunks.includes(item.id));
             let sources = await wordingSources({ householdId, passageList: answerSource === 'model' ? citedPassages : [], clauseList: answerSource === 'model' ? [] : clauseHits });
             // Code owns the status: an answer that rests on no fact, chunk or computed check is "unknown".
+            // The insurer's wording is its own kind of source (never kind "wording", which the beta reads as a page of the household's own documents).
+            for (const item of insurerLines) sources.push({ kind: 'insurer_wording', tier: 'insurer_wording', label: INSURER_UNCHECKED_LABEL, page: item.page, quote: quoteFrom(item.line), ref: `insurer:${createHash('sha256').update(item.chunkId).digest('hex').slice(0, 32)}` });
             let status = usedFacts.length > 0 || usedChunks.length > 0 || sources.length > 0 || (plan?.checks.length ?? 0) > 0 ? 'evidence_found' : 'unknown';
             const factIds = [...new Set(usedFacts.map(fact => fact.sourceIds[0]))];
             // Own-document readings the answer rests on, with their verbatim quote, document and page (status stays extracted_unverified).
@@ -436,6 +455,8 @@ export function createChatV1Service({ chatRepository, holdingRepository, chunks,
             const wordingEvidence = answerSource === 'model'
               ? citedPassages.filter(item => item.sourceDocumentId).map(item => ({ documentId: item.sourceDocumentId, page: pageOf.get(`${item.sourceDocumentId}|${item.sourceRef}`) ?? null, ref: item.sourceRef, text: item.text, tier: item.scope }))
               : clauseHits.map(clause => ({ documentId: clause.documentId, page: clause.page, ref: `clause:${createHash('sha256').update(clause.id).digest('hex').slice(0, 32)}`, text: clause.window, tier: 'own_pdf' }));
+            // Tier ida_wording (the card contract's insurer tier): an unknown tier would fall back to own_pdf and mislabel insurer text as the household's.
+            for (const item of insurerLines) wordingEvidence.push({ documentId: `insurer:${item.versionId}`, page: item.page, ref: item.chunkId, text: item.line, tier: 'ida_wording' });
             // Computed checks (procedure planning) are code, not wording: their detail counts as evidence of the facts they read.
             const checkDetail = new Map();
             for (const check of plan?.checks ?? []) for (const id of check.factIds ?? []) checkDetail.set(id, [checkDetail.get(id), check.detail].filter(Boolean).join(' '));

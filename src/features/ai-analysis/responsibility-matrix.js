@@ -11,11 +11,12 @@ export const AI_TASKS = Object.freeze([
   'chat_answer',
   'intent_classify',
   'fact_extract',
+  'policy_doc_prose',
   'embed',
 ]);
 
 // Tasks that run through the provider-routing gateway (ADR 0030), behind CHAT_MODEL_ENABLED. Not workflow tasks.
-export const GATEWAY_TASKS = Object.freeze(['chat_answer', 'intent_classify', 'fact_extract', 'embed']);
+export const GATEWAY_TASKS = Object.freeze(['chat_answer', 'intent_classify', 'fact_extract', 'policy_doc_prose', 'embed']);
 
 export const DETERMINISTIC_TASKS = Object.freeze([
   'consent_check',
@@ -84,6 +85,7 @@ export const AI_RESPONSIBILITY_MATRIX = Object.freeze({
   chat_answer: 'Draft a short answer to the household question using only the supplied facts, citing fact ids. Code owns every number, eligibility and decision; unknown stays unknown.',
   intent_classify: 'Label the question with one allowed intent. The label is an unverified hint; code decides routing and never acts on it alone.',
   fact_extract: 'Propose values for the requested fact keys from the supplied text, each with a verbatim quote. Code validates the quote; the output is never confirmed.',
+  policy_doc_prose: 'Reword the sentences of the owner\'s policy summary in plain English. Code owns every number, quote, label and citation (never sent) and serves the plain version when any line fails its guard.',
   embed: 'Embed already gated text for retrieval. The vector is derived data and is erased with the household.',
   deterministic: 'Code owns consent, authorization, graph construction, arithmetic, classification, review, state, external actions and release.',
 });
