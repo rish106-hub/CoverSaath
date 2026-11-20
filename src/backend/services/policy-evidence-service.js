@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { CLAUSE_KINDS, FINDING_STATES, QUESTION_CONSENT_SCOPE } from '../../contracts/policy-evidence.js';
 import { INVESTIGATION_VERSION, buildClauses, investigate, looksLikeSchedule } from '../../features/policy-evidence/index.js';
+import { packCacheKey, signatureFor } from './reference-data-port.js';
 import { extractFields, flattenBlock, tableRows, FIELD_NAMES, FIELD_SPECS } from '../../features/ai-analysis/eval-extractor.js';
 
 // Answers one question about a case's policy documents (ADR 0008): stored OCR blocks become clauses, the
@@ -128,6 +129,12 @@ function readbackFields(pages, knownIdentifiers) {
     };
   });
 }
+
+// Insurer wording passages (plan C4): public pack pages cached for the holding's linked version. A separate list, never mixed with own-document
+// passages. The label is FOR LEGAL REVIEW.
+export const INSURER_PASSAGE_SOURCE = 'insurer_wording';
+export const INSURER_PASSAGE_LABEL = "From the insurer's wording, not checked";
+const MAX_INSURER_VERSIONS = 5;
 
 const PASSAGE_NOTICE = 'These are passages from your documents, not an answer or a claim decision.';
 const MAX_SNIPPET_LENGTH = 280;
@@ -442,6 +449,54 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
     return { readable, excluded, knownIdentifiers };
   }
 
+  /**
+   * Passages from the insurer's own wording for the versions the case's holdings are linked to (holding_fss_links), read only from
+   * reference_cache rows keyed by exactly that version. Public data: no consent check, but the same fail-closed filters and masking
+   * as own passages. No link, no cache row, a bad signature or a version mismatch gives nothing (never an error).
+   */
+  async function insurerPassagesFor({ caseRecord, query, limit }) {
+    const { id: caseId, household_id: householdId } = caseRecord;
+    if (!services.fssHandoffs || !services.referenceCache || !services.holdingPipelineRepository) return [];
+    const listed = await services.documents.listForCase(caseId, householdId, MAX_CASE_DOCUMENTS + 1);
+    if (listed.length > MAX_CASE_DOCUMENTS) return [];
+    const versionIds = [];
+    for (const document of listed.filter(item => item.lifecycleState === 'active')) {
+      for (const holdingId of await services.holdingPipelineRepository.holdingsOfDocument({ householdId, documentId: document.id })) {
+        const link = await services.fssHandoffs.linkFor(holdingId);
+        if (link && link.householdId === householdId && link.versionId && !versionIds.includes(link.versionId)) versionIds.push(link.versionId);
+        if (versionIds.length >= MAX_INSURER_VERSIONS) break;
+      }
+    }
+    const words = [...new Set(String(query).normalize('NFKC').toLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])];
+    const found = [];
+    if (words.length === 0) return found;
+    for (const versionId of versionIds) {
+      const row = await services.referenceCache.get(packCacheKey('pages', versionId));
+      const body = row?.body;
+      if (!row || row.signature !== signatureFor(body) || body?.version?.versionId !== versionId || !Array.isArray(body.chunks)) continue;
+      const shaOf = new Map();
+      for (const document of Array.isArray(body.documents) ? body.documents : []) {
+        for (const page of Array.isArray(document.pages) ? document.pages : []) shaOf.set(`${document.documentId}|${page.pageNumber}`, page.pageSha256);
+      }
+      for (const chunk of body.chunks) {
+        if (typeof chunk?.text !== 'string' || !Number.isSafeInteger(chunk.pageNumber) || chunk.pageNumber < 1) continue;
+        const pageSha256 = shaOf.get(`${chunk.documentId}|${chunk.pageNumber}`);
+        if (typeof pageSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(pageSha256)) continue;
+        for (const line of chunk.text.split('\n')) {
+          const lower = line.toLowerCase();
+          if (!words.every(word => lower.includes(word))) continue;
+          if (looksLikeSchedule('', line) || holdsIdentityLabel(line)) continue;
+          found.push({
+            chunkId: String(chunk.id), versionId, documentId: String(chunk.documentId), page: chunk.pageNumber, pageSha256,
+            source: INSURER_PASSAGE_SOURCE, label: INSURER_PASSAGE_LABEL, snippet: snippetAround(maskNumbers(line), query),
+          });
+          if (found.length === limit) return found;
+        }
+      }
+    }
+    return found;
+  }
+
   return Object.freeze({
     // One question per idempotency key runs at a time. A stored answer is written only after the paid model call, so a
     // duplicate that arrives meanwhile would miss the replay and bill the model twice. The claim is a database lease with
@@ -559,7 +614,8 @@ export function createPolicyEvidenceService({ services, loadKnownIdentifiers, cr
         if (passages.length === limit) break;
       }
       // `truncated` appears only when the search stopped at its scan cap or time budget, so later matches may be missing.
-      return { label: 'passage_not_answer', notice: PASSAGE_NOTICE, query, passages, excluded, ...(found.truncated === true ? { truncated: true } : {}) };
+      const insurerPassages = await insurerPassagesFor({ caseRecord, query, limit });
+      return { label: 'passage_not_answer', notice: PASSAGE_NOTICE, query, passages, excluded, insurerPassages, ...(found.truncated === true ? { truncated: true } : {}) };
     },
 
     async get({ caseRecord, answerId }) {
