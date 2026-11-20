@@ -1,7 +1,7 @@
 import { ReferenceDataError, referenceDataEnabled, referenceFailureState, noUsableFactsError } from '../../integrations/index.js';
 import { matchFssVersion, MATCH_OUTCOMES } from '../../features/insurance-rules/fss-version-match.js';
 import { mapFssFacts, fssEvidence } from '../../features/policy-facts/fss-fact-map.js';
-import { cacheKeyFor } from './reference-data-port.js';
+import { cacheKeyFor, packCacheKey } from './reference-data-port.js';
 
 // The FSS reference reader (ADR 0034): the insurer tier of a holding. It plugs into the holdings service as `referenceFacts`.
 //
@@ -24,7 +24,7 @@ const LIVE_LOOKUP = Object.freeze({
   'products.versions': (port, params) => port.listVersions(params),
 });
 
-export function createFssReferenceFacts({ port, repository, env = process.env }) {
+export function createFssReferenceFacts({ port, repository, links = null, env = process.env }) {
   if (!port || !repository) throw new TypeError('createFssReferenceFacts needs a reference port and a holdings repository.');
   const enabled = () => referenceDataEnabled(env);
 
@@ -54,8 +54,19 @@ export function createFssReferenceFacts({ port, repository, env = process.env })
     return hit.data;
   };
 
-  function items({ facts, versionId, version }) {
-    const cacheKey = cacheKeyFor('versions.facts', { versionId });
+  // The version a holding's FSS handoff matched (holding_fss_links, written when the pack was pulled), or null. The link row must be of this household.
+  async function linkedVersion({ householdId, holding }) {
+    const link = links ? await links.linkFor(holding.id) : null;
+    return link && link.householdId === householdId && link.versionId ? link.versionId : null;
+  }
+
+  // Facts of a pulled pack (cache only), as reference items. Empty when nothing was pulled or nothing maps.
+  async function packItems({ versionId }) {
+    const hit = typeof port.peekPackFacts === 'function' ? await port.peekPackFacts({ versionId }) : null;
+    return hit ? items({ facts: hit.data.facts, versionId, version: hit.data.wordingVersion, cacheKey: packCacheKey('facts', versionId) }) : [];
+  }
+
+  function items({ facts, versionId, version, cacheKey = cacheKeyFor('versions.facts', { versionId }) }) {
     return mapFssFacts(facts).map(({ factKey, value, fact, unchecked }) => {
       const reference = fssEvidence({ fact, versionId, cacheKey });
       // ADR 0036: `unchecked` items (model-extracted, not reviewed) carry their quote; collate turns them into extracted_unverified rows.
@@ -70,6 +81,9 @@ export function createFssReferenceFacts({ port, repository, env = process.env })
     async refresh({ householdId, holding }) {
       if (!enabled()) return 'disabled';
       try {
+        // A holding whose FSS handoff matched and whose pack was pulled is attached from the pack (no second match, no live read).
+        const linked = await linkedVersion({ householdId, holding });
+        if (linked && (await packItems({ versionId: linked })).length > 0) return 'attached';
         const matched = await matchFssVersion({ lookup: liveLookup, ...await context({ householdId, holding }) });
         if (matched.outcome !== MATCH_OUTCOMES.matched) return matched.outcome;
         const { data } = await port.getAllFacts({ versionId: matched.versionId });
@@ -85,6 +99,11 @@ export function createFssReferenceFacts({ port, repository, env = process.env })
     async forHolding({ householdId, holding }) {
       if (!enabled()) return [];
       try {
+        const linked = await linkedVersion({ householdId, holding });
+        if (linked) {
+          const fromPack = await packItems({ versionId: linked });
+          if (fromPack.length > 0) return fromPack;
+        }
         const matched = await matchFssVersion({ lookup: cachedLookup, ...await context({ householdId, holding }) });
         if (matched.outcome !== MATCH_OUTCOMES.matched) return [];
         const hit = await port.peekFacts({ versionId: matched.versionId });

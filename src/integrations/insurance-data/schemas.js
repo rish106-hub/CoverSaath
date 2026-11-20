@@ -370,3 +370,132 @@ export function parseProductExport(raw) {
     documents,
   };
 }
+
+// ---- UIN reference pack v1 (insurance-data-api docs/contracts/uin-pack-v1.md; FOR LEGAL REVIEW) -------------------------------------------
+// One document per product UIN: page text, the facts read from it, and the verified page quotes of each fact. Strict: a wrong shape fails the
+// whole pack closed (REFERENCE_DATA_RESPONSE_INVALID); bounds are the contract's own. Facts are normalised to the parsed-fact shape of
+// parseFact above, so the existing mapper (fss-fact-map.js) and evidence sealing read them unchanged:
+//   shown: false             dropped. FSS says the consumer may not show it.
+//   independently_verified   outcome 'verified' (needs a page and a valid quote).
+//   extracted_unverified     outcome 'unchecked' (ADR 0036; needs a page and a valid quote). Never 'verified'.
+// A quote is kept only when it is in bounds (parseQuote) and is a verbatim slice of the cited page text carried in the pack.
+// A fact whose value carries a scope (a plan, age or item variant) is conditional: it gets that scope as a condition, so it never maps as the headline term.
+const PACK_MAX_FACTS = 2000;
+const PACK_MAX_EVIDENCE = 5;
+const PACK_MAX_PAGE_BYTES = 5_000_000;
+const PACK_MAX_LIMITATIONS = 50;
+const PACK_STATUS = new Set(['extracted_unverified', 'independently_verified']);
+// Profile facts carry consumer keys; published facts carry FSS types. Both map to the FSS type the mapper is keyed on.
+const PACK_TYPE_TO_FSS = Object.freeze({
+  room_rent_limit: 'room_rent_limit',
+  copay_percent: 'copay',
+  copay: 'copay',
+  waiting_initial: 'initial_waiting_period',
+  initial_waiting_period: 'initial_waiting_period',
+  waiting_ped: 'pre_existing_disease_waiting_period',
+  pre_existing_disease_waiting_period: 'pre_existing_disease_waiting_period',
+});
+const collapse = value => value.replace(/\s+/g, ' ').trim();
+
+function parsePackPage(raw) {
+  const page = object(raw);
+  if (!Number.isInteger(page.page_number) || page.page_number < 1) throw invalid();
+  if (typeof page.text !== 'string' || page.text.length > MAX_PAGE_TEXT) throw invalid();
+  const pageSha256 = text(page.page_sha256, 64);
+  if (!SHA256.test(pageSha256)) throw invalid();
+  return { pageNumber: page.page_number, text: page.text, pageSha256 };
+}
+
+export function parsePack(raw) {
+  const value = object(raw);
+  const packVersion = text(value.pack_version, 64);
+  if (!SHA256.test(packVersion)) throw invalid();
+  const product = object(value.product);
+  const version = object(value.version);
+  let pageBytes = 0;
+  const documents = array(value.documents, MAX_DOCUMENTS).map(item => {
+    const doc = object(item);
+    const sha256 = text(doc.sha256, 64);
+    if (!SHA256.test(sha256)) throw invalid();
+    const sourcePages = array(doc.pages, MAX_PAGES_PER_DOCUMENT).map(parsePackPage);
+    // A page number twice in one document is ambiguous (which text does a quote cite?): the whole pack fails closed.
+    if (new Set(sourcePages.map(page => page.pageNumber)).size !== sourcePages.length) throw invalid();
+    for (const page of sourcePages) pageBytes += Buffer.byteLength(page.text);
+    if (pageBytes > PACK_MAX_PAGE_BYTES) throw invalid();
+    return { documentId: text(doc.document_id, 100), sha256, sourcePages };
+  });
+  // The same document id twice would let the later entry overwrite the earlier one's hash and pages: the whole pack fails closed.
+  if (new Set(documents.map(doc => doc.documentId)).size !== documents.length) throw invalid();
+  const pages = new Map();
+  const pageShas = new Map();
+  const shaOf = new Map();
+  for (const doc of documents) {
+    shaOf.set(doc.documentId, doc.sha256);
+    for (const page of doc.sourcePages) { pages.set(`${doc.documentId}|${page.pageNumber}`, page.text); pageShas.set(`${doc.documentId}|${page.pageNumber}`, page.pageSha256); }
+  }
+  const facts = [];
+  for (const rawFact of array(value.facts ?? [], PACK_MAX_FACTS)) {
+    const fact = parsePackFact(rawFact, { pages, pageShas, shaOf });
+    if (fact) facts.push(fact);
+  }
+  return {
+    packVersion,
+    product: {
+      productId: text(product.product_id, 100),
+      productName: productNameOf(product.product_name),
+      insurerId: text(product.insurer_id, 100),
+      insurerName: text(product.insurer_name),
+      lineOfBusiness: text(product.line_of_business, 100),
+    },
+    version: {
+      versionId: text(version.version_id, 100),
+      wordingVersion: text(version.wording_version, 100),
+      effectiveFrom: optionalDate(version.effective_from),
+      effectiveTo: optionalDate(version.effective_to),
+    },
+    documents,
+    facts,
+    limitations: array(value.limitations ?? [], PACK_MAX_LIMITATIONS).map(item => text(item, MAX_LONG_TEXT)),
+  };
+}
+
+// Null for a fact the consumer may not use (shown false, an unknown status, no checkable evidence). Throws only on a wrong shape.
+function parsePackFact(raw, { pages, pageShas, shaOf }) {
+  const value = object(raw);
+  oneOf(value.status, PACK_STATUS); // an unknown status fails the pack closed; the value is never trusted past 'unchecked' (below)
+  const shown = bool(value.shown);
+  const factType = text(value.fact_type, 100);
+  const factId = text(value.fact_id, 100);
+  const parsedValue = parseValue(value.value);
+  const evidence = [];
+  for (const item of array(value.evidence ?? [], PACK_MAX_EVIDENCE)) {
+    const entry = object(item);
+    const documentId = text(entry.document_id, 100);
+    const pageSha256 = text(entry.page_sha256, 64);
+    if (!Number.isInteger(entry.page_number) || entry.page_number < 1 || !SHA256.test(pageSha256)) throw invalid();
+    const quote = parseQuote({ quote_included: true, quote: entry.quote });
+    const sha256 = shaOf.get(documentId) ?? null;
+    const page = pages.get(`${documentId}|${entry.page_number}`);
+    // The evidence must cite the page it was read from: a page hash that differs from the pack's own page hash is dropped, not trusted.
+    if (pageShas.get(`${documentId}|${entry.page_number}`) !== pageSha256) continue;
+    if (quote === null || sha256 === null || page === undefined || !(page.includes(quote) || collapse(page).includes(collapse(quote)))) continue;
+    evidence.push({ documentId, pageNumber: entry.page_number, sha256, pageSha256, quote });
+  }
+  const mappedType = Object.hasOwn(PACK_TYPE_TO_FSS, factType) ? PACK_TYPE_TO_FSS[factType] : factType;
+  if (!shown || evidence.length === 0 || parsedValue === null) return null;
+  const scope = parsedValue.scope;
+  const applicable = parsedValue.applicableCondition;
+  // A variant's applicability (plan, age, zone, sum insured) arrives as `value.conditions`, a list of strings (uin-pack-v1: profile facts). Any condition
+  // makes the fact conditional, so it never maps as the headline term. A malformed list fails the pack closed.
+  const conditions = isObject(value.value) && value.value.conditions !== undefined ? textList(value.value.conditions) : [];
+  return {
+    factId, factType: mappedType, valueText: parsedValue.text, value: parsedValue,
+    conditions: [...(typeof scope === 'string' && scope.length > 0 ? [scope] : []), ...(typeof applicable === 'string' && applicable.length > 0 ? [applicable] : []), ...conditions], exceptions: [],
+    // A pack fact is NEVER a reviewed reading, whatever FSS calls it: the published pack carries no conditions or exceptions list, so an
+    // `independently_verified` flag cannot yet prove the value is the headline term. It stays 'unchecked' (extracted_unverified, ADR 0036 / 0037)
+    // until FSS carries conditions and exceptions on published facts. The status kept here is the downgraded one, so nothing downstream reads
+    // the raw flag.
+    verificationStatus: 'extracted_unverified', taxonomyVersion: null, reviewId: null, reviewerId: null, sourceFreshness: null, evidence,
+    outcome: 'unchecked', family: null,
+  };
+}

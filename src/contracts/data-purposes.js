@@ -181,7 +181,7 @@ export const DATA_REGISTRY = Object.freeze({
     ['id', 'household_id', 'holding_id', 'document_id', 'kind', 'created_at']),
   // FSS handoff (migration 068, ADR 0037): ids, closed enums, a counter and timestamps only.
   fss_handoffs: entry('document_processing', {},
-    ['id', 'household_id', 'holding_id', 'request_id', 'fss_handoff_id', 'fss_version_id', 'state', 'attempts', 'last_outcome', 'created_at', 'updated_at', 'decided_at']),
+    ['id', 'household_id', 'holding_id', 'request_id', 'fss_handoff_id', 'fss_version_id', 'state', 'attempts', 'pull_attempts', 'last_outcome', 'created_at', 'updated_at', 'decided_at']),
   holding_fss_links: entry('document_processing', {},
     ['holding_id', 'household_id', 'fss_product_id', 'fss_version_id', 'matched_by', 'confidence', 'matched_at']),
   household_memory_facts: entry('coverage_reconstruction',

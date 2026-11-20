@@ -130,7 +130,7 @@ export const criticalIndexes = Object.freeze([
   'person_records_unique', 'person_records_household_type_idx', 'household_members_mobile_unique',
   'policy_holdings_household_status_idx', 'household_memory_facts_current_slot', 'household_memory_facts_read_idx', 'memory_conflicts_household_idx',
   'memory_conflicts_one_pending', 'member_declarations_household_idx', 'premium_payments_household_idx', 'policy_slot_payments_household_idx', 'premium_dues_household_idx',
-  'fss_handoffs_household_idx', 'fss_handoffs_one_open_per_holding', 'fss_handoffs_open_poll_idx', 'holding_fss_links_household_idx', 'memory_chunks_household_idx', 'memory_chunks_source_slot', 'memory_chunks_embedding_hnsw', 'chat_threads_household_idx', 'chat_turns_thread_order', 'retrieval_traces_turn_idx',
+  'fss_handoffs_household_idx', 'fss_handoffs_one_open_per_holding', 'fss_handoffs_open_poll_idx', 'fss_handoffs_matched_poll_idx', 'holding_fss_links_household_idx', 'memory_chunks_household_idx', 'memory_chunks_source_slot', 'memory_chunks_embedding_hnsw', 'chat_threads_household_idx', 'chat_turns_thread_order', 'retrieval_traces_turn_idx',
 ]);
 
 export const requiredColumns = Object.freeze({
@@ -171,7 +171,7 @@ export const requiredColumns = Object.freeze({
   provider_calls: ['household_id', 'purpose', 'provider', 'model', 'redaction_report_json', 'payload_sha256', 'input_tokens', 'output_tokens', 'cost_paise', 'status'],
   person_records: ['household_id', 'subject_member_id', 'record_type', 'slot', 'payload_ciphertext', 'completeness', 'source', 'state', 'revision'],
   holding_documents: ['household_id', 'holding_id', 'document_id', 'kind'],
-  fss_handoffs: ['household_id', 'holding_id', 'request_id', 'fss_handoff_id', 'fss_version_id', 'state', 'attempts', 'last_outcome', 'decided_at'],
+  fss_handoffs: ['household_id', 'holding_id', 'request_id', 'fss_handoff_id', 'fss_version_id', 'state', 'attempts', 'pull_attempts', 'last_outcome', 'decided_at'],
   holding_fss_links: ['household_id', 'fss_product_id', 'fss_version_id', 'matched_by', 'confidence', 'matched_at'],
   policy_holdings: ['household_id', 'policy_id', 'document_id', 'policy_profile_id', 'kind', 'status'],
   household_memory_facts: ['household_id', 'holding_id', 'fact_key', 'source_tier', 'status', 'value_enc', 'consent_grant_id', 'reference_ref_enc', 'superseded_at'],

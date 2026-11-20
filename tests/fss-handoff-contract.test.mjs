@@ -17,7 +17,7 @@ test('a request carries identifiers only; any other field is refused', () => {
 });
 
 test('a response must have the closed shape', () => {
-  assert.deepEqual({ ...parseHandoff(JSON.parse(body('matched'))) }, { handoffId: 'h-1', requestId: 'req-12345678', state: 'matched', versionId: 'v-1' });
+  assert.deepEqual({ ...parseHandoff(JSON.parse(body('matched'))) }, { handoffId: 'h-1', requestId: 'req-12345678', state: 'matched', versionId: 'v-1', reason: null });
   assert.throws(() => parseHandoff({ handoff_id: 'h-1', request_id: 'req-12345678', state: 'surprise' }), { code: 'REFERENCE_DATA_RESPONSE_INVALID' });
   assert.throws(() => parseHandoff(null), { code: 'REFERENCE_DATA_RESPONSE_INVALID' });
 });

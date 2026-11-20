@@ -13,6 +13,8 @@ const canonical = value => JSON.stringify(value, (key, v) => (v && typeof v === 
   ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : 1))) : v));
 
 export const cacheKeyFor = (endpoint, params) => `${endpoint.toLowerCase().replace(/[^a-z0-9.]/g, '-')}/${digest(canonical(params)).slice(0, 40)}`;
+/** The cache keys of a pulled UIN pack (docs/contracts/uin-pack-v1.md), by FSS version id. `facts` holds the mapped facts, `pages` the page chunks. Public data only. */
+export const packCacheKey = (kind, versionId) => cacheKeyFor(`handoff.pack.${kind}`, { versionId });
 export const signatureFor = body => digest(canonical(body));
 
 export function createReferenceDataPort({ repository, client, env = process.env, owner = `ref-${randomUUID()}`, leaseMs } = {}) {
@@ -70,8 +72,17 @@ export function createReferenceDataPort({ repository, client, env = process.env,
     return { data: row.body, source: 'cache', stale: !row.fresh, fetchedAt: row.fetchedAt, referenceContextOnly: true };
   }
 
+  /** Cache-only read of the pulled pack's facts for one version (parsed-facts shape). Null on disabled, miss or a corrupt row. */
+  async function peekPackFacts({ versionId }) {
+    if (!referenceDataEnabled(env)) return null;
+    const row = await repository.get(packCacheKey('facts', versionId));
+    if (!row || row.signature !== signatureFor(row.body)) return null;
+    return { data: row.body, source: 'cache', stale: !row.fresh, fetchedAt: row.fetchedAt, referenceContextOnly: true };
+  }
+
   return {
     peek,
+    peekPackFacts,
     peekFacts: ({ versionId, factType, cursor }) => peek('versions.facts', factsParams({ versionId, factType, cursor })),
     /** All facts pages (max 5) through the cache. Coverage comes from the first page. */
     async getAllFacts({ versionId, factType }) {

@@ -30,3 +30,8 @@
 - Push all facts in the webhook: large payloads, harder replay and signing; a notice plus a pull is simpler to verify.
 
 **Open questions for the owner.** Which FSS environment receives the webhook (Fly URL and secret ownership). Whether FSS may fetch a missing wording from the insurer's public site on its own, or only parse documents already in its store (source-rights register). Who reviews `needs_review` outcomes.
+
+**Implementation notes** (review fixes, pull and pack).
+- Redrive: the poll re-queues the pull of a matched handoff whose job died (counter `pull_attempts`, migration 070, cap 72, then outcome `pull_gave_up`), and re-pulls a pulled pack whose cached facts are 24 hours stale. A re-pull that answers 404 `pack_not_available` deletes that version's cache rows and re-collates, so rights withdrawal reaches the person's rows.
+- Pack facts are always `extracted_unverified` (ADR 0036), even when FSS flags `independently_verified`: the published pack has no conditions or exceptions list yet. Revisit when FSS adds them. `clause_ayush` maps only as not checked.
+- The two public cache rows are written before the household-locked link transaction. One poll row failing never stops the others.

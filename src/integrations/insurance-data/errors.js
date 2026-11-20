@@ -14,6 +14,9 @@ export const referenceError = (code, message, options) => new ReferenceDataError
 
 export function errorForStatus(status, retryAfterMs = null) {
   if (status === 401 || status === 403) return referenceError('REFERENCE_DATA_AUTH_FAILED', 'Reference data service rejected the server credential.', { statusCode: 503 });
+  if (status === 304) return referenceError('REFERENCE_DATA_NOT_MODIFIED', 'Reference data was not modified.', { statusCode: 304 });
+  // 409 handoff_not_matched (GET /v1/handoffs/{id}/pack): FSS has not (yet) a matched state for this id. Transient from the caller's side: retry later.
+  if (status === 409) return referenceError('REFERENCE_DATA_CONFLICT', 'Reference data is not ready for this request.', { retryable: true, statusCode: 503 });
   if (status === 404) return referenceError('REFERENCE_DATA_NOT_FOUND', 'Reference data was not found.', { statusCode: 404 });
   if (status === 429) return referenceError('REFERENCE_DATA_RATE_LIMITED', 'Reference data service rate limit reached.', { retryable: true, statusCode: 503, retryAfterMs });
   if (status === 400) return referenceError('REFERENCE_DATA_REQUEST_REJECTED', 'Reference data service rejected the request.', { statusCode: 502 });
@@ -27,6 +30,7 @@ export const REFERENCE_FAILURE_STATE = Object.freeze({
   REFERENCE_DATA_UNAVAILABLE: 'unavailable',
   REFERENCE_DATA_RESPONSE_TOO_LARGE: 'invalid_response',
   REFERENCE_DATA_RATE_LIMITED: 'rate_limited',
+  REFERENCE_DATA_CONFLICT: 'unavailable',
   REFERENCE_DATA_AUTH_FAILED: 'unauthorized',
   REFERENCE_DATA_NOT_FOUND: 'no_match',
   REFERENCE_DATA_RESPONSE_INVALID: 'invalid_response',

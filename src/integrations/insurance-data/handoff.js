@@ -50,7 +50,9 @@ export function parseHandoff(json) {
   const versionId = body.version_id ?? body.versionId ?? null;
   if (typeof handoffId !== 'string' || !HANDOFF_ID.test(handoffId) || typeof requestId !== 'string' || !REQUEST_ID.test(requestId)
     || !HANDOFF_STATES.includes(body.state) || (versionId !== null && (typeof versionId !== 'string' || !VERSION_ID.test(versionId)))) throw badShape();
-  return Object.freeze({ handoffId, requestId, state: body.state, versionId });
+  // `reason` is an FSS addition on GET and create (never in a notice): a closed code kept only when it has the code shape, else null.
+  const reason = typeof body.reason === 'string' && /^[a-z][a-z0-9_]{1,59}$/.test(body.reason) ? body.reason : null;
+  return Object.freeze({ handoffId, requestId, state: body.state, versionId, reason });
 }
 
 /** `t=<unix ms>,v1=<hex hmac-sha256 over "<t>.<raw body>">`. */

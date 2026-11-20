@@ -148,12 +148,18 @@ export function createBackendServices(database, options = {}) {
   const memory = createMemoryService({ holdingRepository: holdingPipelineRepository, chunks: memoryChunks, clauses, ocr, database, gateway: modelGateway, loadKnownIdentifiers, providerConsent, env });
   // The insurer tier (ADR 0034): the FSS reference reader over the cached reference port. Cache only on reads; the fetch_reference job refreshes it.
   // `options.referenceFacts` replaces it (tests); `options.referenceClient` replaces the live client (tests use a local stub, never the network).
-  const referenceFacts = options.referenceFacts ?? createFssReferenceFacts({
-    port: createReferenceDataPort({ repository: new ReferenceCacheRepository(database), client: options.referenceClient ?? createInsuranceDataClient({ env }), env }),
-    repository: holdingPipelineRepository, env,
-  });
+  const referenceCacheRepository = new ReferenceCacheRepository(database);
   const fssHandoffs = new FssHandoffRepository(database, { clock: options.clock });
-  const fssHandoff = createFssHandoffService({ repository: fssHandoffs, holdingRepository: holdingPipelineRepository, jobQueue, env: options.env ?? process.env, client: options.handoffClient ?? null, clock: options.clock, onEvent: options.onWarn });
+  const referenceFacts = options.referenceFacts ?? createFssReferenceFacts({
+    port: createReferenceDataPort({ repository: referenceCacheRepository, client: options.referenceClient ?? createInsuranceDataClient({ env }), env }),
+    repository: holdingPipelineRepository, links: fssHandoffs, env,
+  });
+  // `holdings` is built just below; the pull job calls it only after the services exist.
+  const fssHandoff = createFssHandoffService({
+    repository: fssHandoffs, holdingRepository: holdingPipelineRepository, jobQueue, referenceCache: referenceCacheRepository,
+    onPulled: ({ holding }) => holdings.queueCollateFor({ householdId: holding.householdId, holdingId: holding.id }),
+    env: options.env ?? process.env, client: options.handoffClient ?? null, reader: options.referenceClient ?? null, clock: options.clock, onEvent: options.onWarn,
+  });
   const holdings = createHoldingsService({ repository: holdingPipelineRepository, jobQueue, fssHandoff, policyFacts, referenceFacts, memory, analytics, env, clock: options.clock });
   holdingsHook = holdings;
   const chatRepository = new ChatRepository(database, { ...shared, households });

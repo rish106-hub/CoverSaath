@@ -151,6 +151,16 @@ export function readReferenceDataConfig(env = process.env) {
   return Object.freeze({ enabled: true, mode: 'service' });
 }
 
+// FSS handoff poll (ADR 0037, hourly fallback for open handoffs without a notice). Read by the worker scheduler and validated here so a
+// bad value stops startup. Default 1 hour; never below 1 minute. Only runs while FSS_HANDOFF_ENABLED and REFERENCE_DATA_ENABLED are "true".
+export function readFssPollConfig(env = process.env) {
+  const raw = env.FSS_POLL_INTERVAL_MS;
+  if (raw === undefined || raw === '') return Object.freeze({ intervalMs: 3_600_000 });
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 60_000 || parsed > 604_800_000) throw new Error('Invalid FSS_POLL_INTERVAL_MS.');
+  return Object.freeze({ intervalMs: parsed });
+}
+
 export function readServerConfig(env = process.env) {
   // Validated here so a bad identity setting stops startup; the route reads it through readIdentityConfig.
   readIdentityConfig(env);
@@ -158,6 +168,8 @@ export function readServerConfig(env = process.env) {
   readReferenceDataConfig(env);
   // Fails startup with a coded error when column encryption is required (production) and the key is missing or invalid.
   readDataEncryptionConfig(env);
+  // Validated here so a bad poll interval stops startup; the worker reads it through readFssPollConfig.
+  readFssPollConfig(env);
   return Object.freeze({
     sessionTtlMs: boundedInteger(env.SESSION_TTL_SECONDS, 3600, 'SESSION_TTL_SECONDS', 86_400) * 1000,
     maxSessions: boundedInteger(env.MAX_ACTIVE_SESSIONS, 100, 'MAX_ACTIVE_SESSIONS', 100_000),

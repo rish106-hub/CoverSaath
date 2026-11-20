@@ -11,9 +11,10 @@ import { createPolicyFactsHandler } from '../backend/jobs/policy-facts-handler.j
 import { createHoldingCreateHandler, createHoldingHandlers } from '../backend/jobs/holding-pipeline-handlers.js';
 import { holdingsEnabled } from '../backend/services/holdings-flag.js';
 import { createDetectInsurerHandler, createReferenceImportHandler } from '../backend/jobs/holding-product-handlers.js';
-import { FSS_HANDOFF_JOB_KIND } from '../backend/services/fss-handoff-service.js';
-import { createFssHandoffHandler } from '../backend/jobs/fss-handoff-handler.js';
+import { FSS_HANDOFF_JOB_KIND, FSS_PULL_JOB_KIND } from '../backend/services/fss-handoff-service.js';
+import { createFssHandoffHandler, createFssPullHandler } from '../backend/jobs/fss-handoff-handler.js';
 import { createPosthogClient, handoffEnabled } from '../integrations/index.js';
+import { readFssPollConfig } from './config.js';
 import { HOLDING_CREATE_JOB_KIND } from '../contracts/holdings.js';
 import { DETECT_INSURER_JOB_KIND, REFERENCE_IMPORT_JOB_KIND } from '../backend/services/holding-product-service.js';
 
@@ -39,7 +40,11 @@ export function buildJobHandlers(services, env = process.env) {
     handlers[REFERENCE_IMPORT_JOB_KIND] = createReferenceImportHandler({ service: services.holdingProducts, hospitals: services.networkHospitals });
   }
   // holding.fss_handoff (ADR 0037): sends the insurer lookup to FSS as a task. Needs REFERENCE_DATA_ENABLED and FSS_HANDOFF_ENABLED.
-  if (holdingsEnabled(env) && handoffEnabled(env)) handlers[FSS_HANDOFF_JOB_KIND] = createFssHandoffHandler({ service: services.fssHandoff });
+  // holding.fss_pull: on matched, pulls the UIN pack into the reference cache and queues collate.
+  if (holdingsEnabled(env) && handoffEnabled(env)) {
+    handlers[FSS_HANDOFF_JOB_KIND] = createFssHandoffHandler({ service: services.fssHandoff });
+    handlers[FSS_PULL_JOB_KIND] = createFssPullHandler({ service: services.fssHandoff });
+  }
   return Object.freeze(handlers);
 }
 
@@ -103,6 +108,51 @@ export function startAnalyticsDrain({ services, env = process.env, client = crea
   };
 }
 
+/**
+ * FSS handoff poll (ADR 0037): every FSS_POLL_INTERVAL_MS (default 1 h) calls the service's poll(), the fallback for open handoffs that never
+ * got a signed notice. Off unless handoffEnabled(env) (FSS_HANDOFF_ENABLED and REFERENCE_DATA_ENABLED are exactly "true"); otherwise no timer
+ * runs. One tick at a time; a failed tick is logged with a code and the loop keeps going. Logs counts and codes only: no ids, UINs or names.
+ * poll() claims its rows with FOR UPDATE SKIP LOCKED and moves their updated_at to now (FssHandoffRepository.claimForPoll), so two worker processes
+ * never poll the same handoff within the hour; no second lease is kept here.
+ * Returns { tick, stop } or null.
+ */
+export function startFssPollScheduler({ service, env = process.env, intervalMs = readFssPollConfig(env).intervalMs, log = () => {} } = {}) {
+  if (!handoffEnabled(env) || !service) return null;
+  let busy = false;
+  let stopped = false;
+  let current = null;
+  const run = async () => {
+    try {
+      const result = await service.poll();
+      if (result?.polled) log({ type: 'fss.polled', polled: result.polled });
+    } catch (error) {
+      log({ type: 'fss.poll_failed', code: typeof error?.code === 'string' ? error.code.slice(0, 60) : 'FSS_POLL_FAILED' });
+    } finally { busy = false; }
+  };
+  const tick = () => {
+    if (stopped) return Promise.resolve();
+    if (busy) return current ?? Promise.resolve();
+    busy = true;
+    current = run().finally(() => { current = null; });
+    return current;
+  };
+  const timer = setInterval(() => { tick(); }, intervalMs);
+  timer.unref?.();
+  return {
+    tick,
+    // No new tick after stop; waits for the in-flight poll (at most stopWaitMs) so shutdown does not cut a database write.
+    async stop({ stopWaitMs = 10_000 } = {}) {
+      stopped = true;
+      clearInterval(timer);
+      if (current) {
+        let waitTimer;
+        await Promise.race([current, new Promise(resolve => { waitTimer = setTimeout(resolve, stopWaitMs); })]);
+        clearTimeout(waitTimer);
+      }
+    },
+  };
+}
+
 /** Builds and starts a worker on the database from `env`. Returns { worker, stop }. */
 export function startWorker({ env = process.env, handlers = null, log = line => console.log(JSON.stringify(line)) } = {}) {
   const config = readWorkerConfig(env);
@@ -112,12 +162,14 @@ export function startWorker({ env = process.env, handlers = null, log = line => 
   const worker = createJobWorker({ queue: new JobQueueRepository(database), handlers: registered, onEvent: event => log({ ...event, workerId: config.workerId }), ...config });
   worker.start();
   const analyticsDrain = startAnalyticsDrain({ services, env, log });
+  const fssPoll = startFssPollScheduler({ service: services.fssHandoff, env, intervalMs: readFssPollConfig(env).intervalMs, log });
   log({ type: 'worker.started', workerId: config.workerId, kinds: worker.kinds });
   return {
     worker,
     async stop() {
       const drained = await worker.stop();
       await analyticsDrain?.stop();
+      await fssPoll?.stop();
       await database.close();
       log({ type: 'worker.stopped', workerId: config.workerId, drained });
       return drained;
