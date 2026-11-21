@@ -317,7 +317,7 @@ test('memory document: ?format=json returns the same sections as the markdown te
   assert.match(json.headers.get('content-type'), /application\/json/);
   assert.deepEqual(Object.keys(json.data), ['sections']);
   assert.deepEqual(json.data.sections.map(section => section.title), [...MEMORY_DOCUMENT_SECTIONS]);
-  assert.deepEqual(json.data.sections.map(section => section.key), ['policy', 'people_covered', 'cover_and_limits', 'waiting_periods', 'exclusions', 'declared_conditions', 'premiums_and_dues', 'conflicts_to_resolve', 'open_questions']);
+  assert.deepEqual(json.data.sections.map(section => section.key), ['policy', 'people_covered', 'cover_and_limits', 'waiting_periods', 'exclusions', 'insurer_terms_your_document_doesn_t_state', 'declared_conditions', 'premiums_and_dues', 'conflicts_to_resolve', 'open_questions']);
   for (const section of json.data.sections) {
     assert.deepEqual(Object.keys(section), ['key', 'title', 'markdown']);
     assert.ok(section.markdown.length > 0);
