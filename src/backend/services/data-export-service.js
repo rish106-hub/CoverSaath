@@ -68,7 +68,7 @@ export function createDataExportService({ access, database, households, appRepos
   }
 
   const memberDto = async (principal, householdId, member) => ({
-    id: member.id, displayName: member.display_name, memberKind: member.member_kind, relationshipLabel: member.relationship_label,
+    id: member.id, displayName: member.display_name, memberKind: member.member_kind, relationshipLabel: member.relationship_label, relationship: member.relationship ?? null, aliases: member.aliases ?? [],
     dateOfBirth: await birthDate(principal, householdId, member), isYou: member.adult_user_id === principal.adultId,
   });
 

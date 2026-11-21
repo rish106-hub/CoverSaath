@@ -12,6 +12,7 @@ import { createInsurerWording } from './insurer-wording-service.js';
 import { createProviderConsent } from './provider-consent.js';
 import { emergencyInstruction } from '../state/case-state-machine.js';
 import { createHouseholdAppService } from './household-app-service.js';
+import { createHoldingOverviewService } from './holding-overview-service.js';
 import { createUserDataService } from './user-data-service.js';
 import { createPersonRecordService } from './person-record-service.js';
 import { createPolicyProfileService, policyFactsEnabled } from './policy-profile-service.js';
@@ -198,6 +199,9 @@ export function createBackendServices(database, options = {}) {
   // The owner's memory document: rendered on demand, nothing stored (services/memory-document.js).
   const memoryDocument = createMemoryDocumentService({ holdingRepository: holdingPipelineRepository, holdings, repository: new MemoryDocumentRepository(database, shared), declarations, premiums, households, gateway: modelGateway, providerConsent, loadKnownIdentifiers, onEvent: options.onWarn, env: options.env ?? process.env, clock: options.clock });
 
+  // Overview and policies of a household, on holdings (not the legacy policies): owner only, off unless HOLDINGS_ENABLED=true.
+  const holdingOverview = createHoldingOverviewService({ access, app, policyHoldings, holdings, premiums, env });
+
   const networkHospitals = createNetworkHospitalService({ repository: new NetworkHospitalRepository(database), holdingRepository: holdingProductRepository, policyHoldings, referenceCache: new ReferenceCacheRepository(database), analytics, env: options.env ?? process.env, client: options.referenceClient ?? null });
 
   const policySlots = createPolicySlotService({ repository: new PolicySlotRepository(database, { clock: options.clock }), access, env: options.env ?? process.env, client: options.razorpayClient ?? null });
@@ -205,7 +209,7 @@ export function createBackendServices(database, options = {}) {
   return {
     ensureHolding, ensureHoldingForDocument, analytics, networkHospitals, policySlots, holdingProducts, holdingProductRepository, policyHoldings, fssHandoffs, fssHandoff, memoryFacts, intakeQuestions, declarations, premiums, holdingsEnabled: () => holdingsEnabled(options.env ?? process.env),
     personRecords, personRecordRepository, erasure, jobQueue, sync, syncRepository, access, app, householdApp, userData, userDataRepository, audit, appEvents, providerCalls, runtimeLimits, auth, authTokens, authTokenRepository, columnCrypto, identities, profileAnswers, policyProfiles, policyProfile, policyFactsRepository, policyFacts, households, consents, cases, workflows, ocr, coverageParameters, policyStructuring, clauses, catalogueReviews, curatedProducts, documents,
-    holdings, holdingPipelineRepository, referenceCache: referenceCacheRepository, memoryDocument, memory, memoryChunks, chatRepository, chatV1, modelGateway,
+    holdings, holdingPipelineRepository, holdingOverview, referenceCache: referenceCacheRepository, memoryDocument, memory, memoryChunks, chatRepository, chatV1, modelGateway,
     emergencyInstruction,
     // Async: callers await it, so a denial (a rejection) stops the request.
     async requireDocumentProcessingConsent({ consentGrantId, subjectAdultId, documentId = null }) {

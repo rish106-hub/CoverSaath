@@ -13,14 +13,14 @@ export async function seedErasureWorld(pool, services, key, { columnCrypto = ser
   // People: the owner has a contact, a second adult holds an account in this household only, one dependent, one invited placeholder.
   await q('UPDATE adult_users SET display_name = $1, contact_email = $2, contact_phone = $3, contact_email_hash = $4 WHERE id = $5',
     [canary('owner-name'), `${canary('owner')}@example.test`.toLowerCase(), canary('owner-phone'), digest('email'), ids.adult]);
-  await q('UPDATE household_members SET display_name = $1, relationship_label = $2, date_of_birth = $3 WHERE id = $4', [canary('owner-member'), canary('label'), '1980-01-01', ids.member]);
+  await q('UPDATE household_members SET display_name = $1, relationship_label = $2, date_of_birth = $3, relationship = $4, aliases = $5 WHERE id = $6', [canary('owner-member'), canary('label'), '1980-01-01', 'self', columnCrypto.sealJson('household_members', 'aliases', ids.member, [canary('alias')]), ids.member]);
   ids.adult2 = `adult2-${key}`;
   await insert(pool, 'adult_users', { id: ids.adult2, display_name: canary('adult2-name'), contact_email: `${canary('adult2')}@example.test`.toLowerCase() });
   await insert(pool, 'household_roles', { id: `role2-${key}`, household_id: ids.household, adult_user_id: ids.adult2, role: 'member' });
   ids.member2 = `member2-${key}`;
   await insert(pool, 'household_members', { id: ids.member2, household_id: ids.household, adult_user_id: ids.adult2, display_name: canary('adult2-member') });
   ids.dependent = `dependent-${key}`;
-  await insert(pool, 'household_members', { id: ids.dependent, household_id: ids.household, adult_user_id: null, member_kind: 'dependent', display_name: canary('dependent-name'), relationship_label: canary('dep-label'), date_of_birth: '2015-05-05' });
+  await insert(pool, 'household_members', { id: ids.dependent, household_id: ids.household, adult_user_id: null, member_kind: 'dependent', display_name: canary('dependent-name'), relationship_label: canary('dep-label'), date_of_birth: '2015-05-05', relationship: 'son', aliases: columnCrypto.sealJson('household_members', 'aliases', ids.dependent, [canary('dep-alias')]) });
   ids.placeholderAdult = `invited-${key}`;
   await insert(pool, 'adult_users', { id: ids.placeholderAdult, display_name: canary('invited-name'), account_status: 'invited' });
   ids.placeholder = `placeholder-${key}`;

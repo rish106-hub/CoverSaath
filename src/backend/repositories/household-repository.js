@@ -21,7 +21,12 @@ export class HouseholdRepository {
 
   #adult(row) { return this.crypto.openRow('adult_users', row, ['display_name', 'contact_email', 'contact_phone']); }
   #household(row) { return this.crypto.openRow('households', row, ['display_name']); }
-  #member(row) { return this.crypto.openRow('household_members', row, MEMBER_SEALED); }
+  #member(row) {
+    const opened = this.crypto.openRow('household_members', row, MEMBER_SEALED);
+    // The aliases are a sealed JSON array (migration 067), opened to an array (never null).
+    if (opened && 'aliases' in opened) opened.aliases = this.crypto.openJson('household_members', 'aliases', row.id, row.aliases) ?? [];
+    return opened;
+  }
 
   async createAdult({ id: adultId = id('adult'), displayName, contactEmail = null, contactPhone = null, locale = 'en-IN', accountStatus = 'active' }) {
     if (!String(displayName || '').trim()) throw new Error('Adult display name is required.');

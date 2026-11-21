@@ -1,6 +1,23 @@
 # Latest iteration
 
-State of `origin/main` at 36474bb (PR #125 merged), updated 2026-11-12 (first written 2026-11-11). Earlier iteration notes (blocks 1 to 5, S3 erasure, app data routes, Supabase) were replaced by this file; they remain in git history. Plan of record: `docs/exec-plans/active/complete.md`, run state `docs/exec-plans/active/complete-run-state.md`. Prototype, synthetic data only. **Not deployed**: Fly app `knowvia-api` is not running and no migration after the baseline has been applied to Supabase (runbook: [fly-deploy](../runbooks/fly-deploy.md)).
+State of `origin/main` at d1f167c (PR #148 merged), updated 2026-11-15 (first written 2026-11-11). Earlier iteration notes (blocks 1 to 5, S3 erasure, app data routes, Supabase) were replaced by this file; they remain in git history. Plan of record: `docs/exec-plans/active/complete.md`; the live run log of both squads is `docs/exec-plans/active/two-squads-2026-11-14.md`. Prototype. **Deployed**: Fly `knowvia-api` v29 (2 machines, syd; v29 is a secrets-only release on the v28 image), migrations up to 066 applied on Supabase (runbook: [fly-deploy](../runbooks/fly-deploy.md)).
+
+## Since 2026-11-12 (PRs #126 to #148)
+
+| PR | What |
+|---|---|
+| #135 | Chat: honest `unknown` and clause-level answers |
+| #136 | PDF sanitising instead of rejecting active content, and a non-insurance PDF gate at upload (live since v23) |
+| #137 | The owner's memory document, rendered on demand from sealed rows |
+| #138, #145 | answer-card/v1 contract and deterministic guard C0-C10; chat turns release a card only through the guard, before store or stream |
+| #139, #142 | Intake question catalogue, deterministic planner, `GET/PUT` intake questions and answers per holding |
+| #140 | Gnani STT/TTS adapter with a single-flight queue (no voice route yet; O5 held) |
+| #141 | Architecture v1 (both squads, red-teams merged): `docs/exec-plans/active/architecture-v1-2026-11-14.md` |
+| #143 | Product name search over the cached registry |
+| #144 | Import-mode reference jobs read `owner_approved` registry and per-UIN export files (no FSS server on the serve path) |
+| #147, #148 | ADR 0036 (proposed): show model-extracted insurer facts as "not checked"; built after the first extraction run |
+
+Prod state 2026-11-15 (owner approved): the stage 5 reference export (10 parts, sha-verified, 2,230 entries) is imported and the registry snapshot is built (61 insurers, 1,935 products, 274 UIN exports). On: `HOLDINGS_ENABLED`, `MEMORY_ENABLED`, `CHAT_ENABLED`, `CHAT_MODEL_ENABLED`, `SARVAM_OCR_ENABLED`, `POLICY_FACTS_ENABLED`, `REFERENCE_DATA_ENABLED`, `DOCUMENT_READBACK_ENABLED`. `MODEL_PROVIDERS=anthropic` is pinned so Gemini is never routed; no Anthropic, OpenAI or Voyage key is set, so chat answers through the no-key path (code, stored facts, wording search) and embeddings are skipped. Owner decision 2026-11-15: the chat model will be Gemini Flash once approved (then `MODEL_PROVIDERS=gemini` plus a `gemini` chat grant in the beta BFF); OpenAI is used only for FSS insurer-PDF parsing, never for CoverSaath chat. Off: `POLICY_EVIDENCE_ENABLED` and `POLICY_STRUCTURING_ENABLED` (they use `LLM_PROVIDER=google`, Gemini, held), `ANALYTICS_ENABLED` (no PostHog key), voice (no route, O5). Not yet walked end to end on prod with a real PDF.
 
 ## Merged in this run
 
@@ -59,13 +76,14 @@ Related and pre-existing: `REFERENCE_DATA_ENABLED` (reference import), `SARVAM_O
 ## Open gaps
 
 - Chat procedure planning (`planProcedure`) is not wired to `network_hospitals`: a procedure answer does not list hospitals.
-- Analytics events `voice_turn` and `hospital_search` are in the allowlist (`src/contracts/analytics-events.js`) but no code emits them.
+- Analytics event `voice_turn` is in the allowlist (`src/contracts/analytics-events.js`) but no code emits it: no voice route exists yet. `hospital_search` is emitted by the hospital lookup (result count only).
+- The honest-unknown fix (#135) is not yet re-measured against the live-run question set (19 of 20 expected-unknown questions were answered before it).
 - Analytics consent: no consent UI exists and the consent and notice wording is a draft. **FOR LEGAL REVIEW.**
 - Retention for expired (not revoked) consent is an open owner decision (review F3): expiry blocks new use but does not erase derived data.
 - Voice transcript storage, cross-border model calls (Anthropic, Voyage) and all consent, privacy and notice wording are drafts. **FOR LEGAL REVIEW.**
 - Not verified against live providers or a hosted database: tests use local stubs and a local PostgreSQL 17 with pgvector.
-- Migrations 048-065 are applied nowhere hosted; applying them to Supabase needs owner approval.
-- Per-process limits still hold (rate limit, model budget): one Fly machine only.
+- Migrations up to 066 are applied on Supabase (2026-11-14, owner approved); a new migration still needs owner approval per environment.
+- Rate limit and model budget are shared through PostgreSQL (ADR 0014 addendum); the scan worker and the evidence in-flight cap are still per process.
 - Not reviewed: docs and code of this run were built without independent review agents (owner standing order).
 
 ## Resume

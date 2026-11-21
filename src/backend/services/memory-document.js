@@ -367,5 +367,19 @@ export function createMemoryDocumentService({ holdingRepository, holdings, repos
     return { text: serialize(parts, { rewrites, notice: PROSE_NOTICE }), source: 'prose' };
   }
 
-  return Object.freeze({ enabled, proseEnabled, render, renderWithProse });
+  /**
+   * The same document as sections for a UI: { sections: [{ key, title, markdown }] } in MEMORY_DOCUMENT_SECTIONS order. `markdown` is the section's lines as
+   * serialize() writes them (no heading, no prose pass). The notice and generated-on lines of the text form are not sections.
+   */
+  async function renderSections(args) {
+    const { sections } = await build(args);
+    return {
+      sections: MEMORY_DOCUMENT_SECTIONS.map(name => {
+        const lines = sections.get(name);
+        return { key: name.toLowerCase().replace(/[^a-z0-9]+/g, '_'), title: name, markdown: (lines.length > 0 ? lines.map(lineText) : ['- None recorded. [unknown]']).join('\n') };
+      }),
+    };
+  }
+
+  return Object.freeze({ enabled, proseEnabled, render, renderSections, renderWithProse });
 }

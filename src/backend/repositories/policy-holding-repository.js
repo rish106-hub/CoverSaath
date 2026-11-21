@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { householdLock } from '../database/postgres/locks.js';
 import { LIST_LIMIT, fail, invalid, requirePerson, str } from './holdings-common.js';
-import { HOLDING_CREATE_FAILED, HOLDING_CREATE_JOB_KIND, HOLDING_STATUSES } from '../../contracts/holdings.js';
+import { HOLDING_CREATE_FAILED, HOLDING_CREATE_JOB_KIND, HOLDING_JOB_KIND_LIST, HOLDING_STATUSES } from '../../contracts/holdings.js';
+import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
 
 // Policy holdings (migration 048, ADR 0032): the thin link of a household's policy to its upload and policy profile. It stores no
 // insurer, plan, UIN or number. Every read and write is scoped to a household the acting adult can see (a foreign household, or a
@@ -104,6 +105,42 @@ export class PolicyHoldingRepository {
     return rows.map(row => row.status === 'dead'
       ? { document_id: row.document_id, state: 'failed', code: HOLDING_CREATE_FAILED }
       : { document_id: row.document_id, state: 'retrying', code: null });
+  }
+
+  /**
+   * Holdings (of the household) that a pipeline job gave up on: a dead holding.* job whose payload names the holding. Identifiers only, read
+   * from job_queue (no new store). Used by the overview to say `failed` for a holding that never reached a settled status.
+   */
+  async failedHoldingIds({ householdId, adultId }) {
+    await this.#access(householdId, adultId, false);
+    const rows = await this.database.many(`SELECT payload_json FROM job_queue WHERE household_id = ? AND kind = ANY(CAST(? AS text[])) AND status = 'dead' ORDER BY created_at, id LIMIT ?`,
+      [householdId, HOLDING_JOB_KIND_LIST, LIST_LIMIT]);
+    const ids = new Set();
+    for (const row of rows) {
+      try { const id = JSON.parse(row.payload_json)?.holdingId; if (typeof id === 'string') ids.add(id); } catch { /* a malformed payload names no holding */ }
+    }
+    return ids;
+  }
+
+  /**
+   * Members the holding's policy lists as covered (policy_members of the holding's policy), as a Map holding id -> member id[]. A holding with no
+   * policy link, or no listed member, is absent from the map (unknown, never "everyone"). Erased members are left out.
+   */
+  async coveredMemberIds({ householdId, adultId, holdings }) {
+    await this.#access(householdId, adultId, false);
+    const policyIds = [...new Set(holdings.map(item => item.policyId).filter(Boolean))];
+    const out = new Map();
+    if (policyIds.length === 0) return out;
+    const rows = await this.database.many(`SELECT link.policy_id, link.household_member_id FROM policy_members link
+      JOIN policies policy ON policy.id = link.policy_id
+      JOIN household_members member ON member.id = link.household_member_id AND member.household_id = policy.household_id
+      WHERE policy.household_id = ? AND link.policy_id = ANY(CAST(? AS text[])) AND member.display_name <> ?
+      ORDER BY member.created_at, member.id`, [householdId, policyIds, ERASED_NAME]);
+    for (const item of holdings) {
+      const ids = item.policyId ? rows.filter(row => row.policy_id === item.policyId).map(row => row.household_member_id) : [];
+      if (ids.length > 0) out.set(item.id, ids);
+    }
+    return out;
   }
 
   /** Links the policy and the policy profile once they are known. */

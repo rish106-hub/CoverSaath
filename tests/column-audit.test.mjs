@@ -118,7 +118,7 @@ const PLAIN = {
   },
   fact_conflicts: { 'fact key and closed vocabulary': ['fact_key', 'resolution_state'] },
   household_changes: { 'closed vocabulary: synced entity name (a table label matching ^[a-z_]{1,40}$) and operation; the log holds ids and revisions, never values (ADR 0028)': ['entity', 'op'] },
-  household_members: { 'closed vocabulary': ['member_kind'], 'closed vocabulary or flag (ADR 0026): gender, age band, preferred channel, lives-with-household': ['gender', 'age_band', 'preferred_channel', 'lives_with_household'] },
+  household_members: { 'closed vocabulary': ['member_kind', 'relationship'], 'closed vocabulary or flag (ADR 0026): gender, age band, preferred channel, lives-with-household': ['gender', 'age_band', 'preferred_channel', 'lives_with_household'] },
   household_places: { 'closed vocabulary': ['kind', 'slot', 'precision', 'source'] },
   household_roles: { 'closed vocabulary': ['role', 'status'] },
   households: { 'closed vocabulary': ['status'] },

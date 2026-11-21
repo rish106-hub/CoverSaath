@@ -128,24 +128,15 @@ test('policies and overview: shape, derived counts, ownership', opts, async t =>
   const insurer = await services.householdApp.findOrCreateInsurer({ legalName: 'Northstar Synthetic' });
   const policy = await services.householdApp.createPolicy({ householdId: owner.householdId, insurerId: insurer.id, policyKind: 'group', policyNumberMasked: 'XXXX-0001', startsOn: '2026-04-01', endsOn: '2099-03-31', memberIds: [owner.memberId, kid.data.id] });
 
-  const list = await app.call(`/api/v1/households/${owner.householdId}/policies`, { token: owner.token });
-  assert.equal(list.status, 200);
-  assert.equal(list.data.policies[0].insurer.name, 'Northstar Synthetic');
-  assert.equal(list.data.policies[0].members.length, 2);
+  // The legacy policy read by id stays; the household overview and policies now read holdings (tests/relationships-aliases-overview.test.mjs).
   const one = await app.call(`/api/v1/policies/${policy.id}`, { token: owner.token });
   assert.equal(one.status, 200);
   assert.equal(one.data.endsOn, '2099-03-31');
-
-  const ov = await app.call(`/api/v1/households/${owner.householdId}/overview`, { token: owner.token });
-  assert.equal(ov.status, 200);
-  assert.deepEqual(Object.keys(ov.data).sort(), ['counts', 'derived', 'household', 'members', 'nextPolicyEnd', 'policies', 'viewerRole']);
-  assert.equal(ov.data.viewerRole, 'owner');
-  assert.equal(ov.data.counts.members, 3);
-  assert.equal(ov.data.counts.membersCovered, 2);
-  assert.equal(ov.data.counts.membersWithoutPolicy, 1);
-  assert.equal(ov.data.counts.policiesByKind.group, 1);
-  assert.equal(ov.data.nextPolicyEnd.policyId, policy.id);
-  assert.equal(ov.data.household.displayName, 'Synthetic household');
+  assert.equal(one.data.members.length, 2);
+  // Holdings are off in this app: the overview and policies answer the coded 503, not legacy policy rows.
+  const off = await app.call(`/api/v1/households/${owner.householdId}/overview`, { token: owner.token });
+  assert.equal(off.status, 503);
+  assert.equal(off.data.error.code, 'HOLDINGS_DISABLED');
   assert.equal((await app.call(`/api/v1/households/${owner.householdId}/overview`)).status, 401);
 
   // Ownership: another household's token is denied on every route, and a foreign policy looks absent.
@@ -174,7 +165,6 @@ test('viewer can read but not write', opts, async t => {
   const session = await services.auth.issueSession({ adultUserId: viewer.id });
   const base = `/api/v1/households/${owner.householdId}`;
   assert.equal((await app.call(`${base}/members`, { token: session.token })).status, 200);
-  assert.equal((await app.call(`${base}/overview`, { token: session.token })).data.viewerRole, 'viewer');
   for (const [method, path, body] of [['POST', `${base}/members`, { displayName: 'X', memberKind: 'dependent' }], ['PATCH', `${base}/members/${owner.memberId}`, { displayName: 'Y' }], ['DELETE', `${base}/members/${owner.memberId}`]]) {
     const r = await app.call(path, { method, token: session.token, body });
     assert.equal(r.status, 403, `${method}`);

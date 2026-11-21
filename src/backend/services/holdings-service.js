@@ -322,6 +322,24 @@ export function createHoldingsService({ repository, jobQueue, fssHandoff = null,
     },
 
     /**
+     * The renewal date of each holding for the household overview: Map holding id -> ISO day or null. Resolved like facts() (same slot rules),
+     * and null while the fact is absent, conflicting or unknown. Deterministic code over stored data only; nothing is inferred from other dates.
+     */
+    async renewalDates({ householdId, holdings }) {
+      requireEnabled();
+      const out = new Map();
+      for (const holding of holdings) {
+        const rows = await repository.currentMemory({ householdId, holdingId: holding.id, factKeys: ['renewal_date'] });
+        const tiers = {};
+        for (const row of rows) if (row.factKey === 'renewal_date' && row.scopeKey === '') tiers[row.tier] = row;
+        if (Object.keys(tiers).length === 0) { out.set(holding.id, null); continue; }
+        const resolved = resolveSlot({ factKey: 'renewal_date', own: memoryView(tiers.own_pdf), ida: memoryView(tiers.ida_wording), declaration: memoryView(tiers.user_declaration) });
+        out.set(holding.id, resolved.status !== 'conflicting' && resolved.status !== 'unknown' && typeof resolved.value?.iso === 'string' ? resolved.value.iso : null);
+      }
+      return out;
+    },
+
+    /**
      * Links another document of the household (its wording, an endorsement) to a holding, queues collate so the linked document's facts join
      * the holding's, and queues memorise so the linked clauses are embedded for this holding's chat. Idempotent. Household ownership is re-checked in the repository.
      */

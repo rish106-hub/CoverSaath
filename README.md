@@ -29,12 +29,13 @@ Rules the product keeps:
 
 ## 2. Architecture
 
-Three repositories make up the product:
+Four repositories make up the product:
 
 | Repository | Role |
 | --- | --- |
 | `CoverSaath` (this one) | Backend API, worker, database schema, evidence and rules logic |
 | `CoverSaath-Frontend` | The app and its backend-for-frontend (BFF), hosted on Vercel |
+| `insurance-data-api` (FSS) | Insurer wording and product facts service; answers CoverSaath's handoffs (see its README) |
 | Website | Landing page and waitlist |
 
 This repository is a Node 25+ ES-module modular monolith over one PostgreSQL database (Supabase). One Fly.io container (app `knowvia-api`, region `sin` in [fly.toml](fly.toml)) runs the API process, the job worker and clamd (ClamAV); the container entrypoint supervises all three and stops if any one stops, so Fly restarts them together. The worker claims jobs from a Postgres queue with `FOR UPDATE SKIP LOCKED`.
@@ -67,6 +68,27 @@ flowchart LR
 | `tests/`, `scripts/` | Unit, integration, security and journey tests; database, evaluation and architecture-check commands |
 
 `npm run check:architecture` enforces the import and naming boundaries.
+
+### Insurer reference (FSS handoff)
+
+Insurer wording comes from a separate service, the FSS (`insurance-data-api`, hosted on Fly as `knowvia-fss`). The two talk asynchronously ([ADR 0037](docs/adr/0037-fss-async-handoff.md)); CoverSaath never blocks a user request on FSS.
+
+```mermaid
+sequenceDiagram
+  participant H as Holding (CoverSaath)
+  participant F as FSS API
+  participant W as FSS worker
+  H->>F: POST /v1/handoffs (request_id, insurer, product, UIN)
+  F-->>H: 202 handoff_id
+  W->>W: resolve UIN to approved, verified source pages
+  W->>H: HMAC-signed notice, POST /api/v1/fss/notices
+  H->>F: GET /v1/handoffs/{id}/pack (only when matched)
+  H->>H: link pack, collate, insurer tier in policy.md
+```
+
+- A handoff ends `matched`, `no_match`, `needs_review`, `unavailable` or `rights_blocked`. Only `matched` yields a pack. An hourly poll re-drives handoffs whose notice was lost (migration 070).
+- Insurer facts are shown labelled "not checked" ([ADR 0036](docs/adr/0036-unchecked-insurer-facts.md)); a guarded prose pass rewrites wording only ([ADR 0039](docs/adr/0039-policy-md-insurer-tier.md)).
+- Code: `src/backend/services/fss-handoff-service.js`, `fss-reference-facts.js`, `reference-data-port.js`.
 
 ### Security model
 
@@ -103,6 +125,7 @@ Every flag is off unless its value is exactly `true`. Enabling a flag does not c
 | `DOCUMENT_READBACK_ENABLED` | Deterministic document readback (no model call) |
 | `CATALOGUE_INDEPENDENT_REVIEW_ENABLED` | Independent review step of the decision catalogue |
 | `REFERENCE_DATA_ENABLED` | Reference-data import (insurer product reference) |
+| `FSS_HANDOFF_ENABLED` | FSS handoff, signed notice route and hourly poll (needs `REFERENCE_DATA_ENABLED`, `REFERENCE_DATA_BASE_URL`, `REFERENCE_DATA_API_KEY`, `REFERENCE_DATA_ALLOWED_BASE_URLS`, `FSS_NOTICE_SECRET`) |
 | `HOLDINGS_ENABLED` | Holdings, declarations, premiums, dues, hospitals routes and the holdings worker jobs |
 | `MEMORY_ENABLED` | Household memory writes and retrieval, chat v1 threads and turns |
 | `CHAT_ENABLED` | Chat v0 |
@@ -171,6 +194,10 @@ Backend, merged to main:
 - [x] Shared per-adult limits and model budget in PostgreSQL, fail closed (023, 032, PR #116, ADR 0014)
 - [x] Job worker runs inside the Fly container (PR #117)
 - [x] Provider SDK adapters for OpenAI, DeepSeek, Kimi and Anthropic, SDK upgrades (PR #123)
+- [x] FSS async handoff, signed notices, UIN pack pull, hourly redrive (ADR 0037, 070, PR #183); insurer wording passages (PR #184); unchecked insurer facts (ADR 0036, PR #182); policy.md insurer tier with guarded prose pass (ADR 0039, PR #185)
+- [x] Hosting wired for the beta: FSS runs on Fly (`knowvia-fss`, Supabase Postgres, verified TLS); prod `knowvia-api` has the FSS flags on and reached `matched`, pack 200 and a signed notice 200 against the cloud FSS
+- [x] Chat source router and Hinglish routing fixes (ADR 0038, PRs #179, #180); code-scanning fixes (PR #187)
+- [ ] On branch `feat/relationships-aliases` (not merged): member relationship aliases, holding overview, network hospital analytics (migration 071)
 - [x] Synthetic demo seed (`npm run seed:demo`)
 - [x] CI: pinned pgvector PostgreSQL 17 image, gitleaks scan, architecture check
 
@@ -179,7 +206,10 @@ The app and BFF live in `CoverSaath-Frontend`; their features are tracked in tha
 ### What is left
 
 - [ ] The frontend must call the link-wording route (`POST /api/v1/holdings/{id}/documents`) after a wording upload
-- [ ] Production reference-data reader is not wired: the insurer tier is empty until it is
+- [ ] Closed beta: one real "my Optima Secure" holding must be added in prod to prove the handoff end to end (prod and FSS are ready)
+- [ ] FSS coverage is partial: about 211 insurer documents are registered against roughly 5,800 catalogue PDFs; a UIN outside them ends `no_match` or `unavailable`
+- [ ] FSS facts are `extracted_unverified`; the human fact check and the paid 68-UIN extraction run are not done
+- [ ] FSS runs on a free Supabase plan (idle projects pause) with no backups or alerting yet
 - [ ] Live-model evaluation of grounding and refusal behaviour has not been measured; tests use stubs
 - [ ] Legal review of consent, notice and persona wording, and of voice transcript storage and cross-border model calls. **FOR LEGAL REVIEW.**
 - [ ] Legal review before DeepSeek or Kimi are ever enabled (China-hosted). **FOR LEGAL REVIEW.**

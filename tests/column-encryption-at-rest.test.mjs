@@ -36,7 +36,7 @@ const NOT_IN_SCENARIO = new Set([
   'ocr_jobs.error_message', 'integration_outbox.payload_json', 'integration_outbox.last_error', 'catalogue_reviews.fact_json', 'consent_revocations.reason',
   'workflow_events.event_payload_json', 'workflow_tasks.last_error_message', 'idempotency_keys.response_json', 'household_members.relationship_label',
   'household_members.date_of_birth', 'policies.policy_number_masked', 'policies.policy_version', 'policies.starts_on', 'policies.ends_on',
-  'household_members.mobile_ciphertext', 'household_members.email_ciphertext', 'person_records.payload_ciphertext',
+  'household_members.aliases', 'household_members.mobile_ciphertext', 'household_members.email_ciphertext', 'person_records.payload_ciphertext',
   'household_memory_facts.value_enc', 'household_memory_facts.reference_ref_enc', 'member_declarations.label_enc', 'premium_payments.amount_enc',
   'premium_payments.agent_name_enc', 'premium_payments.agent_code_enc', 'premium_dues.amount_enc',
   'memory_chunks.chunk_text_enc', 'chat_turns.content_enc', 'chat_turns.transcript_enc',

@@ -102,7 +102,7 @@ export const DATA_REGISTRY = Object.freeze({
 
   // ---- profile_intake ----
   household_members: entry('profile_intake',
-    { identity: ['display_name'], demographic: ['date_of_birth', 'gender', 'age_band'], relationship: ['relationship_label', 'member_kind', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id'],
+    { identity: ['display_name', 'aliases'], demographic: ['date_of_birth', 'gender', 'age_band'], relationship: ['relationship', 'relationship_label', 'member_kind', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id'],
       contact: ['mobile_ciphertext', 'email_ciphertext', 'preferred_channel'], derived_identifier: ['mobile_hash'] },
     ['id', 'household_id', 'adult_user_id', 'created_at', 'updated_at', 'revision', 'deleted_at']),
   // Long-tail person records (ADR 0026): one sealed payload per record; the type, slot and state columns are closed enums.
