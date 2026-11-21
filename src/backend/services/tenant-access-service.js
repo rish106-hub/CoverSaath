@@ -163,6 +163,8 @@ export class TenantAccessService {
         displayName: member.display_name,
         memberKind: member.member_kind,
         relationshipLabel: member.relationship_label,
+        relationship: member.relationship ?? null,
+        aliases: member.aliases ?? [],
         dateOfBirth: canReadBirthDate ? member.date_of_birth : null,
         fieldAccess: {
           dateOfBirth: canReadBirthDate ? 'granted' : 'withheld',

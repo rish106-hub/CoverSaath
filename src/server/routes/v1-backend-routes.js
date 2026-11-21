@@ -497,7 +497,7 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
       else await services.auth.revokeSession({ sessionId: principal.sessionId, adultUserId: principal.adultId });
       return { status: 200, body: { status: 'revoked' } };
     }
-    // App data (plan B-A): members, policies, overview. Ownership is checked inside services.app; writes need owner or member.
+    // App data (plan B-A): members, policies, overview (the last two read holdings). Ownership is checked inside services.app; writes need owner or member.
     const appMatch = url.pathname.match(/^\/api\/v1\/households\/([^/]+)\/(members|policies|overview)(?:\/([^/]+))?$/);
     if (appMatch) {
       const [, householdId, resource, memberId] = appMatch;
@@ -508,8 +508,9 @@ export async function handleV1BackendRoute({ req, url, database, services, integ
         await services.app.removeMember(principal, householdId, memberId);
         return { status: 200, body: { status: 'removed', memberId } };
       }
-      if (resource === 'policies' && !memberId && req.method === 'GET') return { status: 200, body: await services.app.listPolicies(principal, householdId) };
-      if (resource === 'overview' && !memberId && req.method === 'GET') return { status: 200, body: await services.app.overview(principal, householdId) };
+      // Overview and policies are built on holdings (owner only, HOLDINGS_ENABLED), not the legacy policies table.
+      if (resource === 'policies' && !memberId && req.method === 'GET') return { status: 200, body: await services.holdingOverview.policies(principal, householdId) };
+      if (resource === 'overview' && !memberId && req.method === 'GET') return { status: 200, body: await services.holdingOverview.overview(principal, householdId) };
     }
     // User data (ADR 0015): permissions, places, preferences, onboarding, tool scenarios. The adult comes from the session; the
     // service proves household membership and the repository proves it again inside the write transaction.

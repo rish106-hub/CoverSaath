@@ -5,6 +5,7 @@ import { ERASED_NAME } from '../../contracts/data-lifecycle.js';
 import { assertNoSensitiveIdentifier } from '../../contracts/sensitive-identifiers.js';
 import { assertMemberDetailRules, parseMemberDetails, MEMBER_DETAIL_FIELDS } from '../../contracts/capture-registry.js';
 import { parseIfMatch } from './user-data-service.js';
+import { MEMBER_ALIASES_MAX, MEMBER_ALIAS_MAX_LENGTH, MEMBER_RELATIONSHIPS } from '../../contracts/member-relationships.js';
 
 const MEMBER_KINDS = ['adult', 'dependent'];
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -31,6 +32,31 @@ function text(value, field, { max, required = false }) {
   if (trimmed.length > max || UNSAFE_TEXT.test(trimmed) || trimmed === ERASED_NAME) invalid(`${field} is invalid.`);
   assertNoSensitiveIdentifier(trimmed, field);
   return trimmed;
+}
+
+// relationship: absent or null is null; anything else must be one of the closed vocabulary.
+function relationship(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !MEMBER_RELATIONSHIPS.includes(value)) invalid(`relationship must be one of ${MEMBER_RELATIONSHIPS.join(', ')}.`);
+  return value;
+}
+
+// aliases: absent or null is none. Each is trimmed text of at most 40 characters; blanks are dropped, repeats (ignoring case) are kept once;
+// at most 8 remain, otherwise the request is refused (never silently cut).
+function aliases(value) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) invalid('aliases must be a list of text.');
+  if (value.length > MEMBER_ALIASES_MAX * 4) invalid(`aliases can hold at most ${MEMBER_ALIASES_MAX} names.`);
+  const seen = new Set();
+  const out = [];
+  for (const item of value) {
+    const alias = text(item, 'aliases', { max: MEMBER_ALIAS_MAX_LENGTH });
+    if (alias === null || seen.has(alias.toLocaleLowerCase('en'))) continue;
+    seen.add(alias.toLocaleLowerCase('en'));
+    out.push(alias);
+  }
+  if (out.length > MEMBER_ALIASES_MAX) invalid(`aliases can hold at most ${MEMBER_ALIASES_MAX} names.`);
+  return out;
 }
 
 function dateOfBirth(value, now) {
@@ -77,7 +103,9 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
       id: member.id,
       displayName: member.display_name,
       memberKind: member.member_kind,
-      relationshipLabel: member.relationship_label,
+      relationship: member.relationship ?? null,
+      relationshipLabel: member.relationship_label ?? null,
+      aliases: member.aliases ?? [],
       dateOfBirth: born,
       ageYears: ageYears(born, clock()),
       gender: member.gender ?? null,
@@ -135,6 +163,8 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
         displayName: text(body.displayName, 'displayName', { max: 80, required: true }),
         memberKind: body.memberKind,
         relationshipLabel: text(body.relationshipLabel, 'relationshipLabel', { max: 40 }),
+        relationship: relationship(body.relationship),
+        aliases: aliases(body.aliases),
         dateOfBirth: born,
         details,
       });
@@ -148,9 +178,11 @@ export function createHouseholdAppService({ access, appRepository, consents, hou
       const changes = {};
       if ('displayName' in body) changes.displayName = text(body.displayName, 'displayName', { max: 80, required: true });
       if ('relationshipLabel' in body) changes.relationshipLabel = text(body.relationshipLabel, 'relationshipLabel', { max: 40 });
+      if ('relationship' in body) changes.relationship = relationship(body.relationship);
+      if ('aliases' in body) changes.aliases = aliases(body.aliases);
       if ('dateOfBirth' in body) changes.dateOfBirth = dateOfBirth(body.dateOfBirth, clock());
       Object.assign(changes, parseMemberDetails(body, { now: clock() }));
-      if (Object.keys(changes).length === 0) invalid(`Send displayName, relationshipLabel, dateOfBirth or one of ${Object.keys(MEMBER_DETAIL_FIELDS).join(', ')}.`);
+      if (Object.keys(changes).length === 0) invalid(`Send displayName, relationship, relationshipLabel, aliases, dateOfBirth or one of ${Object.keys(MEMBER_DETAIL_FIELDS).join(', ')}.`);
       const member = await appRepository.updateMember({ householdId, actorAdultId: principal.adultId, memberId, changes, ifMatch: parseIfMatch(ifMatchHeader), now: clock() });
       return memberDto(principal, householdId, member, await appRepository.ownerMemberIds(householdId));
     },

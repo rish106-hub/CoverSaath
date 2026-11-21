@@ -125,7 +125,7 @@ export class ErasureRepository {
         OR right_fact_id IN (SELECT id FROM evidence_facts WHERE household_id = ? AND subject_member_id = ?)`, [householdId, memberId, householdId, memberId]);
       await this.#count(ctx, 'policyLinks', 'DELETE FROM policy_members WHERE household_member_id = ?', [memberId]);
       await this.#count(ctx, 'places', 'DELETE FROM household_places WHERE member_id = ? AND household_id = ?', [memberId, householdId]);
-      await db.run('UPDATE household_members SET display_name = ?, relationship_label = NULL, date_of_birth = NULL, updated_at = ? WHERE id = ?', [ERASED_NAME, at, memberId]);
+      await db.run('UPDATE household_members SET display_name = ?, relationship_label = NULL, relationship = NULL, aliases = NULL, date_of_birth = NULL, updated_at = ? WHERE id = ?', [ERASED_NAME, at, memberId]);
       if (placeholderAdultId) await this.#scrubAdults(ctx, [placeholderAdultId]);
       await this.#pruneIds('household_members', [memberId]);
       if (placeholderAdultId) await this.#pruneIds('adult_users', [placeholderAdultId]);
@@ -220,7 +220,7 @@ export class ErasureRepository {
         await this.#count(ctx, 'identities', 'DELETE FROM auth_identities WHERE adult_user_id = ANY(CAST(? AS text[]))', [soleAdultIds]);
       }
       await this.#count(ctx, 'roles', 'DELETE FROM household_roles WHERE household_id = ?', [householdId]);
-      await this.#count(ctx, 'members', 'UPDATE household_members SET display_name = ?, relationship_label = NULL, date_of_birth = NULL, updated_at = ? WHERE household_id = ?', [ERASED_NAME, at, householdId]);
+      await this.#count(ctx, 'members', 'UPDATE household_members SET display_name = ?, relationship_label = NULL, relationship = NULL, aliases = NULL, date_of_birth = NULL, updated_at = ? WHERE household_id = ?', [ERASED_NAME, at, householdId]);
       await this.#scrubAdults(ctx, soleAdultIds);
 
       // 7. The household tombstone, the ledger and the audit event.

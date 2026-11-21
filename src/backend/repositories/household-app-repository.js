@@ -22,7 +22,12 @@ export class HouseholdAppRepository {
     this.crypto = resolveColumnCrypto(options);
   }
 
-  #member(row) { return this.crypto.openRow('household_members', row, ['display_name', 'relationship_label', 'date_of_birth', 'mobile_ciphertext', 'email_ciphertext']); }
+  // Aliases are a sealed JSON array (migration 067); opened here to an array (never null) for the owning household's own response.
+  #member(row) {
+    const opened = this.crypto.openRow('household_members', row, ['display_name', 'relationship_label', 'date_of_birth', 'mobile_ciphertext', 'email_ciphertext']);
+    if ('aliases' in row) opened.aliases = this.crypto.openJson('household_members', 'aliases', row.id, row.aliases) ?? [];
+    return opened;
+  }
   #policy(row) { return this.crypto.openRow('policies', row, ['policy_number_masked', 'policy_version', 'starts_on', 'ends_on']); }
   #adult(row) { return this.crypto.openRow('adult_users', row, ['display_name', 'contact_email', 'contact_phone']); }
 
@@ -75,7 +80,7 @@ export class HouseholdAppRepository {
 
   // An adult member needs an adult_users row (schema CHECK). A not-yet-invited adult is a placeholder with account_status 'invited',
   // no contact details and no role, so it cannot sign in or read anything until an invite flow exists.
-  async createMember({ householdId, actorAdultId, displayName, memberKind, relationshipLabel = null, dateOfBirth = null, details = {} }) {
+  async createMember({ householdId, actorAdultId, displayName, memberKind, relationshipLabel = null, relationship = null, aliases = [], dateOfBirth = null, details = {} }) {
     const at = this.clock().toISOString();
     const db = this.database;
     const memberId = id('member');
@@ -89,15 +94,15 @@ export class HouseholdAppRepository {
           VALUES (?, ?, NULL, NULL, 'en-IN', 'invited', ?, ?)`, [adultId, this.crypto.seal('adult_users', 'display_name', adultId, displayName), at, at]);
       }
       const extra = await this.#detailColumns(db, householdId, memberId, details);
-      const names = ['id', 'household_id', 'adult_user_id', 'display_name', 'member_kind', 'relationship_label', 'date_of_birth', 'created_at', 'updated_at', ...Object.keys(extra)];
+      const names = ['id', 'household_id', 'adult_user_id', 'display_name', 'member_kind', 'relationship_label', 'relationship', 'aliases', 'date_of_birth', 'created_at', 'updated_at', ...Object.keys(extra)];
       await db.run(`INSERT INTO household_members (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`,
-        [memberId, householdId, adultId, this.crypto.seal('household_members', 'display_name', memberId, displayName), memberKind, this.crypto.seal('household_members', 'relationship_label', memberId, relationshipLabel), this.crypto.seal('household_members', 'date_of_birth', memberId, dateOfBirth), at, at, ...Object.values(extra)]);
-      await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.added', resourceType: 'household_member', resourceId: memberId, payload: { memberKind, detailFields: Object.keys(details) } });
+        [memberId, householdId, adultId, this.crypto.seal('household_members', 'display_name', memberId, displayName), memberKind, this.crypto.seal('household_members', 'relationship_label', memberId, relationshipLabel), relationship, aliases.length > 0 ? this.crypto.sealJson('household_members', 'aliases', memberId, aliases) : null, this.crypto.seal('household_members', 'date_of_birth', memberId, dateOfBirth), at, at, ...Object.values(extra)]);
+      await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.added', resourceType: 'household_member', resourceId: memberId, payload: { memberKind, detailFields: Object.keys(details), aliasCount: aliases.length } });
     }, { locks: [householdLock(householdId)] });
     return this.getMember(householdId, memberId);
   }
 
-  // `changes` holds only the fields to change: displayName, relationshipLabel, dateOfBirth (null clears the last two).
+  // `changes` holds only the fields to change: displayName, relationshipLabel, relationship, aliases, dateOfBirth (null clears relationshipLabel, relationship and dateOfBirth; an empty aliases array clears aliases).
   async updateMember({ householdId, actorAdultId, memberId, changes, ifMatch = null, now = this.clock() }) {
     const at = this.clock().toISOString();
     const db = this.database;
@@ -131,6 +136,8 @@ export class HouseholdAppRepository {
         }
       }
       if ('relationshipLabel' in changes) { sets.push('relationship_label = ?'); params.push(this.crypto.seal('household_members', 'relationship_label', memberId, changes.relationshipLabel)); fields.push('relationshipLabel'); }
+      if ('relationship' in changes) { sets.push('relationship = ?'); params.push(changes.relationship); fields.push('relationship'); }
+      if ('aliases' in changes) { sets.push('aliases = ?'); params.push(changes.aliases.length > 0 ? this.crypto.sealJson('household_members', 'aliases', memberId, changes.aliases) : null); fields.push('aliases'); }
       if ('dateOfBirth' in changes) { sets.push('date_of_birth = ?'); params.push(this.crypto.seal('household_members', 'date_of_birth', memberId, changes.dateOfBirth)); fields.push('dateOfBirth'); }
       await db.run(`UPDATE household_members SET ${sets.join(', ')}, updated_at = ?, revision = revision + 1 WHERE id = ? AND household_id = ?`, [...params, at, memberId, householdId]);
       await this.audit?.append({ householdId, actorType: 'adult_user', actorId: actorAdultId, action: 'household_member.updated', resourceType: 'household_member', resourceId: memberId, payload: { fields } });

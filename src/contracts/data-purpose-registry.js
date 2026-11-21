@@ -240,6 +240,9 @@ export const DATA_PURPOSE_REGISTRY = Object.freeze([
   table('household_members.mobile_ciphertext', {
     category: 'contact', purposes: ['profile_intake'], sealed: true, retention: 'until_member_deleted', childData: 'possible', erasure: ERASE.memberDelete,
   }),
+  table('household_members.aliases', {
+    category: 'identity', purposes: ['profile_intake'], sealed: true, retention: 'until_member_deleted', childData: 'possible', erasure: ERASE.memberDelete,
+  }),
   table('household_members.email_ciphertext', {
     category: 'contact', purposes: ['profile_intake'], sealed: true, retention: 'until_member_deleted', childData: 'possible', erasure: ERASE.memberDelete,
   }),

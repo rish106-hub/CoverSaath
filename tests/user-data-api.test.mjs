@@ -369,7 +369,7 @@ test('POST /access is bootstrap-guarded and idempotent per e-mail', opts, async 
   assert.equal(second.data.household.id, first.data.household.id);
   assert.equal(second.data.owner.id, first.data.owner.id);
   assert.notEqual(second.data.session.token, first.data.session.token);
-  assert.equal((await app.call(`/api/v1/households/${first.data.household.id}/overview`, { token: second.data.session.token })).status, 200);
+  assert.equal((await app.call(`/api/v1/households/${first.data.household.id}/members`, { token: second.data.session.token })).status, 200);
   assert.equal(Number((await db.one('SELECT count(*) AS c FROM households')).c), 3);
   const [concurrent, again] = await Promise.all([
     app.call('/api/v1/access', { method: 'POST', token: bootstrapToken, body: { displayName: 'Race Synthetic', contactEmail: 'race@example.test' } }),

@@ -161,7 +161,7 @@ export const requiredColumns = Object.freeze({
   network_hospitals: ['insurer_id', 'name', 'address', 'city', 'pincode', 'cashless', 'source_ref'],
   model_budget_reservations: ['scope', 'amount_micro_usd', 'state', 'actual_micro_usd'],
   evidence_claims: ['claim_hash', 'owner', 'expires_at'],
-  household_members: ['gender', 'age_band', 'mobile_ciphertext', 'mobile_hash', 'email_ciphertext', 'preferred_channel', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id', 'revision', 'deleted_at'],
+  household_members: ['relationship', 'aliases', 'gender', 'age_band', 'mobile_ciphertext', 'mobile_hash', 'email_ciphertext', 'preferred_channel', 'lives_with_household', 'dependent_on_member_id', 'guardian_member_id', 'revision', 'deleted_at'],
   memory_chunks: ['household_id', 'holding_id', 'scope', 'source_ref', 'chunk_text_enc', 'content_sha256', 'embedding', 'consent_grant_id'],
   chat_threads: ['household_id', 'holding_id', 'created_by_adult_id'],
   chat_turns: ['household_id', 'thread_id', 'turn_index', 'role', 'input_kind', 'content_enc', 'transcript_enc', 'audio_document_id', 'redacted_prompt_hash', 'consent_grant_id'],
